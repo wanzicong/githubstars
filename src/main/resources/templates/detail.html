@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+<head>
+    <title th:text="${repo.fullName + ' - 详情'}">仓库详情</title>
+    <th:block layout:fragment="head">
+        <style>
+            .detail-card {
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+                overflow: hidden;
+            }
+            .detail-header {
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                color: white;
+                padding: 32px;
+            }
+            .detail-header .owner-avatar {
+                width: 64px;
+                height: 64px;
+                border-radius: 50%;
+                border: 3px solid rgba(255, 255, 255, 0.3);
+                margin-right: 20px;
+            }
+            .detail-header .repo-full-name {
+                font-size: 1.6rem;
+                font-weight: 700;
+                margin-bottom: 4px;
+            }
+            .detail-header .owner-name {
+                font-size: 1rem;
+                opacity: 0.75;
+            }
+            .detail-body {
+                padding: 32px;
+            }
+            .detail-desc {
+                font-size: 1.05rem;
+                color: #444;
+                line-height: 1.7;
+                padding: 16px 20px;
+                background: #f6f8fa;
+                border-radius: 8px;
+                margin-bottom: 24px;
+                border-left: 4px solid #0969da;
+            }
+            .stat-card {
+                text-align: center;
+                padding: 16px 12px;
+                background: #f6f8fa;
+                border-radius: 10px;
+                transition: transform 0.2s;
+            }
+            .stat-card:hover {
+                transform: translateY(-2px);
+            }
+            .stat-card .stat-value {
+                font-size: 1.5rem;
+                font-weight: 700;
+                color: #1a1a2e;
+            }
+            .stat-card .stat-label {
+                font-size: 0.8rem;
+                color: #656d76;
+                margin-top: 4px;
+            }
+            .info-table {
+                width: 100%;
+            }
+            .info-table td {
+                padding: 10px 0;
+                border-bottom: 1px solid #f0f0f0;
+            }
+            .info-table td:first-child {
+                color: #656d76;
+                font-weight: 500;
+                width: 140px;
+                font-size: 0.9rem;
+            }
+            .info-table td:last-child {
+                color: #333;
+            }
+            .info-table tr:last-child td {
+                border-bottom: none;
+            }
+            .topic-tag {
+                display: inline-block;
+                padding: 3px 10px;
+                border-radius: 16px;
+                font-size: 0.78rem;
+                background-color: #ddf4ff;
+                color: #0969da;
+                margin: 2px 4px 2px 0;
+                font-weight: 500;
+            }
+            .lang-indicator {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 4px 14px;
+                border-radius: 16px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                background-color: #ddf4ff;
+                color: #0969da;
+            }
+            .btn-github {
+                background-color: #24292f;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 24px;
+                font-weight: 600;
+                text-decoration: none;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                transition: background-color 0.2s;
+            }
+            .btn-github:hover {
+                background-color: #32383f;
+                color: white;
+            }
+            .btn-homepage {
+                background-color: #0969da;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 24px;
+                font-weight: 600;
+                text-decoration: none;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                transition: background-color 0.2s;
+            }
+            .btn-homepage:hover {
+                background-color: #0757b5;
+                color: white;
+            }
+            .back-link {
+                color: #656d76;
+                text-decoration: none;
+                font-weight: 500;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                margin-bottom: 20px;
+                transition: color 0.2s;
+            }
+            .back-link:hover {
+                color: #0969da;
+            }
+            .badge-fork {
+                background-color: #fff3cd;
+                color: #856404;
+                font-size: 0.75rem;
+                padding: 2px 8px;
+                border-radius: 8px;
+            }
+            .badge-archived {
+                background-color: #fde2e2;
+                color: #b31d28;
+                font-size: 0.75rem;
+                padding: 2px 8px;
+                border-radius: 8px;
+            }
+        </style>
+    </th:block>
+</head>
+<body>
+<div layout:fragment="content">
+
+    <!-- 返回链接 -->
+    <a class="back-link" th:href="@{/}">
+        <i class="bi bi-arrow-left"></i> 返回Star列表
+    </a>
+
+    <div class="detail-card">
+        <!-- 头部信息 -->
+        <div class="detail-header">
+            <div class="d-flex align-items-center">
+                <img class="owner-avatar" th:src="${repo.ownerAvatarUrl}" th:alt="${repo.ownerName}"
+                     onerror="this.src='https://github.githubassets.com/images/gravatars/gravatar-user-420.png'">
+                <div>
+                    <div class="repo-full-name" th:text="${repo.fullName}">owner/repo</div>
+                    <div class="owner-name">
+                        <i class="bi bi-person"></i> <span th:text="${repo.ownerName}">owner</span>
+                        <span class="badge-fork ms-2" th:if="${repo.isFork}">
+                            <i class="bi bi-diagram-2"></i> Fork
+                        </span>
+                        <span class="badge-archived ms-2" th:if="${repo.isArchived}">
+                            <i class="bi bi-archive"></i> 已归档
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主体内容 -->
+        <div class="detail-body">
+            <!-- 描述 -->
+            <div class="detail-desc" th:text="${repo.description != null ? repo.description : '该仓库暂无描述信息'}">
+                仓库描述
+            </div>
+
+            <!-- 统计数据卡片 -->
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: #e3b341;">
+                            <i class="bi bi-star-fill" style="font-size: 1rem;"></i>
+                            <span th:text="${repo.starsCount}">0</span>
+                        </div>
+                        <div class="stat-label">Stars</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: #8250df;">
+                            <i class="bi bi-diagram-2" style="font-size: 1rem;"></i>
+                            <span th:text="${repo.forksCount}">0</span>
+                        </div>
+                        <div class="stat-label">Forks</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: #0969da;">
+                            <i class="bi bi-eye" style="font-size: 1rem;"></i>
+                            <span th:text="${repo.watchersCount}">0</span>
+                        </div>
+                        <div class="stat-label">Watchers</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value" style="color: #da3633;">
+                            <i class="bi bi-exclamation-circle" style="font-size: 1rem;"></i>
+                            <span th:text="${repo.openIssuesCount}">0</span>
+                        </div>
+                        <div class="stat-label">Open Issues</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 详细信息表格 -->
+            <h6 class="fw-bold mb-3" style="color: #1a1a2e;">
+                <i class="bi bi-info-circle"></i> 详细信息
+            </h6>
+            <table class="info-table mb-4">
+                <tr th:if="${repo.language != null}">
+                    <td>编程语言</td>
+                    <td><span class="lang-indicator" th:text="${repo.language}">Java</span></td>
+                </tr>
+                <tr th:if="${repo.licenseName != null}">
+                    <td>开源许可证</td>
+                    <td><i class="bi bi-shield-check" style="color: #1a7f37;"></i> <span th:text="${repo.licenseName}">MIT</span></td>
+                </tr>
+                <tr th:if="${topicList != null and !topicList.isEmpty()}">
+                    <td>主题标签</td>
+                    <td>
+                        <span class="topic-tag" th:each="topic : ${topicList}" th:text="${topic}">topic</span>
+                    </td>
+                </tr>
+                <tr th:if="${repo.starredAt != null}">
+                    <td>Star 时间</td>
+                    <td><i class="bi bi-star" style="color: #e3b341;"></i> <span th:text="${#temporals.format(repo.starredAt, 'yyyy-MM-dd HH:mm:ss')}">2024-01-01</span></td>
+                </tr>
+                <tr th:if="${repo.repoCreatedAt != null}">
+                    <td>仓库创建时间</td>
+                    <td><span th:text="${#temporals.format(repo.repoCreatedAt, 'yyyy-MM-dd HH:mm:ss')}">2024-01-01</span></td>
+                </tr>
+                <tr th:if="${repo.repoUpdatedAt != null}">
+                    <td>最后更新时间</td>
+                    <td><span th:text="${#temporals.format(repo.repoUpdatedAt, 'yyyy-MM-dd HH:mm:ss')}">2024-01-01</span></td>
+                </tr>
+                <tr th:if="${repo.repoPushedAt != null}">
+                    <td>最后推送时间</td>
+                    <td><span th:text="${#temporals.format(repo.repoPushedAt, 'yyyy-MM-dd HH:mm:ss')}">2024-01-01</span></td>
+                </tr>
+            </table>
+
+            <!-- 操作按钮 -->
+            <div class="d-flex gap-3 flex-wrap">
+                <a class="btn-github" th:href="${repo.htmlUrl}" target="_blank">
+                    <i class="bi bi-github"></i> 在 GitHub 上查看
+                </a>
+                <a class="btn-homepage" th:if="${repo.homepage != null and !repo.homepage.isEmpty()}"
+                   th:href="${repo.homepage}" target="_blank">
+                    <i class="bi bi-globe"></i> 访问项目主页
+                </a>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<th:block layout:fragment="scripts">
+    <script>
+        // 高亮当前导航项
+        document.getElementById('nav-stars').classList.add('active');
+    </script>
+</th:block>
+</body>
+</html>

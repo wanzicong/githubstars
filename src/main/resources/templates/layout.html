@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title layout:title-pattern="$CONTENT_TITLE - GitHub Stars 管理系统">GitHub Stars 管理系统</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+    <style>
+        body {
+            background-color: #f5f7fa;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .navbar {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.3rem;
+            letter-spacing: 0.5px;
+        }
+        .navbar-brand i {
+            color: #f0c040;
+        }
+        .nav-link {
+            font-weight: 500;
+            padding: 0.5rem 1rem !important;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        .nav-link:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .nav-link.active {
+            background-color: rgba(255, 255, 255, 0.15);
+        }
+        .content-wrapper {
+            flex: 1;
+            padding: 24px 0;
+        }
+        .footer {
+            background-color: #1a1a2e;
+            color: #8892a0;
+            padding: 16px 0;
+            margin-top: auto;
+            font-size: 0.875rem;
+        }
+    </style>
+
+    <th:block layout:fragment="head"></th:block>
+</head>
+<body>
+
+<!-- 导航栏 -->
+<nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #1a1a2e;">
+    <div class="container">
+        <a class="navbar-brand" th:href="@{/}">
+            <i class="bi bi-star-fill"></i> GitHub Stars
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarNav" aria-controls="navbarNav"
+                aria-expanded="false" aria-label="切换导航">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                    <a class="nav-link" th:href="@{/}" id="nav-stars">
+                        <i class="bi bi-list-stars"></i> Star列表
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" th:href="@{/sync}" id="nav-sync">
+                        <i class="bi bi-arrow-repeat"></i> 同步管理
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" th:href="@{/stats}" id="nav-stats">
+                        <i class="bi bi-bar-chart-line"></i> 数据统计
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- 主体内容 -->
+<div class="content-wrapper">
+    <div class="container">
+        <div layout:fragment="content"></div>
+    </div>
+</div>
+
+<!-- 页脚 -->
+<footer class="footer">
+    <div class="container text-center">
+        <span>GitHub Stars 管理系统 &copy; 2026</span>
+    </div>
+</footer>
+
+<!-- Bootstrap 5 JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<th:block layout:fragment="scripts"></th:block>
+</body>
+</html>

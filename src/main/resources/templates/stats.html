@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+
+<head>
+    <title>数据统计</title>
+    <th:block layout:fragment="head">
+        <style>
+            .stats-card {
+                background: #fff;
+                border-radius: 12px;
+                box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+                padding: 24px;
+                text-align: center;
+                transition: transform 0.2s, box-shadow 0.2s;
+            }
+            .stats-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+            }
+            .stats-card .stats-icon {
+                font-size: 2rem;
+                margin-bottom: 8px;
+            }
+            .stats-card .stats-value {
+                font-size: 2rem;
+                font-weight: 700;
+                color: #1a1a2e;
+                line-height: 1.2;
+            }
+            .stats-card .stats-label {
+                font-size: 0.9rem;
+                color: #6c757d;
+                margin-top: 4px;
+            }
+            .chart-card {
+                background: #fff;
+                border-radius: 12px;
+                box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+                padding: 24px;
+                margin-bottom: 24px;
+            }
+            .chart-card .card-title {
+                font-size: 1.1rem;
+                font-weight: 600;
+                color: #1a1a2e;
+                margin-bottom: 16px;
+                padding-bottom: 12px;
+                border-bottom: 2px solid #f0f0f0;
+            }
+            .chart-card .card-title i {
+                margin-right: 8px;
+                color: #6366f1;
+            }
+            .table-card {
+                background: #fff;
+                border-radius: 12px;
+                box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+                padding: 24px;
+                margin-bottom: 24px;
+            }
+            .table-card .card-title {
+                font-size: 1.1rem;
+                font-weight: 600;
+                color: #1a1a2e;
+                margin-bottom: 16px;
+                padding-bottom: 12px;
+                border-bottom: 2px solid #f0f0f0;
+            }
+            .table-card .card-title i {
+                margin-right: 8px;
+                color: #6366f1;
+            }
+            .repo-table {
+                font-size: 0.9rem;
+            }
+            .repo-table th {
+                background-color: #f8f9fa;
+                font-weight: 600;
+                color: #495057;
+                border-bottom: 2px solid #dee2e6;
+            }
+            .repo-table td {
+                vertical-align: middle;
+            }
+            .repo-table .repo-name a {
+                color: #6366f1;
+                text-decoration: none;
+                font-weight: 500;
+            }
+            .repo-table .repo-name a:hover {
+                text-decoration: underline;
+            }
+            .badge-lang {
+                padding: 4px 10px;
+                border-radius: 20px;
+                font-size: 0.8rem;
+                font-weight: 500;
+            }
+            .loading-spinner {
+                text-align: center;
+                padding: 40px;
+                color: #6c757d;
+            }
+            .color-repos { color: #6366f1; }
+            .color-stars { color: #f59e0b; }
+            .color-forks { color: #10b981; }
+            .color-langs { color: #ec4899; }
+            .color-owners { color: #3b82f6; }
+            .page-header {
+                margin-bottom: 24px;
+            }
+            .page-header h2 {
+                font-weight: 700;
+                color: #1a1a2e;
+            }
+            .page-header p {
+                color: #6c757d;
+            }
+        </style>
+    </th:block>
+</head>
+
+<body>
+<div layout:fragment="content">
+
+    <!-- 页面标题 -->
+    <div class="page-header">
+        <h2><i class="bi bi-bar-chart-line"></i> 数据统计</h2>
+        <p>GitHub Star 仓库的综合数据分析</p>
+    </div>
+
+    <!-- 概览卡片 -->
+    <div class="row g-3 mb-4" id="overview-cards">
+        <div class="col-6 col-md">
+            <div class="stats-card">
+                <div class="stats-icon color-repos"><i class="bi bi-journal-code"></i></div>
+                <div class="stats-value" id="total-repos">-</div>
+                <div class="stats-label">总仓库数</div>
+            </div>
+        </div>
+        <div class="col-6 col-md">
+            <div class="stats-card">
+                <div class="stats-icon color-stars"><i class="bi bi-star-fill"></i></div>
+                <div class="stats-value" id="total-stars">-</div>
+                <div class="stats-label">总Star数</div>
+            </div>
+        </div>
+        <div class="col-6 col-md">
+            <div class="stats-card">
+                <div class="stats-icon color-forks"><i class="bi bi-diagram-2-fill"></i></div>
+                <div class="stats-value" id="total-forks">-</div>
+                <div class="stats-label">总Fork数</div>
+            </div>
+        </div>
+        <div class="col-6 col-md">
+            <div class="stats-card">
+                <div class="stats-icon color-langs"><i class="bi bi-translate"></i></div>
+                <div class="stats-value" id="total-languages">-</div>
+                <div class="stats-label">语言数</div>
+            </div>
+        </div>
+        <div class="col-6 col-md">
+            <div class="stats-card">
+                <div class="stats-icon color-owners"><i class="bi bi-people-fill"></i></div>
+                <div class="stats-value" id="total-owners">-</div>
+                <div class="stats-label">作者数</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 图表区域 -->
+    <div class="row">
+        <!-- 语言分布环形图 -->
+        <div class="col-lg-6">
+            <div class="chart-card">
+                <div class="card-title"><i class="bi bi-pie-chart-fill"></i>语言分布</div>
+                <div id="language-chart-container">
+                    <canvas id="languageChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <!-- 作者排行柱状图 -->
+        <div class="col-lg-6">
+            <div class="chart-card">
+                <div class="card-title"><i class="bi bi-bar-chart-fill"></i>作者排行 Top 15</div>
+                <div id="owner-chart-container">
+                    <canvas id="ownerChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 时间趋势折线图 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="chart-card">
+                <div class="card-title"><i class="bi bi-graph-up"></i>Star 时间趋势（按月）</div>
+                <div id="timeline-chart-container">
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 仓库排行表格 -->
+    <div class="row">
+        <!-- 最受欢迎仓库 Top 10 -->
+        <div class="col-lg-6">
+            <div class="table-card">
+                <div class="card-title"><i class="bi bi-trophy-fill"></i>最受欢迎仓库 Top 10</div>
+                <div class="table-responsive">
+                    <table class="table repo-table mb-0" id="top-starred-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>仓库</th>
+                                <th>语言</th>
+                                <th>Star</th>
+                                <th>Fork</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="5" class="loading-spinner">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <!-- 最近活跃仓库 Top 10 -->
+        <div class="col-lg-6">
+            <div class="table-card">
+                <div class="card-title"><i class="bi bi-clock-history"></i>最近活跃仓库 Top 10</div>
+                <div class="table-responsive">
+                    <table class="table repo-table mb-0" id="recent-active-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>仓库</th>
+                                <th>语言</th>
+                                <th>Star</th>
+                                <th>更新时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="5" class="loading-spinner">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<th:block layout:fragment="scripts">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        // 高亮当前导航
+        document.getElementById('nav-stats').classList.add('active');
+
+        // 和谐的图表调色板
+        const CHART_COLORS = [
+            '#6366f1', '#8b5cf6', '#a78bfa', '#c4b5fd',
+            '#ec4899', '#f472b6', '#f9a8d4',
+            '#3b82f6', '#60a5fa', '#93c5fd',
+            '#10b981', '#34d399', '#6ee7b7',
+            '#f59e0b', '#fbbf24', '#fcd34d',
+            '#ef4444', '#f87171', '#fca5a5',
+            '#14b8a6', '#2dd4bf', '#5eead4'
+        ];
+
+        // 格式化大数字
+        function formatNumber(num) {
+            if (num === null || num === undefined) return '0';
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        // 格式化日期
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            var d = new Date(dateStr);
+            var year = d.getFullYear();
+            var month = String(d.getMonth() + 1).padStart(2, '0');
+            var day = String(d.getDate()).padStart(2, '0');
+            return year + '-' + month + '-' + day;
+        }
+
+        // 加载概览数据
+        fetch('/api/stats/overview')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                document.getElementById('total-repos').textContent = formatNumber(data.totalRepos);
+                document.getElementById('total-stars').textContent = formatNumber(data.totalStars);
+                document.getElementById('total-forks').textContent = formatNumber(data.totalForks);
+                document.getElementById('total-languages').textContent = formatNumber(data.totalLanguages);
+                document.getElementById('total-owners').textContent = formatNumber(data.totalOwners);
+            })
+            .catch(function() {
+                document.querySelectorAll('.stats-value').forEach(function(el) { el.textContent = '0'; });
+            });
+
+        // 加载语言分布图
+        fetch('/api/stats/languages')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                // 取前 15 个，其余归为"其他"
+                var top = data.slice(0, 15);
+                var otherCount = 0;
+                for (var i = 15; i < data.length; i++) {
+                    otherCount += data[i].count;
+                }
+                var labels = top.map(function(d) { return d.language; });
+                var values = top.map(function(d) { return d.count; });
+                if (otherCount > 0) {
+                    labels.push('其他');
+                    values.push(otherCount);
+                }
+
+                new Chart(document.getElementById('languageChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: CHART_COLORS.slice(0, labels.length),
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: {
+                                    padding: 12,
+                                    usePointStyle: true,
+                                    pointStyleWidth: 10,
+                                    font: { size: 12 }
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(ctx) {
+                                        var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+                                        var pct = ((ctx.parsed / total) * 100).toFixed(1);
+                                        return ctx.label + ': ' + ctx.parsed + ' (' + pct + '%)';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+
+        // 加载作者排行图
+        fetch('/api/stats/owners?topN=15')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var labels = data.map(function(d) { return d.ownerName; });
+                var values = data.map(function(d) { return d.count; });
+
+                new Chart(document.getElementById('ownerChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: '仓库数量',
+                            data: values,
+                            backgroundColor: '#6366f1',
+                            borderColor: '#4f46e5',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                ticks: { stepSize: 1 },
+                                grid: { color: '#f0f0f0' }
+                            },
+                            y: {
+                                grid: { display: false },
+                                ticks: { font: { size: 12 } }
+                            }
+                        }
+                    }
+                });
+            });
+
+        // 加载时间趋势图
+        fetch('/api/stats/timeline')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var labels = data.map(function(d) { return d.month; });
+                var values = data.map(function(d) { return d.count; });
+
+                new Chart(document.getElementById('timelineChart'), {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Star 数量',
+                            data: values,
+                            borderColor: '#6366f1',
+                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                            borderWidth: 2,
+                            pointBackgroundColor: '#6366f1',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            fill: true,
+                            tension: 0.3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: '#f0f0f0' },
+                                ticks: {
+                                    maxRotation: 45,
+                                    font: { size: 11 }
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: '#f0f0f0' },
+                                ticks: { stepSize: 1 }
+                            }
+                        }
+                    }
+                });
+            });
+
+        // 加载最受欢迎仓库
+        fetch('/api/stats/top-starred')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var tbody = document.querySelector('#top-starred-table tbody');
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">暂无数据</td></tr>';
+                    return;
+                }
+                var html = '';
+                data.forEach(function(repo, idx) {
+                    html += '<tr>';
+                    html += '<td>' + (idx + 1) + '</td>';
+                    html += '<td class="repo-name"><a href="' + (repo.htmlUrl || '#') + '" target="_blank">' + (repo.fullName || repo.repoName || '-') + '</a></td>';
+                    html += '<td><span class="badge bg-light text-dark badge-lang">' + (repo.language || '-') + '</span></td>';
+                    html += '<td><i class="bi bi-star-fill text-warning"></i> ' + formatNumber(repo.starsCount) + '</td>';
+                    html += '<td><i class="bi bi-diagram-2"></i> ' + formatNumber(repo.forksCount) + '</td>';
+                    html += '</tr>';
+                });
+                tbody.innerHTML = html;
+            })
+            .catch(function() {
+                document.querySelector('#top-starred-table tbody').innerHTML = '<tr><td colspan="5" class="text-center text-danger">加载失败</td></tr>';
+            });
+
+        // 加载最近活跃仓库
+        fetch('/api/stats/recent-active')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var tbody = document.querySelector('#recent-active-table tbody');
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">暂无数据</td></tr>';
+                    return;
+                }
+                var html = '';
+                data.forEach(function(repo, idx) {
+                    html += '<tr>';
+                    html += '<td>' + (idx + 1) + '</td>';
+                    html += '<td class="repo-name"><a href="' + (repo.htmlUrl || '#') + '" target="_blank">' + (repo.fullName || repo.repoName || '-') + '</a></td>';
+                    html += '<td><span class="badge bg-light text-dark badge-lang">' + (repo.language || '-') + '</span></td>';
+                    html += '<td><i class="bi bi-star-fill text-warning"></i> ' + formatNumber(repo.starsCount) + '</td>';
+                    html += '<td>' + formatDate(repo.repoUpdatedAt) + '</td>';
+                    html += '</tr>';
+                });
+                tbody.innerHTML = html;
+            })
+            .catch(function() {
+                document.querySelector('#recent-active-table tbody').innerHTML = '<tr><td colspan="5" class="text-center text-danger">加载失败</td></tr>';
+            });
+    </script>
+</th:block>
+</body>
+</html>
