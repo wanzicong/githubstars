@@ -364,6 +364,37 @@
                 color: var(--gs-text);
             }
 
+            /* ── 豆包按钮 ── */
+            .btn-doubao {
+                margin-left: auto;
+                height: 26px;
+                padding: 0 10px;
+                border: 1.5px solid var(--gs-border);
+                border-radius: 6px;
+                background: transparent;
+                color: var(--gs-text-muted);
+                font-size: 0.72rem;
+                font-weight: 500;
+                font-family: var(--gs-font);
+                cursor: pointer;
+                transition: all 0.2s;
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+            .btn-doubao:hover {
+                border-color: var(--gs-accent);
+                color: var(--gs-accent);
+                background: var(--gs-accent-ghost);
+            }
+            .btn-doubao.copied {
+                border-color: var(--gs-green);
+                color: var(--gs-green);
+                background: rgba(34, 160, 107, 0.08);
+            }
+
             /* ── 空状态 ── */
             .empty-state {
                 text-align: center;
@@ -626,6 +657,9 @@
                         <i class="bi bi-clock" style="font-size: 0.7rem;"></i>
                         <span th:text="${#temporals.format(repo.starredAt, 'yyyy-MM-dd')}">2024-01-01</span>
                     </span>
+                    <button class="btn-doubao" th:data-url="${repo.htmlUrl}" onclick="copyAndGo(this)" title="复制仓库地址并跳转豆包">
+                        <i class="bi bi-box-arrow-up-right"></i> 豆包
+                    </button>
                 </div>
             </div>
         </div>
@@ -704,6 +738,22 @@
 
         dateFieldSelect.addEventListener('change', toggleDateInputs);
         toggleDateInputs(); // 页面加载时初始化
+
+        // 复制仓库地址并跳转豆包
+        function copyAndGo(btn) {
+            const url = btn.getAttribute('data-url');
+            navigator.clipboard.writeText(url).then(function () {
+                btn.classList.add('copied');
+                btn.innerHTML = '<i class="bi bi-check-lg"></i> 已复制';
+                setTimeout(function () {
+                    window.open('https://www.doubao.com/chat', '_blank');
+                }, 300);
+                setTimeout(function () {
+                    btn.classList.remove('copied');
+                    btn.innerHTML = '<i class="bi bi-box-arrow-up-right"></i> 豆包';
+                }, 2000);
+            });
+        }
     </script>
 </th:block>
 </body>
