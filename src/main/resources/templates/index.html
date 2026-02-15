@@ -364,6 +364,28 @@
                 color: var(--gs-text);
             }
 
+            /* ── 导出按钮 ── */
+            .btn-gs-export {
+                height: 38px;
+                width: 38px;
+                border: 1.5px solid var(--gs-border);
+                border-radius: var(--gs-radius-sm);
+                background: transparent;
+                color: var(--gs-text-muted);
+                font-size: 1rem;
+                cursor: pointer;
+                transition: all 0.2s;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .btn-gs-export:hover {
+                border-color: var(--gs-green);
+                color: var(--gs-green);
+                background: rgba(34, 160, 107, 0.06);
+            }
+
             /* ── 豆包按钮 ── */
             .btn-doubao {
                 margin-left: auto;
@@ -555,6 +577,9 @@
                         <i class="bi bi-calendar-range"></i> 时间
                         <i class="bi bi-chevron-down chevron"></i>
                     </button>
+                    <button type="button" class="btn-gs-export" id="exportBtn" title="导出筛选结果的全部链接">
+                        <i class="bi bi-download"></i>
+                    </button>
                     <a th:href="@{/}" class="btn-gs-ghost" title="清除筛选">
                         <i class="bi bi-x-lg"></i>
                     </a>
@@ -738,6 +763,14 @@
 
         dateFieldSelect.addEventListener('change', toggleDateInputs);
         toggleDateInputs(); // 页面加载时初始化
+
+        // 导出链接：使用当前筛选条件拼接导出URL
+        document.getElementById('exportBtn').addEventListener('click', function () {
+            const form = document.getElementById('filterForm');
+            const params = new URLSearchParams(new FormData(form));
+            params.delete('size');
+            window.location.href = '/stars/export?' + params.toString();
+        });
 
         // 复制仓库地址并跳转豆包
         function copyAndGo(btn) {

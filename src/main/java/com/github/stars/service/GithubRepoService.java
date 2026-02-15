@@ -145,6 +145,54 @@ public class GithubRepoService {
     }
 
     /**
+     * 按筛选条件查询所有仓库链接（不分页，仅查 html_url）
+     */
+    public List<String> findAllUrls(String keyword, String language, String sortBy, String sortOrder,
+                                    String dateField, String startMonth, String endMonth) {
+        LambdaQueryWrapper<GithubRepo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.select(GithubRepo::getHtmlUrl);
+
+        if (StringUtils.hasText(keyword)) {
+            wrapper.and(w -> w
+                    .like(GithubRepo::getRepoName, keyword)
+                    .or().like(GithubRepo::getDescription, keyword)
+                    .or().like(GithubRepo::getOwnerName, keyword)
+                    .or().like(GithubRepo::getFullName, keyword)
+            );
+        }
+        if (StringUtils.hasText(language)) {
+            wrapper.eq(GithubRepo::getLanguage, language);
+        }
+        if (StringUtils.hasText(dateField) && (StringUtils.hasText(startMonth) || StringUtils.hasText(endMonth))) {
+            SFunction<GithubRepo, ?> dateColumn = getDateColumn(dateField);
+            if (dateColumn != null) {
+                if (StringUtils.hasText(startMonth)) {
+                    LocalDateTime startTime = parseMonthStart(startMonth);
+                    if (startTime != null) wrapper.ge(dateColumn, startTime);
+                }
+                if (StringUtils.hasText(endMonth)) {
+                    LocalDateTime endTime = parseMonthEnd(endMonth);
+                    if (endTime != null) wrapper.le(dateColumn, endTime);
+                }
+            }
+        }
+
+        boolean isAsc = "asc".equalsIgnoreCase(sortOrder);
+        switch (sortBy != null ? sortBy : "starred_at") {
+            case "stars_count": wrapper.orderBy(true, isAsc, GithubRepo::getStarsCount); break;
+            case "forks_count": wrapper.orderBy(true, isAsc, GithubRepo::getForksCount); break;
+            case "repo_updated_at": wrapper.orderBy(true, isAsc, GithubRepo::getRepoUpdatedAt); break;
+            case "repo_created_at": wrapper.orderBy(true, isAsc, GithubRepo::getRepoCreatedAt); break;
+            case "repo_pushed_at": wrapper.orderBy(true, isAsc, GithubRepo::getRepoPushedAt); break;
+            default: wrapper.orderBy(true, isAsc, GithubRepo::getStarredAt); break;
+        }
+
+        return githubRepoMapper.selectList(wrapper).stream()
+                .map(GithubRepo::getHtmlUrl)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
      * 根据ID获取仓库详情
      */
     public GithubRepo findById(Long id) {

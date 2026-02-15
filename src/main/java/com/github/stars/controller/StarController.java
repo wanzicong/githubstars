@@ -9,6 +9,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.Arrays;
@@ -82,6 +86,31 @@ public class StarController {
         model.addAttribute("queryString", queryString != null ? queryString : "");
 
         return "index";
+    }
+
+    /**
+     * 导出筛选后的全部仓库链接为 txt 文件
+     */
+    @GetMapping("/stars/export")
+    public ResponseEntity<byte[]> exportUrls(
+            @RequestParam(value = "keyword", defaultValue = "") String keyword,
+            @RequestParam(value = "language", defaultValue = "") String language,
+            @RequestParam(value = "sortBy", defaultValue = "starred_at") String sortBy,
+            @RequestParam(value = "sortOrder", defaultValue = "desc") String sortOrder,
+            @RequestParam(value = "dateField", defaultValue = "") String dateField,
+            @RequestParam(value = "startMonth", defaultValue = "") String startMonth,
+            @RequestParam(value = "endMonth", defaultValue = "") String endMonth) {
+
+        List<String> urls = githubRepoService.findAllUrls(keyword, language, sortBy, sortOrder,
+                dateField, startMonth, endMonth);
+        String content = String.join("\n", urls);
+        byte[] bytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=github_stars_links.txt")
+                .contentType(MediaType.TEXT_PLAIN)
+                .contentLength(bytes.length)
+                .body(bytes);
     }
 
     /**
