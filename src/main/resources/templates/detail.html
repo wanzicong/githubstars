@@ -173,8 +173,8 @@
 <body>
 <div layout:fragment="content">
 
-    <!-- 返回链接 -->
-    <a class="back-link" th:href="@{/}">
+    <!-- 返回链接（保持查询条件） -->
+    <a class="back-link" th:href="${backQuery != null and !backQuery.isEmpty()} ? @{'/?' + ${backQuery}} : @{/}">
         <i class="bi bi-arrow-left"></i> 返回Star列表
     </a>
 

@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -22,7 +23,7 @@ public class StarController {
     private GithubRepoService githubRepoService;
 
     /**
-     * Star列表首页 - 支持分页、搜索、筛选、排序
+     * Star列表首页 - 支持分页、搜索、筛选、排序、时间范围查询
      */
     @GetMapping({"/", "/stars"})
     public String index(@RequestParam(value = "page", defaultValue = "1") int page,
@@ -31,10 +32,15 @@ public class StarController {
                         @RequestParam(value = "language", defaultValue = "") String language,
                         @RequestParam(value = "sortBy", defaultValue = "starred_at") String sortBy,
                         @RequestParam(value = "sortOrder", defaultValue = "desc") String sortOrder,
+                        @RequestParam(value = "dateField", defaultValue = "") String dateField,
+                        @RequestParam(value = "startMonth", defaultValue = "") String startMonth,
+                        @RequestParam(value = "endMonth", defaultValue = "") String endMonth,
+                        HttpServletRequest request,
                         Model model) {
 
         // 查询分页数据
-        IPage<GithubRepo> pageResult = githubRepoService.findPage(page, size, keyword, language, sortBy, sortOrder);
+        IPage<GithubRepo> pageResult = githubRepoService.findPage(page, size, keyword, language,
+                sortBy, sortOrder, dateField, startMonth, endMonth);
 
         // 查询所有语言列表（用于下拉筛选）
         List<String> languages = githubRepoService.findAllLanguages();
@@ -64,9 +70,16 @@ public class StarController {
         model.addAttribute("language", language);
         model.addAttribute("sortBy", sortBy);
         model.addAttribute("sortOrder", sortOrder);
+        model.addAttribute("dateField", dateField);
+        model.addAttribute("startMonth", startMonth);
+        model.addAttribute("endMonth", endMonth);
 
         // 语言列表
         model.addAttribute("languages", languages);
+
+        // 当前查询字符串，用于详情页返回
+        String queryString = request.getQueryString();
+        model.addAttribute("queryString", queryString != null ? queryString : "");
 
         return "index";
     }
@@ -75,12 +88,15 @@ public class StarController {
      * Star仓库详情页
      */
     @GetMapping("/stars/{id}")
-    public String detail(@PathVariable("id") Long id, Model model) {
+    public String detail(@PathVariable("id") Long id,
+                         @RequestParam(value = "backQuery", defaultValue = "") String backQuery,
+                         Model model) {
         GithubRepo repo = githubRepoService.findById(id);
         if (repo == null) {
             return "redirect:/";
         }
         model.addAttribute("repo", repo);
+        model.addAttribute("backQuery", backQuery);
 
         // 解析 topics JSON 数组为 List
         List<String> topicList = Collections.emptyList();

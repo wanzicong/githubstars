@@ -208,6 +208,8 @@
                         <option value="stars_count" th:selected="${sortBy == 'stars_count'}">Star数量</option>
                         <option value="forks_count" th:selected="${sortBy == 'forks_count'}">Fork数量</option>
                         <option value="repo_updated_at" th:selected="${sortBy == 'repo_updated_at'}">更新时间</option>
+                        <option value="repo_created_at" th:selected="${sortBy == 'repo_created_at'}">创建时间</option>
+                        <option value="repo_pushed_at" th:selected="${sortBy == 'repo_pushed_at'}">推送时间</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -228,6 +230,39 @@
                         <a th:href="@{/}" class="btn btn-reset">
                             <i class="bi bi-x-circle"></i>
                         </a>
+                    </div>
+                </div>
+            </div>
+            <!-- 时间范围筛选 -->
+            <div class="row g-2 align-items-end mt-1">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold" style="font-size: 0.85rem; color: #656d76;">
+                        <i class="bi bi-calendar-range"></i> 时间字段
+                    </label>
+                    <select class="form-select" name="dateField">
+                        <option value="">不限时间</option>
+                        <option value="starred_at" th:selected="${dateField == 'starred_at'}">Star 时间</option>
+                        <option value="repo_created_at" th:selected="${dateField == 'repo_created_at'}">仓库创建时间</option>
+                        <option value="repo_updated_at" th:selected="${dateField == 'repo_updated_at'}">更新时间</option>
+                        <option value="repo_pushed_at" th:selected="${dateField == 'repo_pushed_at'}">推送时间</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold" style="font-size: 0.85rem; color: #656d76;">
+                        <i class="bi bi-calendar-event"></i> 起始月份
+                    </label>
+                    <input type="month" class="form-control" name="startMonth" th:value="${startMonth}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold" style="font-size: 0.85rem; color: #656d76;">
+                        <i class="bi bi-calendar-check"></i> 结束月份
+                    </label>
+                    <input type="month" class="form-control" name="endMonth" th:value="${endMonth}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" style="visibility: hidden; font-size: 0.85rem;">提示</label>
+                    <div class="text-muted" style="font-size: 0.8rem; padding: 6px 0;">
+                        <i class="bi bi-info-circle"></i> 选择时间字段后设置月份范围
                     </div>
                 </div>
             </div>
@@ -254,7 +289,7 @@
                     <img class="owner-avatar" th:src="${repo.ownerAvatarUrl}" th:alt="${repo.ownerName}"
                          onerror="this.src='https://github.githubassets.com/images/gravatars/gravatar-user-420.png'">
                     <div>
-                        <a class="repo-name" th:href="@{'/stars/' + ${repo.id}}" th:text="${repo.repoName}">repo-name</a>
+                        <a class="repo-name" th:href="@{'/stars/' + ${repo.id}(backQuery=${queryString})}" th:text="${repo.repoName}">repo-name</a>
                         <div class="owner-name" th:text="${repo.ownerName}">owner</div>
                     </div>
                 </div>
@@ -286,7 +321,7 @@
             <!-- 上一页 -->
             <li class="page-item" th:classappend="${currentPage == 1} ? 'disabled'">
                 <a class="page-link page-link-custom"
-                   th:href="@{/(page=${currentPage - 1}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder})}"
+                   th:href="@{/(page=${currentPage - 1}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}"
                    th:if="${currentPage > 1}">
                     <i class="bi bi-chevron-left"></i>
                 </a>
@@ -298,7 +333,7 @@
             <!-- 第一页 + 省略号 -->
             <li class="page-item" th:if="${startPage > 1}">
                 <a class="page-link page-link-custom"
-                   th:href="@{/(page=1, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder})}">1</a>
+                   th:href="@{/(page=1, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}">1</a>
             </li>
             <li class="page-item disabled" th:if="${startPage > 2}">
                 <span class="page-link page-link-custom">...</span>
@@ -307,7 +342,7 @@
             <!-- 页码 -->
             <li class="page-item" th:each="i : ${#numbers.sequence(startPage, endPage)}">
                 <a class="page-link page-link-custom" th:classappend="${i == currentPage} ? 'active-page'"
-                   th:href="@{/(page=${i}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder})}"
+                   th:href="@{/(page=${i}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}"
                    th:text="${i}">1</a>
             </li>
 
@@ -317,14 +352,14 @@
             </li>
             <li class="page-item" th:if="${endPage < totalPages}">
                 <a class="page-link page-link-custom"
-                   th:href="@{/(page=${totalPages}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder})}"
+                   th:href="@{/(page=${totalPages}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}"
                    th:text="${totalPages}">99</a>
             </li>
 
             <!-- 下一页 -->
             <li class="page-item" th:classappend="${currentPage == totalPages} ? 'disabled'">
                 <a class="page-link page-link-custom"
-                   th:href="@{/(page=${currentPage + 1}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder})}"
+                   th:href="@{/(page=${currentPage + 1}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}"
                    th:if="${currentPage < totalPages}">
                     <i class="bi bi-chevron-right"></i>
                 </a>
