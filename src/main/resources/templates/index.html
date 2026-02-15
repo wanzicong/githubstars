@@ -5,60 +5,329 @@
 <head>
     <title>Star列表</title>
     <th:block layout:fragment="head">
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;1,9..40,400&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
         <style>
-            .search-bar {
-                background: white;
-                border-radius: 12px;
-                padding: 20px 24px;
-                box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-                margin-bottom: 24px;
+            :root {
+                --gs-navy: #1a1a2e;
+                --gs-navy-light: #2a2a4a;
+                --gs-surface: #ffffff;
+                --gs-surface-alt: #f8f9fc;
+                --gs-border: #e2e6ee;
+                --gs-border-light: #eef1f6;
+                --gs-text: #2d3142;
+                --gs-text-muted: #7b8194;
+                --gs-accent: #4361ee;
+                --gs-accent-hover: #3651d4;
+                --gs-accent-ghost: rgba(67, 97, 238, 0.08);
+                --gs-accent-glow: rgba(67, 97, 238, 0.18);
+                --gs-gold: #f0a500;
+                --gs-gold-bg: rgba(240, 165, 0, 0.1);
+                --gs-purple: #7c5cbf;
+                --gs-green: #22a06b;
+                --gs-red: #e5484d;
+                --gs-radius: 14px;
+                --gs-radius-sm: 10px;
+                --gs-shadow-sm: 0 1px 3px rgba(26, 26, 46, 0.04), 0 1px 2px rgba(26, 26, 46, 0.06);
+                --gs-shadow: 0 4px 16px rgba(26, 26, 46, 0.06), 0 1px 3px rgba(26, 26, 46, 0.04);
+                --gs-shadow-lg: 0 8px 30px rgba(26, 26, 46, 0.1), 0 2px 6px rgba(26, 26, 46, 0.04);
+                --gs-font: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+                --gs-font-display: 'Space Grotesk', 'DM Sans', sans-serif;
             }
+
+            /* ── 统计摘要 ── */
+            .summary-strip {
+                background: var(--gs-navy);
+                border-radius: var(--gs-radius);
+                padding: 22px 28px;
+                margin-bottom: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                position: relative;
+                overflow: hidden;
+            }
+            .summary-strip::before {
+                content: '';
+                position: absolute;
+                top: -40%;
+                right: -5%;
+                width: 220px;
+                height: 220px;
+                background: radial-gradient(circle, rgba(67, 97, 238, 0.2) 0%, transparent 70%);
+                pointer-events: none;
+            }
+            .summary-strip::after {
+                content: '';
+                position: absolute;
+                bottom: -60%;
+                left: 10%;
+                width: 180px;
+                height: 180px;
+                background: radial-gradient(circle, rgba(240, 165, 0, 0.12) 0%, transparent 70%);
+                pointer-events: none;
+            }
+            .summary-strip .summary-left {
+                display: flex;
+                align-items: baseline;
+                gap: 10px;
+                position: relative;
+                z-index: 1;
+            }
+            .summary-strip .summary-count {
+                font-family: var(--gs-font-display);
+                font-size: 2rem;
+                font-weight: 700;
+                color: #fff;
+                letter-spacing: -0.5px;
+                line-height: 1;
+            }
+            .summary-strip .summary-label {
+                font-size: 0.88rem;
+                color: rgba(255, 255, 255, 0.55);
+                font-weight: 300;
+            }
+            .summary-strip .summary-page {
+                font-size: 0.82rem;
+                color: rgba(255, 255, 255, 0.4);
+                position: relative;
+                z-index: 1;
+                font-variant-numeric: tabular-nums;
+            }
+
+            /* ── 筛选面板 ── */
+            .filter-panel {
+                background: var(--gs-surface);
+                border-radius: var(--gs-radius);
+                border: 1px solid var(--gs-border);
+                box-shadow: var(--gs-shadow-sm);
+                margin-bottom: 24px;
+                overflow: hidden;
+            }
+            .filter-main {
+                padding: 18px 22px;
+                display: flex;
+                gap: 10px;
+                align-items: flex-end;
+                flex-wrap: wrap;
+            }
+            .filter-group {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+                flex: 1;
+                min-width: 140px;
+            }
+            .filter-group.fg-search { flex: 2.5; min-width: 220px; }
+            .filter-group.fg-lang { flex: 1.2; }
+            .filter-group.fg-sort { flex: 1.2; }
+            .filter-group.fg-order { flex: 0.8; min-width: 100px; }
+            .filter-group.fg-actions {
+                flex: 0 0 auto;
+                flex-direction: row;
+                align-items: flex-end;
+                gap: 6px;
+            }
+            .filter-label {
+                font-size: 0.72rem;
+                font-weight: 500;
+                color: var(--gs-text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+            }
+            .filter-input {
+                height: 38px;
+                border: 1.5px solid var(--gs-border);
+                border-radius: var(--gs-radius-sm);
+                padding: 0 12px;
+                font-size: 0.88rem;
+                font-family: var(--gs-font);
+                color: var(--gs-text);
+                background: var(--gs-surface);
+                transition: border-color 0.2s, box-shadow 0.2s;
+                width: 100%;
+                outline: none;
+                appearance: none;
+                -webkit-appearance: none;
+            }
+            select.filter-input {
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%237b8194' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+                background-repeat: no-repeat;
+                background-position: right 12px center;
+                padding-right: 32px;
+            }
+            .filter-input:focus {
+                border-color: var(--gs-accent);
+                box-shadow: 0 0 0 3px var(--gs-accent-glow);
+            }
+            .filter-input::placeholder {
+                color: #b0b8c9;
+            }
+
+            /* 时间筛选 - 可折叠高级区域 */
+            .filter-advanced {
+                border-top: 1px solid var(--gs-border-light);
+                padding: 0 22px;
+                max-height: 0;
+                overflow: hidden;
+                transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s;
+            }
+            .filter-advanced.open {
+                max-height: 90px;
+                padding: 14px 22px;
+            }
+            .filter-advanced .adv-row {
+                display: flex;
+                gap: 10px;
+                align-items: flex-end;
+            }
+            .filter-advanced .filter-group { min-width: 120px; }
+
+            /* 按钮 */
+            .btn-gs-primary {
+                height: 38px;
+                padding: 0 20px;
+                border: none;
+                border-radius: var(--gs-radius-sm);
+                background: var(--gs-accent);
+                color: #fff;
+                font-size: 0.85rem;
+                font-weight: 600;
+                font-family: var(--gs-font);
+                cursor: pointer;
+                transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+                white-space: nowrap;
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+            }
+            .btn-gs-primary:hover {
+                background: var(--gs-accent-hover);
+                box-shadow: 0 2px 8px var(--gs-accent-glow);
+            }
+            .btn-gs-primary:active { transform: scale(0.97); }
+            .btn-gs-ghost {
+                height: 38px;
+                width: 38px;
+                border: 1.5px solid var(--gs-border);
+                border-radius: var(--gs-radius-sm);
+                background: transparent;
+                color: var(--gs-text-muted);
+                font-size: 1rem;
+                cursor: pointer;
+                transition: all 0.2s;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                text-decoration: none;
+                flex-shrink: 0;
+            }
+            .btn-gs-ghost:hover {
+                border-color: var(--gs-red);
+                color: var(--gs-red);
+                background: rgba(229, 72, 77, 0.05);
+            }
+            .btn-gs-toggle {
+                height: 38px;
+                padding: 0 14px;
+                border: 1.5px solid var(--gs-border);
+                border-radius: var(--gs-radius-sm);
+                background: transparent;
+                color: var(--gs-text-muted);
+                font-size: 0.82rem;
+                font-weight: 500;
+                font-family: var(--gs-font);
+                cursor: pointer;
+                transition: all 0.2s;
+                white-space: nowrap;
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+            }
+            .btn-gs-toggle:hover, .btn-gs-toggle.active {
+                border-color: var(--gs-accent);
+                color: var(--gs-accent);
+                background: var(--gs-accent-ghost);
+            }
+            .btn-gs-toggle .chevron {
+                transition: transform 0.3s;
+                font-size: 0.7rem;
+            }
+            .btn-gs-toggle.active .chevron { transform: rotate(180deg); }
+
+            /* 活跃筛选标签 */
+            .active-filters {
+                display: flex;
+                gap: 6px;
+                flex-wrap: wrap;
+                padding: 0 22px 14px;
+            }
+            .active-filters:empty { display: none; }
+            .filter-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 3px 10px;
+                border-radius: 20px;
+                font-size: 0.75rem;
+                font-weight: 500;
+                background: var(--gs-accent-ghost);
+                color: var(--gs-accent);
+                border: 1px solid rgba(67, 97, 238, 0.15);
+            }
+            .filter-chip .chip-label { opacity: 0.7; }
+
+            /* ── 仓库卡片 ── */
             .repo-card {
-                background: white;
-                border-radius: 12px;
+                background: var(--gs-surface);
+                border-radius: var(--gs-radius);
+                border: 1px solid var(--gs-border);
                 padding: 20px;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-                transition: transform 0.2s, box-shadow 0.2s;
+                box-shadow: var(--gs-shadow-sm);
+                transition: box-shadow 0.25s, border-color 0.25s, transform 0.25s;
                 height: 100%;
                 display: flex;
                 flex-direction: column;
             }
             .repo-card:hover {
-                transform: translateY(-3px);
-                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+                border-color: rgba(67, 97, 238, 0.25);
+                box-shadow: var(--gs-shadow);
+                transform: translateY(-2px);
             }
             .repo-card .repo-header {
                 display: flex;
                 align-items: center;
                 margin-bottom: 12px;
+                gap: 12px;
             }
             .repo-card .owner-avatar {
-                width: 40px;
-                height: 40px;
-                border-radius: 50%;
-                margin-right: 12px;
-                border: 2px solid #e9ecef;
+                width: 36px;
+                height: 36px;
+                border-radius: 10px;
+                border: 1px solid var(--gs-border-light);
+                flex-shrink: 0;
             }
             .repo-card .repo-name {
-                font-size: 1.05rem;
+                font-family: var(--gs-font-display);
+                font-size: 1rem;
                 font-weight: 600;
-                color: #0969da;
+                color: var(--gs-text);
                 text-decoration: none;
-                word-break: break-all;
+                line-height: 1.3;
+                word-break: break-word;
+                transition: color 0.15s;
             }
-            .repo-card .repo-name:hover {
-                text-decoration: underline;
-            }
+            .repo-card .repo-name:hover { color: var(--gs-accent); }
             .repo-card .owner-name {
-                font-size: 0.85rem;
-                color: #656d76;
+                font-size: 0.78rem;
+                color: var(--gs-text-muted);
+                margin-top: 1px;
             }
             .repo-card .repo-desc {
-                color: #555;
-                font-size: 0.9rem;
-                line-height: 1.5;
+                color: #5a5f72;
+                font-size: 0.85rem;
+                line-height: 1.55;
                 flex: 1;
-                margin-bottom: 12px;
+                margin-bottom: 14px;
                 display: -webkit-box;
                 -webkit-line-clamp: 3;
                 -webkit-box-orient: vertical;
@@ -68,227 +337,271 @@
                 display: flex;
                 align-items: center;
                 flex-wrap: wrap;
-                gap: 12px;
-                font-size: 0.85rem;
-                color: #656d76;
+                gap: 10px;
+                font-size: 0.8rem;
+                color: var(--gs-text-muted);
                 margin-top: auto;
+                padding-top: 12px;
+                border-top: 1px solid var(--gs-border-light);
             }
-            .repo-card .repo-meta .meta-item {
-                display: flex;
+            .repo-card .meta-item {
+                display: inline-flex;
                 align-items: center;
-                gap: 4px;
+                gap: 3px;
             }
-            .lang-badge {
+            .lang-dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
                 display: inline-block;
-                padding: 2px 10px;
-                border-radius: 12px;
-                font-size: 0.78rem;
+                background: var(--gs-accent);
+                margin-right: 4px;
+                flex-shrink: 0;
+            }
+            .lang-text {
+                font-size: 0.8rem;
                 font-weight: 500;
-                background-color: #ddf4ff;
-                color: #0969da;
+                color: var(--gs-text);
             }
-            .stats-summary {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                border-radius: 12px;
-                padding: 20px 24px;
-                color: white;
-                margin-bottom: 24px;
-            }
-            .stats-summary h5 {
-                margin: 0;
-                font-weight: 300;
-                font-size: 0.9rem;
-                opacity: 0.85;
-            }
-            .stats-summary .stat-num {
-                font-size: 1.8rem;
-                font-weight: 700;
-            }
-            .page-link-custom {
-                border-radius: 8px !important;
-                margin: 0 2px;
-                border: none;
-                color: #495057;
-                font-weight: 500;
-            }
-            .page-link-custom.active-page {
-                background-color: #0969da;
-                color: white;
-            }
+
+            /* ── 空状态 ── */
             .empty-state {
                 text-align: center;
-                padding: 60px 20px;
-                color: #8892a0;
+                padding: 72px 24px;
+                color: var(--gs-text-muted);
             }
-            .empty-state i {
-                font-size: 4rem;
-                margin-bottom: 16px;
-                display: block;
+            .empty-state .empty-icon {
+                width: 64px;
+                height: 64px;
+                border-radius: 50%;
+                background: var(--gs-surface-alt);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.6rem;
+                margin-bottom: 18px;
+                color: #b0b8c9;
             }
-            .form-select, .form-control {
-                border-radius: 8px;
-                border: 1px solid #d0d7de;
+            .empty-state h5 {
+                font-family: var(--gs-font-display);
+                font-weight: 600;
+                color: var(--gs-text);
+                margin-bottom: 6px;
             }
-            .form-select:focus, .form-control:focus {
-                border-color: #0969da;
-                box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15);
+            .empty-state p { font-size: 0.9rem; }
+
+            /* ── 分页 ── */
+            .pagination-bar {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 4px;
+                margin-top: 28px;
+                padding-bottom: 8px;
             }
-            .btn-search {
-                background-color: #0969da;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 6px 20px;
+            .pg-btn {
+                min-width: 36px;
+                height: 36px;
+                padding: 0 10px;
+                border: 1px solid transparent;
+                border-radius: var(--gs-radius-sm);
+                background: transparent;
+                color: var(--gs-text-muted);
+                font-size: 0.85rem;
                 font-weight: 500;
+                font-family: var(--gs-font);
+                font-variant-numeric: tabular-nums;
+                cursor: pointer;
+                text-decoration: none;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.15s;
             }
-            .btn-search:hover {
-                background-color: #0757b5;
-                color: white;
+            a.pg-btn:hover {
+                background: var(--gs-surface-alt);
+                border-color: var(--gs-border);
+                color: var(--gs-text);
             }
-            .btn-reset {
-                border: 1px solid #d0d7de;
-                border-radius: 8px;
-                padding: 6px 16px;
-                color: #656d76;
-                background: white;
+            .pg-btn.pg-active {
+                background: var(--gs-accent);
+                color: #fff;
+                font-weight: 600;
+                pointer-events: none;
             }
-            .btn-reset:hover {
-                background-color: #f6f8fa;
-                color: #333;
+            .pg-btn.pg-disabled {
+                opacity: 0.35;
+                pointer-events: none;
             }
+            .pg-ellipsis {
+                min-width: 28px;
+                color: #b0b8c9;
+                text-align: center;
+                font-size: 0.8rem;
+                letter-spacing: 2px;
+            }
+
+            /* ── 响应式 ── */
+            @media (max-width: 768px) {
+                .filter-main { flex-direction: column; gap: 10px; }
+                .filter-group { min-width: 100% !important; }
+                .filter-group.fg-actions { flex-direction: row; }
+                .filter-advanced .adv-row { flex-direction: column; }
+                .filter-advanced.open { max-height: 220px; }
+                .summary-strip { flex-direction: column; gap: 4px; align-items: flex-start; }
+            }
+
+            /* ── 加载动画 ── */
+            @keyframes cardIn {
+                from { opacity: 0; transform: translateY(12px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .repo-card { animation: cardIn 0.35s ease both; }
+            .col-md-6:nth-child(2) .repo-card { animation-delay: 0.04s; }
+            .col-md-6:nth-child(3) .repo-card { animation-delay: 0.08s; }
+            .col-md-6:nth-child(4) .repo-card { animation-delay: 0.12s; }
+            .col-md-6:nth-child(5) .repo-card { animation-delay: 0.16s; }
+            .col-md-6:nth-child(6) .repo-card { animation-delay: 0.20s; }
         </style>
     </th:block>
 </head>
 <body>
 <div layout:fragment="content">
 
-    <!-- 统计摘要 -->
-    <div class="stats-summary">
-        <div class="row align-items-center">
-            <div class="col-md-8">
-                <h5>已收藏的 GitHub 仓库</h5>
-                <span class="stat-num" th:text="${totalCount}">0</span>
-                <span style="font-weight: 300; opacity: 0.85;"> 个仓库</span>
-            </div>
-            <div class="col-md-4 text-md-end" th:if="${totalCount > 0}">
-                <span style="font-size: 0.9rem; opacity: 0.75;">
-                    第 <span th:text="${currentPage}">1</span> / <span th:text="${totalPages}">1</span> 页
-                </span>
-            </div>
+    <!-- 统计摘要条 -->
+    <div class="summary-strip">
+        <div class="summary-left">
+            <span class="summary-count" th:text="${totalCount}">0</span>
+            <span class="summary-label">已收藏仓库</span>
         </div>
+        <span class="summary-page" th:if="${totalCount > 0}">
+            <span th:text="${currentPage}">1</span> / <span th:text="${totalPages}">1</span> 页
+        </span>
     </div>
 
-    <!-- 搜索与筛选栏 -->
-    <div class="search-bar">
-        <form th:action="@{/}" method="get">
-            <div class="row g-2 align-items-end">
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold" style="font-size: 0.85rem; color: #656d76;">
-                        <i class="bi bi-search"></i> 搜索关键词
-                    </label>
-                    <input type="text" class="form-control" name="keyword" th:value="${keyword}"
-                           placeholder="搜索仓库名、描述、作者...">
+    <!-- 筛选面板 -->
+    <div class="filter-panel">
+        <form id="filterForm" th:action="@{/}" method="get">
+            <!-- 主筛选行 -->
+            <div class="filter-main">
+                <div class="filter-group fg-search">
+                    <span class="filter-label">搜索</span>
+                    <input type="text" class="filter-input" name="keyword" th:value="${keyword}"
+                           placeholder="仓库名 / 描述 / 作者...">
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold" style="font-size: 0.85rem; color: #656d76;">
-                        <i class="bi bi-code-slash"></i> 编程语言
-                    </label>
-                    <select class="form-select" name="language">
-                        <option value="">全部语言</option>
+                <div class="filter-group fg-lang">
+                    <span class="filter-label">语言</span>
+                    <select class="filter-input" name="language">
+                        <option value="">全部</option>
                         <option th:each="lang : ${languages}" th:value="${lang}" th:text="${lang}"
-                                th:selected="${lang == language}">Language</option>
+                                th:selected="${lang == language}">Lang</option>
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold" style="font-size: 0.85rem; color: #656d76;">
-                        <i class="bi bi-sort-down"></i> 排序方式
-                    </label>
-                    <select class="form-select" name="sortBy">
-                        <option value="starred_at" th:selected="${sortBy == 'starred_at'}">Star时间</option>
-                        <option value="stars_count" th:selected="${sortBy == 'stars_count'}">Star数量</option>
-                        <option value="forks_count" th:selected="${sortBy == 'forks_count'}">Fork数量</option>
+                <div class="filter-group fg-sort">
+                    <span class="filter-label">排序</span>
+                    <select class="filter-input" name="sortBy">
+                        <option value="starred_at" th:selected="${sortBy == 'starred_at'}">Star 时间</option>
+                        <option value="stars_count" th:selected="${sortBy == 'stars_count'}">Star 数量</option>
+                        <option value="forks_count" th:selected="${sortBy == 'forks_count'}">Fork 数量</option>
                         <option value="repo_updated_at" th:selected="${sortBy == 'repo_updated_at'}">更新时间</option>
                         <option value="repo_created_at" th:selected="${sortBy == 'repo_created_at'}">创建时间</option>
                         <option value="repo_pushed_at" th:selected="${sortBy == 'repo_pushed_at'}">推送时间</option>
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold" style="font-size: 0.85rem; color: #656d76;">
-                        <i class="bi bi-arrow-down-up"></i> 排序方向
-                    </label>
-                    <select class="form-select" name="sortOrder">
+                <div class="filter-group fg-order">
+                    <span class="filter-label">方向</span>
+                    <select class="filter-input" name="sortOrder">
                         <option value="desc" th:selected="${sortOrder == 'desc'}">降序</option>
                         <option value="asc" th:selected="${sortOrder == 'asc'}">升序</option>
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label" style="visibility: hidden; font-size: 0.85rem;">操作</label>
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-search flex-fill">
-                            <i class="bi bi-search"></i> 搜索
-                        </button>
-                        <a th:href="@{/}" class="btn btn-reset">
-                            <i class="bi bi-x-circle"></i>
-                        </a>
+                <div class="filter-group fg-actions">
+                    <button type="submit" class="btn-gs-primary">
+                        <i class="bi bi-search"></i> 搜索
+                    </button>
+                    <button type="button" class="btn-gs-toggle" id="advToggle"
+                            th:classappend="${dateField != null and !dateField.isEmpty()} ? 'active'">
+                        <i class="bi bi-calendar-range"></i> 时间
+                        <i class="bi bi-chevron-down chevron"></i>
+                    </button>
+                    <a th:href="@{/}" class="btn-gs-ghost" title="清除筛选">
+                        <i class="bi bi-x-lg"></i>
+                    </a>
+                </div>
+            </div>
+
+            <!-- 高级筛选：时间范围（可折叠） -->
+            <div class="filter-advanced" id="advPanel"
+                 th:classappend="${dateField != null and !dateField.isEmpty()} ? 'open'">
+                <div class="adv-row">
+                    <div class="filter-group" style="flex: 1.5;">
+                        <span class="filter-label">时间字段</span>
+                        <select class="filter-input" name="dateField" id="dateFieldSelect">
+                            <option value="">不限时间</option>
+                            <option value="starred_at" th:selected="${dateField == 'starred_at'}">Star 时间</option>
+                            <option value="repo_created_at" th:selected="${dateField == 'repo_created_at'}">仓库创建时间</option>
+                            <option value="repo_updated_at" th:selected="${dateField == 'repo_updated_at'}">更新时间</option>
+                            <option value="repo_pushed_at" th:selected="${dateField == 'repo_pushed_at'}">推送时间</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <span class="filter-label">起始月份</span>
+                        <input type="month" class="filter-input date-range-input" name="startMonth"
+                               th:value="${startMonth}" id="startMonthInput">
+                    </div>
+                    <div class="filter-group">
+                        <span class="filter-label">结束月份</span>
+                        <input type="month" class="filter-input date-range-input" name="endMonth"
+                               th:value="${endMonth}" id="endMonthInput">
                     </div>
                 </div>
             </div>
-            <!-- 时间范围筛选 -->
-            <div class="row g-2 align-items-end mt-1">
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold" style="font-size: 0.85rem; color: #656d76;">
-                        <i class="bi bi-calendar-range"></i> 时间字段
-                    </label>
-                    <select class="form-select" name="dateField">
-                        <option value="">不限时间</option>
-                        <option value="starred_at" th:selected="${dateField == 'starred_at'}">Star 时间</option>
-                        <option value="repo_created_at" th:selected="${dateField == 'repo_created_at'}">仓库创建时间</option>
-                        <option value="repo_updated_at" th:selected="${dateField == 'repo_updated_at'}">更新时间</option>
-                        <option value="repo_pushed_at" th:selected="${dateField == 'repo_pushed_at'}">推送时间</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold" style="font-size: 0.85rem; color: #656d76;">
-                        <i class="bi bi-calendar-event"></i> 起始月份
-                    </label>
-                    <input type="month" class="form-control" name="startMonth" th:value="${startMonth}">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold" style="font-size: 0.85rem; color: #656d76;">
-                        <i class="bi bi-calendar-check"></i> 结束月份
-                    </label>
-                    <input type="month" class="form-control" name="endMonth" th:value="${endMonth}">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label" style="visibility: hidden; font-size: 0.85rem;">提示</label>
-                    <div class="text-muted" style="font-size: 0.8rem; padding: 6px 0;">
-                        <i class="bi bi-info-circle"></i> 选择时间字段后设置月份范围
-                    </div>
-                </div>
+
+            <!-- 活跃筛选标签 -->
+            <div class="active-filters" id="activeFilters">
+                <span class="filter-chip" th:if="${keyword != null and !keyword.isEmpty()}">
+                    <span class="chip-label">搜索:</span>
+                    <span th:text="${keyword}">keyword</span>
+                </span>
+                <span class="filter-chip" th:if="${language != null and !language.isEmpty()}">
+                    <span class="chip-label">语言:</span>
+                    <span th:text="${language}">language</span>
+                </span>
+                <span class="filter-chip" th:if="${dateField != null and !dateField.isEmpty()}">
+                    <span class="chip-label">时间:</span>
+                    <span th:if="${dateField == 'starred_at'}">Star时间</span>
+                    <span th:if="${dateField == 'repo_created_at'}">创建时间</span>
+                    <span th:if="${dateField == 'repo_updated_at'}">更新时间</span>
+                    <span th:if="${dateField == 'repo_pushed_at'}">推送时间</span>
+                    <span th:if="${startMonth != null and !startMonth.isEmpty()}" th:text="' 从 ' + ${startMonth}"></span>
+                    <span th:if="${endMonth != null and !endMonth.isEmpty()}" th:text="' 至 ' + ${endMonth}"></span>
+                </span>
             </div>
+
             <input type="hidden" name="size" th:value="${size}">
         </form>
     </div>
 
-    <!-- 仓库卡片列表 -->
+    <!-- 空状态 -->
     <div th:if="${#lists.isEmpty(repos)}" class="empty-state">
-        <i class="bi bi-inbox"></i>
+        <div class="empty-icon"><i class="bi bi-inbox"></i></div>
         <h5>暂无数据</h5>
-        <p th:if="${#strings.isEmpty(keyword) and #strings.isEmpty(language)}">
-            还没有同步任何 Star 仓库，请先进行同步操作。
+        <p th:if="${#strings.isEmpty(keyword) and #strings.isEmpty(language) and #strings.isEmpty(dateField)}">
+            还没有同步任何 Star 仓库，请先前往同步管理页面操作。
         </p>
-        <p th:unless="${#strings.isEmpty(keyword) and #strings.isEmpty(language)}">
+        <p th:unless="${#strings.isEmpty(keyword) and #strings.isEmpty(language) and #strings.isEmpty(dateField)}">
             没有找到符合条件的仓库，请尝试调整搜索条件。
         </p>
     </div>
 
+    <!-- 仓库卡片列表 -->
     <div class="row g-3" th:unless="${#lists.isEmpty(repos)}">
         <div class="col-md-6 col-lg-4" th:each="repo : ${repos}">
             <div class="repo-card">
                 <div class="repo-header">
                     <img class="owner-avatar" th:src="${repo.ownerAvatarUrl}" th:alt="${repo.ownerName}"
                          onerror="this.src='https://github.githubassets.com/images/gravatars/gravatar-user-420.png'">
-                    <div>
+                    <div style="min-width: 0;">
                         <a class="repo-name" th:href="@{'/stars/' + ${repo.id}(backQuery=${queryString})}" th:text="${repo.repoName}">repo-name</a>
                         <div class="owner-name" th:text="${repo.ownerName}">owner</div>
                     </div>
@@ -297,17 +610,20 @@
                     仓库描述信息
                 </div>
                 <div class="repo-meta">
-                    <span class="lang-badge" th:if="${repo.language != null}" th:text="${repo.language}">Java</span>
+                    <span class="meta-item" th:if="${repo.language != null}">
+                        <span class="lang-dot"></span>
+                        <span class="lang-text" th:text="${repo.language}">Java</span>
+                    </span>
                     <span class="meta-item">
-                        <i class="bi bi-star-fill" style="color: #e3b341;"></i>
+                        <i class="bi bi-star-fill" style="color: var(--gs-gold); font-size: 0.72rem;"></i>
                         <span th:text="${repo.starsCount}">0</span>
                     </span>
                     <span class="meta-item">
-                        <i class="bi bi-diagram-2" style="color: #8250df;"></i>
+                        <i class="bi bi-diagram-2" style="color: var(--gs-purple); font-size: 0.72rem;"></i>
                         <span th:text="${repo.forksCount}">0</span>
                     </span>
-                    <span class="meta-item" th:if="${repo.starredAt != null}">
-                        <i class="bi bi-clock"></i>
+                    <span class="meta-item" th:if="${repo.starredAt != null}" style="margin-left: auto;">
+                        <i class="bi bi-clock" style="font-size: 0.7rem;"></i>
                         <span th:text="${#temporals.format(repo.starredAt, 'yyyy-MM-dd')}">2024-01-01</span>
                     </span>
                 </div>
@@ -316,59 +632,36 @@
     </div>
 
     <!-- 分页导航 -->
-    <nav th:if="${totalPages > 1}" class="mt-4 d-flex justify-content-center">
-        <ul class="pagination mb-0">
-            <!-- 上一页 -->
-            <li class="page-item" th:classappend="${currentPage == 1} ? 'disabled'">
-                <a class="page-link page-link-custom"
-                   th:href="@{/(page=${currentPage - 1}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}"
-                   th:if="${currentPage > 1}">
-                    <i class="bi bi-chevron-left"></i>
-                </a>
-                <span class="page-link page-link-custom" th:if="${currentPage == 1}">
-                    <i class="bi bi-chevron-left"></i>
-                </span>
-            </li>
+    <div th:if="${totalPages > 1}" class="pagination-bar">
+        <!-- 上一页 -->
+        <a class="pg-btn" th:classappend="${currentPage == 1} ? 'pg-disabled'"
+           th:href="@{/(page=${currentPage - 1}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}">
+            <i class="bi bi-chevron-left"></i>
+        </a>
 
-            <!-- 第一页 + 省略号 -->
-            <li class="page-item" th:if="${startPage > 1}">
-                <a class="page-link page-link-custom"
-                   th:href="@{/(page=1, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}">1</a>
-            </li>
-            <li class="page-item disabled" th:if="${startPage > 2}">
-                <span class="page-link page-link-custom">...</span>
-            </li>
+        <!-- 第一页 -->
+        <a class="pg-btn" th:if="${startPage > 1}"
+           th:href="@{/(page=1, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}">1</a>
+        <span class="pg-ellipsis" th:if="${startPage > 2}">...</span>
 
-            <!-- 页码 -->
-            <li class="page-item" th:each="i : ${#numbers.sequence(startPage, endPage)}">
-                <a class="page-link page-link-custom" th:classappend="${i == currentPage} ? 'active-page'"
-                   th:href="@{/(page=${i}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}"
-                   th:text="${i}">1</a>
-            </li>
+        <!-- 页码 -->
+        <a class="pg-btn" th:each="i : ${#numbers.sequence(startPage, endPage)}"
+           th:classappend="${i == currentPage} ? 'pg-active'"
+           th:href="@{/(page=${i}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}"
+           th:text="${i}">1</a>
 
-            <!-- 省略号 + 最后一页 -->
-            <li class="page-item disabled" th:if="${endPage < totalPages - 1}">
-                <span class="page-link page-link-custom">...</span>
-            </li>
-            <li class="page-item" th:if="${endPage < totalPages}">
-                <a class="page-link page-link-custom"
-                   th:href="@{/(page=${totalPages}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}"
-                   th:text="${totalPages}">99</a>
-            </li>
+        <!-- 最后一页 -->
+        <span class="pg-ellipsis" th:if="${endPage < totalPages - 1}">...</span>
+        <a class="pg-btn" th:if="${endPage < totalPages}"
+           th:href="@{/(page=${totalPages}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}"
+           th:text="${totalPages}">99</a>
 
-            <!-- 下一页 -->
-            <li class="page-item" th:classappend="${currentPage == totalPages} ? 'disabled'">
-                <a class="page-link page-link-custom"
-                   th:href="@{/(page=${currentPage + 1}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}"
-                   th:if="${currentPage < totalPages}">
-                    <i class="bi bi-chevron-right"></i>
-                </a>
-                <span class="page-link page-link-custom" th:if="${currentPage == totalPages}">
-                    <i class="bi bi-chevron-right"></i>
-                </span>
-            </li>
-        </ul>
-    </nav>
+        <!-- 下一页 -->
+        <a class="pg-btn" th:classappend="${currentPage == totalPages} ? 'pg-disabled'"
+           th:href="@{/(page=${currentPage + 1}, size=${size}, keyword=${keyword}, language=${language}, sortBy=${sortBy}, sortOrder=${sortOrder}, dateField=${dateField}, startMonth=${startMonth}, endMonth=${endMonth})}">
+            <i class="bi bi-chevron-right"></i>
+        </a>
+    </div>
 
 </div>
 
@@ -376,6 +669,41 @@
     <script>
         // 高亮当前导航项
         document.getElementById('nav-stars').classList.add('active');
+
+        // 高级筛选面板折叠控制
+        const advToggle = document.getElementById('advToggle');
+        const advPanel = document.getElementById('advPanel');
+        const dateFieldSelect = document.getElementById('dateFieldSelect');
+        const startMonthInput = document.getElementById('startMonthInput');
+        const endMonthInput = document.getElementById('endMonthInput');
+
+        advToggle.addEventListener('click', function () {
+            this.classList.toggle('active');
+            advPanel.classList.toggle('open');
+            // 收起时清空时间条件
+            if (!advPanel.classList.contains('open')) {
+                dateFieldSelect.value = '';
+                startMonthInput.value = '';
+                endMonthInput.value = '';
+                toggleDateInputs();
+            }
+        });
+
+        // 时间字段联动：未选字段时禁用月份输入
+        function toggleDateInputs() {
+            const disabled = !dateFieldSelect.value;
+            startMonthInput.disabled = disabled;
+            endMonthInput.disabled = disabled;
+            startMonthInput.style.opacity = disabled ? '0.45' : '1';
+            endMonthInput.style.opacity = disabled ? '0.45' : '1';
+            if (disabled) {
+                startMonthInput.value = '';
+                endMonthInput.value = '';
+            }
+        }
+
+        dateFieldSelect.addEventListener('change', toggleDateInputs);
+        toggleDateInputs(); // 页面加载时初始化
     </script>
 </th:block>
 </body>
