@@ -61,7 +61,7 @@
 
 <!-- 导航栏 -->
 <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #1a1a2e;">
-    <div class="container">
+    <div class="container-fluid px-4">
         <a class="navbar-brand" th:href="@{/}">
             <i class="bi bi-star-fill"></i> GitHub Stars
         </a>
@@ -87,6 +87,11 @@
                         <i class="bi bi-bar-chart-line"></i> 数据统计
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" th:href="@{/ai/classify}" id="nav-classify">
+                        <i class="bi bi-cpu"></i> AI分类
+                    </a>
+                </li>
             </ul>
         </div>
     </div>
@@ -94,17 +99,20 @@
 
 <!-- 主体内容 -->
 <div class="content-wrapper">
-    <div class="container">
+    <div class="container-fluid px-4">
         <div layout:fragment="content"></div>
     </div>
 </div>
 
 <!-- 页脚 -->
 <footer class="footer">
-    <div class="container text-center">
+    <div class="container-fluid px-4 text-center">
         <span>GitHub Stars 管理系统 &copy; 2026</span>
     </div>
 </footer>
+
+<!-- jQuery (Bootstrap Select 依赖) -->
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
 
 <!-- Bootstrap 5 JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

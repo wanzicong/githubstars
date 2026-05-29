@@ -2,6 +2,7 @@ package com.github.stars.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.github.stars.entity.GithubRepo;
+import com.github.stars.entity.LanguageStat;
 import com.github.stars.service.GithubRepoService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -49,6 +50,9 @@ public class StarController {
         // 查询所有语言列表（用于下拉筛选）
         List<String> languages = githubRepoService.findAllLanguages();
 
+        // 查询语言统计数据（语言 + 数量）
+        List<LanguageStat> languageStats = githubRepoService.findLanguageStats();
+
         // 计算分页信息
         long totalPages = pageResult.getPages();
         long currentPage = pageResult.getCurrent();
@@ -80,6 +84,9 @@ public class StarController {
 
         // 语言列表
         model.addAttribute("languages", languages);
+
+        // 语言统计数据（语言 + 数量）
+        model.addAttribute("languageStats", languageStats);
 
         // 当前查询字符串，用于详情页返回
         String queryString = request.getQueryString();

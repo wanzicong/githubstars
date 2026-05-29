@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 6001
 
 spring:
   datasource:
@@ -33,6 +33,11 @@ github:
   username: wanzicong
   # 如需访问私有仓库或提高速率限制，请配置 Personal Access Token
   # token: ghp_your_token_here
+
+deepseek:
+  api-key: sk-c5bc442e87e44714a4d4c3189b71adf3
+  api-url: https://api.deepseek.com/v1/chat/completions
+  model: deepseek-chat
 
 logging:
   level:
