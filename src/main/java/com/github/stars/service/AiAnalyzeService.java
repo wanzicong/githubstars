@@ -9,6 +9,7 @@ import com.github.stars.entity.GithubRepo;
 import com.github.stars.mapper.GithubRepoMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -33,7 +34,7 @@ public class AiAnalyzeService {
     @Resource
     private GithubRepoMapper githubRepoMapper;
 
-    @Resource
+    @Autowired
     @Qualifier("longTimeoutRestTemplate")
     private RestTemplate restTemplate;
 
@@ -95,9 +96,24 @@ public class AiAnalyzeService {
             String prompt = buildAnalyzePrompt(repos);
 
             // 3. 调用 DeepSeek
-            String analysis = callDeepSeek(prompt);
+            log.info("AI分析 prompt 大小: {} 字符", prompt.length());
+            String analysis;
+            try {
+                analysis = callDeepSeek(prompt);
+            } catch (Exception e) {
+                log.error("DeepSeek 调用异常", e);
+                String msg = e.getMessage() != null ? e.getMessage() : "未知错误";
+                if (msg.contains("timed out") || msg.contains("timeout")) {
+                    analysis = "### 分析超时\n\nAI 服务响应超时（当前筛选项目数据量较大）。建议：\n- 缩小筛选范围（使用关键词或分类筛选）\n- 减少项目数量后重试";
+                } else {
+                    analysis = "### 分析失败\n\nAI 服务调用异常: " + msg;
+                }
+                results.put(taskId, analysis);
+                statuses.put(taskId, "COMPLETED");
+                return;
+            }
             if (analysis == null || analysis.isEmpty()) {
-                analysis = "### 分析失败\n\nAI 服务暂时不可用，请稍后重试。";
+                analysis = "### 分析失败\n\nAI 服务返回空结果，请稍后重试。";
             }
 
             // 4. 保存结果
@@ -170,25 +186,23 @@ public class AiAnalyzeService {
             sb.append("- **语言**: ").append(r.getLanguage() != null ? r.getLanguage() : "未知").append("\n");
             sb.append("- **Star**: ").append(r.getStarsCount())
               .append(" | Fork: ").append(r.getForksCount()).append("\n");
-            if (r.getDescription() != null && !r.getDescription().isEmpty()) {
-                String desc = r.getDescription().length() > 300
-                    ? r.getDescription().substring(0, 300) + "..."
+            if (r.getDescriptionCn() != null && !r.getDescriptionCn().isEmpty()) {
+                String descCn = r.getDescriptionCn().length() > 200
+                    ? r.getDescriptionCn().substring(0, 200) + "..."
+                    : r.getDescriptionCn();
+                sb.append("- **描述**: ").append(descCn).append("\n");
+            } else if (r.getDescription() != null && !r.getDescription().isEmpty()) {
+                String desc = r.getDescription().length() > 200
+                    ? r.getDescription().substring(0, 200) + "..."
                     : r.getDescription();
                 sb.append("- **描述**: ").append(desc).append("\n");
             }
-            // 如果有中文描述，也附上
-            if (r.getDescriptionCn() != null && !r.getDescriptionCn().isEmpty()) {
-                String descCn = r.getDescriptionCn().length() > 300
-                    ? r.getDescriptionCn().substring(0, 300) + "..."
-                    : r.getDescriptionCn();
-                sb.append("- **中文描述**: ").append(descCn).append("\n");
-            }
-            // README 摘要（前500字符）
+            // README 摘要（前200字符，精简以加快AI响应）
             if (r.getReadmeCn() != null && !r.getReadmeCn().isEmpty()) {
-                String readme = r.getReadmeCn().length() > 500
-                    ? r.getReadmeCn().substring(0, 500) + "..."
+                String readme = r.getReadmeCn().length() > 200
+                    ? r.getReadmeCn().substring(0, 200) + "..."
                     : r.getReadmeCn();
-                sb.append("- **README摘要**: ").append(readme).append("\n");
+                sb.append("- **README**: ").append(readme.replace("\n", " ")).append("\n");
             }
             sb.append("\n");
         }
@@ -254,8 +268,13 @@ public class AiAnalyzeService {
                 JsonNode choices = root.get("choices");
                 if (choices != null && choices.isArray() && choices.size() > 0) {
                     String content = choices.get(0).get("message").get("content").asText();
+                    log.info("AI 分析返回内容长度: {}", content.length());
                     return content.trim();
                 }
+                log.error("AI 分析响应格式异常: {}", response.getBody().substring(0, Math.min(500, response.getBody().length())));
+            } else {
+                log.error("AI 分析 HTTP 状态异常: {} body长度={}", response.getStatusCode(),
+                    response.getBody() != null ? response.getBody().length() : 0);
             }
             return null;
         } catch (Exception e) {

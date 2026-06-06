@@ -31,7 +31,7 @@ public class RestTemplateConfig {
     public RestTemplate longTimeoutRestTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(10000);
-        factory.setReadTimeout(180000); // 3 分钟超时，处理大 README
+        factory.setReadTimeout(300000); // 5 分钟超时，处理大 README / AI 分析
         RestTemplate restTemplate = new RestTemplate(factory);
         restTemplate.getMessageConverters().set(0,
                 new StringHttpMessageConverter(StandardCharsets.UTF_8));
