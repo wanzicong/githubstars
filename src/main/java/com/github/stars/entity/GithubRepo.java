@@ -24,6 +24,15 @@ public class GithubRepo {
     @TableField("description")
     private String description;
 
+    @TableField("description_cn")
+    private String descriptionCn;
+
+    @TableField("readme_cn")
+    private String readmeCn;
+
+    @TableField("readme_fetched")
+    private Boolean readmeFetched;
+
     @TableField("language")
     private String language;
 

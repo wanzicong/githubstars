@@ -15,9 +15,11 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * 同步服务
@@ -85,6 +87,15 @@ public class SyncService {
             // 1. 从 GitHub API 获取所有 Star 仓库
             syncStatus = "正在从 GitHub 获取数据...";
             List<GithubRepo> remoteRepos = githubApiService.fetchAllStarredRepos();
+            // 去重：以 full_name 为 key，保留第一条（防止 API 返回重复数据）
+            remoteRepos = remoteRepos.stream()
+                    .collect(Collectors.toMap(
+                            GithubRepo::getFullName,
+                            r -> r,
+                            (existing, replacement) -> existing,
+                            LinkedHashMap::new))
+                    .values().stream()
+                    .collect(Collectors.toList());
             syncLog.setTotalCount(remoteRepos.size());
 
             // 2. 获取数据库中现有的所有仓库（以 full_name 为 key）
@@ -104,10 +115,10 @@ public class SyncService {
                 GithubRepo local = localRepoMap.get(remote.getFullName());
 
                 if (local == null) {
-                    // 新增
+                    // 新增（使用 upsert 防重，避免大小写差异等导致的唯一键冲突）
                     remote.setCreatedAt(LocalDateTime.now());
                     remote.setUpdatedAt(LocalDateTime.now());
-                    githubRepoMapper.insert(remote);
+                    githubRepoMapper.upsert(remote);
                     syncedCount++;
                 } else {
                     // 更新

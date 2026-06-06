@@ -3,15 +3,13 @@ package com.github.stars.controller;
 import com.github.stars.entity.GithubRepo;
 import com.github.stars.service.AiClassifyService;
 import com.github.stars.service.GithubRepoService;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Controller
+@RestController
 @RequestMapping("/ai")
 public class AiClassifyController {
 
@@ -22,27 +20,9 @@ public class AiClassifyController {
     private GithubRepoService githubRepoService;
 
     /**
-     * AI 分类页面
-     */
-    @GetMapping("/classify")
-    public String classifyPage(
-            @RequestParam(value = "language", defaultValue = "") String language,
-            @RequestParam(value = "keyword", defaultValue = "") String keyword,
-            Model model) {
-
-        List<String> languages = githubRepoService.findAllLanguages();
-        model.addAttribute("languages", languages);
-        model.addAttribute("language", language);
-        model.addAttribute("keyword", keyword);
-
-        return "classify";
-    }
-
-    /**
      * 加载仓库列表（用于选择，支持筛选）
      */
     @GetMapping("/classify/repos")
-    @ResponseBody
     public Map<String, Object> getRepos(
             @RequestParam(value = "keyword", defaultValue = "") String keyword,
             @RequestParam(value = "language", defaultValue = "") String language) {
@@ -72,7 +52,6 @@ public class AiClassifyController {
      * 触发 AI 分类
      */
     @PostMapping("/classify/execute")
-    @ResponseBody
     public Map<String, Object> executeClassify(@RequestBody Map<String, Object> body) {
         @SuppressWarnings("unchecked")
         List<Integer> repoIdInts = (List<Integer>) body.get("repoIds");

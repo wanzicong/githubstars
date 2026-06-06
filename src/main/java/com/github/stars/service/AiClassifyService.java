@@ -38,6 +38,9 @@ public class AiClassifyService {
     @Resource
     private GithubRepoService githubRepoService;
 
+    @Resource
+    private CategoryService categoryService;
+
     /**
      * 对指定仓库列表进行 AI 智能分类
      *
@@ -65,6 +68,16 @@ public class AiClassifyService {
         String prompt = buildPrompt(repos, topN);
         String aiResponse = callDeepSeek(prompt);
         Map<String, List<Long>> categories = parseResponse(aiResponse, repos);
+
+        // 将分类结果保存到数据库
+        if (categories != null && !categories.isEmpty() && !categories.containsKey("分类失败")) {
+            try {
+                categoryService.saveAiClassifyResult(categories);
+                log.info("AI 分类结果已自动保存到数据库");
+            } catch (Exception e) {
+                log.error("保存 AI 分类结果失败", e);
+            }
+        }
 
         result.put("success", true);
         result.put("categories", categories);

@@ -8,13 +8,6 @@ spring:
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
 
-  thymeleaf:
-    prefix: classpath:/templates/
-    suffix: .html
-    mode: HTML
-    encoding: UTF-8
-    cache: false
-
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
@@ -30,12 +23,11 @@ mybatis-plus:
       id-type: auto
 
 github:
-  username: wanzicong
-  # 如需访问私有仓库或提高速率限制，请配置 Personal Access Token
-  # token: ghp_your_token_here
+  username: ${GITHUB_USERNAME:wanzicong}
+  token: ${GITHUB_TOKEN:}
 
 deepseek:
-  api-key: sk-c5bc442e87e44714a4d4c3189b71adf3
+  api-key: ${DEEPSEEK_API_KEY:}
   api-url: https://api.deepseek.com/v1/chat/completions
   model: deepseek-chat
 

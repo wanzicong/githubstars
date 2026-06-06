@@ -38,6 +38,12 @@ CREATE TABLE IF NOT EXISTS `github_repo` (
     KEY `idx_repo_updated_at` (`repo_updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='GitHub Star仓库表';
 
+-- 中文翻译字段（2025-06-06 新增）
+ALTER TABLE `github_repo`
+    ADD COLUMN `description_cn` TEXT DEFAULT NULL COMMENT '中文翻译-仓库描述' AFTER `description`,
+    ADD COLUMN `readme_cn` LONGTEXT DEFAULT NULL COMMENT '中文翻译-README' AFTER `description_cn`,
+    ADD COLUMN `readme_fetched` TINYINT(1) DEFAULT 0 COMMENT '是否已获取并翻译README' AFTER `readme_cn`;
+
 -- 同步日志表
 CREATE TABLE IF NOT EXISTS `sync_log` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
