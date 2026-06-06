@@ -14,8 +14,6 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import javax.annotation.Resource;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -69,23 +67,29 @@ public class SimilarRepoService {
 
         List<SimilarRepo> allResults = new ArrayList<>();
 
-        // 策略1: 按 topic 搜索
-        List<String> topics = parseTopics(source.getTopics());
-        for (String topic : topics) {
-            if (allResults.size() >= MAX_RESULTS) break;
-            List<SimilarRepo> results = searchGitHub("topic:" + topic, source.getFullName());
-            allResults.addAll(results);
+        // 策略1: 用 AI 从描述+README 提取核心关键词搜索
+        List<String> aiKeywords = extractKeywordsWithAI(source);
+        if (!aiKeywords.isEmpty()) {
+            log.info("AI提取关键词: {}", aiKeywords);
+            for (String kw : aiKeywords) {
+                if (allResults.size() >= MAX_RESULTS) break;
+                String q = kw;
+                if (source.getLanguage() != null) q += " language:" + source.getLanguage();
+                List<SimilarRepo> results = searchGitHub(q, source.getFullName());
+                allResults.addAll(results);
+            }
         }
 
-        // 策略2: 按语言+关键词搜索
-        if (allResults.size() < MAX_RESULTS && source.getLanguage() != null) {
-            String query = "language:" + source.getLanguage();
-            if (source.getRepoName() != null) {
-                // 提取仓库名中的关键词（去掉常见后缀）
-                String name = source.getRepoName().replaceAll("[-_.].*", "");
-                if (name.length() >= 3) query += " " + name;
+        // 策略2: topic 搜索（补充 AI 关键词搜不到的结果）
+        List<String> topics = parseTopics(source.getTopics());
+        if (allResults.size() < MAX_RESULTS && !topics.isEmpty()) {
+            StringBuilder q = new StringBuilder();
+            int limit = Math.min(3, topics.size());
+            for (int i = 0; i < limit; i++) {
+                if (i > 0) q.append(" ");
+                q.append("topic:").append(topics.get(i));
             }
-            List<SimilarRepo> results = searchGitHub(query, source.getFullName());
+            List<SimilarRepo> results = searchGitHub(q.toString(), source.getFullName());
             allResults.addAll(results);
         }
 
@@ -112,6 +116,57 @@ public class SimilarRepoService {
 
         log.info("为 {} 发现 {} 个相似项目", source.getFullName(), unique.size());
         return unique;
+    }
+
+    /**
+     * 用 AI 从描述和 README 中提取 3~5 个核心搜索关键词
+     */
+    private List<String> extractKeywordsWithAI(GithubRepo repo) {
+        List<String> keywords = new ArrayList<>();
+        try {
+            StringBuilder ctx = new StringBuilder();
+            ctx.append("项目名称: ").append(repo.getFullName()).append("\n");
+            if (repo.getDescriptionCn() != null && !repo.getDescriptionCn().isEmpty()) {
+                ctx.append("描述: ").append(repo.getDescriptionCn()).append("\n");
+            } else if (repo.getDescription() != null && !repo.getDescription().isEmpty()) {
+                ctx.append("描述: ").append(repo.getDescription()).append("\n");
+            }
+            if (repo.getReadmeCn() != null && !repo.getReadmeCn().isEmpty()) {
+                String readme = repo.getReadmeCn().length() > 600
+                        ? repo.getReadmeCn().substring(0, 600) + "..."
+                        : repo.getReadmeCn();
+                ctx.append("README摘要: ").append(readme).append("\n");
+            }
+
+            String prompt = "根据以下项目信息，提取 3~5 个用于 GitHub 搜索同类项目的核心关键词。\n"
+                    + "关键词应该是英文技术术语（如 \"mcp-server\", \"agent-framework\", \"android-automation\"），\n"
+                    + "每个关键词 1~3 个单词，能精准匹配同类项目。\n"
+                    + "只返回 JSON 数组格式: [\"keyword1\", \"keyword2\", ...]，不要任何其他内容。\n\n"
+                    + ctx.toString();
+
+            JsonNode response = callDeepSeek(prompt);
+            if (response != null) {
+                JsonNode choices = response.get("choices");
+                if (choices != null && choices.isArray() && choices.size() > 0) {
+                    String content = choices.get(0).get("message").get("content").asText().trim();
+                    if (content.startsWith("```")) {
+                        content = content.replaceAll("```json\\s*", "").replaceAll("```\\s*", "");
+                    }
+                    List<String> extracted = objectMapper.readValue(content,
+                            new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+                    if (extracted != null && !extracted.isEmpty()) {
+                        keywords.addAll(extracted);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("AI 关键词提取失败: {}", e.getMessage());
+        }
+        // 兜底：如果 AI 失败，至少用仓库名作为关键词
+        if (keywords.isEmpty() && repo.getRepoName() != null) {
+            keywords.add(repo.getRepoName().replaceAll("[-_.].*", ""));
+        }
+        return keywords;
     }
 
     /**
