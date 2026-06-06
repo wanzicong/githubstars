@@ -31,10 +31,11 @@ public class StarController {
                                         @RequestParam(value = "sortOrder", defaultValue = "desc") String sortOrder,
                                         @RequestParam(value = "dateField", defaultValue = "") String dateField,
                                         @RequestParam(value = "startMonth", defaultValue = "") String startMonth,
-                                        @RequestParam(value = "endMonth", defaultValue = "") String endMonth) {
+                                        @RequestParam(value = "endMonth", defaultValue = "") String endMonth,
+                                        @RequestParam(value = "categoryIds", defaultValue = "") String categoryIds) {
 
         IPage<GithubRepo> pageResult = githubRepoService.findPage(page, size, keyword, language,
-                sortBy, sortOrder, dateField, startMonth, endMonth);
+                sortBy, sortOrder, dateField, startMonth, endMonth, categoryIds);
 
         Map<String, Object> result = new HashMap<>();
         result.put("records", pageResult.getRecords());
@@ -64,10 +65,11 @@ public class StarController {
             @RequestParam(value = "sortOrder", defaultValue = "desc") String sortOrder,
             @RequestParam(value = "dateField", defaultValue = "") String dateField,
             @RequestParam(value = "startMonth", defaultValue = "") String startMonth,
-            @RequestParam(value = "endMonth", defaultValue = "") String endMonth) {
+            @RequestParam(value = "endMonth", defaultValue = "") String endMonth,
+            @RequestParam(value = "categoryIds", defaultValue = "") String categoryIds) {
 
         List<String> urls = githubRepoService.findAllUrls(keyword, language, sortBy, sortOrder,
-                dateField, startMonth, endMonth);
+                dateField, startMonth, endMonth, categoryIds);
         String content = String.join("\n", urls);
         byte[] bytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
 

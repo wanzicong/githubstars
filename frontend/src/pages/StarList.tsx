@@ -37,12 +37,15 @@ import {
   CloseCircleOutlined,
   AppstoreOutlined,
   UnorderedListOutlined,
+  ReadOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import * as statsApi from '../api/stats'
 import * as starsApi from '../api/stars'
 import * as translateApi from '../api/translate'
-import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
+import * as categoriesApi from '../api/categories'
+import { formatNumberCn } from '../utils/format'
+import type { Category, GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -79,7 +82,17 @@ const DATE_FIELD_OPTIONS = [
   { label: '推送时间', value: 'repo_pushed_at' },
 ]
 
-const PAGE_SIZE_OPTIONS = [12, 24, 48]
+const PAGE_SIZE_OPTIONS = [36, 72, 144]
+
+const TIME_PRESETS: { label: string; value: string; days: number }[] = [
+  { label: '不限', value: '', days: 0 },
+  { label: '今天', value: 'today', days: 0 },
+  { label: '7天内', value: '7d', days: 7 },
+  { label: '30天内', value: '30d', days: 30 },
+  { label: '90天内', value: '90d', days: 90 },
+  { label: '半年内', value: '180d', days: 180 },
+  { label: '一年内', value: '365d', days: 365 },
+]
 
 function RepoCard({ repo }: { repo: GithubRepo }) {
   return (
@@ -89,44 +102,51 @@ function RepoCard({ repo }: { repo: GithubRepo }) {
       styles={{ body: { padding: 16 } }}
       onClick={() => { window.location.href = `/stars/${repo.id}` }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-        <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={40} style={{ flexShrink: 0 }} />
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+        <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={48} style={{ flexShrink: 0 }} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <Text strong style={{ fontSize: 14, display: 'block', lineHeight: '20px' }} ellipsis>
+          <Text strong style={{ fontSize: 16, display: 'block', lineHeight: '24px' }} ellipsis>
             <a style={{ color: '#1677ff' }} onClick={(e) => { e.stopPropagation(); window.location.href = `/stars/${repo.id}` }}>{repo.repoName}</a>
           </Text>
-          <Text type="secondary" style={{ fontSize: 12 }} ellipsis>{repo.ownerName}</Text>
+          <Text type="secondary" style={{ fontSize: 14 }} ellipsis>{repo.ownerName}</Text>
         </div>
       </div>
       {repo.descriptionCn ? (
-        <Paragraph ellipsis={{ rows: 2 }} style={{ marginBottom: 10, fontSize: 12, minHeight: 36, color: '#333' }}>
-          {repo.descriptionCn}<Text type="secondary" style={{ fontSize: 10, marginLeft: 4 }}>🇨🇳</Text>
+        <Paragraph ellipsis={{ rows: 2 }} style={{ marginBottom: 10, fontSize: 14, minHeight: 40, color: '#333', lineHeight: '1.6' }}>
+          {repo.descriptionCn}<Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>🇨🇳</Text>
         </Paragraph>
       ) : repo.description ? (
-        <Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ marginBottom: 10, fontSize: 12, minHeight: 36 }}>
+        <Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ marginBottom: 10, fontSize: 14, minHeight: 40, lineHeight: '1.6' }}>
           {repo.description}
         </Paragraph>
       ) : null}
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-        {repo.language && <Tag color="blue" style={{ margin: 0 }}>{repo.language}</Tag>}
+        {repo.language && <Tag color="blue" style={{ margin: 0, fontSize: 13 }}>{repo.language}</Tag>}
         {repo.categoryNames && repo.categoryNames.length > 0 && repo.categoryNames.map((cat) => (
-          <Tag key={cat} color="green" style={{ margin: 0, fontSize: 11 }}>{cat}</Tag>
+          <Tag key={cat} color="green" style={{ margin: 0, fontSize: 13 }}>{cat}</Tag>
         ))}
+        {repo.readmeFetched && repo.readmeCn ? (
+          <Tag color="purple" style={{ margin: 0, fontSize: 12 }}><ReadOutlined style={{ fontSize: 11 }} /> 已翻译</Tag>
+        ) : repo.readmeFetched ? (
+          <Tag color="default" style={{ margin: 0, fontSize: 12 }}>无README</Tag>
+        ) : null}
         <Space size={4}>
-          <StarFilled style={{ color: '#faad14', fontSize: 12 }} />
-          <Text style={{ fontSize: 12 }}>{repo.starsCount}</Text>
+          <StarFilled style={{ color: '#faad14', fontSize: 14 }} />
+          <Text style={{ fontSize: 14 }}>{repo.starsCount}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>{formatNumberCn(repo.starsCount)}</Text>
         </Space>
         <Space size={4}>
-          <ForkOutlined style={{ fontSize: 12 }} />
-          <Text style={{ fontSize: 12 }}>{repo.forksCount}</Text>
+          <ForkOutlined style={{ fontSize: 14 }} />
+          <Text style={{ fontSize: 14 }}>{repo.forksCount}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>{formatNumberCn(repo.forksCount)}</Text>
         </Space>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
-        <Text type="secondary" style={{ fontSize: 11 }}>Star 于 {formatDate(repo.starredAt)}</Text>
+        <Text type="secondary" style={{ fontSize: 13 }}>Star 于 {formatDate(repo.starredAt)}</Text>
         {repo.repoPushedAt && (() => {
           const days = dayjs().diff(dayjs(repo.repoPushedAt), 'day')
           let color = 'green'; if (days > 180) color = 'red'; else if (days > 30) color = 'orange'
-          return <Tag color={color} style={{ margin: 0, fontSize: 10 }}>未更新 {days} 天</Tag>
+          return <Tag color={color} style={{ margin: 0, fontSize: 12 }}>未更新 {days} 天</Tag>
         })()}
       </div>
     </Card>
@@ -143,37 +163,42 @@ function RepoRow({ repo }: { repo: GithubRepo }) {
     >
       <Row align="middle" gutter={[12, 8]}>
         <Col xs={24} sm={12} md={14}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={36} style={{ flexShrink: 0 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={44} style={{ flexShrink: 0 }} />
             <div style={{ minWidth: 0 }}>
-              <Text strong style={{ fontSize: 14 }} ellipsis>
+              <Text strong style={{ fontSize: 16 }} ellipsis>
                 <a style={{ color: '#1677ff' }} onClick={(e) => { e.stopPropagation(); window.location.href = `/stars/${repo.id}` }}>{repo.repoName}</a>
               </Text>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                <Text type="secondary" style={{ fontSize: 11 }}>{repo.ownerName}</Text>
-                {repo.language && <Tag color="blue" style={{ margin: 0, fontSize: 10 }}>{repo.language}</Tag>}
+                <Text type="secondary" style={{ fontSize: 13 }}>{repo.ownerName}</Text>
+                {repo.language && <Tag color="blue" style={{ margin: 0, fontSize: 12 }}>{repo.language}</Tag>}
                 {repo.categoryNames && repo.categoryNames.length > 0 && repo.categoryNames.slice(0, 2).map((cat) => (
-                  <Tag key={cat} color="green" style={{ margin: 0, fontSize: 10 }}>{cat}</Tag>
+                  <Tag key={cat} color="green" style={{ margin: 0, fontSize: 12 }}>{cat}</Tag>
                 ))}
+                {repo.readmeFetched && repo.readmeCn ? (
+                  <Tag color="purple" style={{ margin: 0, fontSize: 11 }}><ReadOutlined style={{ fontSize: 10 }} /> 已翻译</Tag>
+                ) : repo.readmeFetched ? (
+                  <Tag color="default" style={{ margin: 0, fontSize: 11 }}>无README</Tag>
+                ) : null}
               </div>
               {repo.descriptionCn ? (
-                <Paragraph ellipsis={{ rows: 1 }} style={{ margin: '4px 0 0', fontSize: 12, color: '#333' }}>{repo.descriptionCn}</Paragraph>
+                <Paragraph ellipsis={{ rows: 1 }} style={{ margin: '4px 0 0', fontSize: 14, color: '#333', lineHeight: '1.6' }}>{repo.descriptionCn}</Paragraph>
               ) : repo.description ? (
-                <Paragraph type="secondary" ellipsis={{ rows: 1 }} style={{ margin: '4px 0 0', fontSize: 12 }}>{repo.description}</Paragraph>
+                <Paragraph type="secondary" ellipsis={{ rows: 1 }} style={{ margin: '4px 0 0', fontSize: 14, lineHeight: '1.6' }}>{repo.description}</Paragraph>
               ) : null}
             </div>
           </div>
         </Col>
         <Col xs={24} sm={12} md={10}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-            <span><StarFilled style={{ color: '#faad14', fontSize: 12 }} /> <Text style={{ fontSize: 13 }}>{repo.starsCount}</Text></span>
-            <span><ForkOutlined style={{ fontSize: 12 }} /> <Text style={{ fontSize: 13 }}>{repo.forksCount}</Text></span>
+            <span><StarFilled style={{ color: '#faad14', fontSize: 14 }} /> <Text style={{ fontSize: 15 }}>{repo.starsCount}</Text><Text type="secondary" style={{ fontSize: 12, marginLeft: 2 }}>{formatNumberCn(repo.starsCount)}</Text></span>
+            <span><ForkOutlined style={{ fontSize: 14 }} /> <Text style={{ fontSize: 15 }}>{repo.forksCount}</Text><Text type="secondary" style={{ fontSize: 12, marginLeft: 2 }}>{formatNumberCn(repo.forksCount)}</Text></span>
             {repo.repoPushedAt && (() => {
               const days = dayjs().diff(dayjs(repo.repoPushedAt), 'day')
               let color = 'green'; if (days > 180) color = 'red'; else if (days > 30) color = 'orange'
-              return <Tag color={color} style={{ margin: 0, fontSize: 10 }}>未更新 {days} 天</Tag>
+              return <Tag color={color} style={{ margin: 0, fontSize: 12 }}>未更新 {days} 天</Tag>
             })()}
-            <Text type="secondary" style={{ fontSize: 11 }}>Star 于 {formatDate(repo.starredAt)}</Text>
+            <Text type="secondary" style={{ fontSize: 13 }}>Star 于 {formatDate(repo.starredAt)}</Text>
           </div>
         </Col>
       </Row>
@@ -187,17 +212,20 @@ export default function StarList() {
   const keyword = searchParams.get('keyword') || ''
   const languageStr = searchParams.get('languages') || ''
   const selectedLanguages = languageStr ? languageStr.split(',') : []
+  const categoryIdsStr = searchParams.get('categoryIds') || ''
+  const selectedCategoryIds = categoryIdsStr ? categoryIdsStr.split(',') : []
   const sortBy = searchParams.get('sortBy') || 'starred_at'
   const sortOrder = searchParams.get('sortOrder') || 'desc'
   const dateField = searchParams.get('dateField') || undefined
   const currentPage = parseInt(searchParams.get('page') || '1', 10)
-  const pageSize = parseInt(searchParams.get('size') || '12', 10)
+  const pageSize = parseInt(searchParams.get('size') || '36', 10)
   const startMonthStr = searchParams.get('startMonth')
   const endMonthStr = searchParams.get('endMonth')
-  const viewMode = (searchParams.get('view') || 'grid') as 'grid' | 'list'
+  const viewMode = (searchParams.get('view') || 'list') as 'grid' | 'list'
 
   const [startMonth, setStartMonthState] = useState<dayjs.Dayjs | null>(startMonthStr ? dayjs(startMonthStr) : null)
   const [endMonth, setEndMonthState] = useState<dayjs.Dayjs | null>(endMonthStr ? dayjs(endMonthStr) : null)
+  const timePreset = searchParams.get('timePreset') || ''
 
   useEffect(() => { setStartMonthState(startMonthStr ? dayjs(startMonthStr) : null) }, [startMonthStr])
   useEffect(() => { setEndMonthState(endMonthStr ? dayjs(endMonthStr) : null) }, [endMonthStr])
@@ -226,18 +254,39 @@ export default function StarList() {
     })
   }, [setSearchParams])
 
+  const handleTimePreset = useCallback((value: string) => {
+    if (!value) {
+      setUrlParams({ timePreset: null, dateField: null, startMonth: null, endMonth: null })
+      setStartMonthState(null); setEndMonthState(null)
+      return
+    }
+    const preset = TIME_PRESETS.find(p => p.value === value)
+    if (!preset) return
+    if (preset.value === 'today') {
+      const today = dayjs().format('YYYY-MM')
+      setStartMonthState(dayjs(today)); setEndMonthState(dayjs(today))
+      setUrlParams({ timePreset: value, dateField: 'starred_at', startMonth: today, endMonth: today })
+    } else if (preset.days > 0) {
+      const start = dayjs().subtract(preset.days, 'day').format('YYYY-MM')
+      setStartMonthState(dayjs(start)); setEndMonthState(null)
+      setUrlParams({ timePreset: value, dateField: 'starred_at', startMonth: start, endMonth: null })
+    }
+  }, [setUrlParams])
+
   const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({ records: [], total: 0, size: 12, current: 1, pages: 0 })
   const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
   const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
+  const [categoryOptions, setCategoryOptions] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [initialLoading, setInitialLoading] = useState(true)
 
   useEffect(() => {
     const loadMeta = async () => {
       try {
-        const [overviewRes, langRes] = await Promise.allSettled([statsApi.fetchOverviewStats(), statsApi.fetchLanguageStats()])
+        const [overviewRes, langRes, catRes] = await Promise.allSettled([statsApi.fetchOverviewStats(), statsApi.fetchLanguageStats(), categoriesApi.fetchAllCategories()])
         if (overviewRes.status === 'fulfilled') setOverview(overviewRes.value)
         if (langRes.status === 'fulfilled') setLanguageOptions(langRes.value)
+        if (catRes.status === 'fulfilled') setCategoryOptions(catRes.value)
       } catch { } finally { setInitialLoading(false) }
     }
     loadMeta()
@@ -249,7 +298,8 @@ export default function StarList() {
       try {
         const result = await starsApi.fetchStarList({
           page: currentPage, size: pageSize, keyword: keyword || undefined,
-          language: languageStr || undefined, sortBy: sortBy || undefined,
+          language: languageStr || undefined, categoryIds: categoryIdsStr || undefined,
+          sortBy: sortBy || undefined,
           sortOrder: sortOrder || undefined, dateField: dateField || undefined,
           startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined,
           endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined,
@@ -258,10 +308,10 @@ export default function StarList() {
       } catch { } finally { setLoading(false) }
     }
     loadPage()
-  }, [currentPage, pageSize, keyword, languageStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
 
   const handleClearFilters = useCallback(() => {
-    setUrlParams({ keyword: null, languages: null, sortBy: 'starred_at', sortOrder: 'desc', dateField: null, startMonth: null, endMonth: null })
+    setUrlParams({ keyword: null, languages: null, categoryIds: null, timePreset: null, sortBy: 'starred_at', sortOrder: 'desc', dateField: null, startMonth: null, endMonth: null })
     setStartMonthState(null); setEndMonthState(null)
   }, [setUrlParams])
 
@@ -281,13 +331,13 @@ export default function StarList() {
           setTranslateProgress({ status: res.status, totalItems: res.totalItems, completedItems: res.completedItems, failedItems: res.failedItems, descTotal: res.descTotal, descCompleted: res.descCompleted, descFailed: res.descFailed, readmeTotal: res.readmeTotal, readmeCompleted: res.readmeCompleted, readmeFailed: res.readmeFailed, progress: res.progress })
           if (res.status === 'COMPLETED' || res.status === 'FAILED') {
             stopPolling()
-            const result = await starsApi.fetchStarList({ page: currentPage, size: pageSize, keyword: keyword || undefined, language: languageStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined, endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined })
+            const result = await starsApi.fetchStarList({ page: currentPage, size: pageSize, keyword: keyword || undefined, language: languageStr || undefined, categoryIds: categoryIdsStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined, endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined })
             setPageResult(result)
           }
         }
       } catch { }
     }, 2000)
-  }, [currentPage, pageSize, keyword, languageStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
 
   const handleStartFullTranslate = useCallback(async () => {
     setBatchTranslating(true)
@@ -300,6 +350,19 @@ export default function StarList() {
         startPolling(result.taskId)
       } else { message.info(result.message || '没有需要翻译的项目') }
     } catch { message.error('启动翻译失败') } finally { setBatchTranslating(false) }
+  }, [startPolling])
+
+  const handleStartReadmeBatch = useCallback(async () => {
+    setBatchTranslating(true)
+    try {
+      const result = await translateApi.startReadmeBatch()
+      if (result.success && result.taskId) {
+        setTranslateTaskId(result.taskId)
+        setTranslateProgress({ status: 'PENDING', totalItems: 0, completedItems: 0, failedItems: 0, descTotal: 0, descCompleted: 0, descFailed: 0, readmeTotal: 0, readmeCompleted: 0, readmeFailed: 0, progress: 0 })
+        setTranslateModalVisible(true)
+        startPolling(result.taskId)
+      } else { message.info(result.message || '没有需要翻译 README 的项目') }
+    } catch { message.error('启动 README 批量翻译失败') } finally { setBatchTranslating(false) }
   }, [startPolling])
 
   const handleRetryFailed = useCallback(async () => {
@@ -348,18 +411,19 @@ export default function StarList() {
         setPageResult(res)
       }
     } catch { } finally { setBatchTranslating(false) }
-  }, [currentPage, pageSize, keyword, languageStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
 
   const handleExport = useCallback(async () => {
     try {
-      const blob = await starsApi.exportStarsUrls({ keyword: keyword || undefined, language: languageStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined, endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined })
+      const blob = await starsApi.exportStarsUrls({ keyword: keyword || undefined, language: languageStr || undefined, categoryIds: categoryIdsStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined, endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined })
       const url = window.URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `stars_export_${dayjs().format('YYYYMMDD_HHmmss')}.txt`; document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url)
     } catch { console.error('导出失败') }
-  }, [keyword, languageStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
 
   const languageSelectOptions = useMemo(() => languageOptions.map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })), [languageOptions])
+  const categorySelectOptions = useMemo(() => categoryOptions.map((cat) => ({ label: cat.name, value: String(cat.id) })), [categoryOptions])
 
-  const hasActiveFilters = keyword.trim() !== '' || languageStr !== '' || sortBy !== 'starred_at' || sortOrder !== 'desc' || dateField !== undefined || startMonth !== null || endMonth !== null
+  const hasActiveFilters = keyword.trim() !== '' || languageStr !== '' || categoryIdsStr !== '' || sortBy !== 'starred_at' || sortOrder !== 'desc' || dateField !== undefined || startMonth !== null || endMonth !== null
 
   const { records: repos } = pageResult
 
@@ -392,6 +456,9 @@ export default function StarList() {
             <Col xs={24} sm={12} md={10} lg={7}>
               <Select mode="multiple" placeholder="筛选语言" value={selectedLanguages} onChange={(vals) => setUrlParam('languages', vals.length > 0 ? vals.join(',') : null)} options={languageSelectOptions} allowClear showSearch maxTagCount={3} filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())} style={{ width: '100%' }} />
             </Col>
+            <Col xs={24} sm={12} md={6} lg={4}>
+              <Select mode="multiple" placeholder="筛选分类" value={selectedCategoryIds} onChange={(vals) => setUrlParam('categoryIds', vals.length > 0 ? vals.join(',') : null)} options={categorySelectOptions} allowClear showSearch maxTagCount={2} filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())} style={{ width: '100%' }} />
+            </Col>
             <Col xs={12} sm={8} md={6} lg={4}>
               <Select placeholder="排序字段" value={sortBy} onChange={(val) => setUrlParam('sortBy', val || null)} options={SORT_BY_OPTIONS} style={{ width: '100%' }} />
             </Col>
@@ -402,6 +469,7 @@ export default function StarList() {
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {hasActiveFilters && <Button icon={<ClearOutlined />} onClick={handleClearFilters}>清除</Button>}
                 <Button icon={<TranslationOutlined />} loading={batchTranslating} onClick={handleStartFullTranslate} style={{ flex: '1 1 auto', minWidth: 0 }}>批量翻译</Button>
+                <Button icon={<ReadOutlined />} loading={false} onClick={handleStartReadmeBatch} style={{ flex: '1 1 auto', minWidth: 0 }}>批量README</Button>
                 <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport} style={{ flex: '1 1 auto', minWidth: 0 }}>导出链接</Button>
               </div>
             </Col>
@@ -410,11 +478,19 @@ export default function StarList() {
             key: 'date-filter',
             label: <span style={{ fontSize: 13, color: '#666' }}><CaretDownOutlined style={{ marginRight: 4 }} />时间筛选</span>,
             children: (
-              <Row gutter={[16, 12]} align="middle">
-                <Col xs={24} sm={8} md={6} lg={4}><Select placeholder="时间字段" value={dateField} onChange={(val) => setUrlParam('dateField', val || null)} allowClear options={DATE_FIELD_OPTIONS} style={{ width: '100%' }} /></Col>
-                <Col xs={12} sm={8} md={6} lg={4}><DatePicker picker="month" placeholder="起始月份" value={startMonth} onChange={(val) => { setStartMonthState(val); setUrlParam('startMonth', val ? val.format('YYYY-MM') : null) }} disabled={!dateField} style={{ width: '100%' }} /></Col>
-                <Col xs={12} sm={8} md={6} lg={4}><DatePicker picker="month" placeholder="结束月份" value={endMonth} onChange={(val) => { setEndMonthState(val); setUrlParam('endMonth', val ? val.format('YYYY-MM') : null) }} disabled={!dateField} style={{ width: '100%' }} /></Col>
-              </Row>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <Segmented
+                  value={timePreset || '不限'}
+                  onChange={(val) => handleTimePreset(val as string)}
+                  options={TIME_PRESETS.map(p => ({ label: p.label, value: p.value || '不限' }))}
+                  size="small"
+                />
+                <Row gutter={[16, 12]} align="middle">
+                  <Col xs={24} sm={8} md={6} lg={4}><Select placeholder="时间字段" value={dateField} onChange={(val) => setUrlParam('dateField', val || null)} allowClear options={DATE_FIELD_OPTIONS} style={{ width: '100%' }} /></Col>
+                  <Col xs={12} sm={8} md={6} lg={4}><DatePicker picker="month" placeholder="起始月份" value={startMonth} onChange={(val) => { setStartMonthState(val); setUrlParam('startMonth', val ? val.format('YYYY-MM') : null); setUrlParam('timePreset', null) }} disabled={!dateField} style={{ width: '100%' }} /></Col>
+                  <Col xs={12} sm={8} md={6} lg={4}><DatePicker picker="month" placeholder="结束月份" value={endMonth} onChange={(val) => { setEndMonthState(val); setUrlParam('endMonth', val ? val.format('YYYY-MM') : null); setUrlParam('timePreset', null) }} disabled={!dateField} style={{ width: '100%' }} /></Col>
+                </Row>
+              </div>
             ),
           }]} />
         </Space>
@@ -446,7 +522,7 @@ export default function StarList() {
         {pageResult.total > pageSize && (
           <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
             <Pagination current={currentPage} pageSize={pageSize} total={pageResult.total} showSizeChanger pageSizeOptions={PAGE_SIZE_OPTIONS.map(String)} showQuickJumper showTotal={(total) => `共 ${total} 条 / ${pageResult.pages} 页`}
-              onChange={(page, size) => { setUrlParam("page", String(page), false); if (size !== parseInt(searchParams.get("size") || "12", 10)) setUrlParam("size", String(size), false) }} />
+              onChange={(page, size) => { setUrlParam("page", String(page), false); if (size !== parseInt(searchParams.get("size") || "36", 10)) setUrlParam("size", String(size), false) }} />
           </div>
         )}
       </Spin>

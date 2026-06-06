@@ -47,7 +47,7 @@ public class TranslateController {
     }
 
     /**
-     * 翻译单个仓库的 README
+     * 翻译单个仓库的 README（同步方式，可能耗时较长）
      */
     @PostMapping("/{repoId}/readme")
     public Map<String, Object> translateReadme(@PathVariable Long repoId) {
@@ -55,6 +55,42 @@ public class TranslateController {
         String readmeCn = translateService.translateReadme(repoId);
         result.put("success", true);
         result.put("readmeCn", readmeCn);
+        return result;
+    }
+
+    /**
+     * 翻译单个仓库的 README（异步方式，立即返回 taskId，前端轮询进度）
+     */
+    @PostMapping("/{repoId}/readme/async")
+    public Map<String, Object> translateReadmeAsync(@PathVariable Long repoId) {
+        Map<String, Object> result = new HashMap<>();
+        Long taskId = translateTaskService.createAndStartSingleReadme(repoId);
+        if (taskId == null) {
+            result.put("success", false);
+            result.put("message", "仓库不存在");
+            return result;
+        }
+        result.put("success", true);
+        result.put("taskId", taskId);
+        result.put("message", "README 翻译任务已提交");
+        return result;
+    }
+
+    /**
+     * 强制重新翻译单个仓库的 README（异步，忽略已处理标记）
+     */
+    @PostMapping("/{repoId}/readme/retranslate")
+    public Map<String, Object> retranslateReadme(@PathVariable Long repoId) {
+        Map<String, Object> result = new HashMap<>();
+        Long taskId = translateTaskService.createAndStartSingleReadmeForce(repoId);
+        if (taskId == null) {
+            result.put("success", false);
+            result.put("message", "仓库不存在");
+            return result;
+        }
+        result.put("success", true);
+        result.put("taskId", taskId);
+        result.put("message", "README 重新翻译任务已提交");
         return result;
     }
 
@@ -114,6 +150,24 @@ public class TranslateController {
     }
 
     // ============ 全量异步翻译接口 ============
+
+    /**
+     * 启动 README 批量翻译（翻译全部未获取 README 的仓库，异步，10 并发，重试 3 次）
+     */
+    @PostMapping("/readme-start")
+    public Map<String, Object> startReadmeBatch() {
+        Map<String, Object> result = new HashMap<>();
+        Long taskId = translateTaskService.createAndStartReadmeBatch();
+        if (taskId == null) {
+            result.put("success", false);
+            result.put("message", "没有需要翻译 README 的项目");
+            return result;
+        }
+        result.put("success", true);
+        result.put("taskId", taskId);
+        result.put("message", "README 批量翻译任务已启动");
+        return result;
+    }
 
     /**
      * 启动全量翻译（异步，10 并发，自动重试 3 次）

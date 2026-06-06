@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS `github_repo` (
 ALTER TABLE `github_repo`
     ADD COLUMN `description_cn` TEXT DEFAULT NULL COMMENT '中文翻译-仓库描述' AFTER `description`,
     ADD COLUMN `readme_cn` LONGTEXT DEFAULT NULL COMMENT '中文翻译-README' AFTER `description_cn`,
-    ADD COLUMN `readme_fetched` TINYINT(1) DEFAULT 0 COMMENT '是否已获取并翻译README' AFTER `readme_cn`;
+    ADD COLUMN `readme_original` LONGTEXT DEFAULT NULL COMMENT '原始README内容' AFTER `readme_cn`,
+    ADD COLUMN `readme_fetched` TINYINT(1) DEFAULT 0 COMMENT '是否已获取并翻译README' AFTER `readme_original`;
 
 -- 同步日志表
 CREATE TABLE IF NOT EXISTS `sync_log` (

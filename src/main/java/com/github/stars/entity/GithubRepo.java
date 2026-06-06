@@ -31,6 +31,9 @@ public class GithubRepo {
     @TableField("readme_cn")
     private String readmeCn;
 
+    @TableField("readme_original")
+    private String readmeOriginal;
+
     @TableField("readme_fetched")
     private Boolean readmeFetched;
 

@@ -6,11 +6,11 @@ import com.github.stars.entity.GithubRepo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -32,17 +32,14 @@ public class GithubApiService {
     private static final Pattern NEXT_LINK_PATTERN = Pattern.compile("<([^>]+)>;\\s*rel=\"next\"");
     private static final DateTimeFormatter GITHUB_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
 
-    @Value("${github.username}")
-    private String githubUsername;
-
-    @Value("${github.token:}")
-    private String githubToken;
-
     @Autowired
     private RestTemplate restTemplate;
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Resource
+    private SystemConfigService configService;
 
     /**
      * 获取用户所有 Star 仓库
@@ -50,7 +47,8 @@ public class GithubApiService {
      */
     public List<GithubRepo> fetchAllStarredRepos() {
         List<GithubRepo> allRepos = new ArrayList<>();
-        String starredUrl = GITHUB_API_BASE + "/users/" + githubUsername + "/starred";
+        String ghUsername = configService.getValue("github.username", "wanzicong");
+        String starredUrl = GITHUB_API_BASE + "/users/" + ghUsername + "/starred";
         String url = starredUrl + "?per_page=" + PER_PAGE + "&page=1";
 
         int page = 1;
@@ -62,8 +60,9 @@ public class GithubApiService {
             headers.set("Accept", "application/vnd.github.v3.star+json");
             headers.set("User-Agent", "GithubStars-Manager");
             // 如果配置了 token，添加认证头以提高速率限制
-            if (githubToken != null && !githubToken.isEmpty()) {
-                headers.set("Authorization", "Bearer " + githubToken);
+            String ghToken = configService.getValue("github.token");
+            if (ghToken != null && !ghToken.isEmpty()) {
+                headers.set("Authorization", "Bearer " + ghToken);
             }
             HttpEntity<String> entity = new HttpEntity<>(headers);
 

@@ -11,6 +11,7 @@ import CategoryList from './pages/CategoryList'
 import CategoryDetail from './pages/CategoryDetail'
 import AuthorList from './pages/AuthorList'
 import AuthorDetail from './pages/AuthorDetail'
+import Settings from './pages/Settings'
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
               <Route path="/categories/:id" element={<CategoryDetail />} />
               <Route path="/authors" element={<AuthorList />} />
               <Route path="/authors/:ownerName" element={<AuthorDetail />} />
+              <Route path="/settings" element={<Settings />} />
             </Route>
           </Routes>
         </BrowserRouter>

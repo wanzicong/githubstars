@@ -117,6 +117,7 @@ export interface StarListParams {
   size?: number
   keyword?: string
   language?: string
+  categoryIds?: string
   sortBy?: string
   sortOrder?: string
   dateField?: string

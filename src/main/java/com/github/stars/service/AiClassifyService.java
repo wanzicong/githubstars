@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.stars.entity.GithubRepo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -20,15 +19,6 @@ public class AiClassifyService {
 
     private static final Logger log = LoggerFactory.getLogger(AiClassifyService.class);
 
-    @Value("${deepseek.api-key}")
-    private String apiKey;
-
-    @Value("${deepseek.api-url}")
-    private String apiUrl;
-
-    @Value("${deepseek.model}")
-    private String model;
-
     @Resource
     private RestTemplate restTemplate;
 
@@ -40,6 +30,9 @@ public class AiClassifyService {
 
     @Resource
     private CategoryService categoryService;
+
+    @Resource
+    private SystemConfigService configService;
 
     /**
      * 对指定仓库列表进行 AI 智能分类
@@ -118,7 +111,7 @@ public class AiClassifyService {
     private String callDeepSeek(String prompt) {
         try {
             ObjectNode requestBody = objectMapper.createObjectNode();
-            requestBody.put("model", model);
+            requestBody.put("model", configService.getValue("deepseek.model", "deepseek-chat"));
             requestBody.put("temperature", 0.3);
             requestBody.put("max_tokens", 4096);
 
@@ -131,10 +124,12 @@ public class AiClassifyService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Authorization", "Bearer " + apiKey);
+            String dsApiKey = configService.getValue("deepseek.api_key");
+            headers.set("Authorization", "Bearer " + dsApiKey);
 
             HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(requestBody), headers);
-            ResponseEntity<String> response = restTemplate.postForEntity(apiUrl, entity, String.class);
+            String dsApiUrl = configService.getValue("deepseek.api_url", "https://api.deepseek.com/v1/chat/completions");
+            ResponseEntity<String> response = restTemplate.postForEntity(dsApiUrl, entity, String.class);
 
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 JsonNode root = objectMapper.readTree(response.getBody());

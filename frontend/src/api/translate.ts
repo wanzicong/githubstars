@@ -85,6 +85,24 @@ export async function startFullTranslate(): Promise<{ success: boolean; taskId?:
   return data
 }
 
+/** 启动单个仓库的 README 翻译（异步，立即返回 taskId） */
+export async function startSingleReadme(repoId: number): Promise<{ success: boolean; taskId?: number; message?: string }> {
+  const { data } = await api.post(`/api/translate/${repoId}/readme/async`)
+  return data
+}
+
+/** 强制重新翻译单个仓库的 README（异步，忽略已处理标记） */
+export async function retranslateReadme(repoId: number): Promise<{ success: boolean; taskId?: number; message?: string }> {
+  const { data } = await api.post(`/api/translate/${repoId}/readme/retranslate`)
+  return data
+}
+
+/** 启动 README 批量翻译（翻译全部未获取 README 的仓库，异步） */
+export async function startReadmeBatch(): Promise<{ success: boolean; taskId?: number; message?: string }> {
+  const { data } = await api.post('/api/translate/readme-start')
+  return data
+}
+
 /** 获取翻译任务进度 */
 export async function getTaskProgress(taskId: number): Promise<TranslateTaskProgress> {
   const { data } = await api.get<TranslateTaskProgress>(`/api/translate/task/${taskId}`)

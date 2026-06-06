@@ -43,6 +43,120 @@ public class TranslateTaskService {
     private TranslateService translateService;
 
     /**
+     * 创建并启动单个仓库的 README 翻译（异步，立即返回 taskId）
+     */
+    public Long createAndStartSingleReadme(Long repoId) {
+        GithubRepo repo = githubRepoService.findById(repoId);
+        if (repo == null) return null;
+
+        TranslationTask task = new TranslationTask();
+        task.setStatus("PENDING");
+        task.setTotalItems(1);
+        task.setCompletedItems(0);
+        task.setFailedItems(0);
+        task.setDescTotal(0);
+        task.setDescCompleted(0);
+        task.setDescFailed(0);
+        task.setReadmeTotal(1);
+        task.setReadmeCompleted(0);
+        task.setReadmeFailed(0);
+        task.setCreatedAt(LocalDateTime.now());
+        taskMapper.insert(task);
+
+        Long taskId = task.getId();
+
+        TranslationTaskItem item = new TranslationTaskItem();
+        item.setTaskId(taskId);
+        item.setRepoId(repoId);
+        item.setFullName(repo.getFullName());
+        item.setTranslateType("readme");
+        item.setStatus("PENDING");
+        item.setRetryCount(0);
+        item.setCreatedAt(LocalDateTime.now());
+        itemMapper.insert(item);
+
+        startTaskAsync(taskId);
+        return taskId;
+    }
+
+    /**
+     * 创建并启动单个仓库的 README 强制重新翻译（忽略已处理标记）
+     */
+    public Long createAndStartSingleReadmeForce(Long repoId) {
+        GithubRepo repo = githubRepoService.findById(repoId);
+        if (repo == null) return null;
+
+        // 重置标记，允许重新获取和翻译
+        repo.setReadmeFetched(false);
+        repo.setReadmeOriginal(null);
+        repo.setReadmeCn(null);
+        githubRepoService.getGithubRepoMapper().updateById(repo);
+
+        return createAndStartSingleReadme(repoId);
+    }
+
+    /**
+     * 创建并启动 README 批量翻译任务（翻译全部未获取 README 的仓库，异步，10 并发，重试 3 次）
+     */
+    public Long createAndStartReadmeBatch() {
+        cleanOldTasks();
+
+        // 查询全部仓库
+        List<GithubRepo> allRepos = githubRepoService.findAll("", "");
+
+        // 统计需要翻译 README 的仓库
+        List<Long> needReadme = new ArrayList<>();
+        for (GithubRepo repo : allRepos) {
+            if (!Boolean.TRUE.equals(repo.getReadmeFetched())) {
+                needReadme.add(repo.getId());
+            }
+        }
+
+        if (needReadme.isEmpty()) {
+            log.info("没有需要翻译 README 的项目");
+            return null;
+        }
+
+        log.info("创建 README 批量翻译任务：{} 项（全部仓库）", needReadme.size());
+
+        TranslationTask task = new TranslationTask();
+        task.setStatus("PENDING");
+        task.setTotalItems(needReadme.size());
+        task.setCompletedItems(0);
+        task.setFailedItems(0);
+        task.setDescTotal(0);
+        task.setDescCompleted(0);
+        task.setDescFailed(0);
+        task.setReadmeTotal(needReadme.size());
+        task.setReadmeCompleted(0);
+        task.setReadmeFailed(0);
+        task.setCreatedAt(LocalDateTime.now());
+        taskMapper.insert(task);
+
+        Long taskId = task.getId();
+
+        List<TranslationTaskItem> items = new ArrayList<>();
+        for (Long repoId : needReadme) {
+            GithubRepo repo = githubRepoService.findById(repoId);
+            TranslationTaskItem item = new TranslationTaskItem();
+            item.setTaskId(taskId);
+            item.setRepoId(repoId);
+            item.setFullName(repo != null ? repo.getFullName() : String.valueOf(repoId));
+            item.setTranslateType("readme");
+            item.setStatus("PENDING");
+            item.setRetryCount(0);
+            item.setCreatedAt(LocalDateTime.now());
+            items.add(item);
+        }
+        for (TranslationTaskItem item : items) {
+            itemMapper.insert(item);
+        }
+
+        startTaskAsync(taskId);
+        return taskId;
+    }
+
+    /**
      * 创建并启动全量翻译任务（异步）
      *
      * @return 任务ID

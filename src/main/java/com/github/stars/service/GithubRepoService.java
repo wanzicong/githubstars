@@ -45,13 +45,16 @@ public class GithubRepoService {
      */
     public IPage<GithubRepo> findPage(int page, int size, String keyword, String language,
                                       String sortBy, String sortOrder,
-                                      String dateField, String startMonth, String endMonth) {
-        // 解析多语言参数
+                                      String dateField, String startMonth, String endMonth,
+                                      String categoryIds) {
         List<String> languageList = null;
-        if (StringUtils.hasText(language)) {
-            languageList = Arrays.asList(language.split(","));
+        if (StringUtils.hasText(language)) languageList = Arrays.asList(language.split(","));
+        List<Long> catIdList = null;
+        if (StringUtils.hasText(categoryIds)) {
+            catIdList = Arrays.stream(categoryIds.split(","))
+                    .filter(s -> !s.isEmpty()).map(Long::valueOf).collect(Collectors.toList());
         }
-        return findPage(page, size, keyword, languageList, sortBy, sortOrder, dateField, startMonth, endMonth);
+        return findPage(page, size, keyword, languageList, catIdList, sortBy, sortOrder, dateField, startMonth, endMonth);
     }
 
     /**
@@ -69,12 +72,19 @@ public class GithubRepoService {
      * @return 分页结果
      */
     public IPage<GithubRepo> findPage(int page, int size, String keyword, List<String> languages,
+                                      List<Long> categoryIds,
                                       String sortBy, String sortOrder,
                                       String dateField, String startMonth, String endMonth) {
         Page<GithubRepo> pageParam = new Page<>(page, size);
         LambdaQueryWrapper<GithubRepo> wrapper = new LambdaQueryWrapper<>();
 
-        // 关键词搜索：仓库名、描述、作者模糊匹配
+        // 分类筛选（子查询 repo_category 表）
+        if (categoryIds != null && !categoryIds.isEmpty()) {
+            String ids = categoryIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+            wrapper.inSql(GithubRepo::getId, "SELECT repo_id FROM repo_category WHERE category_id IN (" + ids + ")");
+        }
+
+        // 关键词搜索
         if (StringUtils.hasText(keyword)) {
             wrapper.and(w -> w
                     .like(GithubRepo::getRepoName, keyword)
@@ -204,22 +214,34 @@ public class GithubRepoService {
      * 按筛选条件查询所有仓库链接（不分页，仅查 html_url）
      */
     public List<String> findAllUrls(String keyword, String language, String sortBy, String sortOrder,
-                                    String dateField, String startMonth, String endMonth) {
+                                    String dateField, String startMonth, String endMonth, String categoryIds) {
         // 解析多语言参数
         List<String> languageList = null;
         if (StringUtils.hasText(language)) {
             languageList = Arrays.asList(language.split(","));
         }
-        return findAllUrls(keyword, languageList, sortBy, sortOrder, dateField, startMonth, endMonth);
+        // 解析分类参数
+        List<Long> catIdList = null;
+        if (StringUtils.hasText(categoryIds)) {
+            catIdList = Arrays.stream(categoryIds.split(","))
+                    .filter(s -> !s.isEmpty()).map(Long::valueOf).collect(Collectors.toList());
+        }
+        return findAllUrls(keyword, languageList, sortBy, sortOrder, dateField, startMonth, endMonth, catIdList);
     }
 
     /**
-     * 按筛选条件查询所有仓库链接（支持多语言列表）
+     * 按筛选条件查询所有仓库链接（支持多语言列表 + 分类筛选）
      */
     public List<String> findAllUrls(String keyword, List<String> languages, String sortBy, String sortOrder,
-                                    String dateField, String startMonth, String endMonth) {
+                                    String dateField, String startMonth, String endMonth, List<Long> categoryIds) {
         LambdaQueryWrapper<GithubRepo> wrapper = new LambdaQueryWrapper<>();
         wrapper.select(GithubRepo::getHtmlUrl);
+
+        // 分类筛选（子查询 repo_category 表）
+        if (categoryIds != null && !categoryIds.isEmpty()) {
+            String ids = categoryIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+            wrapper.inSql(GithubRepo::getId, "SELECT repo_id FROM repo_category WHERE category_id IN (" + ids + ")");
+        }
 
         if (StringUtils.hasText(keyword)) {
             wrapper.and(w -> w
@@ -360,5 +382,12 @@ public class GithubRepoService {
      */
     public long count() {
         return githubRepoMapper.selectCount(null);
+    }
+
+    /**
+     * 获取 Mapper（供 TranslateTaskService 等内部使用）
+     */
+    public GithubRepoMapper getGithubRepoMapper() {
+        return githubRepoMapper;
     }
 }

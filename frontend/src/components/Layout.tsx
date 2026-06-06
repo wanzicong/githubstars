@@ -9,6 +9,7 @@ import {
   FolderOutlined,
   ThunderboltOutlined,
   UserOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 
 const { Header, Content, Footer } = Layout
@@ -21,6 +22,7 @@ const navItems = [
   { key: '/ai/classify', icon: <ThunderboltOutlined />, label: 'AI分类' },
   { key: '/categories', icon: <AppstoreOutlined />, label: '分类管理' },
   { key: '/authors', icon: <UserOutlined />, label: '作者中心' },
+  { key: '/settings', icon: <SettingOutlined />, label: '系统配置' },
 ]
 
 export default function AppLayout() {
@@ -47,18 +49,18 @@ export default function AppLayout() {
           zIndex: 100,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Text strong style={{ fontSize: 18, color: token.colorPrimary }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 0 }}>
+          <Text strong style={{ fontSize: 18, color: token.colorPrimary, whiteSpace: 'nowrap' }}>
             GitHub Stars
           </Text>
+          <Menu
+            mode="horizontal"
+            selectedKeys={[selectedKey]}
+            items={navItems}
+            onClick={({ key }) => navigate(key)}
+            style={{ flex: 1, border: 'none', minWidth: 0 }}
+          />
         </div>
-        <Menu
-          mode="horizontal"
-          selectedKeys={[selectedKey]}
-          items={navItems}
-          onClick={({ key }) => navigate(key)}
-          style={{ flex: 1, justifyContent: 'flex-end', border: 'none', minWidth: 0 }}
-        />
       </Header>
       <Content style={{ padding: '16px 24px', maxWidth: 1400, width: '100%', margin: '0 auto' }}>
         <Outlet />

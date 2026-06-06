@@ -19,20 +19,15 @@ import {
   GithubOutlined,
 } from '@ant-design/icons'
 import * as authorsApi from '../api/authors'
+import { formatNumberCn } from '../utils/format'
 import type { AuthorDTO, PageResult } from '../types'
 
 const { Title, Text } = Typography
 
 const PAGE_SIZE = 24
 
-function formatNumber(n: number): string {
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
-  return String(n)
-}
-
 export default function AuthorList() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
   const keyword = searchParams.get('keyword') || ''
@@ -49,18 +44,16 @@ export default function AuthorList() {
 
   const setUrlParam = useCallback(
     (key: string, value: string | null) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev)
-        if (!value) {
-          next.delete(key)
-        } else {
-          next.set(key, value)
-        }
-        if (key !== 'page') next.delete('page')
-        return next
-      })
+      const next = new URLSearchParams(searchParams)
+      if (!value) {
+        next.delete(key)
+      } else {
+        next.set(key, value)
+      }
+      if (key !== 'page') next.delete('page')
+      navigate({ search: next.toString() }, { replace: true })
     },
-    [setSearchParams],
+    [navigate, searchParams],
   )
 
   useEffect(() => {
@@ -176,14 +169,16 @@ export default function AuthorList() {
                           value={author.repoCount}
                           prefix={<GithubOutlined />}
                           valueStyle={{ fontSize: 16 }}
+                          formatter={(value) => <span>{value} <Text type="secondary" style={{ fontSize: 11 }}>{formatNumberCn(Number(value))}</Text></span>}
                         />
                       </Col>
                       <Col span={12}>
                         <Statistic
                           title="Star"
-                          value={formatNumber(author.totalStars)}
+                          value={author.totalStars}
                           prefix={<StarFilled style={{ color: '#faad14' }} />}
                           valueStyle={{ fontSize: 16 }}
+                          formatter={(value) => <span>{value} <Text type="secondary" style={{ fontSize: 11 }}>{formatNumberCn(Number(value))}</Text></span>}
                         />
                       </Col>
                     </Row>

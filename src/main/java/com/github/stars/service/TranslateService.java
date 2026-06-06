@@ -8,7 +8,6 @@ import com.github.stars.entity.GithubRepo;
 import com.github.stars.mapper.GithubRepoMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -23,18 +22,6 @@ import java.util.List;
 public class TranslateService {
 
     private static final Logger log = LoggerFactory.getLogger(TranslateService.class);
-
-    @Value("${deepseek.api-key}")
-    private String apiKey;
-
-    @Value("${deepseek.api-url}")
-    private String apiUrl;
-
-    @Value("${deepseek.model}")
-    private String model;
-
-    @Value("${github.token:}")
-    private String githubToken;
 
     @Resource
     private RestTemplate restTemplate;
@@ -51,6 +38,9 @@ public class TranslateService {
 
     @Resource
     private GithubRepoService githubRepoService;
+
+    @Resource
+    private SystemConfigService configService;
 
     /**
      * 翻译单个仓库的描述信息（只翻译一次，已翻译则跳过）
@@ -84,6 +74,13 @@ public class TranslateService {
 
     /**
      * 翻译单个仓库的 README（只翻译一次，已获取翻译则跳过）
+     *
+     * 逻辑：
+     * 1. 已获取（readmeFetched=true）→ 返回已有结果（不重复获取）
+     * 2. 未获取 → 调 GitHub API
+     *    a. README 存在 → 保存原始内容 + 翻译
+     *    b. README 不存在（404）→ 标记 fetched，不再重试
+     *    c. 限流/网络错误 → 抛异常给上层重试，不标记 fetched
      */
     public String translateReadme(Long repoId) {
         GithubRepo repo = githubRepoService.findById(repoId);
@@ -92,33 +89,83 @@ public class TranslateService {
             return null;
         }
 
-        // 只保存一次：已获取并翻译则直接返回
+        // 已获取则直接返回（不再重复请求 GitHub API）
         if (Boolean.TRUE.equals(repo.getReadmeFetched())) {
-            log.info("README 已翻译，跳过: {}", repo.getFullName());
-            return repo.getReadmeCn();
+            log.info("README 已处理，跳过: {}", repo.getFullName());
+            return repo.getReadmeCn() != null ? repo.getReadmeCn() : "";
         }
 
-        String readmeContent = fetchReadmeFromGitHub(repo.getFullName());
+        String readmeContent;
+        try {
+            readmeContent = fetchReadmeFromGitHub(repo.getFullName());
+        } catch (RuntimeException e) {
+            // 限流/网络错误：不标记 fetched，让上层重试
+            log.warn("README 获取失败（将重试）: {} - {}", repo.getFullName(), e.getMessage());
+            throw e;
+        }
+
         if (readmeContent == null) {
-            log.warn("README 不存在或获取失败，标记为已处理: {}", repo.getFullName());
+            // 404: README 确实不存在，标记为已处理，不再重试
+            log.info("README 不存在，标记已处理: {}", repo.getFullName());
             repo.setReadmeFetched(true);
             repo.setReadmeCn(null);
             githubRepoMapper.updateById(repo);
-            return null;
+            return "";
         }
 
-        // README 全部翻译，不截断（使用长超时 RestTemplate）
+        // README 存在：立即保存原始内容（即使翻译失败也不丢失）
+        repo.setReadmeOriginal(readmeContent);
+        repo.setReadmeFetched(true);
+        githubRepoMapper.updateById(repo);
+        log.info("已保存原始 README: {} ({} 字符)", repo.getFullName(), readmeContent.length());
+
+        // 翻译 README（使用长超时 RestTemplate）
         String translated = callDeepSeekTranslate(readmeContent, true);
         if (translated != null) {
             repo.setReadmeCn(translated);
-            repo.setReadmeFetched(true);
             githubRepoMapper.updateById(repo);
-            log.info("README 翻译成功: {} ({} 字符)", repo.getFullName(), translated.length());
+            log.info("README 翻译成功: {} ({} → {} 字符)", repo.getFullName(), readmeContent.length(), translated.length());
         } else {
-            log.warn("README 翻译失败，可重试: {}", repo.getFullName());
-            // 翻译失败不设置 readmeFetched，允许用户重试
+            log.warn("README 翻译失败（原始内容已保存，可稍后重试翻译）: {}", repo.getFullName());
         }
-        return translated;
+        return translated != null ? translated : "";
+    }
+
+    /**
+     * 强制重新翻译 README（忽略 readmeFetched 标记）
+     */
+    public String translateReadmeForce(Long repoId) {
+        GithubRepo repo = githubRepoService.findById(repoId);
+        if (repo == null) return null;
+
+        String readmeContent;
+        try {
+            readmeContent = fetchReadmeFromGitHub(repo.getFullName());
+        } catch (RuntimeException e) {
+            throw e;
+        }
+
+        if (readmeContent == null) {
+            repo.setReadmeFetched(true);
+            repo.setReadmeCn(null);
+            githubRepoMapper.updateById(repo);
+            return "";
+        }
+
+        // 保存原始内容
+        repo.setReadmeOriginal(readmeContent);
+        repo.setReadmeFetched(true);
+        githubRepoMapper.updateById(repo);
+        log.info("重新获取原始 README: {} ({} 字符)", repo.getFullName(), readmeContent.length());
+
+        // 重新翻译
+        String translated = callDeepSeekTranslate(readmeContent, true);
+        if (translated != null) {
+            repo.setReadmeCn(translated);
+            githubRepoMapper.updateById(repo);
+            log.info("重新翻译 README 成功: {} ({} 字符)", repo.getFullName(), translated.length());
+        }
+        return translated != null ? translated : "";
     }
 
     /**
@@ -168,6 +215,9 @@ public class TranslateService {
 
     /**
      * 从 GitHub 获取 README 内容
+     *
+     * @return README 内容，不存在时返回 null
+     * @throws RuntimeException 限流或网络错误时抛出（调用方应重试而不是标记为已处理）
      */
     private String fetchReadmeFromGitHub(String fullName) {
         try {
@@ -175,8 +225,9 @@ public class TranslateService {
             HttpHeaders headers = new HttpHeaders();
             headers.set("Accept", "application/vnd.github.v3.raw");
             headers.set("User-Agent", "GithubStars-Manager");
-            if (githubToken != null && !githubToken.isEmpty()) {
-                headers.set("Authorization", "Bearer " + githubToken);
+            String ghToken = configService.getValue("github.token");
+            if (ghToken != null && !ghToken.isEmpty()) {
+                headers.set("Authorization", "Bearer " + ghToken);
             }
 
             HttpEntity<String> entity = new HttpEntity<>(headers);
@@ -185,11 +236,27 @@ public class TranslateService {
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 return response.getBody();
             }
+
+            // 404 = README 不存在，这是正常情况
+            if (response.getStatusCode() == HttpStatus.NOT_FOUND) {
+                log.info("README 不存在 (404): {}", fullName);
+                return null;
+            }
+
+            // 403 = 限流，不应标记为已处理
+            if (response.getStatusCode() == HttpStatus.FORBIDDEN) {
+                log.warn("GitHub API 限流 (403)，需要稍后重试: {}", fullName);
+                throw new RuntimeException("GitHub API rate limited");
+            }
+
             log.warn("获取 README 失败: {} - {}", fullName, response.getStatusCode());
-            return null;
+            throw new RuntimeException("GitHub API error: " + response.getStatusCodeValue());
+        } catch (RuntimeException e) {
+            throw e; // 重新抛出限流等错误
         } catch (Exception e) {
-            log.warn("获取 README 异常: {} - {}", fullName, e.getMessage());
-            return null;
+            // 网络错误等，也应该重试
+            log.warn("获取 README 网络异常: {} - {}", fullName, e.getMessage());
+            throw new RuntimeException("GitHub API network error: " + e.getMessage());
         }
     }
 
@@ -204,12 +271,19 @@ public class TranslateService {
         try {
             String prompt;
             if (isReadme) {
-                prompt = "你是一位专业的翻译专家。请将以下 GitHub 项目的 README 文档从英文翻译成中文。"
-                        + "要求：\n"
-                        + "1. 保持原文的 Markdown 格式（标题、列表、代码块等）\n"
-                        + "2. 技术术语保留英文（如 API, SDK, CLI 等）\n"
-                        + "3. 代码块内容不要翻译\n"
-                        + "4. 只返回翻译结果，不要任何额外说明\n\n"
+                prompt = "你是一位专业的 GitHub README 文档翻译专家。以下是完整的 Markdown 格式 README 文件，请将其翻译为高质量的中文版本。"
+                        + "\n\n【强制要求 - 必须严格遵守】"
+                        + "\n1. 输出必须是完整、合法的 Markdown 格式文档，这是 GitHub README 文件"
+                        + "\n2. 保持所有 Markdown 语法完整不变：标题(#)、列表(-/*)、代码块(```)、链接([]())、图片(![]())、表格(|)、引用(>)、分隔线(---)、粗体(**)、斜体(*)等"
+                        + "\n3. 代码块(```...```)内的所有内容保持原样不翻译，包括代码注释"
+                        + "\n4. 技术术语保留英文原文，如 API、SDK、CLI、HTTP、JSON、Docker、Git、npm 等"
+                        + "\n5. 项目名称、仓库名、人名、URL 链接保持原文不变"
+                        + "\n6. HTML 标签内容只翻译显示文本，保持标签结构不变"
+                        + "\n7. Badge/徽章（如 ![...](...) 格式的 CI/CD 状态图）保持原文"
+                        + "\n8. 英文专有名词首次出现时可保留英文并在括号内加中文，如 Docker（容器化平台）"
+                        + "\n9. 翻译结果直接输出，不要添加任何前缀（如'翻译结果：'）、后缀或额外解释"
+                        + "\n10. 不要输出任何开头语或结尾语，只输出翻译后的 Markdown 文档本身"
+                        + "\n\n【待翻译的 README 文档】\n\n"
                         + text;
             } else {
                 prompt = "你是一位专业的翻译专家。请将以下 GitHub 项目描述从英文翻译成中文。"
@@ -221,7 +295,7 @@ public class TranslateService {
             }
 
             ObjectNode requestBody = objectMapper.createObjectNode();
-            requestBody.put("model", model);
+            requestBody.put("model", configService.getValue("deepseek.model", "deepseek-chat"));
             requestBody.put("temperature", 0.3);
             // README 翻译使用更多 tokens，避免截断
             requestBody.put("max_tokens", isReadme ? 32768 : 1024);
@@ -235,12 +309,13 @@ public class TranslateService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Authorization", "Bearer " + apiKey);
+            headers.set("Authorization", "Bearer " + configService.getValue("deepseek.api_key"));
 
             HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(requestBody), headers);
             // README 使用长超时 RestTemplate（3 分钟），描述使用默认（30 秒）
             RestTemplate rt = isReadme ? longTimeoutRestTemplate : restTemplate;
-            ResponseEntity<String> response = rt.postForEntity(apiUrl, entity, String.class);
+            String dsUrl = configService.getValue("deepseek.api_url", "https://api.deepseek.com/v1/chat/completions");
+            ResponseEntity<String> response = rt.postForEntity(dsUrl, entity, String.class);
 
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 JsonNode root = objectMapper.readTree(response.getBody());

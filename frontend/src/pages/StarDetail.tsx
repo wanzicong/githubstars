@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Card,
@@ -15,6 +15,9 @@ import {
   Empty,
   Divider,
   message,
+  Modal,
+  Progress,
+  Alert,
 } from 'antd'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -28,9 +31,13 @@ import {
   BugOutlined,
   TranslationOutlined,
   ReadOutlined,
+  ReloadOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons'
 import * as statsApi from '../api/stats'
 import * as translateApi from '../api/translate'
+import { formatNumberCn } from '../utils/format'
 import type { GithubRepo } from '../types'
 
 const { Title, Text, Paragraph } = Typography
@@ -85,6 +92,37 @@ export default function StarDetail() {
   // 翻译状态
   const [translatingDesc, setTranslatingDesc] = useState(false)
   const [translatingReadme, setTranslatingReadme] = useState(false)
+
+  // 异步翻译进度
+  const [translateTaskId, setTranslateTaskId] = useState<number | null>(null)
+  const [translateModalVisible, setTranslateModalVisible] = useState(false)
+  const [translateProgress, setTranslateProgress] = useState<{ status: string; progress: number; readmeCompleted: number; readmeFailed: number; readmeTotal: number } | null>(null)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const repoIdRef = useRef<number | null>(null)
+
+  // 同步 repo.id 到 ref
+  useEffect(() => { repoIdRef.current = repo?.id ?? null }, [repo?.id])
+
+  const stopPolling = useCallback(() => { if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null } }, [])
+  const startPolling = useCallback((taskId: number) => {
+    stopPolling()
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await translateApi.getTaskProgress(taskId)
+        if (res.success) {
+          setTranslateProgress({ status: res.status, progress: res.progress, readmeCompleted: res.readmeCompleted, readmeFailed: res.readmeFailed, readmeTotal: res.readmeTotal })
+          if (res.status === 'COMPLETED' || res.status === 'FAILED') {
+            stopPolling()
+            const rid = repoIdRef.current
+            if (rid) {
+              const updated = await translateApi.fetchRepoDetail(rid)
+              if (updated && updated.id) setRepo(updated)
+            }
+          }
+        }
+      } catch { }
+    }, 2000)
+  }, [stopPolling])
 
   useEffect(() => {
     let cancelled = false
@@ -166,20 +204,45 @@ export default function StarDetail() {
     if (!repo?.id) return
     setTranslatingReadme(true)
     try {
-      const result = await translateApi.translateReadme(repo.id)
-      if (result.success) {
-        const updated = await translateApi.fetchRepoDetail(repo.id)
-        if (updated && updated.id) {
-          setRepo(updated)
-          message.success('README 翻译完成')
-        }
+      const result = await translateApi.startSingleReadme(repo.id)
+      if (result.success && result.taskId) {
+        setTranslateTaskId(result.taskId)
+        setTranslateProgress({ status: 'PENDING', progress: 0, readmeCompleted: 0, readmeFailed: 0, readmeTotal: 1 })
+        setTranslateModalVisible(true)
+        startPolling(result.taskId)
+        message.success('翻译任务已提交，正在后台执行...')
+      } else {
+        message.info(result.message || '提交失败')
       }
     } catch {
-      message.error('翻译 README 失败')
+      message.error('提交翻译任务失败')
     } finally {
       setTranslatingReadme(false)
     }
   }
+
+  const handleRetranslateReadme = async () => {
+    if (!repo?.id) return
+    setTranslatingReadme(true)
+    try {
+      const result = await translateApi.retranslateReadme(repo.id)
+      if (result.success && result.taskId) {
+        setTranslateTaskId(result.taskId)
+        setTranslateProgress({ status: 'PENDING', progress: 0, readmeCompleted: 0, readmeFailed: 0, readmeTotal: 1 })
+        setTranslateModalVisible(true)
+        startPolling(result.taskId)
+        message.success('重新翻译任务已提交，正在后台执行...')
+      } else {
+        message.info(result.message || '提交失败')
+      }
+    } catch {
+      message.error('提交重新翻译任务失败')
+    } finally {
+      setTranslatingReadme(false)
+    }
+  }
+
+  const handleCloseTranslateModal = () => { stopPolling(); setTranslateModalVisible(false); setTranslateTaskId(null); setTranslateProgress(null) }
 
   const handleBack = () => {
     if (window.history.length > 1) {
@@ -320,6 +383,7 @@ export default function StarDetail() {
               title="Stars"
               value={repo.starsCount}
               prefix={<StarFilled style={{ color: '#faad14' }} />}
+              formatter={(value) => <span>{value} <Text type="secondary" style={{ fontSize: 12 }}>{formatNumberCn(Number(value))}</Text></span>}
             />
           </Card>
         </Col>
@@ -329,6 +393,7 @@ export default function StarDetail() {
               title="Forks"
               value={repo.forksCount}
               prefix={<ForkOutlined style={{ color: '#52c41a' }} />}
+              formatter={(value) => <span>{value} <Text type="secondary" style={{ fontSize: 12 }}>{formatNumberCn(Number(value))}</Text></span>}
             />
           </Card>
         </Col>
@@ -338,6 +403,7 @@ export default function StarDetail() {
               title="Watchers"
               value={repo.watchersCount}
               prefix={<EyeOutlined style={{ color: '#1677ff' }} />}
+              formatter={(value) => <span>{value} <Text type="secondary" style={{ fontSize: 12 }}>{formatNumberCn(Number(value))}</Text></span>}
             />
           </Card>
         </Col>
@@ -347,6 +413,7 @@ export default function StarDetail() {
               title="Open Issues"
               value={repo.openIssuesCount}
               prefix={<BugOutlined style={{ color: '#ff4d4f' }} />}
+              formatter={(value) => <span>{value} <Text type="secondary" style={{ fontSize: 12 }}>{formatNumberCn(Number(value))}</Text></span>}
             />
           </Card>
         </Col>
@@ -429,7 +496,29 @@ export default function StarDetail() {
             >
               翻译 README
             </Button>
-          ) : null
+          ) : (
+            <Space>
+              {repo.readmeCn ? (
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  loading={translatingReadme}
+                  onClick={handleRetranslateReadme}
+                >
+                  重新翻译
+                </Button>
+              ) : (
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  loading={translatingReadme}
+                  onClick={handleRetranslateReadme}
+                >
+                  重新获取
+                </Button>
+              )}
+            </Space>
+          )
         }
       >
         {repo.readmeFetched && repo.readmeCn ? (
@@ -491,6 +580,57 @@ export default function StarDetail() {
           </div>
         )}
       </Card>
+
+      {/* 异步翻译进度弹窗 */}
+      <Modal
+        title="README 翻译进度"
+        open={translateModalVisible}
+        onCancel={handleCloseTranslateModal}
+        footer={translateProgress && translateProgress.status !== 'PENDING' && translateProgress.status !== 'PROCESSING' ? (
+          <Button type="primary" onClick={handleCloseTranslateModal}>关闭</Button>
+        ) : null}
+        maskClosable={false}
+        closable={translateProgress?.status !== 'PENDING' && translateProgress?.status !== 'PROCESSING'}
+      >
+        {translateProgress && (
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <Spin spinning={translateProgress.status === 'PENDING' || translateProgress.status === 'PROCESSING'}>
+              <div style={{ padding: 8 }}>
+                {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed === 0 && (
+                  <div style={{ fontSize: 48, marginBottom: 8 }}><CheckCircleOutlined style={{ color: '#52c41a' }} /></div>
+                )}
+                {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed > 0 && (
+                  <div style={{ fontSize: 48, marginBottom: 8 }}><CloseCircleOutlined style={{ color: '#ff4d4f' }} /></div>
+                )}
+                <Progress
+                  type="circle"
+                  percent={translateProgress.progress}
+                  status={translateProgress.status === 'COMPLETED' ? (translateProgress.readmeFailed > 0 ? 'exception' : 'success') : translateProgress.status === 'FAILED' ? 'exception' : 'active'}
+                  size={120}
+                />
+                <div style={{ marginTop: 16, fontSize: 14, color: '#666' }}>
+                  {translateProgress.status === 'PENDING' && '等待执行...'}
+                  {translateProgress.status === 'PROCESSING' && '正在翻译 README...'}
+                  {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed === 0 && '翻译完成！'}
+                  {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed > 0 && '翻译完成（失败）'}
+                  {translateProgress.status === 'FAILED' && '翻译失败'}
+                </div>
+              </div>
+            </Spin>
+            <Alert
+              style={{ marginTop: 12, textAlign: 'left' }}
+              type="info"
+              showIcon
+              message={
+                <div style={{ fontSize: 13 }}>
+                  <div>正在获取 GitHub README 并调用 DeepSeek 翻译，请耐心等待...</div>
+                  <div style={{ marginTop: 4 }}>超时时间：5 分钟 | 失败自动重试 3 次</div>
+                </div>
+              }
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

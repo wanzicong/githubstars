@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: '/',
-  timeout: 30000,
+  timeout: 300000, // 5 分钟超时
 })
 
 api.interceptors.response.use(
