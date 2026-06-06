@@ -38,13 +38,17 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined,
   ReadOutlined,
+  BulbOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import * as statsApi from '../api/stats'
 import * as starsApi from '../api/stars'
 import * as translateApi from '../api/translate'
 import * as categoriesApi from '../api/categories'
+import * as analyzeApi from '../api/analyze'
 import { formatNumberCn } from '../utils/format'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { Category, GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
 
 const { Title, Text, Paragraph } = Typography
@@ -317,6 +321,12 @@ export default function StarList() {
 
   const [batchTranslating, setBatchTranslating] = useState(false)
   const [translateModalVisible, setTranslateModalVisible] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analyzeTaskId, setAnalyzeTaskId] = useState<string | null>(null)
+  const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
+  const [analyzeResult, setAnalyzeResult] = useState<string | null>(null)
+  const [analyzeStatus, setAnalyzeStatus] = useState<string>('')
+  const analyzePollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [translateTaskId, setTranslateTaskId] = useState<number | null>(null)
   const [translateProgress, setTranslateProgress] = useState<{ status: string; totalItems: number; completedItems: number; failedItems: number; descTotal: number; descCompleted: number; descFailed: number; readmeTotal: number; readmeCompleted: number; readmeFailed: number; progress: number } | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -364,6 +374,49 @@ export default function StarList() {
       } else { message.info(result.message || '没有需要翻译 README 的项目') }
     } catch { message.error('启动 README 批量翻译失败') } finally { setBatchTranslating(false) }
   }, [startPolling])
+
+  const handleAiAnalyze = useCallback(async () => {
+    setAnalyzing(true)
+    try {
+      const result = await analyzeApi.startAnalyze({
+        keyword: keyword || undefined,
+        language: languageStr || undefined,
+        categoryIds: categoryIdsStr || undefined,
+        sortBy: sortBy || undefined,
+        sortOrder: sortOrder || undefined,
+      })
+      if (result.success && result.taskId) {
+        setAnalyzeTaskId(result.taskId)
+        setAnalyzeStatus('PROCESSING')
+        setAnalyzeResult(null)
+        setAnalyzeModalVisible(true)
+        // 轮询结果
+        const taskId = result.taskId
+        if (analyzePollingRef.current) clearInterval(analyzePollingRef.current)
+        analyzePollingRef.current = setInterval(async () => {
+          try {
+            const status = await analyzeApi.getAnalyzeStatus(taskId)
+            if (status.status === 'COMPLETED') {
+              if (analyzePollingRef.current) clearInterval(analyzePollingRef.current)
+              setAnalyzeStatus('COMPLETED')
+              setAnalyzeResult(status.content || '分析完成，但无内容返回')
+            }
+          } catch { }
+        }, 3000)
+      } else {
+        message.info(result.message || '启动分析失败')
+      }
+    } catch { message.error('AI 分析请求失败') }
+    finally { setAnalyzing(false) }
+  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder])
+
+  const handleCloseAnalyzeModal = useCallback(() => {
+    if (analyzePollingRef.current) clearInterval(analyzePollingRef.current)
+    setAnalyzeModalVisible(false)
+    setAnalyzeTaskId(null)
+    setAnalyzeResult(null)
+    setAnalyzeStatus('')
+  }, [])
 
   const handleRetryFailed = useCallback(async () => {
     if (!translateTaskId) return
@@ -470,6 +523,7 @@ export default function StarList() {
                 {hasActiveFilters && <Button icon={<ClearOutlined />} onClick={handleClearFilters}>清除</Button>}
                 <Button icon={<TranslationOutlined />} loading={batchTranslating} onClick={handleStartFullTranslate} style={{ flex: '1 1 auto', minWidth: 0 }}>批量翻译</Button>
                 <Button icon={<ReadOutlined />} loading={false} onClick={handleStartReadmeBatch} style={{ flex: '1 1 auto', minWidth: 0 }}>批量README</Button>
+                <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze} style={{ flex: '1 1 auto', minWidth: 0 }}>AI 分析</Button>
                 <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport} style={{ flex: '1 1 auto', minWidth: 0 }}>导出链接</Button>
               </div>
             </Col>
@@ -527,6 +581,56 @@ export default function StarList() {
         )}
       </Spin>
       {renderTranslateProgress()}
+
+      {/* AI 分析结果弹窗 */}
+      <Modal
+        title={<Space><BulbOutlined style={{ color: '#faad14' }} />AI 项目分析总结</Space>}
+        open={analyzeModalVisible}
+        onCancel={handleCloseAnalyzeModal}
+        footer={<Button type="primary" onClick={handleCloseAnalyzeModal}>关闭</Button>}
+        width={900}
+        style={{ top: 20 }}
+        maskClosable={analyzeStatus === 'COMPLETED'}
+        closable={analyzeStatus === 'COMPLETED'}
+      >
+        {analyzeStatus === 'PROCESSING' && (
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <Spin size="large" />
+            <div style={{ marginTop: 16, fontSize: 15, color: '#666' }}>
+              <BulbOutlined style={{ color: '#faad14', marginRight: 8 }} />
+              AI 正在分析筛选出的项目，请耐心等待...
+            </div>
+            <div style={{ marginTop: 8, fontSize: 13, color: '#999' }}>
+              最多分析 30 个项目 | 分析内容包括描述和 README
+            </div>
+          </div>
+        )}
+        {analyzeStatus === 'COMPLETED' && analyzeResult && (
+          <div style={{ maxHeight: '70vh', overflow: 'auto', padding: '8px 0' }} className="readme-markdown">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                h1: ({ children }) => <h1 style={{ fontSize: 20, borderBottom: '2px solid #1677ff', paddingBottom: 8, marginTop: 20, marginBottom: 12 }}>{children}</h1>,
+                h2: ({ children }) => <h2 style={{ fontSize: 17, borderBottom: '1px solid #eee', paddingBottom: 6, marginTop: 16, marginBottom: 10 }}>{children}</h2>,
+                h3: ({ children }) => <h3 style={{ fontSize: 15, marginTop: 14, marginBottom: 8 }}>{children}</h3>,
+                p: ({ children }) => <p style={{ lineHeight: 1.8, marginBottom: 10, fontSize: 14 }}>{children}</p>,
+                a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#1677ff' }}>{children}</a>,
+                ul: ({ children }) => <ul style={{ paddingLeft: 24, marginBottom: 10, lineHeight: 1.8 }}>{children}</ul>,
+                ol: ({ children }) => <ol style={{ paddingLeft: 24, marginBottom: 10, lineHeight: 1.8 }}>{children}</ol>,
+                li: ({ children }) => <li style={{ marginBottom: 4, fontSize: 14 }}>{children}</li>,
+                code: ({ children }) => <code style={{ backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: 3, fontSize: 13 }}>{children}</code>,
+                pre: ({ children }) => <pre style={{ backgroundColor: '#f6f8fa', padding: 14, borderRadius: 6, overflow: 'auto', fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>{children}</pre>,
+                strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{children}</strong>,
+                table: ({ children }) => <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: 14 }}>{children}</table>,
+                th: ({ children }) => <th style={{ border: '1px solid #ddd', padding: '8px 12px', backgroundColor: '#f5f5f5', fontWeight: 600, fontSize: 13 }}>{children}</th>,
+                td: ({ children }) => <td style={{ border: '1px solid #ddd', padding: '8px 12px', fontSize: 13 }}>{children}</td>,
+              }}
+            >
+              {analyzeResult}
+            </ReactMarkdown>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
