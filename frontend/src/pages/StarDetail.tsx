@@ -34,9 +34,12 @@ import {
   ReloadOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  SearchOutlined,
+  BulbOutlined,
 } from '@ant-design/icons'
 import * as statsApi from '../api/stats'
 import * as translateApi from '../api/translate'
+import * as similarApi from '../api/similar'
 import { formatNumberCn } from '../utils/format'
 import type { GithubRepo } from '../types'
 
@@ -242,6 +245,24 @@ export default function StarDetail() {
     }
   }
 
+  // 相似项目
+  const [similarLoading, setSimilarLoading] = useState(false)
+  const [similarModalVisible, setSimilarModalVisible] = useState(false)
+  const [similarRepos, setSimilarRepos] = useState<similarApi.SimilarRepo[]>([])
+
+  const handleFindSimilar = async () => {
+    if (!repo?.id) return
+    setSimilarLoading(true)
+    setSimilarModalVisible(true)
+    setSimilarRepos([])
+    try {
+      const result = await similarApi.findSimilarRepos(repo.id)
+      if (result.success) setSimilarRepos(result.repos)
+      else message.info('未找到相似项目')
+    } catch { message.error('搜索相似项目失败') }
+    finally { setSimilarLoading(false) }
+  }
+
   const handleCloseTranslateModal = () => { stopPolling(); setTranslateModalVisible(false); setTranslateTaskId(null); setTranslateProgress(null) }
 
   const handleBack = () => {
@@ -357,6 +378,13 @@ export default function StarDetail() {
             )}
           </div>
           <Space>
+            <Button
+              icon={<SearchOutlined />}
+              loading={similarLoading}
+              onClick={handleFindSimilar}
+            >
+              发现相似项目
+            </Button>
             <Button
               type="primary"
               icon={<GithubOutlined />}
@@ -580,6 +608,81 @@ export default function StarDetail() {
           </div>
         )}
       </Card>
+
+      {/* 相似项目弹窗 */}
+      <Modal
+        title={<Space><SearchOutlined /> 发现相似项目</Space>}
+        open={similarModalVisible}
+        onCancel={() => setSimilarModalVisible(false)}
+        footer={<Button type="primary" onClick={() => setSimilarModalVisible(false)}>关闭</Button>}
+        width={800}
+        style={{ top: 20 }}
+      >
+        <Spin spinning={similarLoading} tip="正在搜索 GitHub 相似项目...">
+          {similarRepos.length > 0 ? (
+            <div style={{ maxHeight: '60vh', overflow: 'auto' }}>
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 16 }}
+                message={`找到 ${similarRepos.length} 个相似项目（过滤条件: Star≥100, 3个月内活跃, AI排序）`}
+              />
+              {similarRepos.map((r, i) => (
+                <Card
+                  key={r.fullName}
+                  size="small"
+                  style={{ marginBottom: 12 }}
+                  extra={
+                    <Button size="small" type="link" onClick={() => window.open(r.htmlUrl, '_blank')}>
+                      <GithubOutlined /> GitHub
+                    </Button>
+                  }
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Text strong style={{ fontSize: 14 }}>
+                        <a href={r.htmlUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#1677ff' }}>
+                          {r.fullName}
+                        </a>
+                      </Text>
+                      {r.description && (
+                        <Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ marginBottom: 4, fontSize: 12 }}>
+                          {r.description}
+                        </Paragraph>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                        {r.language && <Tag color="blue" style={{ fontSize: 11 }}>{r.language}</Tag>}
+                        <span><StarFilled style={{ color: '#faad14', fontSize: 11 }} /> <Text style={{ fontSize: 12 }}>{r.stars}</Text></span>
+                        <span><ForkOutlined style={{ fontSize: 11 }} /> <Text style={{ fontSize: 12 }}>{r.forks}</Text></span>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', minWidth: 80 }}>
+                      <Text style={{ fontSize: 11, color: '#999' }}>
+                        评分<br /><span style={{ fontSize: 18, color: '#faad14', fontWeight: 600 }}>{r.score.toFixed(1)}</span>
+                      </Text>
+                    </div>
+                  </div>
+                  {r.aiReason && (
+                    <div style={{ marginTop: 8, padding: '6px 10px', backgroundColor: '#fffbe6', borderRadius: 6, border: '1px solid #ffe58f' }}>
+                      <Text style={{ fontSize: 12 }}>
+                        <BulbOutlined style={{ color: '#faad14', marginRight: 4 }} />
+                        <Text type="secondary">AI 推荐: </Text>
+                        {r.aiReason}
+                      </Text>
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </div>
+          ) : !similarLoading ? (
+            <Empty description="未找到符合条件的相似项目">
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                筛选条件: Star ≥ 100 | 3个月内活跃 | 按 topic 和语言匹配
+              </Text>
+            </Empty>
+          ) : null}
+        </Spin>
+      </Modal>
 
       {/* 异步翻译进度弹窗 */}
       <Modal
