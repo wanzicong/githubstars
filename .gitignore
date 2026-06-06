@@ -17,3 +17,11 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Frontend build caches
+frontend/.vite/
+frontend/node_modules/
+frontend/dist/
+
+# Claude Code
+.code-index/
