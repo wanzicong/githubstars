@@ -144,13 +144,25 @@ export default function AuthorList() {
                       />
                     </div>
                     <div style={{ textAlign: 'center', marginBottom: 12 }}>
-                      <Text
-                        strong
-                        style={{ fontSize: 16, display: 'block' }}
-                        ellipsis
-                      >
-                        {author.ownerName}
-                      </Text>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                        <Text
+                          strong
+                          style={{ fontSize: 16 }}
+                          ellipsis
+                        >
+                          {author.ownerName}
+                        </Text>
+                        <a
+                          href={`https://github.com/${author.ownerName}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title="打开 GitHub 主页"
+                          style={{ color: '#1677ff', fontSize: 16, flexShrink: 0 }}
+                        >
+                          <GithubOutlined />
+                        </a>
+                      </div>
                       {author.topLanguage && (
                         <Tag color="blue" style={{ marginTop: 4 }}>
                           {author.topLanguage}

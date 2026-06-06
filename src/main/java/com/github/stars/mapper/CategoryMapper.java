@@ -5,6 +5,7 @@ import com.github.stars.entity.Category;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface CategoryMapper extends BaseMapper<Category> {
@@ -26,6 +27,20 @@ public interface CategoryMapper extends BaseMapper<Category> {
      */
     @Select("SELECT category_id FROM repo_category WHERE repo_id = #{repoId}")
     List<Long> selectCategoryIdsByRepoId(@Param("repoId") Long repoId);
+
+    /**
+     * 批量查询多个仓库的分类名称（用于列表展示）
+     * 返回值: repo_id -> category_name 的映射列表
+     */
+    @Select("<script>" +
+            "SELECT rc.repo_id, c.name FROM repo_category rc " +
+            "INNER JOIN category c ON rc.category_id = c.id " +
+            "WHERE rc.repo_id IN " +
+            "<foreach collection='repoIds' item='repoId' open='(' separator=',' close=')'>" +
+            "#{repoId}" +
+            "</foreach>" +
+            "</script>")
+    List<Map<String, Object>> selectCategoryNamesByRepoIds(@Param("repoIds") List<Long> repoIds);
 
     /**
      * 添加仓库到分类

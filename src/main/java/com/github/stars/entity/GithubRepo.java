@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @TableName("github_repo")
@@ -89,4 +90,10 @@ public class GithubRepo {
 
     @TableField("updated_at")
     private LocalDateTime updatedAt;
+
+    /**
+     * 仓库所属分类名称列表（非数据库字段，查询时动态填充）
+     */
+    @TableField(exist = false)
+    private List<String> categoryNames;
 }

@@ -23,6 +23,7 @@ export interface GithubRepo {
   repoUpdatedAt: string | null
   repoPushedAt: string | null
   starredAt: string | null
+  categoryNames: string[]
 }
 
 export interface Category {

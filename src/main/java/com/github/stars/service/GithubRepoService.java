@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.github.stars.entity.GithubRepo;
 import com.github.stars.entity.LanguageStat;
+import com.github.stars.mapper.CategoryMapper;
 import com.github.stars.mapper.GithubRepoMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -16,9 +17,7 @@ import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,6 +25,9 @@ public class GithubRepoService {
 
     @Resource
     private GithubRepoMapper githubRepoMapper;
+
+    @Resource
+    private CategoryMapper categoryMapper;
 
     /**
      * 分页查询Star仓库列表
@@ -129,7 +131,31 @@ public class GithubRepoService {
                 break;
         }
 
-        return githubRepoMapper.selectPage(pageParam, wrapper);
+        IPage<GithubRepo> result = githubRepoMapper.selectPage(pageParam, wrapper);
+        fillCategoryNames(result.getRecords());
+        return result;
+    }
+
+    /**
+     * 批量填充分类名称到仓库列表
+     */
+    public void fillCategoryNames(List<GithubRepo> repos) {
+        if (repos == null || repos.isEmpty()) return;
+
+        List<Long> repoIds = repos.stream().map(GithubRepo::getId).collect(Collectors.toList());
+        List<Map<String, Object>> rows = categoryMapper.selectCategoryNamesByRepoIds(repoIds);
+
+        // repo_id -> List<category_name>
+        Map<Long, List<String>> categoryMap = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            Long repoId = ((Number) row.get("repo_id")).longValue();
+            String name = (String) row.get("name");
+            categoryMap.computeIfAbsent(repoId, k -> new ArrayList<>()).add(name);
+        }
+
+        for (GithubRepo repo : repos) {
+            repo.setCategoryNames(categoryMap.getOrDefault(repo.getId(), Collections.emptyList()));
+        }
     }
 
     /**
@@ -237,10 +263,14 @@ public class GithubRepoService {
     }
 
     /**
-     * 根据ID获取仓库详情
+     * 根据ID获取仓库详情（含分类信息）
      */
     public GithubRepo findById(Long id) {
-        return githubRepoMapper.selectById(id);
+        GithubRepo repo = githubRepoMapper.selectById(id);
+        if (repo != null) {
+            fillCategoryNames(Collections.singletonList(repo));
+        }
+        return repo;
     }
 
     /**

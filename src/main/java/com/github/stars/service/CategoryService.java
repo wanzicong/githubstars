@@ -1,6 +1,7 @@
 package com.github.stars.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.github.stars.entity.Category;
 import com.github.stars.entity.GithubRepo;
 import com.github.stars.mapper.CategoryMapper;
@@ -9,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
@@ -98,7 +100,69 @@ public class CategoryService {
     }
 
     /**
-     * 获取分类下的仓库列表
+     * 分页查询分类下的仓库列表（支持搜索、排序、分类标签）
+     */
+    public Page<GithubRepo> getReposByCategoryIdPaged(Long categoryId, int page, int size,
+                                                       String keyword, String language,
+                                                       String sortBy, String sortOrder) {
+        List<Long> repoIds = categoryMapper.selectRepoIdsByCategoryId(categoryId);
+        if (repoIds.isEmpty()) {
+            Page<GithubRepo> empty = new Page<>(page, size);
+            empty.setRecords(Collections.emptyList());
+            empty.setTotal(0);
+            return empty;
+        }
+
+        Page<GithubRepo> pageParam = new Page<>(page, size);
+        LambdaQueryWrapper<GithubRepo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(GithubRepo::getId, repoIds);
+
+        // 关键词搜索
+        if (StringUtils.hasText(keyword)) {
+            wrapper.and(w -> w
+                    .like(GithubRepo::getRepoName, keyword)
+                    .or().like(GithubRepo::getDescription, keyword)
+                    .or().like(GithubRepo::getOwnerName, keyword)
+                    .or().like(GithubRepo::getFullName, keyword)
+            );
+        }
+
+        // 语言筛选
+        if (StringUtils.hasText(language)) {
+            List<String> langList = Arrays.asList(language.split(","));
+            wrapper.in(GithubRepo::getLanguage, langList);
+        }
+
+        // 排序
+        boolean isAsc = "asc".equalsIgnoreCase(sortOrder);
+        switch (sortBy != null ? sortBy : "stars_count") {
+            case "stars_count":
+                wrapper.orderBy(true, isAsc, GithubRepo::getStarsCount);
+                break;
+            case "forks_count":
+                wrapper.orderBy(true, isAsc, GithubRepo::getForksCount);
+                break;
+            case "repo_updated_at":
+                wrapper.orderBy(true, isAsc, GithubRepo::getRepoUpdatedAt);
+                break;
+            case "repo_created_at":
+                wrapper.orderBy(true, isAsc, GithubRepo::getRepoCreatedAt);
+                break;
+            case "repo_pushed_at":
+                wrapper.orderBy(true, isAsc, GithubRepo::getRepoPushedAt);
+                break;
+            default:
+                wrapper.orderBy(true, isAsc, GithubRepo::getStarredAt);
+                break;
+        }
+
+        Page<GithubRepo> result = githubRepoMapper.selectPage(pageParam, wrapper);
+        fillCategoryNames(result.getRecords());
+        return result;
+    }
+
+    /**
+     * 获取分类下的仓库列表（不分页，兼容旧接口）
      */
     public List<GithubRepo> getReposByCategoryId(Long categoryId) {
         List<Long> repoIds = categoryMapper.selectRepoIdsByCategoryId(categoryId);
@@ -221,6 +285,24 @@ public class CategoryService {
             result.add(item);
         }
         return result;
+    }
+
+    /**
+     * 批量填充分类名称到仓库列表
+     */
+    private void fillCategoryNames(List<GithubRepo> repos) {
+        if (repos == null || repos.isEmpty()) return;
+        List<Long> repoIds = repos.stream().map(GithubRepo::getId).collect(Collectors.toList());
+        List<Map<String, Object>> rows = categoryMapper.selectCategoryNamesByRepoIds(repoIds);
+        Map<Long, List<String>> categoryMap = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            Long repoId = ((Number) row.get("repo_id")).longValue();
+            String name = (String) row.get("name");
+            categoryMap.computeIfAbsent(repoId, k -> new ArrayList<>()).add(name);
+        }
+        for (GithubRepo repo : repos) {
+            repo.setCategoryNames(categoryMap.getOrDefault(repo.getId(), Collections.emptyList()));
+        }
     }
 
     /**

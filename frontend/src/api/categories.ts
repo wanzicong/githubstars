@@ -58,6 +58,32 @@ export async function fetchReposByCategoryId(categoryId: number): Promise<Github
   return data
 }
 
+export interface CategoryRepoParams {
+  page?: number
+  size?: number
+  keyword?: string
+  language?: string
+  sortBy?: string
+  sortOrder?: string
+}
+
+export async function fetchReposByCategoryIdPaged(
+  categoryId: number,
+  params: CategoryRepoParams
+): Promise<PageResult<GithubRepo>> {
+  const searchParams = new URLSearchParams()
+  if (params.page) searchParams.set('page', String(params.page))
+  if (params.size) searchParams.set('size', String(params.size))
+  if (params.keyword) searchParams.set('keyword', params.keyword)
+  if (params.language) searchParams.set('language', params.language)
+  if (params.sortBy) searchParams.set('sortBy', params.sortBy)
+  if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder)
+  const { data } = await api.get<PageResult<GithubRepo>>(`/categories/${categoryId}/repos/paged`, {
+    params: searchParams,
+  })
+  return data
+}
+
 export async function reclassifyCategory(categoryId: number, topN: number = 8): Promise<ApiResponse> {
   const { data } = await api.post<ApiResponse>(`/categories/${categoryId}/reclassify`, { topN })
   return data

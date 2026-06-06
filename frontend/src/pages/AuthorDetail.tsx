@@ -24,6 +24,7 @@ import {
   GithubOutlined,
   UserOutlined,
 } from '@ant-design/icons'
+import dayjs from 'dayjs'
 import * as authorsApi from '../api/authors'
 import type { GithubRepo, PageResult } from '../types'
 
@@ -181,9 +182,20 @@ export default function AuthorDetail() {
               />
             </Col>
             <Col xs={24} sm={10}>
-              <Title level={4} style={{ margin: 0 }}>
-                {ownerName}
-              </Title>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Title level={4} style={{ margin: 0 }}>
+                  {ownerName}
+                </Title>
+                <a
+                  href={`https://github.com/${ownerName}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="打开 GitHub 主页"
+                  style={{ color: '#1677ff', fontSize: 20, flexShrink: 0 }}
+                >
+                  <GithubOutlined />
+                </a>
+              </div>
               {authorStats.topLanguage && (
                 <Tag color="blue" style={{ marginTop: 8 }}>
                   {authorStats.topLanguage}
@@ -304,12 +316,17 @@ export default function AuthorDetail() {
                         {repo.description}
                       </Paragraph>
                     ) : null}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                       {repo.language && (
                         <Tag color="blue" style={{ margin: 0 }}>
                           {repo.language}
                         </Tag>
                       )}
+                      {repo.categoryNames && repo.categoryNames.length > 0 && repo.categoryNames.map((cat) => (
+                        <Tag key={cat} color="green" style={{ margin: 0, fontSize: 11 }}>
+                          {cat}
+                        </Tag>
+                      ))}
                       <Space size={4}>
                         <StarFilled style={{ color: '#faad14', fontSize: 12 }} />
                         <Text style={{ fontSize: 12 }}>{repo.starsCount}</Text>
@@ -319,9 +336,18 @@ export default function AuthorDetail() {
                         <Text style={{ fontSize: 12 }}>{repo.forksCount}</Text>
                       </Space>
                     </div>
-                    <Text type="secondary" style={{ fontSize: 11 }}>
-                      Star 于 {formatDate(repo.starredAt)}
-                    </Text>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        Star 于 {formatDate(repo.starredAt)}
+                      </Text>
+                      {repo.repoPushedAt && (() => {
+                        const days = dayjs().diff(dayjs(repo.repoPushedAt), 'day')
+                        let color = 'green'
+                        if (days > 180) color = 'red'
+                        else if (days > 30) color = 'orange'
+                        return <Tag color={color} style={{ margin: 0, fontSize: 10 }}>未更新 {days} 天</Tag>
+                      })()}
+                    </div>
                   </Card>
                 </Col>
               ))}

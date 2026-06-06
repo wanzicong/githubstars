@@ -361,6 +361,17 @@ export default function StarDetail() {
               <Text type="secondary">-</Text>
             )}
           </Descriptions.Item>
+          <Descriptions.Item label="所属分类">
+            {repo.categoryNames && repo.categoryNames.length > 0 ? (
+              <Space size={4} wrap>
+                {repo.categoryNames.map((cat) => (
+                  <Tag key={cat} color="green">{cat}</Tag>
+                ))}
+              </Space>
+            ) : (
+              <Text type="secondary">未分类</Text>
+            )}
+          </Descriptions.Item>
           <Descriptions.Item label="许可证">
             {repo.licenseName ? (
               <Text>{repo.licenseName}</Text>

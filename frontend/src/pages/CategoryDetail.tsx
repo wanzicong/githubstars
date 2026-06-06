@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Card,
   Button,
+  Input,
+  Select,
   Breadcrumb,
   Descriptions,
   Empty,
@@ -14,6 +16,7 @@ import {
   Tag,
   Avatar,
   Space,
+  Pagination,
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -22,12 +25,31 @@ import {
   StarFilled,
   ForkOutlined,
   GithubOutlined,
+  SearchOutlined,
+  ClearOutlined,
 } from '@ant-design/icons'
 import * as categoriesApi from '../api/categories'
-import type { Category, GithubRepo } from '../types'
+import * as statsApi from '../api/stats'
+import type { Category, GithubRepo, PageResult, LanguageStatsDTO } from '../types'
 import dayjs from 'dayjs'
 
 const { Title, Paragraph, Text } = Typography
+
+const SORT_BY_OPTIONS = [
+  { label: 'Star 时间', value: 'starred_at' },
+  { label: 'Star 数量', value: 'stars_count' },
+  { label: 'Fork 数量', value: 'forks_count' },
+  { label: '最近更新', value: 'repo_updated_at' },
+  { label: '创建时间', value: 'repo_created_at' },
+  { label: '推送时间', value: 'repo_pushed_at' },
+]
+
+const SORT_ORDER_OPTIONS = [
+  { label: '降序', value: 'desc' },
+  { label: '升序', value: 'asc' },
+]
+
+const PAGE_SIZE_OPTIONS = [12, 24, 48]
 
 function formatDateTime(value: string | null): string {
   if (!value) return '-'
@@ -43,13 +65,44 @@ export default function CategoryDetail() {
   const { id } = useParams<{ id: string }>()
   const { message, modal } = App.useApp()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // 从 URL 参数读取筛选条件
+  const keyword = searchParams.get('keyword') || ''
+  const selectedLanguages = searchParams.get('languages') ? searchParams.get('languages')!.split(',') : []
+  const sortBy = searchParams.get('sortBy') || 'starred_at'
+  const sortOrder = searchParams.get('sortOrder') || 'desc'
+  const currentPage = parseInt(searchParams.get('page') || '1', 10)
+  const pageSize = parseInt(searchParams.get('size') || '12', 10)
 
   const [category, setCategory] = useState<Category | null>(null)
   const [allCategories, setAllCategories] = useState<Category[]>([])
-  const [repos, setRepos] = useState<GithubRepo[]>([])
+  const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
   const [reclassifying, setReclassifying] = useState(false)
   const [loading, setLoading] = useState(false)
   const [reposLoading, setReposLoading] = useState(false)
+
+  // 分页数据
+  const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({
+    records: [],
+    total: 0,
+    size: 12,
+    current: 1,
+    pages: 0,
+  })
+
+  const setUrlParam = useCallback(
+    (key: string, value: string | null) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (!value) next.delete(key)
+        else next.set(key, value)
+        if (key !== 'page') next.delete('page')
+        return next
+      })
+    },
+    [setSearchParams],
+  )
 
   const fetchData = async () => {
     setLoading(true)
@@ -57,9 +110,7 @@ export default function CategoryDetail() {
       const data = await categoriesApi.fetchAllCategories()
       setAllCategories(data)
       const current = data.find((c) => c.id === Number(id))
-      if (current) {
-        setCategory(current)
-      }
+      if (current) setCategory(current)
     } catch {
       message.error('获取分类信息失败')
     } finally {
@@ -71,8 +122,15 @@ export default function CategoryDetail() {
     if (!id) return
     setReposLoading(true)
     try {
-      const data = await categoriesApi.fetchReposByCategoryId(Number(id))
-      setRepos(data)
+      const result = await categoriesApi.fetchReposByCategoryIdPaged(Number(id), {
+        page: currentPage,
+        size: pageSize,
+        keyword: keyword || undefined,
+        language: selectedLanguages.length > 0 ? selectedLanguages.join(',') : undefined,
+        sortBy,
+        sortOrder,
+      })
+      setPageResult(result)
     } catch {
       message.error('获取仓库列表失败')
     } finally {
@@ -81,11 +139,23 @@ export default function CategoryDetail() {
   }
 
   useEffect(() => {
-    if (id) {
-      fetchData()
-      fetchRepos()
-    }
+    if (id) fetchData()
+    // 加载语言选项（用于筛选下拉框）
+    statsApi.fetchLanguageStats().then(setLanguageOptions).catch(() => {})
   }, [id])
+
+  useEffect(() => {
+    if (id) fetchRepos()
+  }, [id, currentPage, pageSize, keyword, selectedLanguages.join(','), sortBy, sortOrder])
+
+  const handleClearFilters = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams()
+      next.set('sortBy', 'starred_at')
+      next.set('sortOrder', 'desc')
+      return next
+    })
+  }
 
   const handleReclassify = () => {
     if (!category) return
@@ -113,6 +183,10 @@ export default function CategoryDetail() {
       },
     })
   }
+
+  const hasActiveFilters = keyword !== '' || selectedLanguages.length > 0
+
+  const { records: repos } = pageResult
 
   if (loading && !category) {
     return (
@@ -153,8 +227,9 @@ export default function CategoryDetail() {
       />
 
       <Spin spinning={loading}>
+        {/* 分类信息头部 */}
         <Card style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
             <div>
               <Title level={4} style={{ marginBottom: 4 }}>
                 <FolderOutlined style={{ marginRight: 8 }} />
@@ -166,7 +241,7 @@ export default function CategoryDetail() {
                 </Paragraph>
               )}
               <Descriptions size="small" column={3}>
-                <Descriptions.Item label="仓库数量">{repos.length || (category?.repoCount ?? 0)}</Descriptions.Item>
+                <Descriptions.Item label="仓库数量">{pageResult.total || (category?.repoCount ?? 0)}</Descriptions.Item>
                 <Descriptions.Item label="排序">{category?.sortOrder ?? 0}</Descriptions.Item>
                 <Descriptions.Item label="创建时间">
                   {formatDateTime(category?.createdAt ?? null)}
@@ -187,9 +262,72 @@ export default function CategoryDetail() {
           </div>
         </Card>
 
-        <Card title={`仓库列表 (${repos.length})`}>
-          <Spin spinning={reposLoading}>
-            {repos.length > 0 ? (
+        {/* 搜索筛选栏 */}
+        <Card style={{ marginBottom: 20 }}>
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Row gutter={[8, 12]} align="middle" style={{ flexWrap: 'wrap' }}>
+              <Col xs={24} sm={12} md={8} lg={6}>
+                <Input.Search
+                  placeholder="搜索仓库名、描述..."
+                  defaultValue={keyword}
+                  onSearch={(val) => setUrlParam('keyword', val || null)}
+                  onChange={(e) => { if (!e.target.value) setUrlParam('keyword', null) }}
+                  allowClear
+                />
+              </Col>
+              <Col xs={24} sm={12} md={10} lg={7}>
+                <Select
+                  mode="multiple"
+                  placeholder="筛选语言"
+                  value={selectedLanguages}
+                  onChange={(vals) => setUrlParam('languages', vals.length > 0 ? vals.join(',') : null)}
+                  allowClear
+                  showSearch
+                  maxTagCount={3}
+                  style={{ width: '100%' }}
+                  options={languageOptions.map((lang) => ({
+                    label: `${lang.language} (${lang.count})`,
+                    value: lang.language,
+                  }))}
+                  filterOption={(input, option) =>
+                    (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
+                  }
+                />
+              </Col>
+              <Col xs={12} sm={8} md={6} lg={4}>
+                <Select
+                  value={sortBy}
+                  onChange={(val) => setUrlParam('sortBy', val)}
+                  options={SORT_BY_OPTIONS}
+                  style={{ width: '100%' }}
+                />
+              </Col>
+              <Col xs={12} sm={8} md={6} lg={3}>
+                <Select
+                  value={sortOrder}
+                  onChange={(val) => setUrlParam('sortOrder', val)}
+                  options={SORT_ORDER_OPTIONS}
+                  style={{ width: '100%' }}
+                />
+              </Col>
+              <Col xs={24} sm={24} md={24} lg={4} style={{ display: 'flex', gap: 8 }}>
+                {hasActiveFilters && (
+                  <Button icon={<ClearOutlined />} onClick={handleClearFilters}>
+                    清除
+                  </Button>
+                )}
+                <Text type="secondary" style={{ lineHeight: '32px' }}>
+                  共 {pageResult.total} 个仓库
+                </Text>
+              </Col>
+            </Row>
+          </Space>
+        </Card>
+
+        {/* 仓库卡片网格 */}
+        <Spin spinning={reposLoading}>
+          {repos.length > 0 ? (
+            <>
               <Row gutter={[16, 16]}>
                 {repos.map((repo) => (
                   <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
@@ -248,7 +386,7 @@ export default function CategoryDetail() {
                       ) : (
                         <div style={{ marginBottom: 10, minHeight: 36 }} />
                       )}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                         {repo.language && (
                           <Tag color="blue" style={{ margin: 0 }}>
                             {repo.language}
@@ -263,10 +401,19 @@ export default function CategoryDetail() {
                           <Text style={{ fontSize: 12 }}>{repo.forksCount}</Text>
                         </Space>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Text type="secondary" style={{ fontSize: 11 }}>
-                          Star 于 {formatDate(repo.starredAt)}
-                        </Text>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            Star 于 {formatDate(repo.starredAt)}
+                          </Text>
+                          {repo.repoPushedAt && (() => {
+                            const days = dayjs().diff(dayjs(repo.repoPushedAt), 'day')
+                            let color = 'green'
+                            if (days > 180) color = 'red'
+                            else if (days > 30) color = 'orange'
+                            return <Tag color={color} style={{ margin: 0, fontSize: 10 }}>未更新 {days} 天</Tag>
+                          })()}
+                        </div>
                         <Button
                           type="link"
                           size="small"
@@ -282,13 +429,45 @@ export default function CategoryDetail() {
                   </Col>
                 ))}
               </Row>
-            ) : (
-              !reposLoading && (
-                <Empty description="该分类下暂无仓库" />
-              )
-            )}
-          </Spin>
-        </Card>
+
+              {pageResult.total > pageSize && (
+                <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
+                  <Pagination
+                    current={currentPage}
+                    pageSize={pageSize}
+                    total={pageResult.total}
+                    showSizeChanger
+                    pageSizeOptions={PAGE_SIZE_OPTIONS.map(String)}
+                    showQuickJumper
+                    showTotal={(total) => `共 ${total} 条 / ${pageResult.pages} 页`}
+                    onChange={(page, size) => {
+                      setUrlParam('page', String(page))
+                      if (size !== pageSize) setUrlParam('size', String(size))
+                    }}
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            !reposLoading && (
+              <Card>
+                <Empty
+                  description={
+                    hasActiveFilters
+                      ? '筛选无结果，请尝试调整筛选条件'
+                      : '该分类下暂无仓库'
+                  }
+                >
+                  {hasActiveFilters && (
+                    <Button type="primary" onClick={handleClearFilters}>
+                      清除所有筛选
+                    </Button>
+                  )}
+                </Empty>
+              </Card>
+            )
+          )}
+        </Spin>
 
         <div style={{ marginTop: 16, textAlign: 'center' }}>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/categories')}>

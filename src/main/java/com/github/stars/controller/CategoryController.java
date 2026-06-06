@@ -1,5 +1,6 @@
 package com.github.stars.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.github.stars.entity.Category;
 import com.github.stars.entity.GithubRepo;
 import com.github.stars.service.AiClassifyService;
@@ -185,6 +186,31 @@ public class CategoryController {
             m.put("isArchived", repo.getIsArchived());
             return m;
         }).collect(Collectors.toList());
+    }
+
+    /**
+     * 分页查询分类下的仓库列表（支持搜索、排序、分页）
+     */
+    @GetMapping("/{id}/repos/paged")
+    public Map<String, Object> getReposByCategoryPaged(
+            @PathVariable Long id,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "size", defaultValue = "12") int size,
+            @RequestParam(value = "keyword", defaultValue = "") String keyword,
+            @RequestParam(value = "language", defaultValue = "") String language,
+            @RequestParam(value = "sortBy", defaultValue = "starred_at") String sortBy,
+            @RequestParam(value = "sortOrder", defaultValue = "desc") String sortOrder) {
+
+        Page<GithubRepo> pageResult = categoryService.getReposByCategoryIdPaged(
+                id, page, size, keyword, language, sortBy, sortOrder);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("records", pageResult.getRecords());
+        result.put("total", pageResult.getTotal());
+        result.put("size", pageResult.getSize());
+        result.put("current", pageResult.getCurrent());
+        result.put("pages", pageResult.getPages());
+        return result;
     }
 
     /**

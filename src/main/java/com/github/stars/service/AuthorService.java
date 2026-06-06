@@ -5,12 +5,13 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.github.stars.dto.AuthorDTO;
 import com.github.stars.entity.GithubRepo;
 import com.github.stars.mapper.AuthorMapper;
+import com.github.stars.mapper.CategoryMapper;
 import com.github.stars.mapper.GithubRepoMapper;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 作者中心业务逻辑
@@ -23,6 +24,9 @@ public class AuthorService {
 
     @Resource
     private GithubRepoMapper githubRepoMapper;
+
+    @Resource
+    private CategoryMapper categoryMapper;
 
     /**
      * 分页查询作者列表
@@ -76,7 +80,30 @@ public class AuthorService {
             wrapper.orderBy(true, isAsc, GithubRepo::getStarredAt);
         }
 
-        return githubRepoMapper.selectPage(pageParam, wrapper);
+        Page<GithubRepo> result = githubRepoMapper.selectPage(pageParam, wrapper);
+        fillCategoryNames(result.getRecords());
+        return result;
+    }
+
+    /**
+     * 批量填充分类名称到仓库列表
+     */
+    private void fillCategoryNames(List<GithubRepo> repos) {
+        if (repos == null || repos.isEmpty()) return;
+
+        List<Long> repoIds = repos.stream().map(GithubRepo::getId).collect(Collectors.toList());
+        List<Map<String, Object>> rows = categoryMapper.selectCategoryNamesByRepoIds(repoIds);
+
+        Map<Long, List<String>> categoryMap = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            Long repoId = ((Number) row.get("repo_id")).longValue();
+            String name = (String) row.get("name");
+            categoryMap.computeIfAbsent(repoId, k -> new ArrayList<>()).add(name);
+        }
+
+        for (GithubRepo repo : repos) {
+            repo.setCategoryNames(categoryMap.getOrDefault(repo.getId(), Collections.emptyList()));
+        }
     }
 
     /**
