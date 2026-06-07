@@ -76,8 +76,8 @@ export default function CategoryList() {
     return result
   }, [categories])
 
-  // Level 1 categories: the root nodes returned by the tree API
-  const level1Categories = categories
+  // Level 1 categories: only actual Level 1 (L2 without parent go to unassigned section)
+  const level1Categories = categories.filter(c => c.level === 1)
 
   // Unassigned Level 2: parentId === null but level === 2 (orphaned after move-out)
   const unassignedLevel2 = allCategories.filter(c => c.parentId === null && c.level === 2)
