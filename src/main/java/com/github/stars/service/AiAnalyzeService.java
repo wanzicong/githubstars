@@ -66,6 +66,62 @@ public class AiAnalyzeService {
     }
 
     /**
+     * 创建趋势分析任务（分析 GitHub trending repos 的技术趋势）
+     */
+    public String createTrendingAnalyzeTask(String since, String language,
+                                             List<Map<String, Object>> repos) {
+        String taskId = "trending_" + taskCounter.incrementAndGet();
+        statuses.put(taskId, "PROCESSING");
+        final String tid = taskId;
+        CompletableFuture.runAsync(() -> executeTrendingAnalyze(tid, since, language, repos));
+        return taskId;
+    }
+
+    private void executeTrendingAnalyze(String taskId, String since, String language,
+                                         List<Map<String, Object>> repos) {
+        try {
+            if (repos.isEmpty()) {
+                results.put(taskId, "### 暂无数据\n\n当前没有趋势数据可供分析。");
+                statuses.put(taskId, "COMPLETED");
+                return;
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("你是一位顶尖的技术趋势分析师。以下是 GitHub 上 ");
+            sb.append(since.equals("daily") ? "今日" : since.equals("weekly") ? "本周" : "本月");
+            if (language != null && !language.isEmpty()) sb.append(" ").append(language).append(" 语言");
+            sb.append("最热门的新项目（共 ").append(repos.size()).append(" 个）。\n\n");
+
+            for (int i = 0; i < repos.size(); i++) {
+                Map<String, Object> r = repos.get(i);
+                sb.append(i + 1).append(". ").append(r.get("full_name")).append("\n");
+                String desc = (String) r.get("description");
+                if (desc != null && !desc.isEmpty()) {
+                    sb.append("   描述: ").append(desc.length() > 150 ? desc.substring(0, 150) + "..." : desc).append("\n");
+                }
+                sb.append("   ⭐").append(r.get("stargazers_count")).append(" | 语言: ").append(r.get("language")).append("\n\n");
+            }
+
+            sb.append("请用中文输出一份趋势分析报告（Markdown格式），包含:\n");
+            sb.append("### 一、热门方向\n列出 3-5 个当前最热的技术方向，每个方向一句话概括\n\n");
+            sb.append("### 二、项目用途分类\n按用途分类这些新项目（如AI工具、开发框架、DevOps工具、安全、数据等）\n\n");
+            sb.append("### 三、值得关注的项目\n推荐 3 个最值得关注的仓库，说明理由\n\n");
+            sb.append("### 四、趋势洞察\n分析这些新项目反映的技术趋势和开发者关注点的变化\n\n");
+            sb.append("只输出分析报告，不要开头语结尾语。");
+
+            log.info("趋势分析 prompt: {} chars, {} repos", sb.length(), repos.size());
+            String analysis = callDeepSeek(sb.toString());
+            if (analysis == null) analysis = "### 分析失败\n\nAI 服务暂时不可用，请稍后重试。";
+            results.put(taskId, analysis);
+            statuses.put(taskId, "COMPLETED");
+        } catch (Exception e) {
+            log.error("趋势分析失败", e);
+            results.put(taskId, "### 分析失败\n\n" + e.getMessage());
+            statuses.put(taskId, "COMPLETED");
+        }
+    }
+
+    /**
      * 获取任务状态
      */
     public Map<String, Object> getTaskStatus(String taskId) {

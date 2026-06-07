@@ -1,5 +1,6 @@
 package com.github.stars.controller;
 
+import com.github.stars.service.AiAnalyzeService;
 import com.github.stars.service.GithubSearchService;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,6 +18,9 @@ public class TrendingController {
 
     @Resource
     private GithubSearchService githubSearchService;
+
+    @Resource
+    private AiAnalyzeService aiAnalyzeService;
 
     /**
      * 获取趋势排行榜
@@ -52,6 +56,24 @@ public class TrendingController {
         result.put("total", searchResult.get("total"));
         result.put("repos", searchResult.get("repos"));
         result.put("dateRange", dateStr + " ~ " + LocalDate.now().format(DateTimeFormatter.ISO_DATE));
+        return result;
+    }
+
+    @PostMapping("/analyze")
+    public Map<String, Object> analyzeTrending(
+            @RequestParam(value = "since", defaultValue = "daily") String since,
+            @RequestParam(value = "language", defaultValue = "") String language) {
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        // First fetch the trending repos
+        Map<String, Object> trendingResult = trending(since, language, 20);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> repos = (List<Map<String, Object>>) trendingResult.get("repos");
+
+        String taskId = aiAnalyzeService.createTrendingAnalyzeTask(since, language, repos);
+        result.put("success", true);
+        result.put("taskId", taskId);
+        result.put("message", "趋势分析任务已启动");
         return result;
     }
 }
