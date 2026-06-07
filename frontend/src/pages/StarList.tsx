@@ -502,7 +502,7 @@ export default function StarList() {
       if (keyword) params.set('keyword', keyword)
       if (languageStr) params.set('language', languageStr)
       if (categoryIdsStr) params.set('categoryIds', categoryIdsStr)
-      const resp = await fetch('/api/clone/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(params)) })
+      const resp = await fetch(`/api/clone/start?${params.toString()}`, { method: 'POST' })
       const data = await resp.json()
       if (data.success && data.taskId) {
         setCloneTaskId(data.taskId)
