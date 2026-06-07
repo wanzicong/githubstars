@@ -23,6 +23,7 @@ import {
   message,
   Alert,
   Segmented,
+  AutoComplete,
 } from 'antd'
 import {
   SearchOutlined,
@@ -41,12 +42,14 @@ import {
   ReadOutlined,
   BulbOutlined,
 } from '@ant-design/icons'
-import dayjs from 'dayjs'
+import dayjs from '../setupDayjs'
 import * as statsApi from '../api/stats'
 import * as starsApi from '../api/stars'
 import * as translateApi from '../api/translate'
 import * as categoriesApi from '../api/categories'
 import * as analyzeApi from '../api/analyze'
+import * as cloneApi from '../api/clone'
+import { buildTargetPath, sanitizeSubdirectory } from '../utils/clonePath'
 import { formatNumberCn } from '../utils/format'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -228,12 +231,19 @@ export default function StarList() {
   const endMonthStr = searchParams.get('endMonth')
   const viewMode = (searchParams.get('view') || 'list') as 'grid' | 'list'
 
-  const [startMonth, setStartMonthState] = useState<dayjs.Dayjs | null>(startMonthStr ? dayjs(startMonthStr) : null)
-  const [endMonth, setEndMonthState] = useState<dayjs.Dayjs | null>(endMonthStr ? dayjs(endMonthStr) : null)
-  const timePreset = searchParams.get('timePreset') || ''
+  const startMonth = useMemo(() => {
+    if (!startMonthStr) return null
+    const parsed = dayjs(startMonthStr, 'YYYY-MM', true)
+    return parsed.isValid() ? parsed : null
+  }, [startMonthStr])
 
-  useEffect(() => { setStartMonthState(startMonthStr ? dayjs(startMonthStr) : null) }, [startMonthStr])
-  useEffect(() => { setEndMonthState(endMonthStr ? dayjs(endMonthStr) : null) }, [endMonthStr])
+  const endMonth = useMemo(() => {
+    if (!endMonthStr) return null
+    const parsed = dayjs(endMonthStr, 'YYYY-MM', true)
+    return parsed.isValid() ? parsed : null
+  }, [endMonthStr])
+
+  const timePreset = searchParams.get('timePreset') || ''
 
   const setUrlParam = useCallback((key: string, value: string | null | undefined, resetPage = true) => {
     setSearchParams(prev => {
@@ -260,23 +270,71 @@ export default function StarList() {
   }, [setSearchParams])
 
   const handleTimePreset = useCallback((value: string) => {
-    if (!value) {
+    const normalized = value === '不限' ? '' : value
+    if (!normalized) {
       setUrlParams({ timePreset: null, dateField: null, startMonth: null, endMonth: null })
-      setStartMonthState(null); setEndMonthState(null)
       return
     }
-    const preset = TIME_PRESETS.find(p => p.value === value)
+    const preset = TIME_PRESETS.find(p => p.value === normalized)
     if (!preset) return
     if (preset.value === 'today') {
       const today = dayjs().format('YYYY-MM')
-      setStartMonthState(dayjs(today)); setEndMonthState(dayjs(today))
-      setUrlParams({ timePreset: value, dateField: 'starred_at', startMonth: today, endMonth: today })
+      setUrlParams({ timePreset: normalized, dateField: 'starred_at', startMonth: today, endMonth: today })
     } else if (preset.days > 0) {
       const start = dayjs().subtract(preset.days, 'day').format('YYYY-MM')
-      setStartMonthState(dayjs(start)); setEndMonthState(null)
-      setUrlParams({ timePreset: value, dateField: 'starred_at', startMonth: start, endMonth: null })
+      const end = dayjs().format('YYYY-MM')
+      setUrlParams({ timePreset: normalized, dateField: 'starred_at', startMonth: start, endMonth: end })
     }
   }, [setUrlParams])
+
+  const handleDateFieldChange = useCallback((val: string | undefined) => {
+    if (!val) {
+      setUrlParams({ dateField: null, startMonth: null, endMonth: null, timePreset: null })
+      return
+    }
+    setUrlParam('dateField', val)
+  }, [setUrlParam, setUrlParams])
+
+  const handleStartMonthChange = useCallback((val: dayjs.Dayjs | null) => {
+    if (val && endMonth && val.isAfter(endMonth, 'month')) {
+      const formatted = val.format('YYYY-MM')
+      setUrlParams({ startMonth: formatted, endMonth: formatted, timePreset: null })
+      message.warning('起始月份不能晚于结束月份，已自动对齐')
+      return
+    }
+    setUrlParams({ startMonth: val ? val.format('YYYY-MM') : null, timePreset: null })
+  }, [endMonth, setUrlParams])
+
+  const handleEndMonthChange = useCallback((val: dayjs.Dayjs | null) => {
+    if (val && startMonth && val.isBefore(startMonth, 'month')) {
+      const formatted = val.format('YYYY-MM')
+      setUrlParams({ startMonth: formatted, endMonth: formatted, timePreset: null })
+      message.warning('结束月份不能早于起始月份，已自动对齐')
+      return
+    }
+    setUrlParams({ endMonth: val ? val.format('YYYY-MM') : null, timePreset: null })
+  }, [startMonth, setUrlParams])
+
+  const dateFieldLabel = DATE_FIELD_OPTIONS.find((item) => item.value === dateField)?.label
+  const timeFilterSummary = useMemo(() => {
+    if (!dateField && !timePreset) return ''
+    const presetLabel = TIME_PRESETS.find((item) => item.value === timePreset)?.label
+    const rangeText = startMonth && endMonth
+      ? `${startMonth.format('YYYY年M月')} ~ ${endMonth.format('YYYY年M月')}`
+      : startMonth
+        ? `${startMonth.format('YYYY年M月')} 起`
+        : endMonth
+          ? `至 ${endMonth.format('YYYY年M月')}`
+          : ''
+    if (presetLabel && presetLabel !== '不限') {
+      return `${dateFieldLabel || 'Star 时间'} · ${presetLabel}${rangeText ? `（${rangeText}）` : ''}`
+    }
+    if (dateFieldLabel && rangeText) return `${dateFieldLabel} · ${rangeText}`
+    if (dateFieldLabel) return dateFieldLabel
+    return ''
+  }, [dateField, dateFieldLabel, timePreset, startMonth, endMonth])
+
+  const dateFilterExpanded = !!(dateField || startMonthStr || endMonthStr || timePreset)
 
   const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({ records: [], total: 0, size: 12, current: 1, pages: 0 })
   const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
@@ -298,6 +356,7 @@ export default function StarList() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     const loadPage = async () => {
       setLoading(true)
       try {
@@ -306,18 +365,22 @@ export default function StarList() {
           language: languageStr || undefined, categoryIds: categoryIdsStr || undefined,
           sortBy: sortBy || undefined,
           sortOrder: sortOrder || undefined, dateField: dateField || undefined,
-          startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined,
-          endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined,
+          startMonth: startMonthStr || undefined,
+          endMonth: endMonthStr || undefined,
         })
-        setPageResult(result)
-      } catch { } finally { setLoading(false) }
+        if (!cancelled) setPageResult(result)
+      } catch {
+        if (!cancelled) message.error('加载列表失败')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
     loadPage()
-  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+    return () => { cancelled = true }
+  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonthStr, endMonthStr])
 
   const handleClearFilters = useCallback(() => {
     setUrlParams({ keyword: null, languages: null, categoryIds: null, timePreset: null, sortBy: 'starred_at', sortOrder: 'desc', dateField: null, startMonth: null, endMonth: null })
-    setStartMonthState(null); setEndMonthState(null)
   }, [setUrlParams])
 
   const [batchTranslating, setBatchTranslating] = useState(false)
@@ -342,13 +405,13 @@ export default function StarList() {
           setTranslateProgress({ status: res.status, totalItems: res.totalItems, completedItems: res.completedItems, failedItems: res.failedItems, descTotal: res.descTotal, descCompleted: res.descCompleted, descFailed: res.descFailed, readmeTotal: res.readmeTotal, readmeCompleted: res.readmeCompleted, readmeFailed: res.readmeFailed, progress: res.progress })
           if (res.status === 'COMPLETED' || res.status === 'FAILED') {
             stopPolling()
-            const result = await starsApi.fetchStarList({ page: currentPage, size: pageSize, keyword: keyword || undefined, language: languageStr || undefined, categoryIds: categoryIdsStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined, endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined })
+            const result = await starsApi.fetchStarList({ page: currentPage, size: pageSize, keyword: keyword || undefined, language: languageStr || undefined, categoryIds: categoryIdsStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonthStr || undefined, endMonth: endMonthStr || undefined })
             setPageResult(result)
           }
         }
       } catch { }
     }, 2000)
-  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonthStr, endMonthStr])
 
   const handleStartFullTranslate = useCallback(async () => {
     setBatchTranslating(true)
@@ -461,18 +524,18 @@ export default function StarList() {
     try {
       const result = await translateApi.translateBatch()
       if (result.translatedCount && result.translatedCount > 0) {
-        const res = await starsApi.fetchStarList({ page: currentPage, size: pageSize, keyword: keyword || undefined, language: languageStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined, endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined })
+        const res = await starsApi.fetchStarList({ page: currentPage, size: pageSize, keyword: keyword || undefined, language: languageStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonthStr || undefined, endMonth: endMonthStr || undefined })
         setPageResult(res)
       }
     } catch { } finally { setBatchTranslating(false) }
-  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonthStr, endMonthStr])
 
   const handleExport = useCallback(async () => {
     try {
-      const blob = await starsApi.exportStarsUrls({ keyword: keyword || undefined, language: languageStr || undefined, categoryIds: categoryIdsStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined, endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined })
+      const blob = await starsApi.exportStarsUrls({ keyword: keyword || undefined, language: languageStr || undefined, categoryIds: categoryIdsStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonthStr || undefined, endMonth: endMonthStr || undefined })
       const url = window.URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `stars_export_${dayjs().format('YYYYMMDD_HHmmss')}.txt`; document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url)
     } catch { console.error('导出失败') }
-  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonthStr, endMonthStr])
 
   const handleExportMd = useCallback(async () => {
     try {
@@ -491,39 +554,129 @@ export default function StarList() {
     } catch { message.error('导出MD失败') }
   }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder])
 
-  const [cloneTaskId, setCloneTaskId] = useState<string | null>(null)
   const [cloneModalVisible, setCloneModalVisible] = useState(false)
-  const [cloneProgress, setCloneProgress] = useState<{ status: string; totalRepos: number; completedRepos: number; failedRepos: number; skippedRepos: number; results: { fullName: string; status: string; message: string }[] } | null>(null)
+  const [cloneDirModalVisible, setCloneDirModalVisible] = useState(false)
+  const [cloneBaseDir, setCloneBaseDir] = useState('')
+  const [cloneSubDir, setCloneSubDir] = useState('')
+  const [cloneSubDirHistory, setCloneSubDirHistory] = useState<string[]>([])
+  const [cloneDirLoading, setCloneDirLoading] = useState(false)
+  const [cloneStarting, setCloneStarting] = useState(false)
+  const [cloneInProgress, setCloneInProgress] = useState(false)
+  const [cloneTargetDir, setCloneTargetDir] = useState('')
+  const [cloneSubDirError, setCloneSubDirError] = useState('')
+  const [cloneProgress, setCloneProgress] = useState<{ status: string; errorMessage?: string; totalRepos: number; completedRepos: number; failedRepos: number; skippedRepos: number; results: { fullName: string; status: string; message: string }[] } | null>(null)
   const clonePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const clonePollFailCountRef = useRef(0)
+
+  useEffect(() => {
+    return () => {
+      if (clonePollRef.current) clearInterval(clonePollRef.current)
+    }
+  }, [])
+
+  const handleOpenCloneDirModal = useCallback(async () => {
+    if (cloneInProgress) {
+      message.warning('已有 Clone 任务正在执行，请等待完成')
+      setCloneModalVisible(true)
+      return
+    }
+    setCloneDirModalVisible(true)
+    setCloneDirLoading(true)
+    setCloneSubDirError('')
+    try {
+      const config = await cloneApi.fetchCloneConfig()
+      setCloneBaseDir(config.baseDirectory)
+      setCloneSubDirHistory(config.subdirectoryHistory || [])
+      setCloneSubDir(config.lastSubdirectory || '')
+      setCloneInProgress(!!config.hasActiveTask)
+    } catch {
+      message.error('加载 Clone 配置失败')
+    } finally {
+      setCloneDirLoading(false)
+    }
+  }, [cloneInProgress])
 
   const handleCloneExecute = useCallback(async () => {
+    const { error } = sanitizeSubdirectory(cloneSubDir)
+    if (error) {
+      setCloneSubDirError(error)
+      message.error(error)
+      return
+    }
+
+    setCloneStarting(true)
+    setCloneSubDirError('')
     try {
-      const params = new URLSearchParams({ maxCount: '50' })
-      if (keyword) params.set('keyword', keyword)
-      if (languageStr) params.set('language', languageStr)
-      if (categoryIdsStr) params.set('categoryIds', categoryIdsStr)
-      const resp = await fetch(`/api/clone/start?${params.toString()}`, { method: 'POST' })
-      const data = await resp.json()
-      if (data.success && data.taskId) {
-        setCloneTaskId(data.taskId)
+      const data = await cloneApi.startClone({
+        keyword: keyword || undefined,
+        language: languageStr || undefined,
+        categoryIds: categoryIdsStr || undefined,
+        maxCount: 50,
+        subDirectory: cloneSubDir.trim() || undefined,
+      })
+      if (!data.success) {
+        message.error(data.message || '启动 Clone 失败')
+        return
+      }
+      if (data.taskId) {
+        setCloneTargetDir(data.targetDirectory || '')
+        setCloneDirModalVisible(false)
+        setCloneInProgress(true)
         setCloneProgress({ status: 'RUNNING', totalRepos: 0, completedRepos: 0, failedRepos: 0, skippedRepos: 0, results: [] })
         setCloneModalVisible(true)
+        clonePollFailCountRef.current = 0
         if (clonePollRef.current) clearInterval(clonePollRef.current)
         clonePollRef.current = setInterval(async () => {
           try {
-            const r = await fetch(`/api/clone/task/${data.taskId}`)
-            const p = await r.json()
+            const p = await cloneApi.fetchCloneTask(data.taskId!)
             if (p.success) {
+              clonePollFailCountRef.current = 0
               setCloneProgress(p)
-              if (p.status === 'COMPLETED' && clonePollRef.current) clearInterval(clonePollRef.current)
+              if (p.status === 'COMPLETED' || p.status === 'FAILED') {
+                setCloneInProgress(false)
+                if (clonePollRef.current) clearInterval(clonePollRef.current)
+              }
             }
-          } catch {}
+          } catch {
+            clonePollFailCountRef.current += 1
+            if (clonePollFailCountRef.current >= 3) {
+              message.error('查询 Clone 进度失败，请稍后重试')
+              if (clonePollRef.current) clearInterval(clonePollRef.current)
+            }
+          }
         }, 2000)
       }
-    } catch { message.error('启动Clone失败') }
-  }, [keyword, languageStr, categoryIdsStr])
+    } catch {
+      message.error('启动 Clone 失败')
+    } finally {
+      setCloneStarting(false)
+    }
+  }, [keyword, languageStr, categoryIdsStr, cloneSubDir])
 
-  const handleCloseCloneModal = () => { if (clonePollRef.current) clearInterval(clonePollRef.current); setCloneModalVisible(false); setCloneTaskId(null); setCloneProgress(null) }
+  const handleCloseCloneModal = () => {
+    if (clonePollRef.current) clearInterval(clonePollRef.current)
+    setCloneProgress((prev) => {
+      if (!prev || prev.status === 'COMPLETED' || prev.status === 'FAILED') {
+        setCloneInProgress(false)
+      }
+      return null
+    })
+    setCloneModalVisible(false)
+    setCloneTargetDir('')
+  }
+
+  const handleCloneSubDirChange = useCallback((value: string) => {
+    setCloneSubDir(value)
+    const { error } = sanitizeSubdirectory(value)
+    setCloneSubDirError(error || '')
+  }, [])
+
+  const cloneSubDirOptions = useMemo(
+    () => cloneSubDirHistory.map((dir) => ({ value: dir, label: dir })),
+    [cloneSubDirHistory],
+  )
+
+  const cloneTargetPreview = useMemo(() => buildTargetPath(cloneBaseDir, cloneSubDir), [cloneBaseDir, cloneSubDir])
 
   const languageSelectOptions = useMemo(() => languageOptions.map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })), [languageOptions])
   const categoryTreeData = useMemo(() => {
@@ -543,7 +696,7 @@ export default function StarList() {
     return buildTree(categoryOptions.filter(c => c.level === 1 || !c.parentId))
   }, [categoryOptions])
 
-  const hasActiveFilters = keyword.trim() !== '' || languageStr !== '' || categoryIdsStr !== '' || sortBy !== 'starred_at' || sortOrder !== 'desc' || dateField !== undefined || startMonth !== null || endMonth !== null
+  const hasActiveFilters = keyword.trim() !== '' || languageStr !== '' || categoryIdsStr !== '' || sortBy !== 'starred_at' || sortOrder !== 'desc' || dateField !== undefined || !!startMonthStr || !!endMonthStr
 
   const { records: repos } = pageResult
 
@@ -594,27 +747,81 @@ export default function StarList() {
                 <Button icon={<ReadOutlined />} loading={false} onClick={handleStartReadmeBatch}>批量README</Button>
                 <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze}>AI 分析</Button>
                 <Button icon={<DownloadOutlined />} onClick={handleExportMd}>导出MD</Button>
-                <Button icon={<DownloadOutlined />} onClick={handleCloneExecute}>批量Clone</Button>
+                <Button icon={<DownloadOutlined />} onClick={handleOpenCloneDirModal} disabled={cloneInProgress}>批量Clone</Button>
                 <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport}>导出链接</Button>
               </div>
             </Col>
           </Row>
-          <Collapse ghost size="small" items={[{
+          <Collapse
+            ghost
+            size="small"
+            defaultActiveKey={dateFilterExpanded ? ['date-filter'] : undefined}
+            items={[{
             key: 'date-filter',
-            label: <span style={{ fontSize: 13, color: '#666' }}><CaretDownOutlined style={{ marginRight: 4 }} />时间筛选</span>,
+            label: (
+              <span style={{ fontSize: 13, color: '#666' }}>
+                <CaretDownOutlined style={{ marginRight: 4 }} />
+                时间筛选
+                {timeFilterSummary && (
+                  <Tag color="blue" style={{ marginLeft: 8, fontSize: 12 }}>{timeFilterSummary}</Tag>
+                )}
+              </span>
+            ),
             children: (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <Segmented
-                  value={timePreset || '不限'}
-                  onChange={(val) => handleTimePreset(val as string)}
-                  options={TIME_PRESETS.map(p => ({ label: p.label, value: p.value || '不限' }))}
-                  size="small"
-                />
-                <Row gutter={[16, 12]} align="middle">
-                  <Col xs={24} sm={8} md={6} lg={4}><Select placeholder="时间字段" value={dateField} onChange={(val) => setUrlParam('dateField', val || null)} allowClear options={DATE_FIELD_OPTIONS} style={{ width: '100%' }} /></Col>
-                  <Col xs={12} sm={8} md={6} lg={4}><DatePicker picker="month" placeholder="起始月份" value={startMonth} onChange={(val) => { setStartMonthState(val); setUrlParam('startMonth', val ? val.format('YYYY-MM') : null); setUrlParam('timePreset', null) }} disabled={!dateField} style={{ width: '100%' }} /></Col>
-                  <Col xs={12} sm={8} md={6} lg={4}><DatePicker picker="month" placeholder="结束月份" value={endMonth} onChange={(val) => { setEndMonthState(val); setUrlParam('endMonth', val ? val.format('YYYY-MM') : null); setUrlParam('timePreset', null) }} disabled={!dateField} style={{ width: '100%' }} /></Col>
-                </Row>
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>快捷选择</Text>
+                  <Segmented
+                    value={timePreset || '不限'}
+                    onChange={(val) => handleTimePreset(val as string)}
+                    options={TIME_PRESETS.map(p => ({ label: p.label, value: p.value || '不限' }))}
+                    size="small"
+                  />
+                </div>
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>自定义范围</Text>
+                  <Row gutter={[12, 12]} align="middle">
+                    <Col xs={24} sm={8} md={6} lg={5}>
+                      <Select
+                        placeholder="选择时间字段"
+                        value={dateField}
+                        onChange={handleDateFieldChange}
+                        allowClear
+                        options={DATE_FIELD_OPTIONS}
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+                    <Col xs={12} sm={8} md={6} lg={5}>
+                      <DatePicker
+                        picker="month"
+                        placeholder="起始月份"
+                        format="YYYY年MM月"
+                        value={startMonth}
+                        onChange={handleStartMonthChange}
+                        disabled={!dateField}
+                        allowClear
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+                    <Col xs={12} sm={8} md={6} lg={5}>
+                      <DatePicker
+                        picker="month"
+                        placeholder="结束月份"
+                        format="YYYY年MM月"
+                        value={endMonth}
+                        onChange={handleEndMonthChange}
+                        disabled={!dateField}
+                        allowClear
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+                  </Row>
+                  {!dateField && (
+                    <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
+                      请先选择时间字段，再指定月份范围
+                    </Text>
+                  )}
+                </div>
               </div>
             ),
           }]} />
@@ -703,19 +910,73 @@ export default function StarList() {
         )}
       </Modal>
 
+      {/* Clone 子目录选择弹窗 */}
+      <Modal
+        title="选择 Clone 目录"
+        open={cloneDirModalVisible}
+        onCancel={() => setCloneDirModalVisible(false)}
+        onOk={handleCloneExecute}
+        okText="开始 Clone"
+        cancelText="取消"
+        confirmLoading={cloneStarting}
+        okButtonProps={{ disabled: !!cloneSubDirError }}
+        destroyOnClose
+      >
+        <Spin spinning={cloneDirLoading}>
+          <div style={{ marginBottom: 16 }}>
+            <Text type="secondary">基础目录（可在系统配置中修改 clone.directory）</Text>
+            <div style={{ marginTop: 8, padding: '8px 12px', background: '#f5f5f5', borderRadius: 6, wordBreak: 'break-all' }}>
+              {cloneBaseDir || '-'}
+            </div>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <Text>子目录</Text>
+            <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>留空则直接 Clone 到基础目录</Text>
+            <AutoComplete
+              style={{ width: '100%', marginTop: 8 }}
+              value={cloneSubDir}
+              options={cloneSubDirOptions}
+              placeholder="输入或从历史记录选择，如 java、frontend/react"
+              onChange={handleCloneSubDirChange}
+              onSelect={handleCloneSubDirChange}
+              allowClear
+              status={cloneSubDirError ? 'error' : undefined}
+              filterOption={(input, option) =>
+                (option?.value as string)?.toLowerCase().includes(input.toLowerCase()) ?? false
+              }
+            />
+            {cloneSubDirError && <Text type="danger" style={{ fontSize: 12 }}>{cloneSubDirError}</Text>}
+          </div>
+          <Alert
+            type={cloneSubDirError ? 'error' : 'info'}
+            showIcon
+            message={cloneSubDirError ? `路径无效：${cloneSubDirError}` : `目标路径：${cloneTargetPreview.path || '-'}`}
+            description={cloneSubDirHistory.length > 0 ? '可从下拉列表选择历史子目录，也可输入新目录' : '首次使用可直接输入子目录，任务成功完成后会自动保存到历史记录'}
+          />
+        </Spin>
+      </Modal>
+
       {/* Clone 进度弹窗 */}
       <Modal title="批量 Clone 进度" open={cloneModalVisible} onCancel={handleCloseCloneModal}
         footer={<Button type="primary" onClick={handleCloseCloneModal}>关闭</Button>}
-        maskClosable={cloneProgress?.status === 'COMPLETED'}>
+        maskClosable={cloneProgress?.status === 'COMPLETED' || cloneProgress?.status === 'FAILED'}>
         {cloneProgress && (
           <div>
+            {cloneTargetDir && (
+              <div style={{ marginBottom: 12, fontSize: 13, color: '#666', wordBreak: 'break-all' }}>
+                目标目录：<Text code>{cloneTargetDir}</Text>
+              </div>
+            )}
+            {cloneProgress.status === 'FAILED' && (
+              <Alert type="error" showIcon message="Clone 任务失败" description={cloneProgress.errorMessage || '未知错误'} style={{ marginBottom: 12 }} />
+            )}
             <div style={{ marginBottom: 16, display: 'flex', gap: 16, justifyContent: 'center' }}>
               <span>总数: <Text strong>{cloneProgress.totalRepos}</Text></span>
               <span style={{ color: '#52c41a' }}>成功: <Text strong>{cloneProgress.completedRepos}</Text></span>
               <span style={{ color: '#faad14' }}>跳过: <Text strong>{cloneProgress.skippedRepos}</Text></span>
               <span style={{ color: '#ff4d4f' }}>失败: <Text strong>{cloneProgress.failedRepos}</Text></span>
             </div>
-            {cloneProgress.status !== 'COMPLETED' && <Spin tip="正在 Clone..." style={{ display: 'block', textAlign: 'center' }} />}
+            {cloneProgress.status === 'RUNNING' && <Spin tip="正在 Clone..." style={{ display: 'block', textAlign: 'center' }} />}
             {cloneProgress.results.length > 0 && (
               <div style={{ maxHeight: 400, overflow: 'auto' }}>
                 {cloneProgress.results.map((r, i) => (

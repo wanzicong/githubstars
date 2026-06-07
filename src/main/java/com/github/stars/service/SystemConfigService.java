@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,8 +34,41 @@ public class SystemConfigService {
      */
     @PostConstruct
     public void init() {
+        ensureDefaultConfigs();
         reloadCache();
         log.info("系统配置加载完成，共 {} 项", cache.size());
+    }
+
+    private void ensureDefaultConfigs() {
+        Map<String, String[]> defaults = new LinkedHashMap<>();
+        defaults.put("github.username", new String[]{"wanzicong", "GitHub 用户名，用于同步 Star 仓库"});
+        defaults.put("github.token", new String[]{"", "GitHub Personal Access Token，用于提高 API 限额"});
+        defaults.put("deepseek.api_key", new String[]{"", "DeepSeek API Key，用于 AI 分析、翻译和分类"});
+        defaults.put("deepseek.api_url", new String[]{"https://api.deepseek.com/v1/chat/completions", "DeepSeek Chat Completions API 地址"});
+        defaults.put("deepseek.model", new String[]{"deepseek-chat", "DeepSeek 模型名称"});
+        defaults.put("clone.directory", new String[]{"D:/github-stars", "批量 Clone 的基础保存目录"});
+        defaults.put("clone.subdirectory.history", new String[]{"[]", "Clone 子目录历史记录，系统自动维护"});
+        defaults.put("clone.subdirectory.last", new String[]{"", "上次选择的 Clone 子目录，系统自动维护"});
+
+        for (Map.Entry<String, String[]> entry : defaults.entrySet()) {
+            String key = entry.getKey();
+            SystemConfig existing = configMapper.selectOne(
+                    new LambdaQueryWrapper<SystemConfig>().eq(SystemConfig::getConfigKey, key)
+            );
+            if (existing == null) {
+                SystemConfig config = new SystemConfig();
+                config.setConfigKey(key);
+                config.setConfigValue(entry.getValue()[0]);
+                config.setDescription(entry.getValue()[1]);
+                config.setCreatedAt(LocalDateTime.now());
+                config.setUpdatedAt(LocalDateTime.now());
+                configMapper.insert(config);
+            } else if (existing.getDescription() == null || existing.getDescription().isEmpty()) {
+                existing.setDescription(entry.getValue()[1]);
+                existing.setUpdatedAt(LocalDateTime.now());
+                configMapper.updateById(existing);
+            }
+        }
     }
 
     /**

@@ -3,13 +3,13 @@ package com.github.stars.controller;
 import com.github.stars.entity.GithubRepo;
 import com.github.stars.service.CloneService;
 import com.github.stars.service.GithubRepoService;
-import com.github.stars.service.SystemConfigService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
+import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -26,31 +26,40 @@ public class CloneController {
     private GithubRepoService githubRepoService;
 
     @Resource
-    private SystemConfigService configService;
-
-    @Resource
     private CloneService cloneService;
 
-    /**
-     * 启动后台批量Clone（实际执行git clone）
-     */
+    @GetMapping("/config")
+    public Map<String, Object> getCloneConfig() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("baseDirectory", cloneService.getBaseDirectory());
+        result.put("subdirectoryHistory", cloneService.getSubdirectoryHistory());
+        result.put("lastSubdirectory", cloneService.getLastSubdirectory());
+        result.put("hasActiveTask", cloneService.hasActiveTask());
+        return result;
+    }
+
     @PostMapping("/start")
     public Map<String, Object> startClone(
             @RequestParam(value = "keyword", defaultValue = "") String keyword,
             @RequestParam(value = "language", defaultValue = "") String language,
             @RequestParam(value = "categoryIds", defaultValue = "") String categoryIds,
-            @RequestParam(value = "maxCount", defaultValue = "50") int maxCount) {
+            @RequestParam(value = "maxCount", defaultValue = "50") int maxCount,
+            @RequestParam(value = "subDirectory", defaultValue = "") String subDirectory) {
         Map<String, Object> result = new LinkedHashMap<>();
-        String taskId = cloneService.startBatchClone(keyword, language, categoryIds, maxCount);
-        result.put("success", true);
-        result.put("taskId", taskId);
-        result.put("message", "Clone 任务已启动（最多5个并发）");
+        try {
+            String taskId = cloneService.startBatchClone(keyword, language, categoryIds, maxCount, subDirectory);
+            result.put("success", true);
+            result.put("taskId", taskId);
+            result.put("targetDirectory", cloneService.resolveCloneDirectory(subDirectory).getAbsolutePath());
+            result.put("message", "Clone 任务已启动（最多5个并发）");
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            result.put("success", false);
+            result.put("message", e.getMessage());
+        }
         return result;
     }
 
-    /**
-     * 查询Clone任务进度
-     */
     @GetMapping("/task/{taskId}")
     public Map<String, Object> getTaskProgress(@PathVariable String taskId) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -63,6 +72,7 @@ public class CloneController {
         result.put("success", true);
         result.put("taskId", task.taskId);
         result.put("status", task.status);
+        result.put("errorMessage", task.errorMessage);
         result.put("totalRepos", task.totalRepos);
         result.put("completedRepos", task.completedRepos);
         result.put("failedRepos", task.failedRepos);
@@ -71,30 +81,23 @@ public class CloneController {
         return result;
     }
 
-    /**
-     * 生成批量 Clone 脚本
-     * @param osType  操作系统: windows / linux / mac
-     * @param keyword 筛选关键词
-     * @param language 筛选语言
-     * @param categoryIds 筛选分类
-     * @param maxCount 最大数量(默认50)
-     */
     @GetMapping("/script")
     public ResponseEntity<byte[]> generateScript(
             @RequestParam(value = "osType", defaultValue = "windows") String osType,
             @RequestParam(value = "keyword", defaultValue = "") String keyword,
             @RequestParam(value = "language", defaultValue = "") String language,
             @RequestParam(value = "categoryIds", defaultValue = "") String categoryIds,
-            @RequestParam(value = "maxCount", defaultValue = "50") int maxCount) {
+            @RequestParam(value = "maxCount", defaultValue = "50") int maxCount,
+            @RequestParam(value = "subDirectory", defaultValue = "") String subDirectory) {
 
         List<GithubRepo> repos = githubRepoService.findPage(1, maxCount, keyword, language,
                 "starred_at", "desc", null, null, null, categoryIds).getRecords();
 
-        String cloneDir = configService.getValue("clone.directory", "~/github-stars");
+        File cloneDirFile = cloneService.resolveCloneDirectory(subDirectory);
+        String cloneDir = cloneDirFile.getAbsolutePath();
         StringBuilder script = new StringBuilder();
 
         if ("windows".equals(osType)) {
-            // PowerShell script
             script.append("# GitHub Stars 批量 Clone 脚本\n");
             script.append("# 生成时间: ").append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("\n");
             script.append("# 项目数量: ").append(repos.size()).append("\n\n");
@@ -115,7 +118,6 @@ public class CloneController {
             }
             script.append("Write-Host \"Done! Cloned into $cloneDir\"\n");
         } else {
-            // Linux/Mac bash script
             script.append("#!/bin/bash\n");
             script.append("# GitHub Stars 批量 Clone 脚本\n");
             script.append("# 生成时间: ").append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("\n");
@@ -141,11 +143,25 @@ public class CloneController {
         byte[] bytes = script.toString().getBytes(StandardCharsets.UTF_8);
         String ext = "windows".equals(osType) ? "ps1" : "sh";
         String filename = "github_stars_clone_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + "." + ext;
+        String encodedFilename;
+        try {
+            encodedFilename = java.net.URLEncoder.encode(filename, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            encodedFilename = filename;
+        }
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFilename)
                 .contentType(MediaType.TEXT_PLAIN)
                 .contentLength(bytes.length)
                 .body(bytes);
+    }
+
+    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
+    public ResponseEntity<Map<String, Object>> handleCloneError(RuntimeException e) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", false);
+        result.put("message", e.getMessage());
+        return ResponseEntity.badRequest().body(result);
     }
 }

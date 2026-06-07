@@ -90,9 +90,15 @@ public class ExportController {
 
         byte[] bytes = md.toString().getBytes(StandardCharsets.UTF_8);
         String filename = "github_stars_export_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".md";
+        String encodedFilename;
+        try {
+            encodedFilename = java.net.URLEncoder.encode(filename, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            encodedFilename = filename;
+        }
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFilename)
                 .contentType(MediaType.TEXT_PLAIN)
                 .contentLength(bytes.length)
                 .body(bytes);
