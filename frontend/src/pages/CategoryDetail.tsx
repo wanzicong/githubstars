@@ -384,12 +384,12 @@ export default function CategoryDetail() {
 
         <Spin spinning={reposLoading}>
           {repos.length > 0 ? (
-            viewMode === 'list' ? (
+            <>
+            {viewMode === 'list' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {repos.map(repo => <RepoRow key={repo.id} repo={repo} />)}
               </div>
             ) : (
-            <>
               <Row gutter={[16, 16]}>
                 {repos.map((repo) => (
                   <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
@@ -491,26 +491,26 @@ export default function CategoryDetail() {
                   </Col>
                 ))}
               </Row>
-
-              {pageResult.total > pageSize && (
-                <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
-                  <Pagination
-                    current={currentPage}
-                    pageSize={pageSize}
-                    total={pageResult.total}
-                    showSizeChanger
-                    pageSizeOptions={PAGE_SIZE_OPTIONS.map(String)}
-                    showQuickJumper
-                    showTotal={(total) => `共 ${total} 条 / ${pageResult.pages} 页`}
-                    onChange={(page, size) => {
-                      setUrlParam('page', String(page))
-                      if (size !== pageSize) setUrlParam('size', String(size))
-                    }}
-                  />
-                </div>
-              )}
+            )}
+            {pageResult.total > pageSize && (
+              <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
+                <Pagination
+                  current={currentPage}
+                  pageSize={pageSize}
+                  total={pageResult.total}
+                  showSizeChanger
+                  pageSizeOptions={PAGE_SIZE_OPTIONS.map(String)}
+                  showQuickJumper
+                  showTotal={(total) => `共 ${total} 条 / ${pageResult.pages} 页`}
+                  onChange={(page, size) => {
+                    setUrlParam('page', String(page))
+                    if (size !== pageSize) setUrlParam('size', String(size))
+                  }}
+                />
+              </div>
+            )}
             </>
-          )) : (
+          ) : (
             !reposLoading && (
               <Card>
                 <Empty
