@@ -246,7 +246,33 @@ public class CategoryService {
      */
     @Transactional
     public void batchAddReposToCategory(List<Long> repoIds, Long categoryId) {
+        Category cat = categoryMapper.selectById(categoryId);
+        if (cat != null && cat.getLevel() != null && cat.getLevel() == 1) {
+            throw new RuntimeException("一级分类不能直接包含仓库，请先将仓库添加到二级分类");
+        }
         categoryMapper.batchInsertRepoCategory(repoIds, categoryId);
+    }
+
+    /**
+     * 展开分类ID：如果是一级分类，替换为其所有二级子分类的ID
+     * 用于搜索时自动包含子分类
+     */
+    public List<Long> expandCategoryIds(List<Long> categoryIds) {
+        if (categoryIds == null || categoryIds.isEmpty()) return categoryIds;
+        List<Long> expanded = new ArrayList<>();
+        for (Long id : categoryIds) {
+            Category cat = categoryMapper.selectById(id);
+            if (cat != null && cat.getLevel() != null && cat.getLevel() == 1) {
+                // 一级分类：替换为所有二级子分类
+                List<Category> children = categoryMapper.selectList(
+                    new LambdaQueryWrapper<Category>().eq(Category::getParentId, id));
+                for (Category child : children) expanded.add(child.getId());
+                if (children.isEmpty()) expanded.add(id); // 没有子分类则保留自身
+            } else {
+                expanded.add(id); // 二级分类直接保留
+            }
+        }
+        return expanded;
     }
 
     /**

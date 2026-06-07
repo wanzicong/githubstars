@@ -491,7 +491,17 @@ export default function StarList() {
   }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder])
 
   const languageSelectOptions = useMemo(() => languageOptions.map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })), [languageOptions])
-  const categorySelectOptions = useMemo(() => categoryOptions.map((cat) => ({ label: cat.name, value: String(cat.id) })), [categoryOptions])
+  const categorySelectOptions = useMemo(() => {
+    const result: { label: string; value: string }[] = []
+    const flatten = (cats: Category[]) => {
+      for (const cat of cats) {
+        result.push({ label: (cat.level === 1 ? '📁 ' : '  📂 ') + cat.name, value: String(cat.id) })
+        if (cat.children && cat.children.length > 0) flatten(cat.children)
+      }
+    }
+    flatten(categoryOptions)
+    return result
+  }, [categoryOptions])
 
   const hasActiveFilters = keyword.trim() !== '' || languageStr !== '' || categoryIdsStr !== '' || sortBy !== 'starred_at' || sortOrder !== 'desc' || dateField !== undefined || startMonth !== null || endMonth !== null
 

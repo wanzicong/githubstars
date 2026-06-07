@@ -29,6 +29,9 @@ public class GithubRepoService {
     @Resource
     private CategoryMapper categoryMapper;
 
+    @Resource
+    private CategoryService categoryService;
+
     /**
      * 分页查询Star仓库列表
      *
@@ -53,6 +56,8 @@ public class GithubRepoService {
         if (StringUtils.hasText(categoryIds)) {
             catIdList = Arrays.stream(categoryIds.split(","))
                     .filter(s -> !s.isEmpty()).map(Long::valueOf).collect(Collectors.toList());
+            // 展开一级分类为其下所有二级子分类
+            catIdList = categoryService.expandCategoryIds(catIdList);
         }
         return findPage(page, size, keyword, languageList, catIdList, sortBy, sortOrder, dateField, startMonth, endMonth);
     }
@@ -220,11 +225,12 @@ public class GithubRepoService {
         if (StringUtils.hasText(language)) {
             languageList = Arrays.asList(language.split(","));
         }
-        // 解析分类参数
+        // 解析分类参数并展开一级分类
         List<Long> catIdList = null;
         if (StringUtils.hasText(categoryIds)) {
             catIdList = Arrays.stream(categoryIds.split(","))
                     .filter(s -> !s.isEmpty()).map(Long::valueOf).collect(Collectors.toList());
+            catIdList = categoryService.expandCategoryIds(catIdList);
         }
         return findAllUrls(keyword, languageList, sortBy, sortOrder, dateField, startMonth, endMonth, catIdList);
     }
