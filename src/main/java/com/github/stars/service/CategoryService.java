@@ -37,19 +37,22 @@ public class CategoryService {
         Map<Long, Category> map = new LinkedHashMap<>();
         List<Category> roots = new ArrayList<>();
         for (Category c : all) {
-            c.setLevel(c.getParentId() == null ? 1 : 2);
+            // level 从数据库读取,不再计算
             c.setRepoCount(categoryMapper.countReposByCategoryId(c.getId()));
             map.put(c.getId(), c);
             if (c.getChildren() == null) c.setChildren(new ArrayList<>());
         }
         for (Category c : all) {
-            if (c.getParentId() != null) {
+            // Level 2 且有父级的,挂载到父级下; Level 1 或无父级的作为根节点
+            if (c.getLevel() != null && c.getLevel() == 2 && c.getParentId() != null) {
                 Category parent = map.get(c.getParentId());
                 if (parent != null) {
                     parent.getChildren().add(c);
+                } else {
+                    roots.add(c); // 父级不存在,作为根节点
                 }
             } else {
-                roots.add(c);
+                roots.add(c); // L1 或未归属的 L2 都作为根节点
             }
         }
         // 按仓库数量从大到小排序（一级分类）
@@ -86,6 +89,7 @@ public class CategoryService {
         category.setName(name.trim());
         category.setDescription(description);
         category.setParentId(parentId);
+        category.setLevel(parentId != null ? 2 : 1);
         category.setSortOrder(0);
         category.setCreatedAt(LocalDateTime.now());
         category.setUpdatedAt(LocalDateTime.now());

@@ -34,13 +34,12 @@ public class Category {
     @TableField("parent_id")
     private Long parentId;
 
+    @TableField("level")
+    private Integer level;
+
     /** 非数据库字段：子分类列表 */
     @TableField(exist = false)
     private List<Category> children;
-
-    /** 非数据库字段：层级 1=一级分类 2=二级分类 */
-    @TableField(exist = false)
-    private Integer level;
 
     /** 非数据库字段：该分类下的仓库数量 */
     @TableField(exist = false)
