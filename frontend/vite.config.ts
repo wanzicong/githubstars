@@ -61,6 +61,10 @@ export default defineConfig({
         target: 'http://localhost:6001',
         changeOrigin: true,
       },
+      '/export': {
+        target: 'http://localhost:6001',
+        changeOrigin: true,
+      },
     },
   },
 })

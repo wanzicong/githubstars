@@ -535,14 +535,16 @@ export default function StarList() {
             <Col xs={12} sm={8} md={6} lg={3}>
               <Select placeholder="排序方向" value={sortOrder} onChange={(val) => setUrlParam('sortOrder', val || null)} options={SORT_ORDER_OPTIONS} style={{ width: '100%' }} />
             </Col>
-            <Col xs={24} sm={24} md={24} lg={4}>
+          </Row>
+          <Row gutter={[8, 8]} style={{ marginTop: 8 }}>
+            <Col span={24}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {hasActiveFilters && <Button icon={<ClearOutlined />} onClick={handleClearFilters}>清除</Button>}
-                <Button icon={<TranslationOutlined />} loading={batchTranslating} onClick={handleStartFullTranslate} style={{ flex: '1 1 auto', minWidth: 0 }}>批量翻译</Button>
-                <Button icon={<ReadOutlined />} loading={false} onClick={handleStartReadmeBatch} style={{ flex: '1 1 auto', minWidth: 0 }}>批量README</Button>
-                <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze} style={{ flex: '1 1 auto', minWidth: 0 }}>AI 分析</Button>
-                <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport} style={{ flex: '1 1 auto', minWidth: 0 }}>导出链接</Button>
-                <Button icon={<DownloadOutlined />} onClick={handleExportMd} style={{ flex: '1 1 auto', minWidth: 0 }}>导出MD</Button>
+                <Button icon={<TranslationOutlined />} loading={batchTranslating} onClick={handleStartFullTranslate}>批量翻译</Button>
+                <Button icon={<ReadOutlined />} loading={false} onClick={handleStartReadmeBatch}>批量README</Button>
+                <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze}>AI 分析</Button>
+                <Button icon={<DownloadOutlined />} onClick={handleExportMd}>导出MD</Button>
+                <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport}>导出链接</Button>
               </div>
             </Col>
           </Row>
