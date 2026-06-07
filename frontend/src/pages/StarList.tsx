@@ -4,6 +4,7 @@ import {
   Card,
   Input,
   Select,
+  TreeSelect,
   Button,
   Row,
   Col,
@@ -491,24 +492,21 @@ export default function StarList() {
   }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder])
 
   const languageSelectOptions = useMemo(() => languageOptions.map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })), [languageOptions])
-  const categorySelectOptions = useMemo(() => {
-    const result: { label: string; value: string }[] = []
-    const flatten = (cats: Category[]) => {
-      for (const cat of cats) {
-        if (cat.level === 1) {
-          result.push({ label: '📁 ' + cat.name + ' (' + cat.repoCount + ')', value: String(cat.id) })
-          if (cat.children && cat.children.length > 0) {
-            for (const child of cat.children) {
-              result.push({ label: '    📂 ' + child.name + ' (' + child.repoCount + ')', value: String(child.id) })
-            }
-          }
-        } else if (!cat.parentId) {
-          result.push({ label: '📂 ' + cat.name + ' (' + cat.repoCount + ')', value: String(cat.id) })
+  const categoryTreeData = useMemo(() => {
+    const buildTree = (cats: Category[]): any[] => {
+      return cats.map(cat => {
+        const node: any = {
+          title: (cat.level === 1 ? '📁 ' : '📂 ') + cat.name + ' (' + cat.repoCount + ')',
+          value: String(cat.id),
+          key: String(cat.id),
         }
-      }
+        if (cat.children && cat.children.length > 0) {
+          node.children = buildTree(cat.children)
+        }
+        return node
+      })
     }
-    flatten(categoryOptions)
-    return result
+    return buildTree(categoryOptions.filter(c => c.level === 1 || !c.parentId))
   }, [categoryOptions])
 
   const hasActiveFilters = keyword.trim() !== '' || languageStr !== '' || categoryIdsStr !== '' || sortBy !== 'starred_at' || sortOrder !== 'desc' || dateField !== undefined || startMonth !== null || endMonth !== null
@@ -545,7 +543,7 @@ export default function StarList() {
               <Select mode="multiple" placeholder="筛选语言" value={selectedLanguages} onChange={(vals) => setUrlParam('languages', vals.length > 0 ? vals.join(',') : null)} options={languageSelectOptions} allowClear showSearch maxTagCount={3} filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())} style={{ width: '100%' }} />
             </Col>
             <Col xs={24} sm={12} md={6} lg={4}>
-              <Select mode="multiple" placeholder="筛选分类" value={selectedCategoryIds} onChange={(vals) => setUrlParam('categoryIds', vals.length > 0 ? vals.join(',') : null)} options={categorySelectOptions} allowClear showSearch maxTagCount={2} filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())} style={{ width: '100%' }} />
+              <TreeSelect treeData={categoryTreeData} value={selectedCategoryIds} onChange={(vals) => setUrlParam('categoryIds', vals.length > 0 ? vals.join(',') : null)} placeholder="筛选分类" treeCheckable showCheckedStrategy={TreeSelect.SHOW_CHILD} allowClear showSearch maxTagCount={2} filterTreeNode={(input, node) => (node?.title as string)?.toLowerCase().includes(input.toLowerCase())} style={{ width: '100%' }} />
             </Col>
             <Col xs={12} sm={8} md={6} lg={4}>
               <Select placeholder="排序字段" value={sortBy} onChange={(val) => setUrlParam('sortBy', val || null)} options={SORT_BY_OPTIONS} style={{ width: '100%' }} />
