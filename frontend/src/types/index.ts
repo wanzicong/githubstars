@@ -34,6 +34,9 @@ export interface Category {
   repoCount: number
   createdAt: string
   updatedAt: string
+  parentId: number | null
+  children: Category[]
+  level: number
 }
 
 export interface SyncLog {

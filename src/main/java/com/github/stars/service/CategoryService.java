@@ -29,18 +29,34 @@ public class CategoryService {
     private GithubRepoMapper githubRepoMapper;
 
     /**
-     * 获取所有分类（含仓库数量）
+     * 获取所有分类（含仓库数量，树形结构）
      */
     public List<Category> listAll() {
-        List<Category> categories = categoryMapper.selectList(null);
-        for (Category cat : categories) {
-            cat.setRepoCount(categoryMapper.countReposByCategoryId(cat.getId()));
+        List<Category> all = categoryMapper.selectList(null);
+        // 构建树形结构：一级分类包含其二级子分类
+        Map<Long, Category> map = new LinkedHashMap<>();
+        List<Category> roots = new ArrayList<>();
+        for (Category c : all) {
+            c.setLevel(c.getParentId() == null ? 1 : 2);
+            c.setRepoCount(categoryMapper.countReposByCategoryId(c.getId()));
+            map.put(c.getId(), c);
+            if (c.getChildren() == null) c.setChildren(new ArrayList<>());
         }
-        // 按仓库数量从大到小排序
-        categories.sort((a, b) -> Integer.compare(
+        for (Category c : all) {
+            if (c.getParentId() != null) {
+                Category parent = map.get(c.getParentId());
+                if (parent != null) {
+                    parent.getChildren().add(c);
+                }
+            } else {
+                roots.add(c);
+            }
+        }
+        // 按仓库数量从大到小排序（一级分类）
+        roots.sort((a, b) -> Integer.compare(
                 b.getRepoCount() == null ? 0 : b.getRepoCount(),
                 a.getRepoCount() == null ? 0 : a.getRepoCount()));
-        return categories;
+        return roots;
     }
 
     /**
@@ -51,13 +67,25 @@ public class CategoryService {
     }
 
     /**
-     * 新增分类
+     * 新增分类（无父分类）
      */
     @Transactional
     public Category create(String name, String description) {
+        return create(name, description, null);
+    }
+
+    /**
+     * 新增分类（支持指定父分类）
+     */
+    @Transactional
+    public Category create(String name, String description, Long parentId) {
+        // 检查重名
+        Category existing = categoryMapper.selectOne(new LambdaQueryWrapper<Category>().eq(Category::getName, name));
+        if (existing != null) throw new RuntimeException("分类名已存在: " + name);
         Category category = new Category();
-        category.setName(name);
+        category.setName(name.trim());
         category.setDescription(description);
+        category.setParentId(parentId);
         category.setSortOrder(0);
         category.setCreatedAt(LocalDateTime.now());
         category.setUpdatedAt(LocalDateTime.now());
@@ -97,6 +125,19 @@ public class CategoryService {
             categoryMapper.deleteAllRepoCategory(id);
             categoryMapper.deleteById(id);
         }
+    }
+
+    /**
+     * 移动分类到指定父分类
+     */
+    @Transactional
+    public void moveToParent(Long categoryId, Long newParentId) {
+        Category category = categoryMapper.selectById(categoryId);
+        if (category == null) throw new RuntimeException("分类不存在");
+        category.setParentId(newParentId);
+        category.setUpdatedAt(LocalDateTime.now());
+        categoryMapper.updateById(category);
+        log.info("分类 {} 已移至父分类 {}", category.getName(), newParentId);
     }
 
     /**

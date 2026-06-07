@@ -11,8 +11,13 @@ export async function fetchUncategorizedRepos(): Promise<GithubRepo[]> {
   return data
 }
 
-export async function createCategory(name: string, description?: string): Promise<ApiResponse> {
-  const { data } = await api.post<ApiResponse>('/categories', { name, description })
+export async function createCategory(name: string, description?: string, parentId?: number | null): Promise<ApiResponse> {
+  const { data } = await api.post<ApiResponse>('/categories', { name, description, parentId })
+  return data
+}
+
+export async function moveCategory(id: number, parentId: number | null): Promise<ApiResponse> {
+  const { data } = await api.post<ApiResponse>(`/categories/${id}/move`, { parentId })
   return data
 }
 

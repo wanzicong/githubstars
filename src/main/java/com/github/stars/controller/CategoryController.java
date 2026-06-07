@@ -22,20 +22,22 @@ public class CategoryController {
     private AiClassifyService aiClassifyService;
 
     /**
-     * 新增分类
+     * 新增分类（支持指定父分类）
      */
     @PostMapping
     public Map<String, Object> create(@RequestBody Map<String, String> body) {
         Map<String, Object> result = new LinkedHashMap<>();
         String name = body.get("name");
         String description = body.get("description");
+        String parentIdStr = body.get("parentId");
+        Long parentId = parentIdStr != null && !parentIdStr.isEmpty() ? Long.valueOf(parentIdStr) : null;
         if (name == null || name.trim().isEmpty()) {
             result.put("success", false);
             result.put("message", "分类名称不能为空");
             return result;
         }
         try {
-            Category category = categoryService.create(name.trim(), description);
+            Category category = categoryService.create(name.trim(), description, parentId);
             result.put("success", true);
             result.put("category", category);
         } catch (Exception e) {
@@ -96,6 +98,24 @@ public class CategoryController {
             categoryService.batchDelete(ids);
             result.put("success", true);
             result.put("message", "已删除 " + ids.size() + " 个分类");
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * 移动分类到指定父分类
+     */
+    @PostMapping("/{id}/move")
+    public Map<String, Object> moveToParent(@PathVariable Long id, @RequestBody Map<String, Long> body) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            Long parentId = body.get("parentId");
+            categoryService.moveToParent(id, parentId);
+            result.put("success", true);
+            result.put("message", "已移动");
         } catch (Exception e) {
             result.put("success", false);
             result.put("message", e.getMessage());
