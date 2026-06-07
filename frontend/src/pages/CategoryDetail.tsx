@@ -510,7 +510,7 @@ export default function CategoryDetail() {
                 </div>
               )}
             </>
-          ) : (
+          )) : (
             !reposLoading && (
               <Card>
                 <Empty
