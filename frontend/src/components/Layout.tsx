@@ -10,6 +10,7 @@ import {
   ThunderboltOutlined,
   UserOutlined,
   SettingOutlined,
+  SearchOutlined,
 } from '@ant-design/icons'
 
 const { Header, Content, Footer } = Layout
@@ -23,6 +24,7 @@ const navItems = [
   { key: '/categories', icon: <AppstoreOutlined />, label: '分类管理' },
   { key: '/authors', icon: <UserOutlined />, label: '作者中心' },
   { key: '/settings', icon: <SettingOutlined />, label: '系统配置' },
+  { key: '/search', icon: <SearchOutlined />, label: 'GitHub搜索' },
 ]
 
 export default function AppLayout() {

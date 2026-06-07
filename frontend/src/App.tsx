@@ -12,6 +12,7 @@ import CategoryDetail from './pages/CategoryDetail'
 import AuthorList from './pages/AuthorList'
 import AuthorDetail from './pages/AuthorDetail'
 import Settings from './pages/Settings'
+import GithubSearch from './pages/GithubSearch'
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
               <Route path="/authors" element={<AuthorList />} />
               <Route path="/authors/:ownerName" element={<AuthorDetail />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/search" element={<GithubSearch />} />
             </Route>
           </Routes>
         </BrowserRouter>
