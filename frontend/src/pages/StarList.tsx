@@ -473,6 +473,23 @@ export default function StarList() {
     } catch { console.error('导出失败') }
   }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
 
+  const handleExportMd = useCallback(async () => {
+    try {
+      const params = new URLSearchParams()
+      if (keyword) params.set('keyword', keyword)
+      if (languageStr) params.set('language', languageStr)
+      if (categoryIdsStr) params.set('categoryIds', categoryIdsStr)
+      if (sortBy) params.set('sortBy', sortBy)
+      if (sortOrder) params.set('sortOrder', sortOrder)
+      params.set('maxCount', '50')
+      const resp = await fetch(`/export/md?${params.toString()}`)
+      const blob = await resp.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = `stars_export_${dayjs().format('YYYYMMDD_HHmmss')}.md`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url)
+    } catch { message.error('导出MD失败') }
+  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder])
+
   const languageSelectOptions = useMemo(() => languageOptions.map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })), [languageOptions])
   const categorySelectOptions = useMemo(() => categoryOptions.map((cat) => ({ label: cat.name, value: String(cat.id) })), [categoryOptions])
 
@@ -525,6 +542,7 @@ export default function StarList() {
                 <Button icon={<ReadOutlined />} loading={false} onClick={handleStartReadmeBatch} style={{ flex: '1 1 auto', minWidth: 0 }}>批量README</Button>
                 <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze} style={{ flex: '1 1 auto', minWidth: 0 }}>AI 分析</Button>
                 <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport} style={{ flex: '1 1 auto', minWidth: 0 }}>导出链接</Button>
+                <Button icon={<DownloadOutlined />} onClick={handleExportMd} style={{ flex: '1 1 auto', minWidth: 0 }}>导出MD</Button>
               </div>
             </Col>
           </Row>
