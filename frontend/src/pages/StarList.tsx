@@ -491,6 +491,23 @@ export default function StarList() {
     } catch { message.error('导出MD失败') }
   }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder])
 
+  const handleCloneScript = useCallback(async () => {
+    const osType = navigator.platform.includes('Win') ? 'windows' : 'linux'
+    try {
+      const params = new URLSearchParams({ osType, maxCount: '50' })
+      if (keyword) params.set('keyword', keyword)
+      if (languageStr) params.set('language', languageStr)
+      if (categoryIdsStr) params.set('categoryIds', categoryIdsStr)
+      const resp = await fetch(`/api/clone/script?${params.toString()}`)
+      const blob = await resp.blob()
+      const url = window.URL.createObjectURL(blob)
+      const ext = osType === 'windows' ? 'ps1' : 'sh'
+      const a = document.createElement('a'); a.href = url; a.download = `clone_${dayjs().format('YYYYMMDD_HHmmss')}.${ext}`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url)
+      message.success('Clone 脚本已下载')
+    } catch { message.error('生成脚本失败') }
+  }, [keyword, languageStr, categoryIdsStr])
+
   const languageSelectOptions = useMemo(() => languageOptions.map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })), [languageOptions])
   const categoryTreeData = useMemo(() => {
     const buildTree = (cats: Category[]): any[] => {
@@ -560,6 +577,7 @@ export default function StarList() {
                 <Button icon={<ReadOutlined />} loading={false} onClick={handleStartReadmeBatch}>批量README</Button>
                 <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze}>AI 分析</Button>
                 <Button icon={<DownloadOutlined />} onClick={handleExportMd}>导出MD</Button>
+                <Button icon={<DownloadOutlined />} onClick={handleCloneScript}>批量Clone</Button>
                 <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport}>导出链接</Button>
               </div>
             </Col>

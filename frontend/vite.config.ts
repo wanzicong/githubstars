@@ -65,6 +65,10 @@ export default defineConfig({
         target: 'http://localhost:6001',
         changeOrigin: true,
       },
+      '/api/clone': {
+        target: 'http://localhost:6001',
+        changeOrigin: true,
+      },
     },
   },
 })
