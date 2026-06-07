@@ -4,9 +4,18 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.github.stars.entity.GithubRepo;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Select;
+
+import java.util.List;
 
 @Mapper
 public interface GithubRepoMapper extends BaseMapper<GithubRepo> {
+
+    /**
+     * 查询未分类的仓库（不在 repo_category 表中的）
+     */
+    @Select("SELECT r.* FROM github_repo r LEFT JOIN repo_category rc ON r.id = rc.repo_id WHERE rc.repo_id IS NULL")
+    List<GithubRepo> selectUncategorizedRepos();
 
     /**
      * 插入或更新（基于 uk_full_name 唯一索引）

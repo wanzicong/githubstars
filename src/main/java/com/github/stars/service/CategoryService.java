@@ -421,14 +421,7 @@ public class CategoryService {
      * 获取未分类仓库列表
      */
     public List<GithubRepo> getUncategorizedRepos() {
-        List<GithubRepo> allRepos = githubRepoMapper.selectList(null);
-        List<GithubRepo> uncategorized = new ArrayList<>();
-        for (GithubRepo repo : allRepos) {
-            List<Long> catIds = categoryMapper.selectCategoryIdsByRepoId(repo.getId());
-            if (catIds.isEmpty()) {
-                uncategorized.add(repo);
-            }
-        }
-        return uncategorized;
+        // 单条SQL: LEFT JOIN + WHERE NULL, O(1)数据库查询
+        return githubRepoMapper.selectUncategorizedRepos();
     }
 }
