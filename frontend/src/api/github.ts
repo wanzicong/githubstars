@@ -8,10 +8,8 @@ export interface GithubSearchRepo {
   stargazers_count: number
   forks_count: number
   html_url: string
-  owner: {
-    login: string
-    avatar_url: string
-  }
+  owner_login: string
+  owner_avatar_url: string
   topics: string[]
   pushed_at: string
 }
@@ -44,18 +42,11 @@ export async function searchRepos(params: SearchReposParams): Promise<SearchRepo
 }
 
 export async function starRepo(owner: string, repo: string): Promise<{ success: boolean; starred: boolean; message?: string }> {
-  const { data } = await api.post<{ success: boolean; starred: boolean; message?: string }>('/api/github/star', { owner, repo })
-  return data
-}
-
-export async function unstarRepo(owner: string, repo: string): Promise<{ success: boolean; message?: string }> {
-  const { data } = await api.post<{ success: boolean; message?: string }>('/api/github/unstar', { owner, repo })
+  const { data } = await api.post<{ success: boolean; starred: boolean; message?: string }>(`/api/github/star/${owner}/${repo}`)
   return data
 }
 
 export async function checkStarred(owner: string, repo: string): Promise<{ success: boolean; starred: boolean }> {
-  const { data } = await api.get<{ success: boolean; starred: boolean }>('/api/github/check-starred', {
-    params: { owner, repo },
-  })
+  const { data } = await api.get<{ success: boolean; starred: boolean }>(`/api/github/starred/${owner}/${repo}`)
   return data
 }

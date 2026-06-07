@@ -91,10 +91,12 @@ export default function GithubSearch() {
           page: searchPage,
           perPage,
         })
+        console.log('search result:', data)
         setResults(data.repos || [])
         setTotal(data.total || 0)
         setPage(data.page || searchPage)
-      } catch {
+      } catch (e) {
+        console.error('search error:', e)
         message.error('搜索失败，请稍后重试')
         setResults([])
         setTotal(0)
@@ -294,13 +296,13 @@ export default function GithubSearch() {
                     <Card
                       hoverable
                       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-                      bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+                      styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column' } }}
                       onMouseEnter={() => handleCheckStar(repo)}
                     >
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
                         <img
-                          src={repo.owner.avatar_url}
-                          alt={repo.owner.login}
+                          src={repo.owner_avatar_url || ''}
+                          alt={repo.owner_login || ''}
                           style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0 }}
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>

@@ -61,11 +61,15 @@ public class GithubSearchService {
             query = "stars:>1";
         }
 
-        String url = GITHUB_API_BASE + "/search/repositories"
-                + "?q=" + encodeQueryParam(query)
-                + "&sort=" + (sort != null && !sort.isEmpty() ? sort : "stars")
-                + "&page=" + page
-                + "&per_page=" + perPage;
+        String sortParam = sort != null && !sort.isEmpty() ? sort : "stars";
+        String url = org.springframework.web.util.UriComponentsBuilder
+                .fromHttpUrl(GITHUB_API_BASE + "/search/repositories")
+                .queryParam("q", query)
+                .queryParam("sort", sortParam)
+                .queryParam("page", page)
+                .queryParam("per_page", perPage)
+                .build()
+                .toUriString();
 
         log.info("GitHub 搜索请求: {}", url);
 
@@ -75,8 +79,10 @@ public class GithubSearchService {
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
 
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                log.info("GitHub 搜索响应长度: {}", response.getBody().length());
                 JsonNode root = objectMapper.readTree(response.getBody());
                 int totalCount = root.get("total_count").asInt(0);
+                log.info("GitHub 搜索 total_count: {}", totalCount);
                 JsonNode items = root.get("items");
 
                 List<Map<String, Object>> repos = new ArrayList<>();
@@ -220,18 +226,6 @@ public class GithubSearchService {
         }
 
         return headers;
-    }
-
-    /**
-     * URL 编码查询参数（Java 8 兼容方式）
-     */
-    private String encodeQueryParam(String value) {
-        try {
-            return java.net.URLEncoder.encode(value, "UTF-8")
-                    .replace("+", "%20");
-        } catch (Exception e) {
-            return value;
-        }
     }
 
     /**
