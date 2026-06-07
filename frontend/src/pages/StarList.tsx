@@ -495,8 +495,18 @@ export default function StarList() {
     const result: { label: string; value: string }[] = []
     const flatten = (cats: Category[]) => {
       for (const cat of cats) {
-        result.push({ label: (cat.level === 1 ? '📁 ' : '  📂 ') + cat.name, value: String(cat.id) })
-        if (cat.children && cat.children.length > 0) flatten(cat.children)
+        const name = `${cat.name} (${cat.repoCount})`
+        if (cat.level === 1) {
+          result.push({ label: '📁 ' + name, value: String(cat.id) })
+          if (cat.children && cat.children.length > 0) {
+            for (const child of cat.children) {
+              result.push({ label: '    📂 ' + child.name + ' (' + child.repoCount + ')', value: String(child.id) })
+            }
+          }
+        } else if (!cat.parentId) {
+          // 未归属的L2(应该很少)
+          result.push({ label: '📂 ' + name, value: String(cat.id) })
+        }
       }
     }
     flatten(categoryOptions)
