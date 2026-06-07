@@ -17,6 +17,7 @@ import {
   Avatar,
   Space,
   Pagination,
+  Segmented,
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -27,6 +28,8 @@ import {
   GithubOutlined,
   SearchOutlined,
   ClearOutlined,
+  AppstoreOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons'
 import * as categoriesApi from '../api/categories'
 import * as statsApi from '../api/stats'
@@ -61,6 +64,47 @@ function formatDate(dateStr: string | null): string {
   return dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr
 }
 
+function RepoRow({ repo }: { repo: GithubRepo }) {
+  return (
+    <Card hoverable style={{ cursor: 'pointer' }} styles={{ body: { padding: 12 } }}
+      onClick={() => { window.location.href = `/stars/${repo.id}` }}>
+      <Row align="middle" gutter={[12, 8]}>
+        <Col xs={24} sm={12} md={14}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={36} style={{ flexShrink: 0 }} />
+            <div style={{ minWidth: 0 }}>
+              <Text strong style={{ fontSize: 14 }} ellipsis>
+                <a style={{ color: '#1677ff' }} onClick={(e) => { e.stopPropagation(); window.location.href = `/stars/${repo.id}` }}>{repo.repoName}</a>
+              </Text>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                <Text type="secondary" style={{ fontSize: 11 }}>{repo.ownerName}</Text>
+                {repo.language && <Tag color="blue" style={{ margin: 0, fontSize: 10 }}>{repo.language}</Tag>}
+              </div>
+              {repo.descriptionCn ? (
+                <Paragraph ellipsis={{ rows: 1 }} style={{ margin: '4px 0 0', fontSize: 12, color: '#333' }}>{repo.descriptionCn}</Paragraph>
+              ) : repo.description ? (
+                <Paragraph type="secondary" ellipsis={{ rows: 1 }} style={{ margin: '4px 0 0', fontSize: 12 }}>{repo.description}</Paragraph>
+              ) : null}
+            </div>
+          </div>
+        </Col>
+        <Col xs={24} sm={12} md={10}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+            <span><StarFilled style={{ color: '#faad14', fontSize: 12 }} /> <Text style={{ fontSize: 13 }}>{repo.starsCount}</Text></span>
+            <span><ForkOutlined style={{ fontSize: 12 }} /> <Text style={{ fontSize: 13 }}>{repo.forksCount}</Text></span>
+            {repo.repoPushedAt && (() => {
+              const days = dayjs().diff(dayjs(repo.repoPushedAt), 'day')
+              let color = 'green'; if (days > 180) color = 'red'; else if (days > 30) color = 'orange'
+              return <Tag color={color} style={{ margin: 0, fontSize: 10 }}>未更新 {days} 天</Tag>
+            })()}
+            <Text type="secondary" style={{ fontSize: 11 }}>Star 于 {formatDate(repo.starredAt)}</Text>
+          </div>
+        </Col>
+      </Row>
+    </Card>
+  )
+}
+
 export default function CategoryDetail() {
   const { id } = useParams<{ id: string }>()
   const { message, modal } = App.useApp()
@@ -81,6 +125,7 @@ export default function CategoryDetail() {
   const [reclassifying, setReclassifying] = useState(false)
   const [loading, setLoading] = useState(false)
   const [reposLoading, setReposLoading] = useState(false)
+  const viewMode = (searchParams.get('view') || 'list') as 'grid' | 'list'
 
   // 分页数据
   const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({
@@ -327,6 +372,8 @@ export default function CategoryDetail() {
                     清除
                   </Button>
                 )}
+                <Segmented value={viewMode} onChange={(val) => setUrlParam('view', val === 'list' ? null : val as string, false)}
+                  options={[{ value: 'grid', icon: <AppstoreOutlined /> }, { value: 'list', icon: <UnorderedListOutlined /> }]} />
                 <Text type="secondary" style={{ lineHeight: '32px' }}>
                   共 {pageResult.total} 个仓库
                 </Text>
@@ -335,9 +382,13 @@ export default function CategoryDetail() {
           </Space>
         </Card>
 
-        {/* 仓库卡片网格 */}
         <Spin spinning={reposLoading}>
           {repos.length > 0 ? (
+            viewMode === 'list' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {repos.map(repo => <RepoRow key={repo.id} repo={repo} />)}
+              </div>
+            ) : (
             <>
               <Row gutter={[16, 16]}>
                 {repos.map((repo) => (
