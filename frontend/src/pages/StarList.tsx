@@ -491,22 +491,39 @@ export default function StarList() {
     } catch { message.error('导出MD失败') }
   }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder])
 
-  const handleCloneScript = useCallback(async () => {
-    const osType = navigator.platform.includes('Win') ? 'windows' : 'linux'
+  const [cloneTaskId, setCloneTaskId] = useState<string | null>(null)
+  const [cloneModalVisible, setCloneModalVisible] = useState(false)
+  const [cloneProgress, setCloneProgress] = useState<{ status: string; totalRepos: number; completedRepos: number; failedRepos: number; skippedRepos: number; results: { fullName: string; status: string; message: string }[] } | null>(null)
+  const clonePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const handleCloneExecute = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ osType, maxCount: '50' })
+      const params = new URLSearchParams({ maxCount: '50' })
       if (keyword) params.set('keyword', keyword)
       if (languageStr) params.set('language', languageStr)
       if (categoryIdsStr) params.set('categoryIds', categoryIdsStr)
-      const resp = await fetch(`/api/clone/script?${params.toString()}`)
-      const blob = await resp.blob()
-      const url = window.URL.createObjectURL(blob)
-      const ext = osType === 'windows' ? 'ps1' : 'sh'
-      const a = document.createElement('a'); a.href = url; a.download = `clone_${dayjs().format('YYYYMMDD_HHmmss')}.${ext}`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url)
-      message.success('Clone 脚本已下载')
-    } catch { message.error('生成脚本失败') }
+      const resp = await fetch('/api/clone/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(params)) })
+      const data = await resp.json()
+      if (data.success && data.taskId) {
+        setCloneTaskId(data.taskId)
+        setCloneProgress({ status: 'RUNNING', totalRepos: 0, completedRepos: 0, failedRepos: 0, skippedRepos: 0, results: [] })
+        setCloneModalVisible(true)
+        if (clonePollRef.current) clearInterval(clonePollRef.current)
+        clonePollRef.current = setInterval(async () => {
+          try {
+            const r = await fetch(`/api/clone/task/${data.taskId}`)
+            const p = await r.json()
+            if (p.success) {
+              setCloneProgress(p)
+              if (p.status === 'COMPLETED' && clonePollRef.current) clearInterval(clonePollRef.current)
+            }
+          } catch {}
+        }, 2000)
+      }
+    } catch { message.error('启动Clone失败') }
   }, [keyword, languageStr, categoryIdsStr])
+
+  const handleCloseCloneModal = () => { if (clonePollRef.current) clearInterval(clonePollRef.current); setCloneModalVisible(false); setCloneTaskId(null); setCloneProgress(null) }
 
   const languageSelectOptions = useMemo(() => languageOptions.map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })), [languageOptions])
   const categoryTreeData = useMemo(() => {
@@ -577,7 +594,7 @@ export default function StarList() {
                 <Button icon={<ReadOutlined />} loading={false} onClick={handleStartReadmeBatch}>批量README</Button>
                 <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze}>AI 分析</Button>
                 <Button icon={<DownloadOutlined />} onClick={handleExportMd}>导出MD</Button>
-                <Button icon={<DownloadOutlined />} onClick={handleCloneScript}>批量Clone</Button>
+                <Button icon={<DownloadOutlined />} onClick={handleCloneExecute}>批量Clone</Button>
                 <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport}>导出链接</Button>
               </div>
             </Col>
@@ -682,6 +699,36 @@ export default function StarList() {
             >
               {analyzeResult}
             </ReactMarkdown>
+          </div>
+        )}
+      </Modal>
+
+      {/* Clone 进度弹窗 */}
+      <Modal title="批量 Clone 进度" open={cloneModalVisible} onCancel={handleCloseCloneModal}
+        footer={<Button type="primary" onClick={handleCloseCloneModal}>关闭</Button>}
+        maskClosable={cloneProgress?.status === 'COMPLETED'}>
+        {cloneProgress && (
+          <div>
+            <div style={{ marginBottom: 16, display: 'flex', gap: 16, justifyContent: 'center' }}>
+              <span>总数: <Text strong>{cloneProgress.totalRepos}</Text></span>
+              <span style={{ color: '#52c41a' }}>成功: <Text strong>{cloneProgress.completedRepos}</Text></span>
+              <span style={{ color: '#faad14' }}>跳过: <Text strong>{cloneProgress.skippedRepos}</Text></span>
+              <span style={{ color: '#ff4d4f' }}>失败: <Text strong>{cloneProgress.failedRepos}</Text></span>
+            </div>
+            {cloneProgress.status !== 'COMPLETED' && <Spin tip="正在 Clone..." style={{ display: 'block', textAlign: 'center' }} />}
+            {cloneProgress.results.length > 0 && (
+              <div style={{ maxHeight: 400, overflow: 'auto' }}>
+                {cloneProgress.results.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, padding: '4px 0', borderBottom: '1px solid #f0f0f0', fontSize: 13 }}>
+                    <span style={{ minWidth: 60, color: r.status === 'CLONED' ? '#52c41a' : r.status === 'SKIPPED' ? '#faad14' : '#ff4d4f' }}>
+                      {r.status === 'CLONED' ? '✅ 已克隆' : r.status === 'SKIPPED' ? '⏭ 跳过' : '❌ 失败'}
+                    </span>
+                    <Text style={{ flex: 1 }}>{r.fullName}</Text>
+                    <Text type="secondary">{r.message}</Text>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </Modal>
