@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Card, Button, Table, Tag, Select, Input, Row, Col, Typography, Spin, App } from 'antd'
-import { GithubOutlined, RobotOutlined, ClearOutlined } from '@ant-design/icons'
+import { GithubOutlined, RobotOutlined, ClearOutlined, FilterOutlined } from '@ant-design/icons'
 import * as classifyApi from '../api/classify'
 import * as categoriesApi from '../api/categories'
 import type { GithubRepo } from '../types'
@@ -25,6 +25,8 @@ export default function Classify() {
   const [loading, setLoading] = useState(false)
   const [classifying, setClassifying] = useState(false)
   const [results, setResults] = useState<Record<string, GithubRepo[]>>({})
+  const [uncategorizedIds, setUncategorizedIds] = useState<Set<number>>(new Set())
+  const [showUncategorizedOnly, setShowUncategorizedOnly] = useState(false)
 
   const resultsRef = useRef<HTMLDivElement>(null)
 
@@ -49,6 +51,9 @@ export default function Classify() {
 
   useEffect(() => {
     fetchRepos()
+    categoriesApi.fetchUncategorizedRepos().then(repos => {
+      setUncategorizedIds(new Set(repos.map(r => r.id)))
+    }).catch(() => {})
   }, [])
 
   const languages = useMemo(() => {
@@ -61,6 +66,9 @@ export default function Classify() {
 
   const filteredRepos = useMemo(() => {
     let list = repos
+    if (showUncategorizedOnly) {
+      list = list.filter(r => uncategorizedIds.has(r.id))
+    }
     if (keyword) {
       const kw = keyword.toLowerCase()
       list = list.filter(
@@ -73,7 +81,7 @@ export default function Classify() {
       list = list.filter((r) => r.language === language)
     }
     return list
-  }, [repos, keyword, language])
+  }, [repos, keyword, language, showUncategorizedOnly, uncategorizedIds])
 
   const handleSelectAll = () => {
     setSelectedIds(filteredRepos.map((r) => r.id))
@@ -191,6 +199,22 @@ export default function Classify() {
               onChange={(e) => setKeyword(e.target.value)}
               onSearch={setKeyword}
             />
+          </Col>
+          <Col>
+            <Button
+              type={showUncategorizedOnly ? 'primary' : 'default'}
+              icon={<FilterOutlined />}
+              onClick={() => {
+                setShowUncategorizedOnly(!showUncategorizedOnly)
+                if (!showUncategorizedOnly) {
+                  // 开启时自动全选未分类仓库
+                  const ids = repos.filter(r => uncategorizedIds.has(r.id)).map(r => r.id)
+                  setSelectedIds(ids)
+                }
+              }}
+            >
+              仅未分类 ({uncategorizedIds.size})
+            </Button>
           </Col>
           <Col>
             <Button onClick={handleSelectAll}>全选</Button>
