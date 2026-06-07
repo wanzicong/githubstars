@@ -104,10 +104,10 @@ public class TranslateTaskService {
         // 查询全部仓库
         List<GithubRepo> allRepos = githubRepoService.findAll("", "");
 
-        // 统计需要翻译 README 的仓库
+        // 只翻译没有中文README的项目(readmeCn为空)
         List<Long> needReadme = new ArrayList<>();
         for (GithubRepo repo : allRepos) {
-            if (!Boolean.TRUE.equals(repo.getReadmeFetched())) {
+            if (repo.getReadmeCn() == null || repo.getReadmeCn().isEmpty()) {
                 needReadme.add(repo.getId());
             }
         }
