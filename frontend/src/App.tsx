@@ -13,6 +13,7 @@ import AuthorList from './pages/AuthorList'
 import AuthorDetail from './pages/AuthorDetail'
 import Settings from './pages/Settings'
 import GithubSearch from './pages/GithubSearch'
+import Trending from './pages/Trending'
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="/authors/:ownerName" element={<AuthorDetail />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/search" element={<GithubSearch />} />
+              <Route path="/trending" element={<Trending />} />
             </Route>
           </Routes>
         </BrowserRouter>
