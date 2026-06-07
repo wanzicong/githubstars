@@ -109,7 +109,18 @@ export default function CategoryDetail() {
     try {
       const data = await categoriesApi.fetchAllCategories()
       setAllCategories(data)
-      const current = data.find((c) => c.id === Number(id))
+      // 递归搜索树形结构(L1+children), 匹配任意层级的分类
+      const findInTree = (cats: typeof data): typeof data[0] | undefined => {
+        for (const cat of cats) {
+          if (cat.id === Number(id)) return cat
+          if (cat.children?.length > 0) {
+            const found = findInTree(cat.children)
+            if (found) return found
+          }
+        }
+        return undefined
+      }
+      const current = findInTree(data)
       if (current) setCategory(current)
     } catch {
       message.error('获取分类信息失败')
