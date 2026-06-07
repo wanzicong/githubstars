@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Card, Button, Table, Tag, Select, Input, Row, Col, Typography, Spin, App } from 'antd'
 import { GithubOutlined, RobotOutlined, ClearOutlined } from '@ant-design/icons'
 import * as classifyApi from '../api/classify'
+import * as categoriesApi from '../api/categories'
 import type { GithubRepo } from '../types'
 
 const { Title, Text } = Typography
@@ -80,6 +81,21 @@ export default function Classify() {
 
   const handleClearSelection = () => {
     setSelectedIds([])
+  }
+
+  const handleSmartClassify = async () => {
+    setClassifying(true)
+    setResults({})
+    try {
+      const res = await categoriesApi.smartClassify()
+      if (res.success) {
+        message.success(`智能分类完成！处理 ${res.totalProcessed || 0} 个项目，匹配现有分类 ${res.matchedExisting || 0} 个，新建 ${res.createdNew || 0} 个`)
+        fetchRepos()
+      } else {
+        message.info(res.message || '没有需要分类的仓库')
+      }
+    } catch { message.error('智能分类请求失败') }
+    finally { setClassifying(false) }
   }
 
   const handleClassify = async () => {
@@ -205,6 +221,15 @@ export default function Classify() {
               onClick={handleClassify}
             >
               开始 AI 分类
+            </Button>
+          </Col>
+          <Col>
+            <Button
+              icon={<RobotOutlined />}
+              onClick={handleSmartClassify}
+              loading={classifying}
+            >
+              智能分类(匹配现有)
             </Button>
           </Col>
         </Row>

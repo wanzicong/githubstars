@@ -354,6 +354,37 @@ public class CategoryService {
     }
 
     /**
+     * 智能分类保存：已有分类直接加入，新分类创建为L2
+     */
+    @Transactional
+    public void applySmartClassifyResult(Map<String, List<Long>> assignments) {
+        for (Map.Entry<String, List<Long>> entry : assignments.entrySet()) {
+            String categoryName = entry.getKey();
+            List<Long> repoIds = entry.getValue();
+            if (repoIds == null || repoIds.isEmpty()) continue;
+
+            // 查找已有分类
+            Category category = categoryMapper.selectOne(
+                new LambdaQueryWrapper<Category>().eq(Category::getName, categoryName));
+
+            if (category == null) {
+                // 创建新L2分类
+                category = create(categoryName, null, null);
+                category.setLevel(2);
+                categoryMapper.updateById(category);
+                log.info("创建新L2分类: {}", categoryName);
+            }
+
+            // 清除旧分类并添加新分类
+            for (Long repoId : repoIds) {
+                categoryMapper.deleteAllCategoriesByRepoId(repoId);
+            }
+            categoryMapper.batchInsertRepoCategory(repoIds, category.getId());
+        }
+        log.info("智能分类已保存: {} 个分类", assignments.size());
+    }
+
+    /**
      * 获取所有分类及其仓库（用于分类管理页面）
      */
     public List<Map<String, Object>> listAllWithRepos() {

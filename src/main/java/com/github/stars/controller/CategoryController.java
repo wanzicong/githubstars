@@ -290,4 +290,31 @@ public class CategoryController {
         }
         return result;
     }
+
+    /**
+     * 智能分类未归类的仓库（利用现有分类，优先匹配）
+     */
+    @PostMapping("/smart-classify")
+    public Map<String, Object> smartClassify(@RequestBody(required = false) Map<String, Object> body) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            List<GithubRepo> uncategorized = categoryService.getUncategorizedRepos();
+            if (uncategorized.isEmpty()) {
+                result.put("success", false);
+                result.put("message", "没有未分类的仓库");
+                return result;
+            }
+            // 每批最多15个，避免AI超时
+            List<Long> repoIds = uncategorized.stream().map(GithubRepo::getId).limit(15).collect(Collectors.toList());
+            Map<String, Object> classifyResult = aiClassifyService.smartClassify(repoIds);
+            result.putAll(classifyResult);
+            if (uncategorized.size() > 15) {
+                result.put("remaining", uncategorized.size() - 15);
+            }
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "智能分类失败: " + e.getMessage());
+        }
+        return result;
+    }
 }

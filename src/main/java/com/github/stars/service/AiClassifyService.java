@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.github.stars.entity.Category;
 import com.github.stars.entity.GithubRepo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,11 +36,102 @@ public class AiClassifyService {
     private SystemConfigService configService;
 
     /**
-     * 对指定仓库列表进行 AI 智能分类
-     *
-     * @param repoIds  仓库 ID 列表
-     * @param topN     期望的分类数量（上限）
-     * @return 分类结果 Map<类别名, List<仓库ID>>
+     * 智能分类：优先匹配现有分类，只对不匹配的创建新分类
+     * @param repoIds 未分类仓库ID列表
+     * @return 分类结果
+     */
+    public Map<String, Object> smartClassify(List<Long> repoIds) {
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        List<GithubRepo> repos = new ArrayList<>();
+        for (Long id : repoIds) {
+            GithubRepo repo = githubRepoService.findById(id);
+            if (repo != null) repos.add(repo);
+        }
+        if (repos.isEmpty()) {
+            result.put("success", false);
+            result.put("message", "没有需要分类的仓库");
+            return result;
+        }
+
+        // 获取所有现有L2分类
+        List<Category> existingCategories = categoryService.listAll();
+        Map<String, Long> categoryNameToId = new LinkedHashMap<>();
+        for (Category cat : existingCategories) {
+            if (cat.getLevel() != null && cat.getLevel() == 2) {
+                categoryNameToId.put(cat.getName(), cat.getId());
+            }
+        }
+
+        String prompt = buildSmartPrompt(repos, new ArrayList<>(categoryNameToId.keySet()));
+        String aiResponse = callDeepSeek(prompt);
+
+        Map<String, List<Long>> assignments = parseSmartResponse(aiResponse, repos, categoryNameToId);
+
+        if (assignments != null && !assignments.isEmpty()) {
+            try {
+                categoryService.applySmartClassifyResult(assignments);
+                result.put("categories", assignments);
+                result.put("matchedExisting", countExistingMatches(assignments, categoryNameToId));
+                result.put("createdNew", assignments.size() - countExistingMatches(assignments, categoryNameToId));
+            } catch (Exception e) {
+                log.error("保存分类结果失败", e);
+                result.put("message", "保存失败: " + e.getMessage());
+            }
+        }
+
+        result.put("success", true);
+        result.put("totalProcessed", repos.size());
+        return result;
+    }
+
+    private int countExistingMatches(Map<String, List<Long>> assignments, Map<String, Long> existing) {
+        int count = 0;
+        for (String name : assignments.keySet()) {
+            if (existing.containsKey(name)) count++;
+        }
+        return count;
+    }
+
+    private String buildSmartPrompt(List<GithubRepo> repos, List<String> existingCategoryNames) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是一位资深的技术分类专家。请将以下未分类的 GitHub 项目归类。\n\n");
+
+        if (!existingCategoryNames.isEmpty()) {
+            sb.append("## 现有分类（优先匹配）\n");
+            sb.append("以下是已有的分类列表，如果项目符合某个分类，请直接使用该分类名称，不要创建重复分类：\n\n");
+            for (String name : existingCategoryNames) {
+                sb.append("- ").append(name).append("\n");
+            }
+            sb.append("\n**重要：优先将项目归入现有分类。只有当前分类都不匹配时，才创建新分类。**\n\n");
+        }
+
+        sb.append("## 待分类项目\n");
+        for (int i = 0; i < repos.size(); i++) {
+            GithubRepo repo = repos.get(i);
+            sb.append("[").append(i).append("] ").append(repo.getRepoName());
+            sb.append(" | 语言: ").append(repo.getLanguage() != null ? repo.getLanguage() : "未知");
+            String desc = repo.getDescriptionCn() != null ? repo.getDescriptionCn() : repo.getDescription();
+            if (desc != null && !desc.isEmpty()) {
+                sb.append(" | ").append(desc.length() > 150 ? desc.substring(0, 150) + "..." : desc);
+            }
+            sb.append("\n");
+        }
+
+        sb.append("\n返回 JSON 格式：{\"分类名1\": [序号], \"分类名2\": [序号]}\n");
+        sb.append("每个项目只能归入一个分类。分类名尽量使用现有分类名。不要输出任何其他内容。");
+        return sb.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, List<Long>> parseSmartResponse(String jsonResponse, List<GithubRepo> repos,
+                                                        Map<String, Long> existingCategories) {
+        // 复用原有的解析逻辑
+        return parseResponse(jsonResponse, repos);
+    }
+
+    /**
+     * 对指定仓库列表进行 AI 智能分类（原方法，创建新分类）
      */
     public Map<String, Object> classify(List<Long> repoIds, int topN) {
         Map<String, Object> result = new LinkedHashMap<>();

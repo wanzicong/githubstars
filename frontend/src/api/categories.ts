@@ -93,3 +93,9 @@ export async function reclassifyCategory(categoryId: number, topN: number = 8): 
   const { data } = await api.post<ApiResponse>(`/categories/${categoryId}/reclassify`, { topN })
   return data
 }
+
+/** 智能分类：对未归类仓库优先匹配现有分类 */
+export async function smartClassify(): Promise<ApiResponse & { totalProcessed?: number; matchedExisting?: number; createdNew?: number }> {
+  const { data } = await api.post('/categories/smart-classify')
+  return data
+}
