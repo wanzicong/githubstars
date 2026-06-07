@@ -55,7 +55,17 @@ public class CategoryService {
                 roots.add(c); // L1 或未归属的 L2 都作为根节点
             }
         }
-        // 按仓库数量从大到小排序（一级分类）
+        // 一级分类的仓库数量 = 自身 + 所有子分类的仓库数之和
+        for (Category root : roots) {
+            int total = root.getRepoCount() != null ? root.getRepoCount() : 0;
+            if (root.getChildren() != null) {
+                for (Category child : root.getChildren()) {
+                    total += child.getRepoCount() != null ? child.getRepoCount() : 0;
+                }
+            }
+            root.setRepoCount(total);
+        }
+        // 按总仓库数量从大到小排序
         roots.sort((a, b) -> Integer.compare(
                 b.getRepoCount() == null ? 0 : b.getRepoCount(),
                 a.getRepoCount() == null ? 0 : a.getRepoCount()));
