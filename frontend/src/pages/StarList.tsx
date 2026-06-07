@@ -495,17 +495,15 @@ export default function StarList() {
     const result: { label: string; value: string }[] = []
     const flatten = (cats: Category[]) => {
       for (const cat of cats) {
-        const name = `${cat.name} (${cat.repoCount})`
         if (cat.level === 1) {
-          result.push({ label: '📁 ' + name, value: String(cat.id) })
+          result.push({ label: '📁 ' + cat.name + ' (' + cat.repoCount + ')', value: String(cat.id) })
           if (cat.children && cat.children.length > 0) {
             for (const child of cat.children) {
               result.push({ label: '    📂 ' + child.name + ' (' + child.repoCount + ')', value: String(child.id) })
             }
           }
         } else if (!cat.parentId) {
-          // 未归属的L2(应该很少)
-          result.push({ label: '📂 ' + name, value: String(cat.id) })
+          result.push({ label: '📂 ' + cat.name + ' (' + cat.repoCount + ')', value: String(cat.id) })
         }
       }
     }
@@ -537,7 +535,7 @@ export default function StarList() {
         </Row>
       </Spin>
 
-      <Card style={{ marginBottom: 20, overflow: 'hidden' }}>
+      <Card style={{ marginBottom: 20 }}>
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <Row gutter={[8, 12]} align="middle" style={{ flexWrap: 'wrap' }}>
             <Col xs={24} sm={12} md={8} lg={6}>
