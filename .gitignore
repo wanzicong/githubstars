@@ -25,3 +25,19 @@ frontend/dist/
 
 # Claude Code
 .code-index/
+
+# Database exports
+githubstars_backup.sql
+githubstars_full_export.sql
+
+# Desktop (Electron app)
+githubstars-desktop/node_modules/
+githubstars-desktop/frontend/node_modules/
+githubstars-desktop/dist/
+githubstars-desktop/dist-electron/
+githubstars-desktop/frontend/dist/
+githubstars-desktop/frontend/.vite/
+githubstars-desktop/githubstars.db
+githubstars-desktop/*.log
+githubstars-desktop/frontend/*.log
+githubstars-desktop/.vite/

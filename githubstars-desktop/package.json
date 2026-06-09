@@ -1,0 +1,86 @@
+{
+  "name": "githubstars-desktop",
+  "version": "1.0.0",
+  "description": "GitHub Stars 管理系统 - Windows 桌面端",
+  "main": "dist-electron/main.js",
+  "author": "wanzicong",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server-standalone\" \"npm run dev:frontend\"",
+    "dev:full": "concurrently \"npm run dev:server-standalone\" \"npm run dev:frontend\" \"wait-on http://localhost:5173 && npm run dev:electron\"",
+    "dev:server-standalone": "tsx watch electron/server/index-standalone.ts",
+    "dev:frontend": "cd frontend && npx vite --port 5173",
+    "dev:electron": "tsx electron/dev-runner.ts",
+    "generate:icon": "node scripts/generate-icon.js",
+    "build:frontend": "cd frontend && npx vite build",
+    "build:electron": "tsc -p tsconfig.json",
+    "build": "npm run generate:icon && npm run build:electron && npm run build:frontend && electron-builder --win",
+    "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "express": "^4.21.0",
+    "knex": "^3.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.0",
+    "electron-rebuild": "^3.2.9",
+    "sharp": "^0.34.5",
+    "to-ico": "^1.1.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "wait-on": "^8.0.0"
+  },
+  "build": {
+    "appId": "com.githubstars.desktop",
+    "productName": "GitHub Stars 管理系统",
+    "directories": {
+      "output": "dist",
+      "buildResources": "resources"
+    },
+    "forceCodeSigning": false,
+    "files": [
+      "dist-electron/**/*",
+      "frontend/dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "resources/icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName} ${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName} ${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "GitHub Stars"
+    },
+    "extraResources": [
+      {
+        "from": "node_modules/better-sqlite3/build",
+        "to": "./node_modules/better-sqlite3/build",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  }
+}
