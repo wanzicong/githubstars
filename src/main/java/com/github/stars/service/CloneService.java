@@ -241,6 +241,83 @@ public class CloneService {
     }
 
     /**
+     * 重试失败项（同步方法，为每个失败项执行 git clone）
+     */
+    @Async("cloneExecutor")
+    public void retryFailedClones(String taskId) {
+        CloneTask task = cloneTaskService.getTaskByTaskId(taskId);
+        if (task == null) {
+            log.error("Retry failed: task {} not found", taskId);
+            return;
+        }
+        if (!"COMPLETED".equals(task.getStatus()) && !"FAILED".equals(task.getStatus())) {
+            log.warn("Retry failed: task {} is still running, cannot retry", taskId);
+            return;
+        }
+
+        List<CloneTaskItem> failedItems = cloneTaskService.getFailedItemsByTaskId(taskId);
+        if (failedItems.isEmpty()) {
+            log.info("Retry failed: task {} has no failed items", taskId);
+            return;
+        }
+
+        File dir = new File(task.getTargetDir());
+        if (!dir.exists()) {
+            log.error("Retry failed: target dir {} not found", task.getTargetDir());
+            return;
+        }
+
+        // 用 CompletableFuture 并发重试
+        int concurrency = Math.min(task.getConcurrency() != null && task.getConcurrency() > 0
+                ? task.getConcurrency() : 5, failedItems.size());
+        ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+
+        for (CloneTaskItem item : failedItems) {
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                CloneResult result;
+                try {
+                    String repoName = item.getFullName().contains("/")
+                            ? item.getFullName().substring(item.getFullName().lastIndexOf('/') + 1)
+                            : item.getFullName();
+                    String htmlUrl = "https://github.com/" + item.getFullName();
+                    result = doClone(item.getFullName(), repoName, dir, htmlUrl);
+                } catch (Exception e) {
+                    result = new CloneResult();
+                    result.setFullName(item.getFullName());
+                    result.setStatus("FAILED");
+                    result.setMessage(e.getMessage());
+                }
+
+                // 更新 DB
+                item.setStatus(result.getStatus());
+                item.setMessage(result.getMessage());
+                cloneTaskService.updateItem(item);
+
+                log.info("Retry {}: {} -> {}", item.getFullName(), result.getStatus(), result.getMessage());
+            }, executor);
+            futures.add(future);
+        }
+
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        executor.shutdown();
+
+        // 更新任务计数
+        int completed = cloneTaskService.countItemsByTaskIdAndStatus(taskId, "CLONED");
+        int failed = cloneTaskService.countItemsByTaskIdAndStatus(taskId, "FAILED");
+        int skipped = cloneTaskService.countItemsByTaskIdAndStatus(taskId, "SKIPPED");
+        task.setCompletedRepos(completed);
+        task.setFailedRepos(failed);
+        task.setSkippedRepos(skipped);
+        task.setStatus(completed > 0 && failed == 0 ? "COMPLETED" : task.getStatus());
+        task.setFinishedAt(LocalDateTime.now());
+        cloneTaskService.updateTask(task);
+
+        log.info("Retry task {} done: success={}, failed={}, skipped={}",
+                taskId, completed, failed, skipped);
+    }
+
+    /**
      * 异步执行批量 Clone（由 cloneExecutor 线程池调度）
      */
     @Async("cloneExecutor")

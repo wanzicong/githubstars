@@ -3,12 +3,14 @@ package com.github.stars.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.github.stars.entity.CloneTask;
 import com.github.stars.entity.CloneTaskItem;
+import com.github.stars.service.CloneService;
 import com.github.stars.service.CloneTaskService;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -20,6 +22,9 @@ public class CloneTaskController {
 
     @Resource
     private CloneTaskService cloneTaskService;
+
+    @Resource
+    private CloneService cloneService;
 
     /**
      * 分页查询所有 Clone 任务
@@ -84,6 +89,41 @@ public class CloneTaskController {
         result.put("size", itemPage.getSize());
         result.put("current", itemPage.getCurrent());
         result.put("pages", itemPage.getPages());
+        return result;
+    }
+
+    /**
+     * 重试失败项
+     */
+    @PostMapping("/{taskId}/retry")
+    public Map<String, Object> retryTask(@PathVariable String taskId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            CloneTask task = cloneTaskService.getTaskByTaskId(taskId);
+            if (task == null) {
+                result.put("success", false);
+                result.put("message", "任务不存在");
+                return result;
+            }
+            if ("RUNNING".equals(task.getStatus()) || "PENDING".equals(task.getStatus())) {
+                result.put("success", false);
+                result.put("message", "任务正在执行中，无法重试");
+                return result;
+            }
+            List<CloneTaskItem> failedItems = cloneTaskService.getFailedItemsByTaskId(taskId);
+            if (failedItems.isEmpty()) {
+                result.put("success", false);
+                result.put("message", "没有需要重试的失败项");
+                return result;
+            }
+            cloneService.retryFailedClones(taskId);
+            result.put("success", true);
+            result.put("message", "已开始重试 " + failedItems.size() + " 个失败项");
+            result.put("retryCount", failedItems.size());
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "重试失败: " + e.getMessage());
+        }
         return result;
     }
 

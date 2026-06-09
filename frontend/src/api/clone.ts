@@ -69,3 +69,8 @@ export async function deleteCloneTask(taskId: string): Promise<{ success: boolea
   const { data } = await api.delete(`/api/clone/tasks/${taskId}`)
   return data
 }
+
+export async function retryCloneTask(taskId: string): Promise<{ success: boolean; message?: string; retryCount?: number }> {
+  const { data } = await api.post(`/api/clone/tasks/${taskId}/retry`)
+  return data
+}

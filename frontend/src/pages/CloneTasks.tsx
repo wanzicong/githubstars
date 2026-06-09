@@ -11,7 +11,7 @@ import {
   Spin,
   Typography,
 } from 'antd'
-import { DeleteOutlined, ArrowLeftOutlined } from '@ant-design/icons'
+import { DeleteOutlined, ArrowLeftOutlined, ReloadOutlined, RedoOutlined } from '@ant-design/icons'
 import * as cloneApi from '../api/clone'
 import type { CloneTaskRecord } from '../types'
 import dayjs from '../setupDayjs'
@@ -109,6 +109,24 @@ export default function CloneTasks() {
     }
   }, [fetchData, currentPage, pageSize])
 
+  const handleRetry = useCallback(async (taskId: string) => {
+    try {
+      const res = await cloneApi.retryCloneTask(taskId)
+      if (res.success) {
+        message.success(res.message || '重试已启动')
+        fetchData(currentPage, pageSize)
+      } else {
+        message.warning(res.message || '重试失败')
+      }
+    } catch {
+      message.error('重试请求失败')
+    }
+  }, [fetchData, currentPage, pageSize])
+
+  const handleRefresh = useCallback(() => {
+    fetchData(currentPage, pageSize)
+  }, [fetchData, currentPage, pageSize])
+
   const columns = [
     {
       title: '任务 ID',
@@ -184,26 +202,38 @@ export default function CloneTasks() {
     {
       title: '操作',
       key: 'action',
-      width: 80,
+      width: 160,
       render: (_: unknown, record: CloneTaskRecord) => (
         <div onClick={(e) => e.stopPropagation()}>
-          <Popconfirm
-            title="确认删除"
-            description="删除后将无法恢复，确定要删除此任务记录吗？"
-            onConfirm={() => handleDelete(record.taskId)}
-            okText="删除"
-            cancelText="取消"
-          >
-            <Button
-              type="link"
-              danger
-              size="small"
-              icon={<DeleteOutlined />}
-              loading={deleting === record.taskId}
+          <Space size="small">
+            {record.failedRepos > 0 && (record.status === 'COMPLETED' || record.status === 'FAILED') && (
+              <Button
+                type="link"
+                size="small"
+                icon={<RedoOutlined />}
+                onClick={() => handleRetry(record.taskId)}
+              >
+                重试
+              </Button>
+            )}
+            <Popconfirm
+              title="确认删除"
+              description="删除后将无法恢复，确定要删除此任务记录吗？"
+              onConfirm={() => handleDelete(record.taskId)}
+              okText="删除"
+              cancelText="取消"
             >
-              删除
-            </Button>
-          </Popconfirm>
+              <Button
+                type="link"
+                danger
+                size="small"
+                icon={<DeleteOutlined />}
+                loading={deleting === record.taskId}
+              >
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
         </div>
       ),
     },
@@ -214,6 +244,9 @@ export default function CloneTasks() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <Title level={3} style={{ margin: 0 }}>克隆任务管理</Title>
         <Space>
+          <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={listLoading}>
+            刷新
+          </Button>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/')}>
             返回列表
           </Button>

@@ -9,6 +9,7 @@ import com.github.stars.mapper.CloneTaskMapper;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.List;
 
 /**
  * Clone 任务持久化服务
@@ -111,5 +112,42 @@ public class CloneTaskService {
         LambdaQueryWrapper<CloneTask> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(CloneTask::getStatus, status);
         return cloneTaskMapper.selectCount(wrapper);
+    }
+
+    /**
+     * 查询某任务的所有失败项
+     */
+    public List<CloneTaskItem> getFailedItemsByTaskId(String taskId) {
+        LambdaQueryWrapper<CloneTaskItem> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(CloneTaskItem::getTaskId, taskId)
+               .eq(CloneTaskItem::getStatus, "FAILED");
+        return cloneTaskItemMapper.selectList(wrapper);
+    }
+
+    /**
+     * 更新单项状态
+     */
+    public void updateItem(CloneTaskItem item) {
+        cloneTaskItemMapper.updateById(item);
+    }
+
+    /**
+     * 按 taskId 和 fullName 查询单项
+     */
+    public CloneTaskItem getItemByTaskIdAndFullName(String taskId, String fullName) {
+        LambdaQueryWrapper<CloneTaskItem> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(CloneTaskItem::getTaskId, taskId)
+               .eq(CloneTaskItem::getFullName, fullName);
+        return cloneTaskItemMapper.selectOne(wrapper);
+    }
+
+    /**
+     * 按 taskId 和 status 统计项数
+     */
+    public int countItemsByTaskIdAndStatus(String taskId, String status) {
+        LambdaQueryWrapper<CloneTaskItem> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(CloneTaskItem::getTaskId, taskId)
+               .eq(CloneTaskItem::getStatus, status);
+        return cloneTaskItemMapper.selectCount(wrapper).intValue();
     }
 }
