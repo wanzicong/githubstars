@@ -277,15 +277,17 @@ export default function StarList() {
     }
     const preset = TIME_PRESETS.find(p => p.value === normalized)
     if (!preset) return
+    // 保留用户已选的时间字段，不覆盖；未选时默认 starred_at
+    const effectiveField = dateField || 'starred_at'
     if (preset.value === 'today') {
       const today = dayjs().format('YYYY-MM-DD')
-      setUrlParams({ timePreset: normalized, dateField: 'starred_at', startDate: today, endDate: today })
+      setUrlParams({ timePreset: normalized, dateField: effectiveField, startDate: today, endDate: today })
     } else if (preset.days > 0) {
       const start = dayjs().subtract(preset.days, 'day').format('YYYY-MM-DD')
       const end = dayjs().format('YYYY-MM-DD')
-      setUrlParams({ timePreset: normalized, dateField: 'starred_at', startDate: start, endDate: end })
+      setUrlParams({ timePreset: normalized, dateField: effectiveField, startDate: start, endDate: end })
     }
-  }, [setUrlParams])
+  }, [dateField, setUrlParams])
 
   const handleDateFieldChange = useCallback((val: string | undefined) => {
     if (!val) {

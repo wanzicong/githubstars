@@ -252,16 +252,18 @@ export default function StarList() {
     }
     const preset = TIME_PRESETS.find(p => p.value === value)
     if (!preset) return
+    // 保留用户已选的时间字段，不覆盖；未选时默认 starred_at
+    const effectiveField = dateField || 'starred_at'
     if (preset.value === 'today') {
       const today = dayjs().format('YYYY-MM-DD')
       setStartDateState(dayjs(today)); setEndDateState(dayjs(today))
-      setUrlParams({ timePreset: value, dateField: 'starred_at', startDate: today, endDate: today })
+      setUrlParams({ timePreset: value, dateField: effectiveField, startDate: today, endDate: today })
     } else if (preset.days > 0) {
       const start = dayjs().subtract(preset.days, 'day').format('YYYY-MM-DD')
       setStartDateState(dayjs(start)); setEndDateState(null)
-      setUrlParams({ timePreset: value, dateField: 'starred_at', startDate: start, endDate: null })
+      setUrlParams({ timePreset: value, dateField: effectiveField, startDate: start, endDate: null })
     }
-  }, [setUrlParams])
+  }, [dateField, setUrlParams])
 
   const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({ records: [], total: 0, size: 12, current: 1, pages: 0 })
   const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
