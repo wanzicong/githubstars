@@ -60,3 +60,46 @@ CREATE TABLE IF NOT EXISTS `sync_log` (
     KEY `idx_status` (`status`),
     KEY `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='同步日志表';
+
+-- Clone任务表
+CREATE TABLE IF NOT EXISTS `clone_task` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `task_id` VARCHAR(64) NOT NULL COMMENT '任务唯一标识',
+    `status` VARCHAR(32) DEFAULT 'PENDING' COMMENT '任务状态：PENDING/RUNNING/COMPLETED/FAILED',
+    `total_repos` INT DEFAULT 0 COMMENT '总仓库数',
+    `completed_repos` INT DEFAULT 0 COMMENT '已完成数',
+    `failed_repos` INT DEFAULT 0 COMMENT '失败数',
+    `skipped_repos` INT DEFAULT 0 COMMENT '跳过数',
+    `error_message` TEXT DEFAULT NULL COMMENT '错误信息',
+    `keyword` VARCHAR(255) DEFAULT NULL COMMENT '筛选关键词',
+    `language` VARCHAR(255) DEFAULT NULL COMMENT '筛选语言',
+    `category_ids` VARCHAR(255) DEFAULT NULL COMMENT '筛选分类ID列表',
+    `date_field` VARCHAR(64) DEFAULT NULL COMMENT '时间筛选字段',
+    `start_date` VARCHAR(16) DEFAULT NULL COMMENT '开始日期',
+    `end_date` VARCHAR(16) DEFAULT NULL COMMENT '结束日期',
+    `sort_by` VARCHAR(64) DEFAULT NULL COMMENT '排序字段',
+    `sort_order` VARCHAR(16) DEFAULT NULL COMMENT '排序方向',
+    `sub_directory` VARCHAR(255) DEFAULT NULL COMMENT '子目录',
+    `target_dir` VARCHAR(500) DEFAULT NULL COMMENT '目标目录',
+    `concurrency` INT DEFAULT 5 COMMENT '并发数',
+    `started_at` DATETIME DEFAULT NULL COMMENT '开始时间',
+    `finished_at` DATETIME DEFAULT NULL COMMENT '完成时间',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_task_id` (`task_id`),
+    KEY `idx_status` (`status`),
+    KEY `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Clone任务表';
+
+-- Clone任务项表
+CREATE TABLE IF NOT EXISTS `clone_task_item` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `task_id` VARCHAR(64) NOT NULL COMMENT '关联任务ID',
+    `full_name` VARCHAR(500) NOT NULL COMMENT '仓库全名（owner/repo）',
+    `status` VARCHAR(32) NOT NULL COMMENT '克隆状态：CLONED/FAILED/SKIPPED',
+    `message` TEXT DEFAULT NULL COMMENT '状态信息',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_task_id` (`task_id`),
+    KEY `idx_full_name` (`full_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Clone任务项表';

@@ -1,5 +1,6 @@
 package com.github.stars.controller;
 
+import com.github.stars.entity.CloneTask;
 import com.github.stars.entity.GithubRepo;
 import com.github.stars.service.CloneService;
 import com.github.stars.service.GithubRepoService;
@@ -45,14 +46,21 @@ public class CloneController {
             @RequestParam(value = "language", defaultValue = "") String language,
             @RequestParam(value = "categoryIds", defaultValue = "") String categoryIds,
             @RequestParam(value = "maxCount", defaultValue = "50") int maxCount,
-            @RequestParam(value = "subDirectory", defaultValue = "") String subDirectory) {
+            @RequestParam(value = "subDirectory", defaultValue = "") String subDirectory,
+            @RequestParam(value = "dateField", defaultValue = "") String dateField,
+            @RequestParam(value = "startDate", defaultValue = "") String startDate,
+            @RequestParam(value = "endDate", defaultValue = "") String endDate,
+            @RequestParam(value = "sortBy", defaultValue = "starred_at") String sortBy,
+            @RequestParam(value = "sortOrder", defaultValue = "desc") String sortOrder,
+            @RequestParam(value = "concurrency", defaultValue = "5") int concurrency) {
         Map<String, Object> result = new LinkedHashMap<>();
         try {
-            String taskId = cloneService.startBatchClone(keyword, language, categoryIds, maxCount, subDirectory);
+            String taskId = cloneService.startBatchClone(keyword, language, categoryIds, maxCount, subDirectory,
+                    dateField, startDate, endDate, sortBy, sortOrder, concurrency);
             result.put("success", true);
             result.put("taskId", taskId);
             result.put("targetDirectory", cloneService.resolveCloneDirectory(subDirectory).getAbsolutePath());
-            result.put("message", "Clone 任务已启动（最多5个并发）");
+            result.put("message", "Clone 任务已启动（最多" + concurrency + "个并发）");
         } catch (IllegalArgumentException | IllegalStateException e) {
             result.put("success", false);
             result.put("message", e.getMessage());
@@ -63,21 +71,21 @@ public class CloneController {
     @GetMapping("/task/{taskId}")
     public Map<String, Object> getTaskProgress(@PathVariable String taskId) {
         Map<String, Object> result = new LinkedHashMap<>();
-        CloneService.CloneTask task = cloneService.getTask(taskId);
+        CloneTask task = cloneService.getTask(taskId);
         if (task == null) {
             result.put("success", false);
             result.put("message", "任务不存在");
             return result;
         }
         result.put("success", true);
-        result.put("taskId", task.taskId);
-        result.put("status", task.status);
-        result.put("errorMessage", task.errorMessage);
-        result.put("totalRepos", task.totalRepos);
-        result.put("completedRepos", task.completedRepos);
-        result.put("failedRepos", task.failedRepos);
-        result.put("skippedRepos", task.skippedRepos);
-        result.put("results", task.results);
+        result.put("taskId", task.getTaskId());
+        result.put("status", task.getStatus());
+        result.put("errorMessage", task.getErrorMessage());
+        result.put("totalRepos", task.getTotalRepos());
+        result.put("completedRepos", task.getCompletedRepos());
+        result.put("failedRepos", task.getFailedRepos());
+        result.put("skippedRepos", task.getSkippedRepos());
+        result.put("results", task.getResults() != null ? task.getResults() : Collections.emptyList());
         return result;
     }
 

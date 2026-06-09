@@ -12,6 +12,7 @@ import {
   SettingOutlined,
   SearchOutlined,
   FireOutlined,
+  CloudDownloadOutlined,
 } from '@ant-design/icons'
 
 const { Header, Content, Footer } = Layout
@@ -24,6 +25,7 @@ const navItems = [
   { key: '/ai/classify', icon: <ThunderboltOutlined />, label: 'AI分类' },
   { key: '/categories', icon: <AppstoreOutlined />, label: '分类管理' },
   { key: '/authors', icon: <UserOutlined />, label: '作者中心' },
+  { key: '/clone-tasks', icon: <CloudDownloadOutlined />, label: '克隆管理' },
   { key: '/settings', icon: <SettingOutlined />, label: '系统配置' },
   { key: '/search', icon: <SearchOutlined />, label: 'GitHub搜索' },
   { key: '/trending', icon: <FireOutlined />, label: '趋势排行' },

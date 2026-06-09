@@ -14,6 +14,8 @@ import AuthorDetail from './pages/AuthorDetail'
 import Settings from './pages/Settings'
 import GithubSearch from './pages/GithubSearch'
 import Trending from './pages/Trending'
+import CloneTasks from './pages/CloneTasks'
+import CloneTaskDetail from './pages/CloneTaskDetail'
 
 export default function App() {
   return (
@@ -42,6 +44,8 @@ export default function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/search" element={<GithubSearch />} />
               <Route path="/trending" element={<Trending />} />
+              <Route path="/clone-tasks" element={<CloneTasks />} />
+              <Route path="/clone-tasks/:taskId" element={<CloneTaskDetail />} />
             </Route>
           </Routes>
         </BrowserRouter>

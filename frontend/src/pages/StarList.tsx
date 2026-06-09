@@ -24,6 +24,7 @@ import {
   Alert,
   Segmented,
   AutoComplete,
+  InputNumber,
 } from 'antd'
 import {
   SearchOutlined,
@@ -567,6 +568,7 @@ export default function StarList() {
   const [cloneTargetDir, setCloneTargetDir] = useState('')
   const [cloneSubDirError, setCloneSubDirError] = useState('')
   const [cloneProgress, setCloneProgress] = useState<{ status: string; errorMessage?: string; totalRepos: number; completedRepos: number; failedRepos: number; skippedRepos: number; results: { fullName: string; status: string; message: string }[] } | null>(null)
+  const [cloneConcurrency, setCloneConcurrency] = useState(5)
   const clonePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const clonePollFailCountRef = useRef(0)
 
@@ -606,6 +608,21 @@ export default function StarList() {
       return
     }
 
+    const totalCount = pageResult.total
+    if (totalCount > 200) {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: '项目数量较多，确认克隆吗？',
+          content: `当前筛选结果共 ${totalCount} 个项目，并发数 ${cloneConcurrency}。克隆大量项目可能占用较多磁盘空间和网络带宽。`,
+          okText: '确认克隆',
+          cancelText: '不克隆',
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        })
+      })
+      if (!confirmed) return
+    }
+
     setCloneStarting(true)
     setCloneSubDirError('')
     try {
@@ -613,8 +630,14 @@ export default function StarList() {
         keyword: keyword || undefined,
         language: languageStr || undefined,
         categoryIds: categoryIdsStr || undefined,
-        maxCount: 50,
+        maxCount: totalCount,
         subDirectory: cloneSubDir.trim() || undefined,
+        dateField: dateField || undefined,
+        startDate: startDateStr || undefined,
+        endDate: endDateStr || undefined,
+        sortBy: sortBy || undefined,
+        sortOrder: sortOrder || undefined,
+        concurrency: cloneConcurrency,
       })
       if (!data.success) {
         message.error(data.message || '启动 Clone 失败')
@@ -653,7 +676,7 @@ export default function StarList() {
     } finally {
       setCloneStarting(false)
     }
-  }, [keyword, languageStr, categoryIdsStr, cloneSubDir])
+  }, [keyword, languageStr, categoryIdsStr, cloneSubDir, dateField, startDateStr, endDateStr, sortBy, sortOrder, cloneConcurrency, pageResult.total])
 
   const handleCloseCloneModal = () => {
     if (clonePollRef.current) clearInterval(clonePollRef.current)
@@ -928,6 +951,31 @@ export default function StarList() {
             <div style={{ marginTop: 8, padding: '8px 12px', background: '#f5f5f5', borderRadius: 6, wordBreak: 'break-all' }}>
               {cloneBaseDir || '-'}
             </div>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <Alert
+              type="info"
+              showIcon
+              message={
+                <span>
+                  当前筛选结果：<Text strong>{pageResult.total}</Text> 个项目
+                  {pageResult.total > 200 && (
+                    <Tag color="warning" style={{ marginLeft: 8 }}>数量较多</Tag>
+                  )}
+                </span>
+              }
+            />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <Text>并发克隆数</Text>
+            <InputNumber
+              min={1}
+              max={20}
+              value={cloneConcurrency}
+              onChange={(val) => setCloneConcurrency(val ?? 5)}
+              addonAfter="个同时克隆"
+              style={{ width: '100%', marginTop: 8 }}
+            />
           </div>
           <div style={{ marginBottom: 16 }}>
             <Text>子目录</Text>

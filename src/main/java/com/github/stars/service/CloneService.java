@@ -1,28 +1,38 @@
 package com.github.stars.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.stars.entity.CloneResult;
+import com.github.stars.entity.CloneTask;
+import com.github.stars.entity.CloneTaskItem;
 import com.github.stars.entity.GithubRepo;
+import com.github.stars.mapper.CloneTaskItemMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.io.File;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 /**
- * 批量 Clone 服务 - 后台异步执行 git clone
+ * 批量 Clone 服务 - 后台异步执行 git clone，持久化任务进度到数据库
  */
 @Service
 public class CloneService {
 
     private static final Logger log = LoggerFactory.getLogger(CloneService.class);
-    private static final int MAX_CONCURRENT = 5;
     private static final int MAX_SUBDIRECTORY_HISTORY = 20;
     private static final String HISTORY_KEY = "clone.subdirectory.history";
     private static final String LAST_SUBDIRECTORY_KEY = "clone.subdirectory.last";
@@ -39,30 +49,23 @@ public class CloneService {
     @Resource
     private SystemConfigService configService;
 
+    @Resource
+    private CloneTaskService cloneTaskService;
+
+    @Resource
+    private CloneTaskItemMapper cloneTaskItemMapper;
+
+    @Resource
+    private ApplicationContext applicationContext;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Object historyLock = new Object();
-
-    private final Map<String, CloneTask> tasks = new ConcurrentHashMap<>();
     private final AtomicInteger taskCounter = new AtomicInteger(0);
-    private volatile String activeTaskId;
 
-    public static class CloneTask {
-        public String taskId;
-        public String status; // PENDING, RUNNING, COMPLETED, FAILED
-        public String errorMessage;
-        public int totalRepos;
-        public int completedRepos;
-        public int failedRepos;
-        public int skippedRepos;
-        public List<CloneResult> results;
-        public CloneTask() { results = Collections.synchronizedList(new ArrayList<>()); }
-    }
+    /** 运行中任务的实时进度缓存（key=taskId），完成后移除 */
+    private final ConcurrentHashMap<String, CloneTask> runningTaskCache = new ConcurrentHashMap<>();
 
-    public static class CloneResult {
-        public String fullName;
-        public String status; // CLONED, FAILED, SKIPPED
-        public String message;
-    }
+    // ======================== 目录 / 配置方法 ========================
 
     public String getBaseDirectory() {
         return configService.getValue("clone.directory", "D:/github-stars");
@@ -83,12 +86,11 @@ public class CloneService {
         return configService.getValue(LAST_SUBDIRECTORY_KEY, "");
     }
 
+    /**
+     * 检查是否存在活跃的 Clone 任务（查数据库）
+     */
     public boolean hasActiveTask() {
-        if (activeTaskId == null) {
-            return false;
-        }
-        CloneTask task = tasks.get(activeTaskId);
-        return task != null && ("PENDING".equals(task.status) || "RUNNING".equals(task.status));
+        return cloneTaskService.hasActiveTask();
     }
 
     /**
@@ -173,138 +175,270 @@ public class CloneService {
         }
     }
 
-    public String startBatchClone(String keyword, String language, String categoryIds, int maxCount, String subDirectory) {
+    // ======================== 任务生命周期 ========================
+
+    /**
+     * 启动批量 Clone 任务（同步方法，创建任务记录后异步执行）
+     */
+    public String startBatchClone(String keyword, String language, String categoryIds, int maxCount,
+                                  String subDirectory, String dateField, String startDate, String endDate,
+                                  String sortBy, String sortOrder, int concurrency) {
         synchronized (this) {
-            if (hasActiveTask()) {
+            if (cloneTaskService.hasActiveTask()) {
                 throw new IllegalStateException("已有 Clone 任务正在执行，请等待完成后再试");
             }
         }
 
         final String safeSubDir = sanitizeSubdirectory(subDirectory);
-        resolveCloneDirectory(safeSubDir);
+        File dir = resolveCloneDirectory(safeSubDir);
 
-        String taskId = "clone_" + taskCounter.incrementAndGet();
+        // 创建任务实体
         CloneTask task = new CloneTask();
-        task.taskId = taskId;
-        task.status = "PENDING";
-        tasks.put(taskId, task);
-        activeTaskId = taskId;
+        task.setTaskId("clone_" + taskCounter.incrementAndGet());
+        task.setStatus("PENDING");
+        task.setTotalRepos(maxCount);
+        task.setKeyword(keyword);
+        task.setLanguage(language);
+        task.setCategoryIds(categoryIds);
+        task.setDateField(dateField);
+        task.setStartDate(startDate);
+        task.setEndDate(endDate);
+        task.setSortBy(sortBy);
+        task.setSortOrder(sortOrder);
+        task.setSubDirectory(safeSubDir);
+        task.setTargetDir(dir.getAbsolutePath());
+        task.setConcurrency(concurrency);
+        task.setCreatedAt(LocalDateTime.now());
+        cloneTaskService.createTask(task);
 
-        final String tid = taskId;
-        new Thread(() -> executeClone(tid, keyword, language, categoryIds, maxCount, safeSubDir)).start();
-        return taskId;
+        // 填入运行缓存以便前端实时轮询
+        CloneTask cacheEntry = new CloneTask();
+        cacheEntry.setTaskId(task.getTaskId());
+        cacheEntry.setStatus("PENDING");
+        cacheEntry.setTotalRepos(0);
+        cacheEntry.setCompletedRepos(0);
+        cacheEntry.setFailedRepos(0);
+        cacheEntry.setSkippedRepos(0);
+        cacheEntry.setResults(Collections.synchronizedList(new ArrayList<>()));
+        runningTaskCache.put(task.getTaskId(), cacheEntry);
+
+        // 通过 ApplicationContext 获取代理对象，确保 @Async 生效
+        CloneService proxy = applicationContext.getBean(CloneService.class);
+        proxy.executeBatchClone(task.getTaskId());
+
+        return task.getTaskId();
     }
 
+    /**
+     * 获取任务进度：优先从实时缓存读取，降级查数据库
+     */
     public CloneTask getTask(String taskId) {
-        return tasks.get(taskId);
+        CloneTask cached = runningTaskCache.get(taskId);
+        if (cached != null) {
+            return cached;
+        }
+        return cloneTaskService.getTaskByTaskId(taskId);
     }
 
-    private void executeClone(String taskId, String keyword, String language, String categoryIds, int maxCount, String subDirectory) {
-        CloneTask task = tasks.get(taskId);
+    /**
+     * 异步执行批量 Clone（由 cloneExecutor 线程池调度）
+     */
+    @Async("cloneExecutor")
+    public void executeBatchClone(String taskId) {
+        // 从 DB 获取任务
+        CloneTask task = cloneTaskService.getTaskByTaskId(taskId);
         if (task == null) {
+            log.error("Clone task {} not found in DB", taskId);
+            runningTaskCache.remove(taskId);
             return;
         }
 
-        task.status = "RUNNING";
+        // 获取或初始化缓存（cachedInitial 可能在 if 中被重新赋值，用 final 引用传给 lambda）
+        CloneTask cachedInitial = runningTaskCache.get(taskId);
+        if (cachedInitial == null) {
+            cachedInitial = new CloneTask();
+            cachedInitial.setTaskId(taskId);
+            cachedInitial.setResults(Collections.synchronizedList(new ArrayList<>()));
+            runningTaskCache.put(taskId, cachedInitial);
+        }
+        final CloneTask cached = cachedInitial;
+
+        // 标记运行中
+        task.setStatus("RUNNING");
+        task.setStartedAt(LocalDateTime.now());
+        cloneTaskService.updateTask(task);
+        cached.setStatus("RUNNING");
+
         try {
-            File dir = resolveCloneDirectory(subDirectory);
-            List<GithubRepo> repos = githubRepoService.findPage(1, maxCount, keyword, language,
-                    "starred_at", "desc", null, null, null, categoryIds).getRecords();
-            task.totalRepos = repos.size();
+            File dir = new File(task.getTargetDir());
+            int maxCount = task.getTotalRepos() != null && task.getTotalRepos() > 0
+                    ? task.getTotalRepos() : Integer.MAX_VALUE;
 
-            final Object lock = new Object();
-            List<Thread> threads = new ArrayList<>();
+            // 分页获取所有匹配仓库
+            List<GithubRepo> allRepos = new ArrayList<>();
+            int pageNum = 1;
+            int batchSize = 500;
+            while (allRepos.size() < maxCount) {
+                IPage<GithubRepo> repoPage = githubRepoService.findPage(
+                        pageNum, batchSize,
+                        task.getKeyword(), task.getLanguage(),
+                        task.getSortBy(), task.getSortOrder(),
+                        task.getDateField(), task.getStartDate(), task.getEndDate(),
+                        task.getCategoryIds());
+                if (repoPage.getRecords().isEmpty()) {
+                    break;
+                }
+                for (GithubRepo repo : repoPage.getRecords()) {
+                    if (allRepos.size() >= maxCount) {
+                        break;
+                    }
+                    allRepos.add(repo);
+                }
+                pageNum++;
+            }
 
-            for (GithubRepo repo : repos) {
-                Thread t = new Thread(() -> {
-                    CloneResult r = new CloneResult();
-                    r.fullName = repo.getFullName();
+            // 更新总仓库数
+            task.setTotalRepos(allRepos.size());
+            cloneTaskService.updateTask(task);
+            cached.setTotalRepos(allRepos.size());
 
-                    String repoName = repo.getRepoName();
-                    if (repoName == null || repoName.trim().isEmpty()) {
-                        r.status = "FAILED";
-                        r.message = "仓库名称为空";
-                        synchronized (lock) { task.failedRepos++; }
-                        task.results.add(r);
-                        return;
+            // 使用线程池并发执行 git clone
+            int concurrency = task.getConcurrency() != null && task.getConcurrency() > 0
+                    ? task.getConcurrency() : 5;
+            ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+            final Object writeLock = new Object();
+
+            for (GithubRepo repo : allRepos) {
+                CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                    CloneResult result;
+                    try {
+                        result = doClone(repo.getFullName(), repo.getRepoName(), dir, repo.getHtmlUrl());
+                    } catch (Exception e) {
+                        result = new CloneResult();
+                        result.setFullName(repo.getFullName());
+                        result.setStatus("FAILED");
+                        result.setMessage(e.getMessage());
                     }
 
-                    File repoDir = new File(dir, repoName);
-                    if (repoDir.exists()) {
-                        r.status = "SKIPPED";
-                        r.message = "目录已存在";
-                        synchronized (lock) { task.skippedRepos++; }
-                    } else {
-                        try {
-                            ProcessBuilder pb = new ProcessBuilder("git", "clone", repo.getHtmlUrl() + ".git", repoDir.getAbsolutePath());
-                            pb.directory(dir);
-                            pb.redirectErrorStream(true);
-                            Process p = pb.start();
-                            int exitCode = p.waitFor();
-                            if (exitCode == 0) {
-                                r.status = "CLONED";
-                                r.message = "成功";
-                                synchronized (lock) { task.completedRepos++; }
-                            } else {
-                                r.status = "FAILED";
-                                r.message = "git clone exit code: " + exitCode;
-                                synchronized (lock) { task.failedRepos++; }
-                            }
-                        } catch (Exception e) {
-                            r.status = "FAILED";
-                            r.message = e.getMessage();
-                            synchronized (lock) { task.failedRepos++; }
+                    // 持久化到 clone_task_item
+                    CloneTaskItem item = new CloneTaskItem();
+                    item.setTaskId(taskId);
+                    item.setFullName(repo.getFullName());
+                    item.setStatus(result.getStatus());
+                    item.setMessage(result.getMessage());
+                    item.setCreatedAt(LocalDateTime.now());
+                    cloneTaskItemMapper.insert(item);
+
+                    // 更新实时缓存
+                    synchronized (writeLock) {
+                        switch (result.getStatus()) {
+                            case "CLONED":
+                                cached.setCompletedRepos(cached.getCompletedRepos() + 1);
+                                break;
+                            case "FAILED":
+                                cached.setFailedRepos(cached.getFailedRepos() + 1);
+                                break;
+                            case "SKIPPED":
+                                cached.setSkippedRepos(cached.getSkippedRepos() + 1);
+                                break;
+                        }
+                        cached.getResults().add(result);
+
+                        // 每完成 10 个同步一次 DB
+                        int done = cached.getCompletedRepos() + cached.getFailedRepos() + cached.getSkippedRepos();
+                        if (done % 10 == 0) {
+                            task.setCompletedRepos(cached.getCompletedRepos());
+                            task.setFailedRepos(cached.getFailedRepos());
+                            task.setSkippedRepos(cached.getSkippedRepos());
+                            cloneTaskService.updateTask(task);
                         }
                     }
-                    task.results.add(r);
-                    log.info("Clone {}: {} -> {}", r.fullName, r.status, r.message);
-                });
-                threads.add(t);
+
+                    log.info("Clone {}: {} -> {}", repo.getFullName(), result.getStatus(), result.getMessage());
+                }, executor);
+                futures.add(future);
             }
 
-            int running = 0;
-            Iterator<Thread> it = threads.iterator();
-            List<Thread> active = new ArrayList<>();
-            while (it.hasNext() || !active.isEmpty()) {
-                while (running < MAX_CONCURRENT && it.hasNext()) {
-                    Thread t = it.next();
-                    active.add(t);
-                    t.start();
-                    running++;
-                }
-                for (int i = active.size() - 1; i >= 0; i--) {
-                    Thread t = active.get(i);
-                    try {
-                        t.join(1000);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        task.status = "FAILED";
-                        task.errorMessage = "任务被中断";
-                        return;
-                    }
-                    if (!t.isAlive()) {
-                        active.remove(i);
-                        running--;
-                    }
-                }
-            }
+            // 等待全部完成
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            executor.shutdown();
 
-            task.status = "COMPLETED";
-            saveSubdirectoryToHistory(subDirectory);
+            // 最终同步 DB
+            task.setCompletedRepos(cached.getCompletedRepos());
+            task.setFailedRepos(cached.getFailedRepos());
+            task.setSkippedRepos(cached.getSkippedRepos());
+            task.setStatus("COMPLETED");
+            task.setFinishedAt(LocalDateTime.now());
+            cloneTaskService.updateTask(task);
+
+            cached.setStatus("COMPLETED");
+            cached.setCompletedRepos(task.getCompletedRepos());
+            cached.setFailedRepos(task.getFailedRepos());
+            cached.setSkippedRepos(task.getSkippedRepos());
+
+            saveSubdirectoryToHistory(task.getSubDirectory());
+
             log.info("Clone task {} done: {}/{} success, {} skipped, {} failed",
-                    taskId, task.completedRepos, task.totalRepos, task.skippedRepos, task.failedRepos);
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            task.status = "FAILED";
-            task.errorMessage = e.getMessage();
-            log.error("Clone task {} failed: {}", taskId, e.getMessage());
+                    taskId, task.getCompletedRepos(), task.getTotalRepos(),
+                    task.getSkippedRepos(), task.getFailedRepos());
+
         } catch (Exception e) {
-            task.status = "FAILED";
-            task.errorMessage = "Clone 任务执行失败: " + e.getMessage();
             log.error("Clone task {} failed", taskId, e);
+            task.setStatus("FAILED");
+            task.setErrorMessage("Clone 任务执行失败: " + e.getMessage());
+            task.setFinishedAt(LocalDateTime.now());
+            cloneTaskService.updateTask(task);
+            cached.setStatus("FAILED");
+            cached.setErrorMessage(task.getErrorMessage());
         } finally {
-            if (taskId.equals(activeTaskId)) {
-                activeTaskId = null;
-            }
+            // 任务结束后，5 秒后从缓存移除，让前端有足够时间拉取最终状态
+            new Timer().schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    runningTaskCache.remove(taskId);
+                }
+            }, 5000);
         }
+    }
+
+    /**
+     * 执行单个仓库的 git clone
+     */
+    private CloneResult doClone(String fullName, String repoName, File dir, String htmlUrl) {
+        CloneResult result = new CloneResult();
+        result.setFullName(fullName);
+
+        if (repoName == null || repoName.trim().isEmpty()) {
+            result.setStatus("FAILED");
+            result.setMessage("仓库名称为空");
+            return result;
+        }
+
+        File repoDir = new File(dir, repoName);
+        if (repoDir.exists()) {
+            result.setStatus("SKIPPED");
+            result.setMessage("目录已存在");
+            return result;
+        }
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder("git", "clone", htmlUrl + ".git", repoDir.getAbsolutePath());
+            pb.directory(dir);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            int exitCode = p.waitFor();
+            if (exitCode == 0) {
+                result.setStatus("CLONED");
+                result.setMessage("成功");
+            } else {
+                result.setStatus("FAILED");
+                result.setMessage("git clone exit code: " + exitCode);
+            }
+        } catch (Exception e) {
+            result.setStatus("FAILED");
+            result.setMessage(e.getMessage());
+        }
+        return result;
     }
 }
