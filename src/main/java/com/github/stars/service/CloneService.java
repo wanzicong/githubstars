@@ -215,7 +215,7 @@ public class CloneService {
         CloneTask cacheEntry = new CloneTask();
         cacheEntry.setTaskId(task.getTaskId());
         cacheEntry.setStatus("PENDING");
-        cacheEntry.setTotalRepos(0);
+        cacheEntry.setTotalRepos(task.getTotalRepos());
         cacheEntry.setCompletedRepos(0);
         cacheEntry.setFailedRepos(0);
         cacheEntry.setSkippedRepos(0);
@@ -345,14 +345,11 @@ public class CloneService {
                         }
                         cached.getResults().add(result);
 
-                        // 每完成 10 个同步一次 DB
-                        int done = cached.getCompletedRepos() + cached.getFailedRepos() + cached.getSkippedRepos();
-                        if (done % 10 == 0) {
-                            task.setCompletedRepos(cached.getCompletedRepos());
-                            task.setFailedRepos(cached.getFailedRepos());
-                            task.setSkippedRepos(cached.getSkippedRepos());
-                            cloneTaskService.updateTask(task);
-                        }
+                        // 每次同步 DB 计数（保证列表页与详情页数据一致）
+                        task.setCompletedRepos(cached.getCompletedRepos());
+                        task.setFailedRepos(cached.getFailedRepos());
+                        task.setSkippedRepos(cached.getSkippedRepos());
+                        cloneTaskService.updateTask(task);
                     }
 
                     log.info("Clone {}: {} -> {}", repo.getFullName(), result.getStatus(), result.getMessage());

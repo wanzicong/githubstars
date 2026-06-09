@@ -186,23 +186,25 @@ export default function CloneTasks() {
       key: 'action',
       width: 80,
       render: (_: unknown, record: CloneTaskRecord) => (
-        <Popconfirm
-          title="确认删除"
-          description="删除后将无法恢复，确定要删除此任务记录吗？"
-          onConfirm={() => handleDelete(record.taskId)}
-          okText="删除"
-          cancelText="取消"
-        >
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            loading={deleting === record.taskId}
+        <div onClick={(e) => e.stopPropagation()}>
+          <Popconfirm
+            title="确认删除"
+            description="删除后将无法恢复，确定要删除此任务记录吗？"
+            onConfirm={() => handleDelete(record.taskId)}
+            okText="删除"
+            cancelText="取消"
           >
-            删除
-          </Button>
-        </Popconfirm>
+            <Button
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              loading={deleting === record.taskId}
+            >
+              删除
+            </Button>
+          </Popconfirm>
+        </div>
       ),
     },
   ]
