@@ -47,8 +47,8 @@ export interface StarFilterParams {
   sortBy?: string;
   sortOrder?: string;
   dateField?: string;
-  startMonth?: string;
-  endMonth?: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 // 排序字段映射（与前端一致）
@@ -112,22 +112,18 @@ export class RepoService {
       countQuery = countQuery.whereIn('language', filters.languages);
     }
 
-    // 时间范围筛选
-    if (filters.startMonth) {
+    // 时间范围筛选（精确到天）
+    if (filters.startDate) {
       const dateField = filters.dateField || 'starred_at';
       const column = SORT_COLUMN_MAP[dateField] || 'starred_at';
-      query = query.where(column, '>=', `${filters.startMonth}-01`);
-      countQuery = countQuery.where(column, '>=', `${filters.startMonth}-01`);
+      query = query.where(column, '>=', `${filters.startDate}T00:00:00`);
+      countQuery = countQuery.where(column, '>=', `${filters.startDate}T00:00:00`);
     }
-    if (filters.endMonth) {
+    if (filters.endDate) {
       const dateField = filters.dateField || 'starred_at';
       const column = SORT_COLUMN_MAP[dateField] || 'starred_at';
-      // endMonth 是 YYYY-MM 格式，需要取该月最后一天
-      const [year, month] = filters.endMonth.split('-').map(Number);
-      const lastDay = new Date(year, month, 0).getDate(); // month is 0-indexed
-      const endDate = `${filters.endMonth}-${String(lastDay).padStart(2, '0')}`;
-      query = query.where(column, '<=', endDate);
-      countQuery = countQuery.where(column, '<=', endDate);
+      query = query.where(column, '<=', `${filters.endDate}T23:59:59`);
+      countQuery = countQuery.where(column, '<=', `${filters.endDate}T23:59:59`);
     }
 
     // 排序

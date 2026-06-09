@@ -121,8 +121,8 @@ export interface StarListParams {
   sortBy?: string
   sortOrder?: string
   dateField?: string
-  startMonth?: string
-  endMonth?: string
+  startDate?: string
+  endDate?: string
 }
 
 export interface ApiResponse<T = unknown> {

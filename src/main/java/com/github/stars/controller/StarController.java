@@ -30,12 +30,12 @@ public class StarController {
                                         @RequestParam(value = "sortBy", defaultValue = "starred_at") String sortBy,
                                         @RequestParam(value = "sortOrder", defaultValue = "desc") String sortOrder,
                                         @RequestParam(value = "dateField", defaultValue = "") String dateField,
-                                        @RequestParam(value = "startMonth", defaultValue = "") String startMonth,
-                                        @RequestParam(value = "endMonth", defaultValue = "") String endMonth,
+                                        @RequestParam(value = "startDate", defaultValue = "") String startDate,
+                                        @RequestParam(value = "endDate", defaultValue = "") String endDate,
                                         @RequestParam(value = "categoryIds", defaultValue = "") String categoryIds) {
 
         IPage<GithubRepo> pageResult = githubRepoService.findPage(page, size, keyword, language,
-                sortBy, sortOrder, dateField, startMonth, endMonth, categoryIds);
+                sortBy, sortOrder, dateField, startDate, endDate, categoryIds);
 
         Map<String, Object> result = new HashMap<>();
         result.put("records", pageResult.getRecords());
@@ -64,12 +64,12 @@ public class StarController {
             @RequestParam(value = "sortBy", defaultValue = "starred_at") String sortBy,
             @RequestParam(value = "sortOrder", defaultValue = "desc") String sortOrder,
             @RequestParam(value = "dateField", defaultValue = "") String dateField,
-            @RequestParam(value = "startMonth", defaultValue = "") String startMonth,
-            @RequestParam(value = "endMonth", defaultValue = "") String endMonth,
+            @RequestParam(value = "startDate", defaultValue = "") String startDate,
+            @RequestParam(value = "endDate", defaultValue = "") String endDate,
             @RequestParam(value = "categoryIds", defaultValue = "") String categoryIds) {
 
         List<String> urls = githubRepoService.findAllUrls(keyword, language, sortBy, sortOrder,
-                dateField, startMonth, endMonth, categoryIds);
+                dateField, startDate, endDate, categoryIds);
         String content = String.join("\n", urls);
         byte[] bytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
 

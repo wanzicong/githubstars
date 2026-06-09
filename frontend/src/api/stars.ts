@@ -11,8 +11,8 @@ export async function fetchStarList(params: StarListParams): Promise<PageResult<
   if (params.sortBy) searchParams.set('sortBy', params.sortBy)
   if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder)
   if (params.dateField) searchParams.set('dateField', params.dateField)
-  if (params.startMonth) searchParams.set('startMonth', params.startMonth)
-  if (params.endMonth) searchParams.set('endMonth', params.endMonth)
+  if (params.startDate) searchParams.set('startDate', params.startDate)
+  if (params.endDate) searchParams.set('endDate', params.endDate)
   const { data } = await api.get<PageResult<GithubRepo>>('/api/stars', { params: searchParams })
   return data
 }
@@ -31,8 +31,8 @@ export async function exportStarsUrls(params: StarListParams): Promise<Blob> {
   if (params.sortBy) searchParams.set('sortBy', params.sortBy)
   if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder)
   if (params.dateField) searchParams.set('dateField', params.dateField)
-  if (params.startMonth) searchParams.set('startMonth', params.startMonth)
-  if (params.endMonth) searchParams.set('endMonth', params.endMonth)
+  if (params.startDate) searchParams.set('startDate', params.startDate)
+  if (params.endDate) searchParams.set('endDate', params.endDate)
   const { data } = await api.get('/stars/export', {
     params: searchParams,
     responseType: 'blob',

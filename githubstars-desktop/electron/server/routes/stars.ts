@@ -15,8 +15,8 @@ export function registerStarRoutes(app: Express): void {
       const sortBy = req.query.sortBy as string | undefined;
       const sortOrder = req.query.sortOrder as string | undefined;
       const dateField = req.query.dateField as string | undefined;
-      const startMonth = req.query.startMonth as string | undefined;
-      const endMonth = req.query.endMonth as string | undefined;
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
 
       const result = await repoService.findPage(page, size, {
         keyword,
@@ -25,8 +25,8 @@ export function registerStarRoutes(app: Express): void {
         sortBy: sortBy || 'starredAt',
         sortOrder: sortOrder || 'desc',
         dateField,
-        startMonth,
-        endMonth,
+        startDate,
+        endDate,
       });
 
       res.json(result);

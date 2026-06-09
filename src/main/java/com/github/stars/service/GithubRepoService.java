@@ -14,8 +14,8 @@ import org.springframework.util.StringUtils;
 import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
 
 import javax.annotation.Resource;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -42,13 +42,13 @@ public class GithubRepoService {
      * @param sortBy     排序字段（stars_count, forks_count, repo_updated_at, starred_at）
      * @param sortOrder  排序方向（asc, desc）
      * @param dateField  时间筛选字段（starred_at, repo_created_at, repo_updated_at, repo_pushed_at）
-     * @param startMonth 开始月份（格式：yyyy-MM）
-     * @param endMonth   结束月份（格式：yyyy-MM）
+     * @param startDate  开始日期（格式：yyyy-MM-dd）
+     * @param endDate    结束日期（格式：yyyy-MM-dd）
      * @return 分页结果
      */
     public IPage<GithubRepo> findPage(int page, int size, String keyword, String language,
                                       String sortBy, String sortOrder,
-                                      String dateField, String startMonth, String endMonth,
+                                      String dateField, String startDate, String endDate,
                                       String categoryIds) {
         List<String> languageList = null;
         if (StringUtils.hasText(language)) languageList = Arrays.asList(language.split(","));
@@ -59,7 +59,7 @@ public class GithubRepoService {
             // 展开一级分类为其下所有二级子分类
             catIdList = categoryService.expandCategoryIds(catIdList);
         }
-        return findPage(page, size, keyword, languageList, catIdList, sortBy, sortOrder, dateField, startMonth, endMonth);
+        return findPage(page, size, keyword, languageList, catIdList, sortBy, sortOrder, dateField, startDate, endDate);
     }
 
     /**
@@ -72,14 +72,14 @@ public class GithubRepoService {
      * @param sortBy     排序字段
      * @param sortOrder  排序方向
      * @param dateField  时间筛选字段
-     * @param startMonth 开始月份
-     * @param endMonth   结束月份
+     * @param startDate  开始日期
+     * @param endDate    结束日期
      * @return 分页结果
      */
     public IPage<GithubRepo> findPage(int page, int size, String keyword, List<String> languages,
                                       List<Long> categoryIds,
                                       String sortBy, String sortOrder,
-                                      String dateField, String startMonth, String endMonth) {
+                                      String dateField, String startDate, String endDate) {
         Page<GithubRepo> pageParam = new Page<>(page, size);
         LambdaQueryWrapper<GithubRepo> wrapper = new LambdaQueryWrapper<>();
 
@@ -104,18 +104,18 @@ public class GithubRepoService {
             wrapper.in(GithubRepo::getLanguage, languages);
         }
 
-        // 时间月份范围筛选
-        if (StringUtils.hasText(dateField) && (StringUtils.hasText(startMonth) || StringUtils.hasText(endMonth))) {
+        // 时间日期范围筛选（精确到天）
+        if (StringUtils.hasText(dateField) && (StringUtils.hasText(startDate) || StringUtils.hasText(endDate))) {
             SFunction<GithubRepo, ?> dateColumn = getDateColumn(dateField);
             if (dateColumn != null) {
-                if (StringUtils.hasText(startMonth)) {
-                    LocalDateTime startTime = parseMonthStart(startMonth);
+                if (StringUtils.hasText(startDate)) {
+                    LocalDateTime startTime = parseDateStart(startDate);
                     if (startTime != null) {
                         wrapper.ge(dateColumn, startTime);
                     }
                 }
-                if (StringUtils.hasText(endMonth)) {
-                    LocalDateTime endTime = parseMonthEnd(endMonth);
+                if (StringUtils.hasText(endDate)) {
+                    LocalDateTime endTime = parseDateEnd(endDate);
                     if (endTime != null) {
                         wrapper.le(dateColumn, endTime);
                     }
@@ -192,24 +192,24 @@ public class GithubRepoService {
     }
 
     /**
-     * 解析月份字符串为该月第一天 00:00:00
+     * 解析日期字符串为该天 00:00:00（精确到天）
      */
-    private LocalDateTime parseMonthStart(String month) {
+    private LocalDateTime parseDateStart(String dateStr) {
         try {
-            YearMonth ym = YearMonth.parse(month);
-            return ym.atDay(1).atStartOfDay();
+            LocalDate date = LocalDate.parse(dateStr);
+            return date.atStartOfDay();
         } catch (DateTimeParseException e) {
             return null;
         }
     }
 
     /**
-     * 解析月份字符串为该月最后一天 23:59:59
+     * 解析日期字符串为该天 23:59:59（精确到天）
      */
-    private LocalDateTime parseMonthEnd(String month) {
+    private LocalDateTime parseDateEnd(String dateStr) {
         try {
-            YearMonth ym = YearMonth.parse(month);
-            return ym.atEndOfMonth().atTime(23, 59, 59);
+            LocalDate date = LocalDate.parse(dateStr);
+            return date.atTime(23, 59, 59);
         } catch (DateTimeParseException e) {
             return null;
         }
@@ -219,7 +219,7 @@ public class GithubRepoService {
      * 按筛选条件查询所有仓库链接（不分页，仅查 html_url）
      */
     public List<String> findAllUrls(String keyword, String language, String sortBy, String sortOrder,
-                                    String dateField, String startMonth, String endMonth, String categoryIds) {
+                                    String dateField, String startDate, String endDate, String categoryIds) {
         // 解析多语言参数
         List<String> languageList = null;
         if (StringUtils.hasText(language)) {
@@ -232,14 +232,14 @@ public class GithubRepoService {
                     .filter(s -> !s.isEmpty()).map(Long::valueOf).collect(Collectors.toList());
             catIdList = categoryService.expandCategoryIds(catIdList);
         }
-        return findAllUrls(keyword, languageList, sortBy, sortOrder, dateField, startMonth, endMonth, catIdList);
+        return findAllUrls(keyword, languageList, sortBy, sortOrder, dateField, startDate, endDate, catIdList);
     }
 
     /**
      * 按筛选条件查询所有仓库链接（支持多语言列表 + 分类筛选）
      */
     public List<String> findAllUrls(String keyword, List<String> languages, String sortBy, String sortOrder,
-                                    String dateField, String startMonth, String endMonth, List<Long> categoryIds) {
+                                    String dateField, String startDate, String endDate, List<Long> categoryIds) {
         LambdaQueryWrapper<GithubRepo> wrapper = new LambdaQueryWrapper<>();
         wrapper.select(GithubRepo::getHtmlUrl);
 
@@ -261,15 +261,15 @@ public class GithubRepoService {
         if (languages != null && !languages.isEmpty() && !languages.contains("")) {
             wrapper.in(GithubRepo::getLanguage, languages);
         }
-        if (StringUtils.hasText(dateField) && (StringUtils.hasText(startMonth) || StringUtils.hasText(endMonth))) {
+        if (StringUtils.hasText(dateField) && (StringUtils.hasText(startDate) || StringUtils.hasText(endDate))) {
             SFunction<GithubRepo, ?> dateColumn = getDateColumn(dateField);
             if (dateColumn != null) {
-                if (StringUtils.hasText(startMonth)) {
-                    LocalDateTime startTime = parseMonthStart(startMonth);
+                if (StringUtils.hasText(startDate)) {
+                    LocalDateTime startTime = parseDateStart(startDate);
                     if (startTime != null) wrapper.ge(dateColumn, startTime);
                 }
-                if (StringUtils.hasText(endMonth)) {
-                    LocalDateTime endTime = parseMonthEnd(endMonth);
+                if (StringUtils.hasText(endDate)) {
+                    LocalDateTime endTime = parseDateEnd(endDate);
                     if (endTime != null) wrapper.le(dateColumn, endTime);
                 }
             }

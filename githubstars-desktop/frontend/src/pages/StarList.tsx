@@ -209,16 +209,16 @@ export default function StarList() {
   const dateField = searchParams.get('dateField') || undefined
   const currentPage = parseInt(searchParams.get('page') || '1', 10)
   const pageSize = parseInt(searchParams.get('size') || '36', 10)
-  const startMonthStr = searchParams.get('startMonth')
-  const endMonthStr = searchParams.get('endMonth')
+  const startDateStr = searchParams.get('startDate')
+  const endDateStr = searchParams.get('endDate')
   const viewMode = (searchParams.get('view') || 'list') as 'grid' | 'list'
 
-  const [startMonth, setStartMonthState] = useState<dayjs.Dayjs | null>(startMonthStr ? dayjs(startMonthStr) : null)
-  const [endMonth, setEndMonthState] = useState<dayjs.Dayjs | null>(endMonthStr ? dayjs(endMonthStr) : null)
+  const [startDate, setStartDateState] = useState<dayjs.Dayjs | null>(startDateStr ? dayjs(startDateStr) : null)
+  const [endDate, setEndDateState] = useState<dayjs.Dayjs | null>(endDateStr ? dayjs(endDateStr) : null)
   const timePreset = searchParams.get('timePreset') || ''
 
-  useEffect(() => { setStartMonthState(startMonthStr ? dayjs(startMonthStr) : null) }, [startMonthStr])
-  useEffect(() => { setEndMonthState(endMonthStr ? dayjs(endMonthStr) : null) }, [endMonthStr])
+  useEffect(() => { setStartDateState(startDateStr ? dayjs(startDateStr) : null) }, [startDateStr])
+  useEffect(() => { setEndDateState(endDateStr ? dayjs(endDateStr) : null) }, [endDateStr])
 
   const setUrlParam = useCallback((key: string, value: string | null | undefined, resetPage = true) => {
     setSearchParams(prev => {
@@ -246,20 +246,20 @@ export default function StarList() {
 
   const handleTimePreset = useCallback((value: string) => {
     if (!value) {
-      setUrlParams({ timePreset: null, dateField: null, startMonth: null, endMonth: null })
-      setStartMonthState(null); setEndMonthState(null)
+      setUrlParams({ timePreset: null, dateField: null, startDate: null, endDate: null })
+      setStartDateState(null); setEndDateState(null)
       return
     }
     const preset = TIME_PRESETS.find(p => p.value === value)
     if (!preset) return
     if (preset.value === 'today') {
-      const today = dayjs().format('YYYY-MM')
-      setStartMonthState(dayjs(today)); setEndMonthState(dayjs(today))
-      setUrlParams({ timePreset: value, dateField: 'starred_at', startMonth: today, endMonth: today })
+      const today = dayjs().format('YYYY-MM-DD')
+      setStartDateState(dayjs(today)); setEndDateState(dayjs(today))
+      setUrlParams({ timePreset: value, dateField: 'starred_at', startDate: today, endDate: today })
     } else if (preset.days > 0) {
-      const start = dayjs().subtract(preset.days, 'day').format('YYYY-MM')
-      setStartMonthState(dayjs(start)); setEndMonthState(null)
-      setUrlParams({ timePreset: value, dateField: 'starred_at', startMonth: start, endMonth: null })
+      const start = dayjs().subtract(preset.days, 'day').format('YYYY-MM-DD')
+      setStartDateState(dayjs(start)); setEndDateState(null)
+      setUrlParams({ timePreset: value, dateField: 'starred_at', startDate: start, endDate: null })
     }
   }, [setUrlParams])
 
@@ -291,18 +291,18 @@ export default function StarList() {
           language: languageStr || undefined, categoryIds: categoryIdsStr || undefined,
           sortBy: sortBy || undefined,
           sortOrder: sortOrder || undefined, dateField: dateField || undefined,
-          startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined,
-          endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined,
+          startDate: startDate ? startDate.format('YYYY-MM-DD') : undefined,
+          endDate: endDate ? endDate.format('YYYY-MM-DD') : undefined,
         })
         setPageResult(result)
       } catch { } finally { setLoading(false) }
     }
     loadPage()
-  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDate, endDate])
 
   const handleClearFilters = useCallback(() => {
-    setUrlParams({ keyword: null, languages: null, categoryIds: null, timePreset: null, sortBy: 'starred_at', sortOrder: 'desc', dateField: null, startMonth: null, endMonth: null })
-    setStartMonthState(null); setEndMonthState(null)
+    setUrlParams({ keyword: null, languages: null, categoryIds: null, timePreset: null, sortBy: 'starred_at', sortOrder: 'desc', dateField: null, startDate: null, endDate: null })
+    setStartDateState(null); setEndDateState(null)
   }, [setUrlParams])
 
   const [batchTranslating, setBatchTranslating] = useState(false)
@@ -321,13 +321,13 @@ export default function StarList() {
           setTranslateProgress({ status: res.status, totalItems: res.totalItems, completedItems: res.completedItems, failedItems: res.failedItems, descTotal: res.descTotal, descCompleted: res.descCompleted, descFailed: res.descFailed, readmeTotal: res.readmeTotal, readmeCompleted: res.readmeCompleted, readmeFailed: res.readmeFailed, progress: res.progress })
           if (res.status === 'COMPLETED' || res.status === 'FAILED') {
             stopPolling()
-            const result = await starsApi.fetchStarList({ page: currentPage, size: pageSize, keyword: keyword || undefined, language: languageStr || undefined, categoryIds: categoryIdsStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined, endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined })
+            const result = await starsApi.fetchStarList({ page: currentPage, size: pageSize, keyword: keyword || undefined, language: languageStr || undefined, categoryIds: categoryIdsStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startDate: startDate ? startDate.format('YYYY-MM-DD') : undefined, endDate: endDate ? endDate.format('YYYY-MM-DD') : undefined })
             setPageResult(result)
           }
         }
       } catch { }
     }, 2000)
-  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDate, endDate])
 
   const handleStartFullTranslate = useCallback(async () => {
     setBatchTranslating(true)
@@ -397,15 +397,15 @@ export default function StarList() {
     try {
       const result = await translateApi.translateBatch()
       if (result.translatedCount && result.translatedCount > 0) {
-        const res = await starsApi.fetchStarList({ page: currentPage, size: pageSize, keyword: keyword || undefined, language: languageStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined, endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined })
+        const res = await starsApi.fetchStarList({ page: currentPage, size: pageSize, keyword: keyword || undefined, language: languageStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startDate: startDate ? startDate.format('YYYY-MM-DD') : undefined, endDate: endDate ? endDate.format('YYYY-MM-DD') : undefined })
         setPageResult(res)
       }
     } catch { } finally { setBatchTranslating(false) }
-  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDate, endDate])
 
   const handleExport = useCallback(async () => {
     try {
-      const params = { keyword: keyword || undefined, language: languageStr || undefined, categoryIds: categoryIdsStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startMonth: startMonth ? startMonth.format('YYYY-MM') : undefined, endMonth: endMonth ? endMonth.format('YYYY-MM') : undefined }
+      const params = { keyword: keyword || undefined, language: languageStr || undefined, categoryIds: categoryIdsStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startDate: startDate ? startDate.format('YYYY-MM-DD') : undefined, endDate: endDate ? endDate.format('YYYY-MM-DD') : undefined }
       const defaultName = `stars_export_${dayjs().format('YYYYMMDD_HHmmss')}.txt`
 
       // Electron 桌面端：使用原生保存对话框
@@ -433,12 +433,12 @@ export default function StarList() {
         message.success('导出成功')
       }
     } catch { console.error('导出失败'); message.error('导出失败') }
-  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startMonth, endMonth])
+  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDate, endDate])
 
   const languageSelectOptions = useMemo(() => languageOptions.map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })), [languageOptions])
   const categorySelectOptions = useMemo(() => categoryOptions.map((cat) => ({ label: cat.name, value: String(cat.id) })), [categoryOptions])
 
-  const hasActiveFilters = keyword.trim() !== '' || languageStr !== '' || categoryIdsStr !== '' || sortBy !== 'starred_at' || sortOrder !== 'desc' || dateField !== undefined || startMonth !== null || endMonth !== null
+  const hasActiveFilters = keyword.trim() !== '' || languageStr !== '' || categoryIdsStr !== '' || sortBy !== 'starred_at' || sortOrder !== 'desc' || dateField !== undefined || startDate !== null || endDate !== null
 
   const { records: repos } = pageResult
 
@@ -501,9 +501,9 @@ export default function StarList() {
                   size="small"
                 />
                 <Row gutter={[16, 12]} align="middle">
-                  <Col xs={24} sm={8} md={6} lg={4}><Select placeholder="时间字段" value={dateField} onChange={(val) => setUrlParam('dateField', val || null)} allowClear options={DATE_FIELD_OPTIONS} style={{ width: '100%' }} /></Col>
-                  <Col xs={12} sm={8} md={6} lg={4}><DatePicker picker="month" placeholder="起始月份" value={startMonth} onChange={(val) => { setStartMonthState(val); setUrlParam('startMonth', val ? val.format('YYYY-MM') : null); setUrlParam('timePreset', null) }} disabled={!dateField} style={{ width: '100%' }} /></Col>
-                  <Col xs={12} sm={8} md={6} lg={4}><DatePicker picker="month" placeholder="结束月份" value={endMonth} onChange={(val) => { setEndMonthState(val); setUrlParam('endMonth', val ? val.format('YYYY-MM') : null); setUrlParam('timePreset', null) }} disabled={!dateField} style={{ width: '100%' }} /></Col>
+                  <Col xs={24} sm={8} md={6} lg={4}><Select placeholder="时间字段" value={dateField} onChange={(val) => { setUrlParam('dateField', val || null); setUrlParam('timePreset', null) }} allowClear options={DATE_FIELD_OPTIONS} style={{ width: '100%' }} /></Col>
+                  <Col xs={12} sm={8} md={6} lg={4}><DatePicker placeholder="起始日期" value={startDate} onChange={(val) => { setStartDateState(val); setUrlParam('startDate', val ? val.format('YYYY-MM-DD') : null); setUrlParam('timePreset', null) }} disabled={!dateField} style={{ width: '100%' }} /></Col>
+                  <Col xs={12} sm={8} md={6} lg={4}><DatePicker placeholder="结束日期" value={endDate} onChange={(val) => { setEndDateState(val); setUrlParam('endDate', val ? val.format('YYYY-MM-DD') : null); setUrlParam('timePreset', null) }} disabled={!dateField} style={{ width: '100%' }} /></Col>
                 </Row>
               </div>
             ),
