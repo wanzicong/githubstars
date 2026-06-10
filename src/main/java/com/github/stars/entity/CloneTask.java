@@ -82,6 +82,9 @@ public class CloneTask {
     @TableField("created_at")
     private LocalDateTime createdAt;
 
+    @TableField("pinned")
+    private Integer pinned;
+
     /** 实时进度结果（非数据库字段，仅用于运行时缓存和 API 返回） */
     @TableField(exist = false)
     private List<CloneResult> results;

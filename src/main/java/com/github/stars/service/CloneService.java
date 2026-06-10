@@ -186,12 +186,6 @@ public class CloneService {
     public String startBatchClone(String keyword, String language, String categoryIds, int maxCount,
                                   String subDirectory, String dateField, String startDate, String endDate,
                                   String sortBy, String sortOrder, int concurrency) {
-        synchronized (this) {
-            if (cloneTaskService.hasActiveTask()) {
-                throw new IllegalStateException("已有 Clone 任务正在执行，请等待完成后再试");
-            }
-        }
-
         final String safeSubDir = sanitizeSubdirectory(subDirectory);
         File dir = resolveCloneDirectory(safeSubDir);
 

@@ -11,7 +11,7 @@ import {
   Spin,
   Typography,
 } from 'antd'
-import { DeleteOutlined, ArrowLeftOutlined, ReloadOutlined, RedoOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { DeleteOutlined, ArrowLeftOutlined, ReloadOutlined, RedoOutlined, ThunderboltOutlined, PushpinOutlined, PushpinFilled } from '@ant-design/icons'
 import * as cloneApi from '../api/clone'
 import type { CloneTaskRecord } from '../types'
 import dayjs from '../setupDayjs'
@@ -99,6 +99,18 @@ export default function CloneTasks() {
     const timer = setInterval(() => fetchData(currentPage, pageSize), 3000)
     return () => clearInterval(timer)
   }, [hasRunning, currentPage, pageSize, fetchData])
+
+  const handlePin = useCallback(async (taskId: string, currentPinned: boolean) => {
+    try {
+      const res = await cloneApi.togglePinCloneTask(taskId)
+      if (res.success) {
+        message.success(res.message)
+        fetchData(currentPage, pageSize)
+      }
+    } catch {
+      message.error('操作失败')
+    }
+  }, [fetchData, currentPage, pageSize])
 
   const handleDelete = useCallback(async (taskId: string) => {
     setDeleting(taskId)
@@ -234,6 +246,13 @@ export default function CloneTasks() {
       render: (_: unknown, record: CloneTaskRecord) => (
         <div onClick={(e) => e.stopPropagation()}>
           <Space size="small">
+            <Button
+              type="link"
+              size="small"
+              icon={record.pinned === 1 ? <PushpinFilled style={{ color: '#faad14' }} /> : <PushpinOutlined />}
+              onClick={() => handlePin(record.taskId, record.pinned === 1)}
+              title={record.pinned === 1 ? '取消置顶' : '置顶'}
+            />
             {record.totalRepos > record.completedRepos && record.status !== 'PENDING' && (
               <Button
                 type="link"

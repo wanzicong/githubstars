@@ -148,6 +148,19 @@ public class CloneTaskController {
     }
 
     /**
+     * 切换任务置顶状态
+     */
+    @PostMapping("/{taskId}/pin")
+    public Map<String, Object> togglePin(@PathVariable String taskId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        boolean pinned = cloneTaskService.togglePin(taskId);
+        result.put("success", true);
+        result.put("pinned", pinned);
+        result.put("message", pinned ? "已置顶" : "已取消置顶");
+        return result;
+    }
+
+    /**
      * 删除 Clone 任务及所有关联项
      */
     @DeleteMapping("/{taskId}")

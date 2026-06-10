@@ -49,13 +49,48 @@ public class CloneTaskService {
     }
 
     /**
-     * 分页查询所有任务（按创建时间降序）
+     * 分页查询所有任务（置顶优先，然后按创建时间降序）
      */
     public Page<CloneTask> getTaskPage(int page, int size) {
         Page<CloneTask> pageParam = new Page<>(page, size);
         LambdaQueryWrapper<CloneTask> wrapper = new LambdaQueryWrapper<>();
-        wrapper.orderByDesc(CloneTask::getCreatedAt);
-        return cloneTaskMapper.selectPage(pageParam, wrapper);
+        wrapper.orderByDesc(CloneTask::getPinned)
+               .orderByDesc(CloneTask::getCreatedAt);
+        Page<CloneTask> result = cloneTaskMapper.selectPage(pageParam, wrapper);
+        // 对已完成的任务，从 items 表重新计算计数（保证数据一致性）
+        for (CloneTask task : result.getRecords()) {
+            if (!"RUNNING".equals(task.getStatus()) && !"PENDING".equals(task.getStatus())) {
+                recalcFromItems(task);
+            }
+        }
+        return result;
+    }
+
+    /** 从 clone_task_item 表重新计算计数 */
+    private void recalcFromItems(CloneTask task) {
+        int completed = countItemsByTaskIdAndStatus(task.getTaskId(), "CLONED");
+        int failed = countItemsByTaskIdAndStatus(task.getTaskId(), "FAILED");
+        int skipped = countItemsByTaskIdAndStatus(task.getTaskId(), "SKIPPED");
+        if (task.getCompletedRepos() == null || task.getCompletedRepos() != completed
+                || task.getFailedRepos() == null || task.getFailedRepos() != failed
+                || task.getSkippedRepos() == null || task.getSkippedRepos() != skipped) {
+            task.setCompletedRepos(completed);
+            task.setFailedRepos(failed);
+            task.setSkippedRepos(skipped);
+            cloneTaskMapper.updateById(task);
+        }
+    }
+
+    /**
+     * 切换置顶状态
+     */
+    public boolean togglePin(String taskId) {
+        CloneTask task = getTaskByTaskId(taskId);
+        if (task == null) return false;
+        int newPin = (task.getPinned() != null && task.getPinned() == 1) ? 0 : 1;
+        task.setPinned(newPin);
+        cloneTaskMapper.updateById(task);
+        return newPin == 1;
     }
 
     /**

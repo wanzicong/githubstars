@@ -87,3 +87,8 @@ export async function retryAllCloneTasks(): Promise<{ success: boolean; message?
   const { data } = await api.post('/api/clone/tasks/retry-all')
   return data
 }
+
+export async function togglePinCloneTask(taskId: string): Promise<{ success: boolean; pinned: boolean; message?: string }> {
+  const { data } = await api.post(`/api/clone/tasks/${taskId}/pin`)
+  return data
+}
