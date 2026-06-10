@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -506,21 +508,23 @@ public class CloneService {
 
         File repoDir = new File(dir, repoName);
         if (repoDir.exists()) {
-            // 重试模式下：空目录则删除后重试，非空目录保护性跳过
+            // 重试模式下：先删除整个目录再重新克隆
             if (forceRetry) {
-                String[] contents = repoDir.list();
-                if (contents != null && contents.length == 0) {
-                    if (repoDir.delete()) {
-                        log.info("Retry: removed empty dir {} before reclone", repoDir.getAbsolutePath());
-                        // 继续往下执行 git clone
-                    } else {
+                try {
+                    Files.walk(repoDir.toPath())
+                        .sorted(Comparator.reverseOrder())
+                        .map(Path::toFile)
+                        .forEach(File::delete);
+                    log.info("Retry: removed dir {} before reclone", repoDir.getAbsolutePath());
+                    if (repoDir.exists()) {
                         result.setStatus("FAILED");
-                        result.setMessage("空目录已存在但无法删除: " + repoDir.getAbsolutePath());
+                        result.setMessage("目录已存在但无法删除: " + repoDir.getAbsolutePath());
                         return result;
                     }
-                } else {
-                    result.setStatus("SKIPPED");
-                    result.setMessage("目录已存在且非空，跳过");
+                    // 删除成功，继续往下执行 git clone
+                } catch (IOException e) {
+                    result.setStatus("FAILED");
+                    result.setMessage("删除目录失败: " + e.getMessage());
                     return result;
                 }
             } else {
