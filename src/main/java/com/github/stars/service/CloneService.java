@@ -608,10 +608,10 @@ public class CloneService {
             Process p = pb.start();
             // 读取错误输出以便调试
             String errorOut = new String(p.getErrorStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            if (!p.waitFor(120, TimeUnit.SECONDS)) {
+            if (!p.waitFor(300, TimeUnit.SECONDS)) {
                 p.destroyForcibly();
                 result.setStatus("FAILED");
-                result.setMessage("git clone 超时(120s): " + errorOut.trim());
+                result.setMessage("git clone 超时(300s): " + errorOut.trim());
                 return result;
             }
             int exitCode = p.exitValue();
