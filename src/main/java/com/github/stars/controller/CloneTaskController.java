@@ -51,7 +51,8 @@ public class CloneTaskController {
     public Map<String, Object> getTaskDetail(
             @PathVariable String taskId,
             @RequestParam(value = "page", defaultValue = "1") int page,
-            @RequestParam(value = "size", defaultValue = "100") int size) {
+            @RequestParam(value = "size", defaultValue = "100") int size,
+            @RequestParam(value = "status", defaultValue = "") String status) {
         Map<String, Object> result = new LinkedHashMap<>();
         CloneTask task = cloneTaskService.getTaskByTaskId(taskId);
         if (task == null) {
@@ -60,7 +61,7 @@ public class CloneTaskController {
             return result;
         }
 
-        Page<CloneTaskItem> itemPage = cloneTaskService.getItemsByTaskId(taskId, page, size);
+        Page<CloneTaskItem> itemPage = cloneTaskService.getItemsByTaskId(taskId, page, size, status);
         task.setItems(itemPage.getRecords());
 
         result.put("success", true);
@@ -80,9 +81,10 @@ public class CloneTaskController {
     public Map<String, Object> listTaskItems(
             @PathVariable String taskId,
             @RequestParam(value = "page", defaultValue = "1") int page,
-            @RequestParam(value = "size", defaultValue = "100") int size) {
+            @RequestParam(value = "size", defaultValue = "100") int size,
+            @RequestParam(value = "status", defaultValue = "") String status) {
         Map<String, Object> result = new LinkedHashMap<>();
-        Page<CloneTaskItem> itemPage = cloneTaskService.getItemsByTaskId(taskId, page, size);
+        Page<CloneTaskItem> itemPage = cloneTaskService.getItemsByTaskId(taskId, page, size, status);
         result.put("success", true);
         result.put("records", itemPage.getRecords());
         result.put("total", itemPage.getTotal());

@@ -7,6 +7,7 @@ import com.github.stars.entity.CloneTaskItem;
 import com.github.stars.mapper.CloneTaskItemMapper;
 import com.github.stars.mapper.CloneTaskMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import javax.annotation.Resource;
 import java.util.List;
@@ -58,12 +59,17 @@ public class CloneTaskService {
 
     /**
      * 分页查询某任务的关联项（按创建时间升序）
+     *
+     * @param status 可选状态筛选：CLONED/FAILED/SKIPPED，为空时查全部
      */
-    public Page<CloneTaskItem> getItemsByTaskId(String taskId, int page, int size) {
+    public Page<CloneTaskItem> getItemsByTaskId(String taskId, int page, int size, String status) {
         Page<CloneTaskItem> pageParam = new Page<>(page, size);
         LambdaQueryWrapper<CloneTaskItem> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(CloneTaskItem::getTaskId, taskId)
-               .orderByAsc(CloneTaskItem::getCreatedAt);
+        wrapper.eq(CloneTaskItem::getTaskId, taskId);
+        if (StringUtils.hasText(status)) {
+            wrapper.eq(CloneTaskItem::getStatus, status);
+        }
+        wrapper.orderByAsc(CloneTaskItem::getCreatedAt);
         return cloneTaskItemMapper.selectPage(pageParam, wrapper);
     }
 

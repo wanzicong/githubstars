@@ -60,8 +60,10 @@ export async function fetchCloneTasks(page: number, size: number): Promise<PageR
   return data
 }
 
-export async function fetchCloneTaskItems(taskId: string, page: number, size: number): Promise<PageResult<CloneTaskItem>> {
-  const { data } = await api.get<PageResult<CloneTaskItem>>(`/api/clone/tasks/${taskId}/items`, { params: { page, size } })
+export async function fetchCloneTaskItems(taskId: string, page: number, size: number, status?: string): Promise<PageResult<CloneTaskItem>> {
+  const params: Record<string, string | number> = { page, size }
+  if (status) params.status = status
+  const { data } = await api.get<PageResult<CloneTaskItem>>(`/api/clone/tasks/${taskId}/items`, { params })
   return data
 }
 

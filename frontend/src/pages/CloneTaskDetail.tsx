@@ -13,6 +13,7 @@ import {
   Typography,
   Space,
   Divider,
+  Segmented,
   message,
 } from 'antd'
 import {
@@ -22,6 +23,7 @@ import {
   ClockCircleOutlined,
   WarningOutlined,
   DownloadOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import * as cloneApi from '../api/clone'
 import type { CloneTaskItem } from '../types'
@@ -70,6 +72,7 @@ export default function CloneTaskDetail() {
   const [itemsLoading, setItemsLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+  const [statusFilter, setStatusFilter] = useState('')
 
   const fetchTask = useCallback(async () => {
     if (!taskId) return
@@ -84,11 +87,11 @@ export default function CloneTaskDetail() {
     }
   }, [taskId])
 
-  const fetchItems = useCallback(async (page: number, size: number) => {
+  const fetchItems = useCallback(async (page: number, size: number, status?: string) => {
     if (!taskId) return
     setItemsLoading(true)
     try {
-      const res = await cloneApi.fetchCloneTaskItems(taskId, page, size)
+      const res = await cloneApi.fetchCloneTaskItems(taskId, page, size, status)
       setItems(res.records)
       setItemsTotal(res.total)
     } catch {
@@ -103,8 +106,8 @@ export default function CloneTaskDetail() {
   }, [fetchTask])
 
   useEffect(() => {
-    fetchItems(currentPage, pageSize)
-  }, [currentPage, pageSize, fetchItems])
+    fetchItems(currentPage, pageSize, statusFilter)
+  }, [currentPage, pageSize, statusFilter, fetchItems])
 
   const itemColumns = [
     {
@@ -257,6 +260,27 @@ export default function CloneTaskDetail() {
         <Divider orientation="left" orientationMargin={0}>
           <Text strong style={{ fontSize: 16 }}>仓库克隆明细</Text>
         </Divider>
+
+        {/* 状态筛选 */}
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Text type="secondary" style={{ fontSize: 13 }}>筛选状态：</Text>
+            <Segmented
+              value={statusFilter || '全部'}
+              onChange={(val) => {
+                setStatusFilter(val === '全部' ? '' : val as string)
+                setCurrentPage(1)
+              }}
+              options={[
+                { label: '全部', value: '全部' },
+                { label: `成功 (${task.completedRepos ?? 0})`, value: 'CLONED' },
+                { label: `失败 (${task.failedRepos ?? 0})`, value: 'FAILED' },
+                { label: `跳过 (${task.skippedRepos ?? 0})`, value: 'SKIPPED' },
+              ]}
+              size="small"
+            />
+          </div>
+        </Card>
 
         {/* 明细表格 */}
         <Card>
