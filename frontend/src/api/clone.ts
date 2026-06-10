@@ -76,3 +76,8 @@ export async function retryCloneTask(taskId: string): Promise<{ success: boolean
   const { data } = await api.post(`/api/clone/tasks/${taskId}/retry`)
   return data
 }
+
+export async function retryAllCloneTasks(): Promise<{ success: boolean; message?: string }> {
+  const { data } = await api.post('/api/clone/tasks/retry-all')
+  return data
+}

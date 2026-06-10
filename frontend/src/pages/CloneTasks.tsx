@@ -11,7 +11,7 @@ import {
   Spin,
   Typography,
 } from 'antd'
-import { DeleteOutlined, ArrowLeftOutlined, ReloadOutlined, RedoOutlined } from '@ant-design/icons'
+import { DeleteOutlined, ArrowLeftOutlined, ReloadOutlined, RedoOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import * as cloneApi from '../api/clone'
 import type { CloneTaskRecord } from '../types'
 import dayjs from '../setupDayjs'
@@ -123,8 +123,28 @@ export default function CloneTasks() {
     }
   }, [fetchData, currentPage, pageSize])
 
+  const [retryingAll, setRetryingAll] = useState(false)
+  const hasAnyFailed = data.some(r => r.failedRepos > 0 && r.status !== 'PENDING')
+
   const handleRefresh = useCallback(() => {
     fetchData(currentPage, pageSize)
+  }, [fetchData, currentPage, pageSize])
+
+  const handleRetryAll = useCallback(async () => {
+    setRetryingAll(true)
+    try {
+      const res = await cloneApi.retryAllCloneTasks()
+      if (res.success) {
+        message.success(res.message || '已开始重试全部失败项')
+        fetchData(currentPage, pageSize)
+      } else {
+        message.warning(res.message || '一键重试失败')
+      }
+    } catch {
+      message.error('一键重试请求失败')
+    } finally {
+      setRetryingAll(false)
+    }
   }, [fetchData, currentPage, pageSize])
 
   const columns = [
@@ -244,6 +264,16 @@ export default function CloneTasks() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <Title level={3} style={{ margin: 0 }}>克隆任务管理</Title>
         <Space>
+          {hasAnyFailed && (
+            <Button
+              type="primary"
+              icon={<ThunderboltOutlined />}
+              onClick={handleRetryAll}
+              loading={retryingAll}
+            >
+              一键重试全部
+            </Button>
+          )}
           <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={listLoading}>
             刷新
           </Button>

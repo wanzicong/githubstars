@@ -95,7 +95,24 @@ public class CloneTaskController {
     }
 
     /**
-     * 重试失败项
+     * 一键重试全部有失败项的任务
+     */
+    @PostMapping("/retry-all")
+    public Map<String, Object> retryAll() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            cloneService.retryAllFailedClones();
+            result.put("success", true);
+            result.put("message", "已开始重试全部失败项");
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "一键重试失败: " + e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * 重试单个任务的失败项
      */
     @PostMapping("/{taskId}/retry")
     public Map<String, Object> retryTask(@PathVariable String taskId) {

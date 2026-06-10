@@ -244,6 +244,27 @@ public class CloneService {
     }
 
     /**
+     * 一键重试全部有失败项的任务（异步执行）
+     */
+    @Async("cloneExecutor")
+    public void retryAllFailedClones() {
+        List<String> taskIds = cloneTaskService.getTaskIdsWithFailedItems();
+        if (taskIds.isEmpty()) {
+            log.info("Retry all: no tasks with failed items found");
+            return;
+        }
+        log.info("Retry all: found {} tasks with failed items, retrying sequentially", taskIds.size());
+        for (String taskId : taskIds) {
+            try {
+                retryFailedClones(taskId);
+            } catch (Exception e) {
+                log.error("Retry all: error retrying task {}", taskId, e);
+            }
+        }
+        log.info("Retry all: done");
+    }
+
+    /**
      * 重试失败项（异步执行）
      */
     @Async("cloneExecutor")

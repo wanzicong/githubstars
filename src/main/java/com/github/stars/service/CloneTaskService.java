@@ -11,6 +11,7 @@ import org.springframework.util.StringUtils;
 
 import javax.annotation.Resource;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Clone 任务持久化服务
@@ -109,6 +110,20 @@ public class CloneTaskService {
         LambdaQueryWrapper<CloneTaskItem> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(CloneTaskItem::getTaskId, taskId);
         return cloneTaskItemMapper.selectCount(wrapper);
+    }
+
+    /**
+     * 查询所有有失败项的任务 ID（排除 PENDING）
+     */
+    public List<String> getTaskIdsWithFailedItems() {
+        LambdaQueryWrapper<CloneTaskItem> wrapper = new LambdaQueryWrapper<>();
+        wrapper.select(CloneTaskItem::getTaskId)
+               .eq(CloneTaskItem::getStatus, "FAILED")
+               .groupBy(CloneTaskItem::getTaskId);
+        return cloneTaskItemMapper.selectList(wrapper).stream()
+                .map(CloneTaskItem::getTaskId)
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     /**
