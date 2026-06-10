@@ -129,16 +129,17 @@ public class CloneTaskController {
                 result.put("message", "任务尚未开始执行，无法重试");
                 return result;
             }
-            List<CloneTaskItem> failedItems = cloneTaskService.getFailedItemsByTaskId(taskId);
-            if (failedItems.isEmpty()) {
+            int retryCount = cloneTaskService.getFailedItemsByTaskId(taskId).size()
+                    + cloneTaskService.getSkippedItemsByTaskId(taskId).size();
+            if (retryCount == 0) {
                 result.put("success", false);
-                result.put("message", "没有需要重试的失败项");
+                result.put("message", "没有需要重试的项");
                 return result;
             }
             cloneService.retryFailedClones(taskId);
             result.put("success", true);
-            result.put("message", "已开始重试 " + failedItems.size() + " 个失败项");
-            result.put("retryCount", failedItems.size());
+            result.put("message", "已开始重试 " + retryCount + " 个项（含失败/跳过）");
+            result.put("retryCount", retryCount);
         } catch (Exception e) {
             result.put("success", false);
             result.put("message", "重试失败: " + e.getMessage());

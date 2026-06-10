@@ -124,7 +124,7 @@ export default function CloneTasks() {
   }, [fetchData, currentPage, pageSize])
 
   const [retryingAll, setRetryingAll] = useState(false)
-  const hasAnyFailed = data.some(r => r.failedRepos > 0 && r.status !== 'PENDING')
+  const hasAnyFailed = data.some(r => r.totalRepos > r.completedRepos && r.status !== 'PENDING')
 
   const handleRefresh = useCallback(() => {
     fetchData(currentPage, pageSize)
@@ -226,7 +226,7 @@ export default function CloneTasks() {
       render: (_: unknown, record: CloneTaskRecord) => (
         <div onClick={(e) => e.stopPropagation()}>
           <Space size="small">
-            {record.failedRepos > 0 && record.status !== 'PENDING' && (
+            {record.totalRepos > record.completedRepos && record.status !== 'PENDING' && (
               <Button
                 type="link"
                 size="small"

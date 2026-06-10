@@ -279,15 +279,14 @@ public class CloneService {
             return;
         }
 
-        List<CloneTaskItem> failedItems;
-        try {
-            failedItems = cloneTaskService.getFailedItemsByTaskId(taskId);
-        } catch (Exception e) {
-            log.error("Retry failed: query failed items error for {}", taskId, e);
-            return;
-        }
-        if (failedItems.isEmpty()) {
-            log.info("Retry failed: task {} has no failed items", taskId);
+        // 获取所有需要重试的项（失败+跳过）
+        List<CloneTaskItem> retryItems = new ArrayList<>();
+        List<CloneTaskItem> failedItems = cloneTaskService.getFailedItemsByTaskId(taskId);
+        List<CloneTaskItem> skippedItems = cloneTaskService.getSkippedItemsByTaskId(taskId);
+        if (failedItems != null) retryItems.addAll(failedItems);
+        if (skippedItems != null) retryItems.addAll(skippedItems);
+        if (retryItems.isEmpty()) {
+            log.info("Retry: task {} has no failed or skipped items", taskId);
             return;
         }
 
@@ -299,14 +298,14 @@ public class CloneService {
 
         // 用 CompletableFuture 并发重试
         int concurrency = Math.min(task.getConcurrency() != null && task.getConcurrency() > 0
-                ? task.getConcurrency() : 5, failedItems.size());
-        log.info("Starting retry for task {}: {} items, concurrency={}", taskId, failedItems.size(), concurrency);
+                ? task.getConcurrency() : 5, retryItems.size());
+        log.info("Starting retry for task {}: {} items, concurrency={}", taskId, retryItems.size(), concurrency);
 
         try {
             ExecutorService executor = Executors.newFixedThreadPool(concurrency);
             List<CompletableFuture<Void>> futures = new ArrayList<>();
 
-            for (CloneTaskItem item : failedItems) {
+            for (CloneTaskItem item : retryItems) {
                 CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                     CloneResult result;
                     try {

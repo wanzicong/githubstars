@@ -113,12 +113,12 @@ public class CloneTaskService {
     }
 
     /**
-     * 查询所有有失败项的任务 ID（排除 PENDING）
+     * 查询所有有失败/跳过项的任务 ID（排除 PENDING）
      */
     public List<String> getTaskIdsWithFailedItems() {
         LambdaQueryWrapper<CloneTaskItem> wrapper = new LambdaQueryWrapper<>();
         wrapper.select(CloneTaskItem::getTaskId)
-               .eq(CloneTaskItem::getStatus, "FAILED")
+               .in(CloneTaskItem::getStatus, "FAILED", "SKIPPED")
                .groupBy(CloneTaskItem::getTaskId);
         return cloneTaskItemMapper.selectList(wrapper).stream()
                 .map(CloneTaskItem::getTaskId)
@@ -142,6 +142,16 @@ public class CloneTaskService {
         LambdaQueryWrapper<CloneTaskItem> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(CloneTaskItem::getTaskId, taskId)
                .eq(CloneTaskItem::getStatus, "FAILED");
+        return cloneTaskItemMapper.selectList(wrapper);
+    }
+
+    /**
+     * 查询某任务的所有跳过项
+     */
+    public List<CloneTaskItem> getSkippedItemsByTaskId(String taskId) {
+        LambdaQueryWrapper<CloneTaskItem> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(CloneTaskItem::getTaskId, taskId)
+               .eq(CloneTaskItem::getStatus, "SKIPPED");
         return cloneTaskItemMapper.selectList(wrapper);
     }
 
