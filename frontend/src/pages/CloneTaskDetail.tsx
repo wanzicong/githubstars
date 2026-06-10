@@ -9,6 +9,7 @@ import {
   Tag,
   Button,
   Spin,
+  Skeleton,
   Descriptions,
   Typography,
   Space,
@@ -180,9 +181,30 @@ export default function CloneTaskDetail() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 80 }}>
-        <Spin size="large" />
-        <div style={{ marginTop: 16, color: '#666' }}>加载中...</div>
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+          <Skeleton.Button active size="small" style={{ width: 60 }} />
+          <Skeleton.Input active size="small" style={{ width: 160 }} />
+          <Skeleton.Button active size="small" style={{ width: 70 }} />
+        </div>
+        {/* 基本信息骨架 */}
+        <Card style={{ marginBottom: 16 }}>
+          <Skeleton active title={{ width: 100 }} paragraph={{ rows: 3 }} />
+        </Card>
+        {/* 统计卡片骨架 */}
+        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+          {[1, 2, 3, 4].map(i => (
+            <Col xs={12} sm={6} key={i}>
+              <Card size="small">
+                <Skeleton active paragraph={{ rows: 1 }} title={false} />
+              </Card>
+            </Col>
+          ))}
+        </Row>
+        {/* 表格骨架 */}
+        <Card>
+          <Skeleton active title={{ width: 120 }} paragraph={{ rows: 5 }} />
+        </Card>
       </div>
     )
   }
