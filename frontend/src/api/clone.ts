@@ -55,6 +55,12 @@ export async function fetchCloneTask(taskId: string) {
   return data
 }
 
+/** 获取任务详情（从DB，含完整字段） */
+export async function fetchCloneTaskDetail(taskId: string): Promise<{ success: boolean; task: CloneTaskRecord; items: CloneTaskItem[]; total: number }> {
+  const { data } = await api.get(`/api/clone/tasks/${taskId}`)
+  return data
+}
+
 export async function fetchCloneTasks(page: number, size: number): Promise<PageResult<CloneTaskRecord>> {
   const { data } = await api.get<PageResult<CloneTaskRecord>>('/api/clone/tasks', { params: { page, size } })
   return data

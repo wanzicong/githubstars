@@ -299,11 +299,32 @@ public class CloneService {
         // 用 CompletableFuture 并发重试
         int concurrency = Math.min(task.getConcurrency() != null && task.getConcurrency() > 0
                 ? task.getConcurrency() : 5, retryItems.size());
+        // 加入运行缓存，让前端轮询能看到实时进度
+        CloneTask cacheEntry = runningTaskCache.get(taskId);
+        boolean wasCached = cacheEntry != null;
+        if (!wasCached) {
+            cacheEntry = new CloneTask();
+            cacheEntry.setTaskId(taskId);
+            cacheEntry.setResults(Collections.synchronizedList(new ArrayList<>()));
+        }
+        cacheEntry.setStatus("RUNNING");
+        cacheEntry.setTotalRepos(retryItems.size());
+        cacheEntry.setCompletedRepos(0);
+        cacheEntry.setFailedRepos(0);
+        cacheEntry.setSkippedRepos(0);
+        runningTaskCache.put(taskId, cacheEntry);
+
+        // 更新 DB 状态为运行中
+        task.setStatus("RUNNING");
+        task.setFinishedAt(null);
+        cloneTaskService.updateTask(task);
+
         log.info("Starting retry for task {}: {} items, concurrency={}", taskId, retryItems.size(), concurrency);
 
         try {
             ExecutorService executor = Executors.newFixedThreadPool(concurrency);
             List<CompletableFuture<Void>> futures = new ArrayList<>();
+            final CloneTask finalCache = cacheEntry;
 
             for (CloneTaskItem item : retryItems) {
                 CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
@@ -326,6 +347,16 @@ public class CloneService {
                     item.setMessage(result.getMessage());
                     cloneTaskService.updateItem(item);
 
+                    // 更新实时缓存
+                    synchronized (finalCache) {
+                        switch (result.getStatus()) {
+                            case "CLONED": finalCache.setCompletedRepos(finalCache.getCompletedRepos() + 1); break;
+                            case "FAILED": finalCache.setFailedRepos(finalCache.getFailedRepos() + 1); break;
+                            case "SKIPPED": finalCache.setSkippedRepos(finalCache.getSkippedRepos() + 1); break;
+                        }
+                        finalCache.getResults().add(result);
+                    }
+
                     log.info("Retry {}: {} -> {}", item.getFullName(), result.getStatus(), result.getMessage());
                 }, executor);
                 futures.add(future);
@@ -345,10 +376,26 @@ public class CloneService {
             task.setFinishedAt(LocalDateTime.now());
             cloneTaskService.updateTask(task);
 
+            cacheEntry.setStatus("COMPLETED");
+
             log.info("Retry task {} done: success={}, failed={}, skipped={}",
                     taskId, completed, failed, skipped);
         } catch (Exception e) {
             log.error("Retry task {} failed with exception", taskId, e);
+            cacheEntry.setStatus("FAILED");
+            cacheEntry.setErrorMessage(e.getMessage());
+            task.setStatus("FAILED");
+            task.setErrorMessage(e.getMessage());
+            task.setFinishedAt(LocalDateTime.now());
+            cloneTaskService.updateTask(task);
+        } finally {
+            // 5秒后从缓存移除，让前端有时间拉取最终状态
+            new Timer().schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    if (!wasCached) runningTaskCache.remove(taskId);
+                }
+            }, 5000);
         }
     }
 

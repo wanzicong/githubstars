@@ -92,6 +92,14 @@ export default function CloneTasks() {
     }
   }, [currentPage, pageSize, fetchData, loading])
 
+  // 有运行中任务时每3秒自动刷新
+  const hasRunning = data.some(r => r.status === 'RUNNING')
+  useEffect(() => {
+    if (!hasRunning) return
+    const timer = setInterval(() => fetchData(currentPage, pageSize), 3000)
+    return () => clearInterval(timer)
+  }, [hasRunning, currentPage, pageSize, fetchData])
+
   const handleDelete = useCallback(async (taskId: string) => {
     setDeleting(taskId)
     try {

@@ -14,6 +14,7 @@ import {
   Space,
   Divider,
   Segmented,
+  Progress,
   message,
 } from 'antd'
 import {
@@ -66,6 +67,7 @@ export default function CloneTaskDetail() {
   const navigate = useNavigate()
 
   const [task, setTask] = useState<any>(null)
+  const [progress, setProgress] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<CloneTaskItem[]>([])
   const [itemsTotal, setItemsTotal] = useState(0)
@@ -78,14 +80,40 @@ export default function CloneTaskDetail() {
     if (!taskId) return
     setLoading(true)
     try {
-      const res = await cloneApi.fetchCloneTask(taskId)
-      setTask(res)
+      const res = await cloneApi.fetchCloneTaskDetail(taskId)
+      setTask(res.task)
+      // 如果任务正在运行，同时拉取实时进度
+      if (res.task?.status === 'RUNNING') {
+        try {
+          const live = await cloneApi.fetchCloneTask(taskId)
+          setProgress(live)
+        } catch {}
+      } else {
+        setProgress(null)
+      }
     } catch {
       message.error('加载任务详情失败')
     } finally {
       setLoading(false)
     }
   }, [taskId])
+
+  // 运行中时每2秒轮询进度
+  useEffect(() => {
+    if (!taskId || task?.status !== 'RUNNING') return
+    const timer = setInterval(async () => {
+      try {
+        const live = await cloneApi.fetchCloneTask(taskId)
+        setProgress(live)
+        if (live.status === 'COMPLETED' || live.status === 'FAILED') {
+          // 重新加载完整数据
+          fetchTask()
+          fetchItems(1, pageSize, statusFilter)
+        }
+      } catch {}
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [taskId, task?.status])
 
   const fetchItems = useCallback(async (page: number, size: number, status?: string) => {
     if (!taskId) return
@@ -248,7 +276,7 @@ export default function CloneTaskDetail() {
               <Card size="small" hoverable>
                 <Statistic
                   title={s.title}
-                  value={s.value}
+                  value={progress ? (s.title === '总仓库数' ? progress.totalRepos : s.title === '成功' ? progress.completedRepos : s.title === '失败' ? progress.failedRepos : progress.skippedRepos) : s.value}
                   valueStyle={{ color: s.color, fontWeight: 600 }}
                   prefix={s.icon}
                 />
@@ -256,6 +284,34 @@ export default function CloneTaskDetail() {
             </Col>
           ))}
         </Row>
+
+        {/* 实时进度条 */}
+        {progress && progress.status === 'RUNNING' && (
+          <Card style={{ marginBottom: 24 }}>
+            <Space direction="vertical" style={{ width: '100%' }} size="middle">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Spin size="small" />
+                <Text>正在重试中...</Text>
+              </div>
+              <Progress
+                percent={progress.totalRepos > 0
+                  ? Math.round(((progress.completedRepos + progress.failedRepos + progress.skippedRepos) / progress.totalRepos) * 100)
+                  : 0}
+                status="active"
+                format={() => `${progress.completedRepos + progress.failedRepos + progress.skippedRepos}/${progress.totalRepos}`}
+              />
+              {progress.results && progress.results.length > 0 && (
+                <div style={{ maxHeight: 200, overflow: 'auto', fontSize: 13 }}>
+                  {progress.results.slice(-10).reverse().map((r: any, i: number) => (
+                    <div key={i} style={{ padding: '2px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {r.status === 'CLONED' ? '✅' : r.status === 'FAILED' ? '❌' : '⏭'} {r.fullName}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Space>
+          </Card>
+        )}
 
         <Divider orientation="left" orientationMargin={0}>
           <Text strong style={{ fontSize: 16 }}>仓库克隆明细</Text>
