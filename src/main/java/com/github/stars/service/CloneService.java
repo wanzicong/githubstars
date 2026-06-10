@@ -253,8 +253,8 @@ public class CloneService {
             log.error("Retry failed: task {} not found", taskId);
             return;
         }
-        if (!"COMPLETED".equals(task.getStatus()) && !"FAILED".equals(task.getStatus())) {
-            log.warn("Retry failed: task {} is still running, cannot retry", taskId);
+        if ("PENDING".equals(task.getStatus())) {
+            log.warn("Retry failed: task {} hasn't started yet", taskId);
             return;
         }
 

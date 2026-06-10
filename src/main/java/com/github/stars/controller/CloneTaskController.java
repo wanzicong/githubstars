@@ -107,9 +107,9 @@ public class CloneTaskController {
                 result.put("message", "任务不存在");
                 return result;
             }
-            if ("RUNNING".equals(task.getStatus()) || "PENDING".equals(task.getStatus())) {
+            if ("PENDING".equals(task.getStatus())) {
                 result.put("success", false);
-                result.put("message", "任务正在执行中，无法重试");
+                result.put("message", "任务尚未开始执行，无法重试");
                 return result;
             }
             List<CloneTaskItem> failedItems = cloneTaskService.getFailedItemsByTaskId(taskId);

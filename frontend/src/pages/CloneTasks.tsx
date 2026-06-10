@@ -206,7 +206,7 @@ export default function CloneTasks() {
       render: (_: unknown, record: CloneTaskRecord) => (
         <div onClick={(e) => e.stopPropagation()}>
           <Space size="small">
-            {record.failedRepos > 0 && (record.status === 'COMPLETED' || record.status === 'FAILED') && (
+            {record.failedRepos > 0 && record.status !== 'PENDING' && (
               <Button
                 type="link"
                 size="small"
