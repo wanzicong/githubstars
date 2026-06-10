@@ -291,7 +291,7 @@ public class CloneService {
                                 ? item.getFullName().substring(item.getFullName().lastIndexOf('/') + 1)
                                 : item.getFullName();
                         String htmlUrl = "https://github.com/" + item.getFullName();
-                        result = doClone(item.getFullName(), repoName, dir, htmlUrl);
+                        result = doClone(item.getFullName(), repoName, dir, htmlUrl, true);
                     } catch (Exception e) {
                         result = new CloneResult();
                         result.setFullName(item.getFullName());
@@ -403,7 +403,7 @@ public class CloneService {
                 CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                     CloneResult result;
                     try {
-                        result = doClone(repo.getFullName(), repo.getRepoName(), dir, repo.getHtmlUrl());
+                        result = doClone(repo.getFullName(), repo.getRepoName(), dir, repo.getHtmlUrl(), false);
                     } catch (Exception e) {
                         result = new CloneResult();
                         result.setFullName(repo.getFullName());
@@ -491,8 +491,10 @@ public class CloneService {
 
     /**
      * 执行单个仓库的 git clone
+     *
+     * @param forceRetry 强制重试模式：目录存在但为空时删除后重新克隆
      */
-    private CloneResult doClone(String fullName, String repoName, File dir, String htmlUrl) {
+    private CloneResult doClone(String fullName, String repoName, File dir, String htmlUrl, boolean forceRetry) {
         CloneResult result = new CloneResult();
         result.setFullName(fullName);
 
@@ -504,9 +506,28 @@ public class CloneService {
 
         File repoDir = new File(dir, repoName);
         if (repoDir.exists()) {
-            result.setStatus("SKIPPED");
-            result.setMessage("目录已存在");
-            return result;
+            // 重试模式下：空目录则删除后重试，非空目录保护性跳过
+            if (forceRetry) {
+                String[] contents = repoDir.list();
+                if (contents != null && contents.length == 0) {
+                    if (repoDir.delete()) {
+                        log.info("Retry: removed empty dir {} before reclone", repoDir.getAbsolutePath());
+                        // 继续往下执行 git clone
+                    } else {
+                        result.setStatus("FAILED");
+                        result.setMessage("空目录已存在但无法删除: " + repoDir.getAbsolutePath());
+                        return result;
+                    }
+                } else {
+                    result.setStatus("SKIPPED");
+                    result.setMessage("目录已存在且非空，跳过");
+                    return result;
+                }
+            } else {
+                result.setStatus("SKIPPED");
+                result.setMessage("目录已存在");
+                return result;
+            }
         }
 
         try {
