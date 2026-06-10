@@ -23,6 +23,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
@@ -241,7 +242,7 @@ public class CloneService {
     }
 
     /**
-     * 重试失败项（同步方法，为每个失败项执行 git clone）
+     * 重试失败项（异步执行）
      */
     @Async("cloneExecutor")
     public void retryFailedClones(String taskId) {
@@ -255,66 +256,78 @@ public class CloneService {
             return;
         }
 
-        List<CloneTaskItem> failedItems = cloneTaskService.getFailedItemsByTaskId(taskId);
+        List<CloneTaskItem> failedItems;
+        try {
+            failedItems = cloneTaskService.getFailedItemsByTaskId(taskId);
+        } catch (Exception e) {
+            log.error("Retry failed: query failed items error for {}", taskId, e);
+            return;
+        }
         if (failedItems.isEmpty()) {
             log.info("Retry failed: task {} has no failed items", taskId);
             return;
         }
 
         File dir = new File(task.getTargetDir());
-        if (!dir.exists()) {
-            log.error("Retry failed: target dir {} not found", task.getTargetDir());
+        if (!dir.exists() || !dir.isDirectory()) {
+            log.error("Retry failed: target dir {} not found for task {}", task.getTargetDir(), taskId);
             return;
         }
 
         // 用 CompletableFuture 并发重试
         int concurrency = Math.min(task.getConcurrency() != null && task.getConcurrency() > 0
                 ? task.getConcurrency() : 5, failedItems.size());
-        ExecutorService executor = Executors.newFixedThreadPool(concurrency);
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        log.info("Starting retry for task {}: {} items, concurrency={}", taskId, failedItems.size(), concurrency);
 
-        for (CloneTaskItem item : failedItems) {
-            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-                CloneResult result;
-                try {
-                    String repoName = item.getFullName().contains("/")
-                            ? item.getFullName().substring(item.getFullName().lastIndexOf('/') + 1)
-                            : item.getFullName();
-                    String htmlUrl = "https://github.com/" + item.getFullName();
-                    result = doClone(item.getFullName(), repoName, dir, htmlUrl);
-                } catch (Exception e) {
-                    result = new CloneResult();
-                    result.setFullName(item.getFullName());
-                    result.setStatus("FAILED");
-                    result.setMessage(e.getMessage());
-                }
+        try {
+            ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
 
-                // 更新 DB
-                item.setStatus(result.getStatus());
-                item.setMessage(result.getMessage());
-                cloneTaskService.updateItem(item);
+            for (CloneTaskItem item : failedItems) {
+                CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                    CloneResult result;
+                    try {
+                        String repoName = item.getFullName().contains("/")
+                                ? item.getFullName().substring(item.getFullName().lastIndexOf('/') + 1)
+                                : item.getFullName();
+                        String htmlUrl = "https://github.com/" + item.getFullName();
+                        result = doClone(item.getFullName(), repoName, dir, htmlUrl);
+                    } catch (Exception e) {
+                        result = new CloneResult();
+                        result.setFullName(item.getFullName());
+                        result.setStatus("FAILED");
+                        result.setMessage(e.getMessage());
+                    }
 
-                log.info("Retry {}: {} -> {}", item.getFullName(), result.getStatus(), result.getMessage());
-            }, executor);
-            futures.add(future);
+                    // 更新 DB
+                    item.setStatus(result.getStatus());
+                    item.setMessage(result.getMessage());
+                    cloneTaskService.updateItem(item);
+
+                    log.info("Retry {}: {} -> {}", item.getFullName(), result.getStatus(), result.getMessage());
+                }, executor);
+                futures.add(future);
+            }
+
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            executor.shutdown();
+
+            // 更新任务计数
+            int completed = cloneTaskService.countItemsByTaskIdAndStatus(taskId, "CLONED");
+            int failed = cloneTaskService.countItemsByTaskIdAndStatus(taskId, "FAILED");
+            int skipped = cloneTaskService.countItemsByTaskIdAndStatus(taskId, "SKIPPED");
+            task.setCompletedRepos(completed);
+            task.setFailedRepos(failed);
+            task.setSkippedRepos(skipped);
+            task.setStatus(completed > 0 && failed == 0 ? "COMPLETED" : task.getStatus());
+            task.setFinishedAt(LocalDateTime.now());
+            cloneTaskService.updateTask(task);
+
+            log.info("Retry task {} done: success={}, failed={}, skipped={}",
+                    taskId, completed, failed, skipped);
+        } catch (Exception e) {
+            log.error("Retry task {} failed with exception", taskId, e);
         }
-
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-        executor.shutdown();
-
-        // 更新任务计数
-        int completed = cloneTaskService.countItemsByTaskIdAndStatus(taskId, "CLONED");
-        int failed = cloneTaskService.countItemsByTaskIdAndStatus(taskId, "FAILED");
-        int skipped = cloneTaskService.countItemsByTaskIdAndStatus(taskId, "SKIPPED");
-        task.setCompletedRepos(completed);
-        task.setFailedRepos(failed);
-        task.setSkippedRepos(skipped);
-        task.setStatus(completed > 0 && failed == 0 ? "COMPLETED" : task.getStatus());
-        task.setFinishedAt(LocalDateTime.now());
-        cloneTaskService.updateTask(task);
-
-        log.info("Retry task {} done: success={}, failed={}, skipped={}",
-                taskId, completed, failed, skipped);
     }
 
     /**
@@ -501,13 +514,21 @@ public class CloneService {
             pb.directory(dir);
             pb.redirectErrorStream(true);
             Process p = pb.start();
-            int exitCode = p.waitFor();
+            // 读取错误输出以便调试
+            String errorOut = new String(p.getErrorStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            if (!p.waitFor(120, TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                result.setStatus("FAILED");
+                result.setMessage("git clone 超时(120s): " + errorOut.trim());
+                return result;
+            }
+            int exitCode = p.exitValue();
             if (exitCode == 0) {
                 result.setStatus("CLONED");
                 result.setMessage("成功");
             } else {
                 result.setStatus("FAILED");
-                result.setMessage("git clone exit code: " + exitCode);
+                result.setMessage("git clone exit code: " + exitCode + " - " + errorOut.trim());
             }
         } catch (Exception e) {
             result.setStatus("FAILED");
