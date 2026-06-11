@@ -1,22 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, theme, Typography } from 'antd'
+import { Layout, Menu, theme, Typography, Button, Tooltip } from 'antd'
 import {
   StarOutlined,
   SyncOutlined,
   BarChartOutlined,
   AppstoreOutlined,
-  FolderOutlined,
   ThunderboltOutlined,
   UserOutlined,
   SettingOutlined,
   SearchOutlined,
   FireOutlined,
   CloudDownloadOutlined,
+  MenuOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons'
 
-const { Header, Content, Footer } = Layout
+const { Header, Sider, Content, Footer } = Layout
 const { Text } = Typography
+
+type LayoutMode = 'top' | 'side'
+
+const LAYOUT_KEY = 'githubstars-layout-mode'
 
 const navItems = [
   { key: '/', icon: <StarOutlined />, label: 'Star列表' },
@@ -31,49 +37,137 @@ const navItems = [
   { key: '/trending', icon: <FireOutlined />, label: '趋势排行' },
 ]
 
+function getSelectedKey(pathname: string) {
+  const currentKey = '/' + pathname.split('/').filter(Boolean).slice(0, 1).join('/') || '/'
+  return currentKey === '/ai' ? '/ai/classify' : currentKey
+}
+
 export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const { token } = theme.useToken()
 
-  const currentKey = '/' + location.pathname.split('/').filter(Boolean).slice(0, 1).join('/') || '/'
-  const selectedKey = currentKey === '/ai' ? '/ai/classify' : currentKey
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
+    const saved = localStorage.getItem(LAYOUT_KEY)
+    return saved === 'side' ? 'side' : 'top'
+  })
+  const [siderCollapsed, setSiderCollapsed] = useState(false)
 
-  return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+  useEffect(() => {
+    localStorage.setItem(LAYOUT_KEY, layoutMode)
+  }, [layoutMode])
+
+  const selectedKey = getSelectedKey(location.pathname)
+
+  const brand = (
+    <Text strong style={{ fontSize: 18, color: token.colorPrimary, whiteSpace: 'nowrap' }}>
+      GitHub Stars
+    </Text>
+  )
+
+  const toggleLayout = () => {
+    setLayoutMode(prev => prev === 'top' ? 'side' : 'top')
+  }
+
+  // ── 顶部导航模式 ──
+  if (layoutMode === 'top') {
+    return (
+      <Layout style={{ minHeight: '100vh' }}>
+        <Header style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: token.colorBgContainer,
           borderBottom: `1px solid ${token.colorBorderSecondary}`,
-          paddingInline: 24,
-          height: 56,
-          position: 'sticky',
+          paddingInline: 16, height: 56, position: 'sticky', top: 0, zIndex: 100,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+            {brand}
+            <Menu
+              mode="horizontal"
+              selectedKeys={[selectedKey]}
+              items={navItems}
+              onClick={({ key }) => navigate(key)}
+              style={{ flex: 1, border: 'none', minWidth: 0 }}
+            />
+          </div>
+          <Tooltip title="切换到侧边栏布局">
+            <Button type="text" icon={<MenuOutlined />} onClick={toggleLayout} />
+          </Tooltip>
+        </Header>
+        <Content style={{ padding: '16px 24px', maxWidth: 1400, width: '100%', margin: '0 auto' }}>
+          <Outlet />
+        </Content>
+        <Footer style={{ textAlign: 'center', color: token.colorTextTertiary, fontSize: 12, padding: 12 }}>
+          GitHub Stars 管理系统 ©{new Date().getFullYear()}
+        </Footer>
+      </Layout>
+    )
+  }
+
+  // ── 侧边栏导航模式 ──
+  return (
+    <Layout style={{ minHeight: '100vh' }} hasSider>
+      <Sider
+        collapsible
+        collapsed={siderCollapsed}
+        onCollapse={setSiderCollapsed}
+        trigger={null}
+        width={220}
+        style={{
+          background: token.colorBgContainer,
+          borderRight: `1px solid ${token.colorBorderSecondary}`,
+          height: '100vh',
+          position: 'fixed',
+          left: 0,
           top: 0,
-          zIndex: 100,
+          bottom: 0,
+          zIndex: 10,
+          overflow: 'auto',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 0 }}>
-          <Text strong style={{ fontSize: 18, color: token.colorPrimary, whiteSpace: 'nowrap' }}>
-            GitHub Stars
-          </Text>
-          <Menu
-            mode="horizontal"
-            selectedKeys={[selectedKey]}
-            items={navItems}
-            onClick={({ key }) => navigate(key)}
-            style={{ flex: 1, border: 'none', minWidth: 0 }}
-          />
+        <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+          {siderCollapsed ? (
+            <StarOutlined style={{ fontSize: 20, color: token.colorPrimary }} />
+          ) : (
+            brand
+          )}
         </div>
-      </Header>
-      <Content style={{ padding: '16px 24px', maxWidth: 1400, width: '100%', margin: '0 auto' }}>
-        <Outlet />
-      </Content>
-      <Footer style={{ textAlign: 'center', color: token.colorTextTertiary, fontSize: 12 }}>
-        GitHub Stars 管理系统 ©{new Date().getFullYear()}
-      </Footer>
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedKey]}
+          items={navItems}
+          onClick={({ key }) => navigate(key)}
+          style={{ border: 'none' }}
+        />
+      </Sider>
+      <Layout style={{ marginLeft: siderCollapsed ? 80 : 220, transition: 'margin-left 0.2s' }}>
+        <Header style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: token.colorBgContainer,
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          paddingInline: 16, height: 56,
+          position: 'sticky', top: 0, zIndex: 100,
+        }}>
+          <Space size={8}>
+            <Button
+              type="text"
+              icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setSiderCollapsed(!siderCollapsed)}
+            />
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              {navItems.find(i => i.key === selectedKey)?.label || ''}
+            </Text>
+          </Space>
+          <Tooltip title="切换到顶部菜单布局">
+            <Button type="text" icon={<MenuOutlined />} onClick={toggleLayout} />
+          </Tooltip>
+        </Header>
+        <Content style={{ padding: '16px 24px', maxWidth: 1400, width: '100%', margin: '0 auto' }}>
+          <Outlet />
+        </Content>
+        <Footer style={{ textAlign: 'center', color: token.colorTextTertiary, fontSize: 12, padding: 12 }}>
+          GitHub Stars 管理系统 ©{new Date().getFullYear()}
+        </Footer>
+      </Layout>
     </Layout>
   )
 }
