@@ -85,8 +85,9 @@ CREATE TABLE IF NOT EXISTS `clone_task` (
     `started_at` DATETIME DEFAULT NULL COMMENT '开始时间',
     `finished_at` DATETIME DEFAULT NULL COMMENT '完成时间',
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `pinned` INT DEFAULT 0 COMMENT '是否置顶：0=否，1=是',
     PRIMARY KEY (`id`),
-    KEY `idx_task_id` (`task_id`),
+    UNIQUE KEY `uk_task_id` (`task_id`),
     KEY `idx_status` (`status`),
     KEY `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Clone任务表';

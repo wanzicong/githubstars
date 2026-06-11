@@ -83,14 +83,8 @@ export default function CloneTasks() {
 
   useEffect(() => {
     setLoading(true)
-    fetchData(1, pageSize).finally(() => setLoading(false))
-  }, [fetchData, pageSize])
-
-  useEffect(() => {
-    if (!loading) {
-      fetchData(currentPage, pageSize)
-    }
-  }, [currentPage, pageSize, fetchData, loading])
+    fetchData(currentPage, pageSize).finally(() => setLoading(false))
+  }, [currentPage, pageSize, fetchData])
 
   // 有运行中任务时每3秒自动刷新
   const hasRunning = data.some(r => r.status === 'RUNNING')
@@ -144,7 +138,7 @@ export default function CloneTasks() {
   }, [fetchData, currentPage, pageSize])
 
   const [retryingAll, setRetryingAll] = useState(false)
-  const hasAnyFailed = data.some(r => r.totalRepos > r.completedRepos && r.status !== 'PENDING')
+  const hasIncompleteItems = data.some(r => r.totalRepos > r.completedRepos && (r.status === 'COMPLETED' || r.status === 'FAILED'))
 
   const handleRefresh = useCallback(() => {
     fetchData(currentPage, pageSize)
@@ -174,7 +168,7 @@ export default function CloneTasks() {
       key: 'taskId',
       width: 100,
       ellipsis: true,
-      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v.substring(0, 8)}...</span>,
+      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v.length > 12 ? v.substring(0, 12) + '...' : v}</span>,
     },
     {
       title: '状态',
@@ -253,7 +247,7 @@ export default function CloneTasks() {
               onClick={() => handlePin(record.taskId, record.pinned === 1)}
               title={record.pinned === 1 ? '取消置顶' : '置顶'}
             />
-            {record.totalRepos > record.completedRepos && record.status !== 'PENDING' && (
+            {(record.status === 'COMPLETED' || record.status === 'FAILED') && record.totalRepos > record.completedRepos && (
               <Button
                 type="link"
                 size="small"
@@ -291,7 +285,7 @@ export default function CloneTasks() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <Title level={3} style={{ margin: 0 }}>克隆任务管理</Title>
         <Space>
-          {hasAnyFailed && (
+          {hasIncompleteItems && (
             <Button
               type="primary"
               icon={<ThunderboltOutlined />}

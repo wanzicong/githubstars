@@ -146,6 +146,7 @@ export interface CloneTaskRecord {
   errorMessage?: string
   keyword?: string
   language?: string
+  categoryIds?: string
   dateField?: string
   startDate?: string
   endDate?: string

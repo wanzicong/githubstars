@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Card,
@@ -77,6 +77,12 @@ export default function CloneTaskDetail() {
   const [pageSize, setPageSize] = useState(20)
   const [statusFilter, setStatusFilter] = useState('')
 
+  // 用 ref 保存轮询中会变化的值，避免闭包过时问题
+  const statusFilterRef = useRef(statusFilter)
+  statusFilterRef.current = statusFilter
+  const pageSizeRef = useRef(pageSize)
+  pageSizeRef.current = pageSize
+
   const fetchTask = useCallback(async () => {
     if (!taskId) return
     setLoading(true)
@@ -99,23 +105,6 @@ export default function CloneTaskDetail() {
     }
   }, [taskId])
 
-  // 运行中时每2秒轮询进度
-  useEffect(() => {
-    if (!taskId || task?.status !== 'RUNNING') return
-    const timer = setInterval(async () => {
-      try {
-        const live = await cloneApi.fetchCloneTask(taskId)
-        setProgress(live)
-        if (live.status === 'COMPLETED' || live.status === 'FAILED') {
-          // 重新加载完整数据
-          fetchTask()
-          fetchItems(1, pageSize, statusFilter)
-        }
-      } catch {}
-    }, 2000)
-    return () => clearInterval(timer)
-  }, [taskId, task?.status])
-
   const fetchItems = useCallback(async (page: number, size: number, status?: string) => {
     if (!taskId) return
     setItemsLoading(true)
@@ -129,6 +118,23 @@ export default function CloneTaskDetail() {
       setItemsLoading(false)
     }
   }, [taskId])
+
+  // 运行中时每2秒轮询进度
+  useEffect(() => {
+    if (!taskId || task?.status !== 'RUNNING') return
+    const timer = setInterval(async () => {
+      try {
+        const live = await cloneApi.fetchCloneTask(taskId)
+        setProgress(live)
+        if (live.status === 'COMPLETED' || live.status === 'FAILED') {
+          // 重新加载完整数据（使用 ref 避免闭包过时）
+          fetchTask()
+          fetchItems(1, pageSizeRef.current, statusFilterRef.current)
+        }
+      } catch {}
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [taskId, task?.status, fetchTask, fetchItems])
 
   useEffect(() => {
     fetchTask()
@@ -219,10 +225,10 @@ export default function CloneTaskDetail() {
   }
 
   const stats = [
-    { title: '总仓库数', value: task.totalRepos ?? 0, color: '#1677ff', icon: <DownloadOutlined /> },
-    { title: '成功', value: task.completedRepos ?? 0, color: '#52c41a', icon: <CheckCircleOutlined /> },
-    { title: '失败', value: task.failedRepos ?? 0, color: '#ff4d4f', icon: <CloseCircleOutlined /> },
-    { title: '跳过', value: task.skippedRepos ?? 0, color: '#faad14', icon: <WarningOutlined /> },
+    { title: '总仓库数', key: 'totalRepos', color: '#1677ff', icon: <DownloadOutlined /> },
+    { title: '成功', key: 'completedRepos', color: '#52c41a', icon: <CheckCircleOutlined /> },
+    { title: '失败', key: 'failedRepos', color: '#ff4d4f', icon: <CloseCircleOutlined /> },
+    { title: '跳过', key: 'skippedRepos', color: '#faad14', icon: <WarningOutlined /> },
   ]
 
   return (
@@ -258,6 +264,7 @@ export default function CloneTaskDetail() {
               <Text code style={{ fontSize: 12 }}>{task.targetDir || '-'}</Text>
             </Descriptions.Item>
             <Descriptions.Item label="创建时间">{formatDateTime(task.createdAt)}</Descriptions.Item>
+            <Descriptions.Item label="开始时间">{formatDateTime(task.startedAt)}</Descriptions.Item>
             <Descriptions.Item label="完成时间">{formatDateTime(task.finishedAt)}</Descriptions.Item>
           </Descriptions>
         </Card>
@@ -298,7 +305,7 @@ export default function CloneTaskDetail() {
               <Card size="small" hoverable>
                 <Statistic
                   title={s.title}
-                  value={progress ? (s.title === '总仓库数' ? progress.totalRepos : s.title === '成功' ? progress.completedRepos : s.title === '失败' ? progress.failedRepos : progress.skippedRepos) : s.value}
+                  value={progress ? (progress[s.key] ?? 0) : (task[s.key] ?? 0)}
                   valueStyle={{ color: s.color, fontWeight: 600 }}
                   prefix={s.icon}
                 />
@@ -313,7 +320,7 @@ export default function CloneTaskDetail() {
             <Space direction="vertical" style={{ width: '100%' }} size="middle">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Spin size="small" />
-                <Text>正在重试中...</Text>
+                <Text>{task.status === 'RUNNING' ? '正在克隆中...' : '正在处理中...'}</Text>
               </div>
               <Progress
                 percent={progress.totalRepos > 0

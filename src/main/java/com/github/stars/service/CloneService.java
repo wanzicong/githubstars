@@ -14,6 +14,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import java.io.File;
 import java.io.IOException;
@@ -23,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -67,6 +69,16 @@ public class CloneService {
 
     /** 运行中任务的实时进度缓存（key=taskId），完成后移除 */
     private final ConcurrentHashMap<String, CloneTask> runningTaskCache = new ConcurrentHashMap<>();
+
+    /**
+     * 服务启动时从数据库初始化 taskCounter，避免重启后 ID 重复
+     */
+    @PostConstruct
+    public void initTaskCounter() {
+        int maxNum = cloneTaskService.getMaxTaskCounterNumber();
+        taskCounter.set(maxNum);
+        log.info("CloneService taskCounter 初始化: {}", maxNum);
+    }
 
     // ======================== 目录 / 配置方法 ========================
 
@@ -216,7 +228,7 @@ public class CloneService {
         cacheEntry.setCompletedRepos(0);
         cacheEntry.setFailedRepos(0);
         cacheEntry.setSkippedRepos(0);
-        cacheEntry.setResults(Collections.synchronizedList(new ArrayList<>()));
+        cacheEntry.setResults(new CopyOnWriteArrayList<>());
         runningTaskCache.put(task.getTaskId(), cacheEntry);
 
         // 通过 ApplicationContext 获取代理对象，确保 @Async 生效
@@ -299,7 +311,7 @@ public class CloneService {
         if (!wasCached) {
             cacheEntry = new CloneTask();
             cacheEntry.setTaskId(taskId);
-            cacheEntry.setResults(Collections.synchronizedList(new ArrayList<>()));
+            cacheEntry.setResults(new CopyOnWriteArrayList<>());
         }
         cacheEntry.setStatus("RUNNING");
         cacheEntry.setTotalRepos(retryItems.size());
@@ -366,11 +378,19 @@ public class CloneService {
             task.setCompletedRepos(completed);
             task.setFailedRepos(failed);
             task.setSkippedRepos(skipped);
-            task.setStatus(completed > 0 && failed == 0 ? "COMPLETED" : task.getStatus());
+            // 重试完成后设置正确的终止状态
+            if (failed > 0 && completed == 0) {
+                task.setStatus("FAILED");
+            } else {
+                task.setStatus("COMPLETED");
+            }
             task.setFinishedAt(LocalDateTime.now());
             cloneTaskService.updateTask(task);
 
-            cacheEntry.setStatus("COMPLETED");
+            cacheEntry.setStatus(task.getStatus());
+            cacheEntry.setCompletedRepos(completed);
+            cacheEntry.setFailedRepos(failed);
+            cacheEntry.setSkippedRepos(skipped);
 
             log.info("Retry task {} done: success={}, failed={}, skipped={}",
                     taskId, completed, failed, skipped);
@@ -411,7 +431,7 @@ public class CloneService {
         if (cachedInitial == null) {
             cachedInitial = new CloneTask();
             cachedInitial.setTaskId(taskId);
-            cachedInitial.setResults(Collections.synchronizedList(new ArrayList<>()));
+            cachedInitial.setResults(new CopyOnWriteArrayList<>());
             runningTaskCache.put(taskId, cachedInitial);
         }
         final CloneTask cached = cachedInitial;
@@ -553,6 +573,21 @@ public class CloneService {
     }
 
     /**
+     * 安全删除目录（递归），忽略异常
+     */
+    private void deleteDirectory(File dir) {
+        if (dir == null || !dir.exists()) return;
+        try {
+            Files.walk(dir.toPath())
+                    .sorted(Comparator.reverseOrder())
+                    .map(Path::toFile)
+                    .forEach(File::delete);
+        } catch (IOException e) {
+            log.warn("清理残留目录失败: {} - {}", dir.getAbsolutePath(), e.getMessage());
+        }
+    }
+
+    /**
      * 根据配置构建最终的 clone URL（支持代理加速）
      * 如配置 clone.proxy.url=https://gh-proxy.org/，则原始 URL https://github.com/a/b
      * 会被转换为 https://gh-proxy.org/https://github.com/a/b
@@ -618,12 +653,14 @@ public class CloneService {
             pb.directory(dir);
             pb.redirectErrorStream(true);
             Process p = pb.start();
-            // 读取错误输出以便调试
-            String errorOut = new String(p.getErrorStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            if (!p.waitFor(300, TimeUnit.SECONDS)) {
+            // redirectErrorStream(true) 已将 stderr 合并到 stdout，从 getInputStream() 读取
+            String output = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            if (!p.waitFor(600, TimeUnit.SECONDS)) {
                 p.destroyForcibly();
                 result.setStatus("FAILED");
-                result.setMessage("git clone 超时(300s): " + errorOut.trim());
+                result.setMessage("git clone 超时(600s): " + (output.length() > 500 ? output.substring(0, 500) + "..." : output).trim());
+                // 清理残留的空目录，避免下次误判 SKIPPED
+                deleteDirectory(repoDir);
                 return result;
             }
             int exitCode = p.exitValue();
@@ -632,11 +669,16 @@ public class CloneService {
                 result.setMessage("成功");
             } else {
                 result.setStatus("FAILED");
-                result.setMessage("git clone exit code: " + exitCode + " - " + errorOut.trim());
+                String trimmedOutput = output.length() > 500 ? output.substring(0, 500) + "..." : output;
+                result.setMessage("git clone exit code: " + exitCode + " - " + trimmedOutput.trim());
+                // 清理残留目录，避免下次误判 SKIPPED
+                deleteDirectory(repoDir);
             }
         } catch (Exception e) {
             result.setStatus("FAILED");
             result.setMessage(e.getMessage());
+            // 清理可能残留的目录
+            deleteDirectory(repoDir);
         }
         return result;
     }
