@@ -47,6 +47,7 @@ public class SystemConfigService {
         defaults.put("deepseek.api_url", new String[]{"https://api.deepseek.com/v1/chat/completions", "DeepSeek Chat Completions API 地址"});
         defaults.put("deepseek.model", new String[]{"deepseek-chat", "DeepSeek 模型名称"});
         defaults.put("clone.directory", new String[]{"D:/github-stars", "批量 Clone 的基础保存目录"});
+        defaults.put("clone.proxy.url", new String[]{"", "GitHub 克隆代理加速前缀，如 https://gh-proxy.org/，为空则不使用代理"});
         defaults.put("clone.subdirectory.history", new String[]{"[]", "Clone 子目录历史记录，系统自动维护"});
         defaults.put("clone.subdirectory.last", new String[]{"", "上次选择的 Clone 子目录，系统自动维护"});
 

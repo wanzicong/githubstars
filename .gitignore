@@ -42,3 +42,5 @@ githubstars-desktop/*.log
 githubstars-desktop/frontend/*.log
 githubstars-desktop/.vite/
 githubstars_full_export.sql
+githubstars-desktop/githubstars.db-shm
+githubstars-desktop/githubstars.db-wal

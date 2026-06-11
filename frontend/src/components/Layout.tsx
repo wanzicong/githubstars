@@ -42,6 +42,55 @@ function getSelectedKey(pathname: string) {
   return currentKey === '/ai' ? '/ai/classify' : currentKey
 }
 
+/** 注入 Menu 选中态样式 — 用主色替代默认灰色 */
+function MenuStyles({ token }: { token: any }) {
+  return (
+    <style>{`
+      /* ── 顶部水平菜单选中态 ── */
+      .ant-menu-horizontal .ant-menu-item-selected {
+        color: ${token.colorPrimary} !important;
+      }
+      .ant-menu-horizontal .ant-menu-item-selected::after {
+        border-bottom-color: ${token.colorPrimary} !important;
+      }
+      .ant-menu-horizontal .ant-menu-item:hover {
+        color: ${token.colorPrimary} !important;
+      }
+
+      /* ── 侧边栏内联菜单选中态 ── */
+      .ant-menu-inline .ant-menu-item-selected {
+        background: ${token.colorPrimaryBg} !important;
+        color: ${token.colorPrimary} !important;
+        border-radius: 8px;
+        margin: 2px 8px;
+        width: auto !important;
+      }
+      .ant-menu-inline .ant-menu-item-selected::after {
+        border-right-color: ${token.colorPrimary} !important;
+      }
+      .ant-menu-inline .ant-menu-item {
+        border-radius: 8px;
+        margin: 2px 8px;
+        width: auto !important;
+      }
+      .ant-menu-inline .ant-menu-item:hover {
+        color: ${token.colorPrimary} !important;
+        background: ${token.colorFillSecondary} !important;
+      }
+      .ant-menu-inline .ant-menu-submenu-selected > .ant-menu-submenu-title {
+        color: ${token.colorPrimary} !important;
+      }
+
+      /* ── 收起状态下的弹出菜单选中态 ── */
+      .ant-menu-vertical .ant-menu-item-selected {
+        background: ${token.colorPrimaryBg} !important;
+        color: ${token.colorPrimary} !important;
+        border-radius: 8px;
+      }
+    `}</style>
+  )
+}
+
 export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -73,11 +122,13 @@ export default function AppLayout() {
   if (layoutMode === 'top') {
     return (
       <Layout style={{ minHeight: '100vh' }}>
+        <MenuStyles token={token} />
         <Header style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: token.colorBgContainer,
           borderBottom: `1px solid ${token.colorBorderSecondary}`,
-          paddingInline: 16, height: 56, position: 'sticky', top: 0, zIndex: 100,
+          paddingInline: 16, height: 56,
+          position: 'sticky', top: 0, zIndex: 100,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
             {brand}
@@ -107,7 +158,9 @@ export default function AppLayout() {
   const siderWidth = siderCollapsed ? 80 : 220
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      {/* 固定侧边栏 — 不随页面滚动 */}
+      <MenuStyles token={token} />
+
+      {/* 固定侧边栏 */}
       <div style={{
         position: 'fixed',
         left: 0, top: 0, bottom: 0,
@@ -131,6 +184,7 @@ export default function AppLayout() {
             flexDirection: 'column',
           }}
         >
+          {/* Logo */}
           <div style={{
             height: 56, flexShrink: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -142,7 +196,9 @@ export default function AppLayout() {
               brand
             )}
           </div>
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+
+          {/* 菜单 */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
             <Menu
               mode="inline"
               selectedKeys={[selectedKey]}
@@ -154,7 +210,7 @@ export default function AppLayout() {
         </Layout.Sider>
       </div>
 
-      {/* 主内容区 — 用 marginLeft 避开侧边栏 */}
+      {/* 主内容区 */}
       <Layout style={{ marginLeft: siderWidth, transition: 'margin-left 0.2s', minHeight: '100vh' }}>
         <Header style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',

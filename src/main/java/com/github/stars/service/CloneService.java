@@ -553,6 +553,23 @@ public class CloneService {
     }
 
     /**
+     * 根据配置构建最终的 clone URL（支持代理加速）
+     * 如配置 clone.proxy.url=https://gh-proxy.org/，则原始 URL https://github.com/a/b
+     * 会被转换为 https://gh-proxy.org/https://github.com/a/b
+     */
+    public String buildCloneUrl(String htmlUrl) {
+        String proxyUrl = configService.getValue("clone.proxy.url", "");
+        if (proxyUrl != null && !proxyUrl.trim().isEmpty()) {
+            String trimmed = proxyUrl.trim();
+            if (!trimmed.endsWith("/")) {
+                trimmed += "/";
+            }
+            return trimmed + htmlUrl;
+        }
+        return htmlUrl + ".git";
+    }
+
+    /**
      * 执行单个仓库的 git clone
      *
      * @param forceRetry 强制重试模式：目录存在但为空时删除后重新克隆
@@ -596,7 +613,8 @@ public class CloneService {
         }
 
         try {
-            ProcessBuilder pb = new ProcessBuilder("git", "clone", htmlUrl + ".git", repoDir.getAbsolutePath());
+            String cloneUrl = buildCloneUrl(htmlUrl);
+            ProcessBuilder pb = new ProcessBuilder("git", "clone", cloneUrl, repoDir.getAbsolutePath());
             pb.directory(dir);
             pb.redirectErrorStream(true);
             Process p = pb.start();

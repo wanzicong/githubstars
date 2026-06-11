@@ -121,7 +121,7 @@ public class CloneController {
                 script.append("if (Test-Path \"").append(repo.getRepoName()).append("\") {\n");
                 script.append("  Write-Host \"[SKIP] ").append(repo.getRepoName()).append(" 已存在\"\n");
                 script.append("} else {\n");
-                script.append("  git clone ").append(repo.getHtmlUrl()).append(".git\n");
+                script.append("  git clone ").append(cloneService.buildCloneUrl(repo.getHtmlUrl())).append("\n");
                 script.append("}\n\n");
             }
             script.append("Write-Host \"Done! Cloned into $cloneDir\"\n");
@@ -142,7 +142,7 @@ public class CloneController {
                 script.append("if [ -d \"").append(repo.getRepoName()).append("\" ]; then\n");
                 script.append("  echo \"[SKIP] ").append(repo.getRepoName()).append(" already exists\"\n");
                 script.append("else\n");
-                script.append("  git clone ").append(repo.getHtmlUrl()).append(".git\n");
+                script.append("  git clone ").append(cloneService.buildCloneUrl(repo.getHtmlUrl())).append("\n");
                 script.append("fi\n\n");
             }
             script.append("echo \"Done! Cloned into $CLONE_DIR\"\n");
