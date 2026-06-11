@@ -104,42 +104,64 @@ export default function AppLayout() {
   }
 
   // ── 侧边栏导航模式 ──
+  const siderWidth = siderCollapsed ? 80 : 220
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider
-        collapsible
-        collapsed={siderCollapsed}
-        onCollapse={setSiderCollapsed}
-        trigger={null}
-        width={220}
-        style={{
-          background: token.colorBgContainer,
-          borderRight: `1px solid ${token.colorBorderSecondary}`,
-          overflow: 'auto',
-        }}
-      >
-        <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
-          {siderCollapsed ? (
-            <StarOutlined style={{ fontSize: 20, color: token.colorPrimary }} />
-          ) : (
-            brand
-          )}
-        </div>
-        <Menu
-          mode="inline"
-          selectedKeys={[selectedKey]}
-          items={navItems}
-          onClick={({ key }) => navigate(key)}
-          style={{ border: 'none' }}
-        />
-      </Sider>
-      <Layout>
+      {/* 固定侧边栏 — 不随页面滚动 */}
+      <div style={{
+        position: 'fixed',
+        left: 0, top: 0, bottom: 0,
+        width: siderWidth,
+        zIndex: 100,
+        transition: 'width 0.2s',
+      }}>
+        <Layout.Sider
+          width={220}
+          collapsedWidth={80}
+          collapsible
+          collapsed={siderCollapsed}
+          onCollapse={setSiderCollapsed}
+          trigger={null}
+          style={{
+            height: '100%',
+            background: token.colorBgContainer,
+            borderRight: `1px solid ${token.colorBorderSecondary}`,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div style={{
+            height: 56, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          }}>
+            {siderCollapsed ? (
+              <StarOutlined style={{ fontSize: 20, color: token.colorPrimary }} />
+            ) : (
+              brand
+            )}
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <Menu
+              mode="inline"
+              selectedKeys={[selectedKey]}
+              items={navItems}
+              onClick={({ key }) => navigate(key)}
+              style={{ border: 'none' }}
+            />
+          </div>
+        </Layout.Sider>
+      </div>
+
+      {/* 主内容区 — 用 marginLeft 避开侧边栏 */}
+      <Layout style={{ marginLeft: siderWidth, transition: 'margin-left 0.2s', minHeight: '100vh' }}>
         <Header style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: token.colorBgContainer,
           borderBottom: `1px solid ${token.colorBorderSecondary}`,
           paddingInline: 16, height: 56,
-          position: 'sticky', top: 0, zIndex: 100,
+          position: 'sticky', top: 0, zIndex: 99,
         }}>
           <Space size={8}>
             <Button
@@ -155,7 +177,7 @@ export default function AppLayout() {
             <Button type="text" icon={<MenuOutlined />} onClick={toggleLayout} />
           </Tooltip>
         </Header>
-        <Content style={{ padding: '16px 24px', maxWidth: 1400, width: '100%', margin: '0 auto' }}>
+        <Content style={{ padding: '16px 24px', maxWidth: 1400, width: '100%', margin: '0 auto', flex: 1 }}>
           <Outlet />
         </Content>
         <Footer style={{ textAlign: 'center', color: token.colorTextTertiary, fontSize: 12, padding: 12 }}>
