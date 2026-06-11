@@ -17,7 +17,7 @@ import {
   MenuUnfoldOutlined,
 } from '@ant-design/icons'
 
-const { Header, Sider, Content, Footer } = Layout
+const { Header, Content, Footer } = Layout
 const { Text } = Typography
 
 type LayoutMode = 'top' | 'side'
