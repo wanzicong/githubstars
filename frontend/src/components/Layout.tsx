@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, theme, Typography, Button, Tooltip } from 'antd'
+import { Layout, Menu, theme, Typography, Button, Tooltip, Space } from 'antd'
 import {
   StarOutlined,
   SyncOutlined,
@@ -105,7 +105,7 @@ export default function AppLayout() {
 
   // ── 侧边栏导航模式 ──
   return (
-    <Layout style={{ minHeight: '100vh' }} hasSider>
+    <Layout style={{ minHeight: '100vh' }}>
       <Sider
         collapsible
         collapsed={siderCollapsed}
@@ -115,12 +115,6 @@ export default function AppLayout() {
         style={{
           background: token.colorBgContainer,
           borderRight: `1px solid ${token.colorBorderSecondary}`,
-          height: '100vh',
-          position: 'fixed',
-          left: 0,
-          top: 0,
-          bottom: 0,
-          zIndex: 10,
           overflow: 'auto',
         }}
       >
@@ -139,7 +133,7 @@ export default function AppLayout() {
           style={{ border: 'none' }}
         />
       </Sider>
-      <Layout style={{ marginLeft: siderCollapsed ? 80 : 220, transition: 'margin-left 0.2s' }}>
+      <Layout>
         <Header style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: token.colorBgContainer,
