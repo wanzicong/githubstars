@@ -32,10 +32,11 @@ public class StarController {
                                         @RequestParam(value = "dateField", defaultValue = "") String dateField,
                                         @RequestParam(value = "startDate", defaultValue = "") String startDate,
                                         @RequestParam(value = "endDate", defaultValue = "") String endDate,
-                                        @RequestParam(value = "categoryIds", defaultValue = "") String categoryIds) {
+                                        @RequestParam(value = "categoryIds", defaultValue = "") String categoryIds,
+                                        @RequestParam(value = "untranslatedOnly", defaultValue = "false") boolean untranslatedOnly) {
 
         IPage<GithubRepo> pageResult = githubRepoService.findPage(page, size, keyword, language,
-                sortBy, sortOrder, dateField, startDate, endDate, categoryIds);
+                sortBy, sortOrder, dateField, startDate, endDate, categoryIds, untranslatedOnly);
 
         Map<String, Object> result = new HashMap<>();
         result.put("records", pageResult.getRecords());

@@ -26,6 +26,7 @@ import {
   Segmented,
   AutoComplete,
   InputNumber,
+  Switch,
 } from 'antd'
 import {
   StarFilled,
@@ -230,6 +231,7 @@ export default function StarList() {
   const pageSize = parseInt(searchParams.get('size') || '36', 10)
   const startDateStr = searchParams.get('startDate')
   const endDateStr = searchParams.get('endDate')
+  const untranslatedOnly = searchParams.get('untranslatedOnly') === 'true'
   const viewMode = (searchParams.get('view') || 'list') as 'grid' | 'list'
 
   const startDate = useMemo(() => {
@@ -370,6 +372,7 @@ export default function StarList() {
           sortOrder: sortOrder || undefined, dateField: dateField || undefined,
           startDate: startDateStr || undefined,
           endDate: endDateStr || undefined,
+          untranslatedOnly: untranslatedOnly || undefined,
         })
         if (!cancelled) setPageResult(result)
       } catch {
@@ -380,10 +383,10 @@ export default function StarList() {
     }
     loadPage()
     return () => { cancelled = true }
-  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr])
+  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly])
 
   const handleClearFilters = useCallback(() => {
-    setUrlParams({ keyword: null, languages: null, categoryIds: null, timePreset: null, sortBy: 'starred_at', sortOrder: 'desc', dateField: null, startDate: null, endDate: null })
+    setUrlParams({ keyword: null, languages: null, categoryIds: null, timePreset: null, sortBy: 'starred_at', sortOrder: 'desc', dateField: null, startDate: null, endDate: null, untranslatedOnly: null })
   }, [setUrlParams])
 
   const [batchTranslating, setBatchTranslating] = useState(false)
@@ -441,6 +444,28 @@ export default function StarList() {
       } else { message.info(result.message || '没有需要翻译 README 的项目') }
     } catch { message.error('启动 README 批量翻译失败') } finally { setBatchTranslating(false) }
   }, [startPolling])
+
+  const handleFilterTranslate = useCallback(async () => {
+    setBatchTranslating(true)
+    try {
+      const result = await translateApi.startFilterBatch({
+        keyword: keyword || undefined,
+        language: languageStr || undefined,
+        categoryIds: categoryIdsStr || undefined,
+        sortBy: sortBy || undefined,
+        sortOrder: sortOrder || undefined,
+        dateField: dateField || undefined,
+        startDate: startDateStr || undefined,
+        endDate: endDateStr || undefined,
+      })
+      if (result.success && result.taskId) {
+        setTranslateTaskId(result.taskId)
+        setTranslateProgress({ status: 'PENDING', totalItems: 0, completedItems: 0, failedItems: 0, descTotal: 0, descCompleted: 0, descFailed: 0, readmeTotal: 0, readmeCompleted: 0, readmeFailed: 0, progress: 0 })
+        setTranslateModalVisible(true)
+        startPolling(result.taskId)
+      } else { message.info(result.message || '没有需要翻译的项目') }
+    } catch { message.error('启动筛选翻译失败') } finally { setBatchTranslating(false) }
+  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, startPolling])
 
   const handleAiAnalyze = useCallback(async () => {
     setAnalyzing(true)
@@ -790,14 +815,21 @@ export default function StarList() {
           </Row>
           <Row gutter={[8, 8]} style={{ marginTop: 8 }}>
             <Col span={24}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 {hasActiveFilters && <Button icon={<ClearOutlined />} onClick={handleClearFilters}>清除</Button>}
                 <Button icon={<TranslationOutlined />} loading={batchTranslating} onClick={handleStartFullTranslate}>批量翻译</Button>
                 <Button icon={<ReadOutlined />} loading={false} onClick={handleStartReadmeBatch}>批量README</Button>
+                <Button icon={<TranslationOutlined />} loading={batchTranslating} onClick={handleFilterTranslate}>筛选翻译</Button>
                 <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze}>AI 分析</Button>
                 <Button icon={<DownloadOutlined />} onClick={handleExportMd}>导出MD</Button>
                 <Button icon={<DownloadOutlined />} onClick={handleOpenCloneDirModal} disabled={cloneInProgress}>批量Clone</Button>
                 <Button type="primary" icon={<DownloadOutlined />} onClick={handleExport}>导出链接</Button>
+                <Switch
+                  checked={untranslatedOnly}
+                  onChange={(checked) => setUrlParam('untranslatedOnly', checked ? 'true' : null)}
+                  checkedChildren="仅未翻译"
+                  unCheckedChildren="全部"
+                />
               </div>
             </Col>
           </Row>

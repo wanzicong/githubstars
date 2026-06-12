@@ -261,6 +261,34 @@ public class TranslateController {
     }
 
     /**
+     * 基于筛选条件批量翻译描述（异步，仅翻译未翻译的）
+     */
+    @PostMapping("/filter-batch")
+    public Map<String, Object> startFilterBatch(
+            @RequestParam(value = "keyword", defaultValue = "") String keyword,
+            @RequestParam(value = "language", defaultValue = "") String language,
+            @RequestParam(value = "categoryIds", defaultValue = "") String categoryIds,
+            @RequestParam(value = "sortBy", defaultValue = "starred_at") String sortBy,
+            @RequestParam(value = "sortOrder", defaultValue = "desc") String sortOrder,
+            @RequestParam(value = "dateField", defaultValue = "") String dateField,
+            @RequestParam(value = "startDate", defaultValue = "") String startDate,
+            @RequestParam(value = "endDate", defaultValue = "") String endDate) {
+        Map<String, Object> result = new HashMap<>();
+        Long taskId = translateTaskService.createAndStartFilterBatch(
+                keyword, language, categoryIds, sortBy, sortOrder,
+                dateField, startDate, endDate);
+        if (taskId == null) {
+            result.put("success", false);
+            result.put("message", "没有需要翻译的项目");
+            return result;
+        }
+        result.put("success", true);
+        result.put("taskId", taskId);
+        result.put("message", "筛选批量翻译任务已启动");
+        return result;
+    }
+
+    /**
      * 获取最近的任务列表
      */
     @GetMapping("/tasks")

@@ -121,6 +121,30 @@ export async function getTaskFailures(taskId: number): Promise<{ success: boolea
   return data
 }
 
+/** 基于筛选条件批量翻译描述 */
+export async function startFilterBatch(params: {
+  keyword?: string
+  language?: string
+  categoryIds?: string
+  sortBy?: string
+  sortOrder?: string
+  dateField?: string
+  startDate?: string
+  endDate?: string
+}): Promise<{ success: boolean; taskId?: number; message?: string }> {
+  const searchParams = new URLSearchParams()
+  if (params.keyword) searchParams.set('keyword', params.keyword)
+  if (params.language) searchParams.set('language', params.language)
+  if (params.categoryIds) searchParams.set('categoryIds', params.categoryIds)
+  if (params.sortBy) searchParams.set('sortBy', params.sortBy)
+  if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder)
+  if (params.dateField) searchParams.set('dateField', params.dateField)
+  if (params.startDate) searchParams.set('startDate', params.startDate)
+  if (params.endDate) searchParams.set('endDate', params.endDate)
+  const { data } = await api.post(`/api/translate/filter-batch?${searchParams.toString()}`)
+  return data
+}
+
 /** 获取最近任务列表 */
 export async function getRecentTasks(): Promise<TaskListResult> {
   const { data } = await api.get<TaskListResult>('/api/translate/tasks')

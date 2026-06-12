@@ -126,6 +126,7 @@ export interface StarListParams {
   dateField?: string
   startDate?: string
   endDate?: string
+  untranslatedOnly?: boolean
 }
 
 export interface ApiResponse<T = unknown> {

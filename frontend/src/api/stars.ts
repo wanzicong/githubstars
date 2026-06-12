@@ -13,6 +13,7 @@ export async function fetchStarList(params: StarListParams): Promise<PageResult<
   if (params.dateField) searchParams.set('dateField', params.dateField)
   if (params.startDate) searchParams.set('startDate', params.startDate)
   if (params.endDate) searchParams.set('endDate', params.endDate)
+  if (params.untranslatedOnly) searchParams.set('untranslatedOnly', 'true')
   const { data } = await api.get<PageResult<GithubRepo>>('/api/stars', { params: searchParams })
   return data
 }

@@ -50,6 +50,17 @@ public class GithubRepoService {
                                       String sortBy, String sortOrder,
                                       String dateField, String startDate, String endDate,
                                       String categoryIds) {
+        return findPage(page, size, keyword, language, sortBy, sortOrder,
+                dateField, startDate, endDate, categoryIds, false);
+    }
+
+    /**
+     * 分页查询Star仓库列表（支持未翻译筛选）
+     */
+    public IPage<GithubRepo> findPage(int page, int size, String keyword, String language,
+                                      String sortBy, String sortOrder,
+                                      String dateField, String startDate, String endDate,
+                                      String categoryIds, boolean untranslatedOnly) {
         List<String> languageList = null;
         if (StringUtils.hasText(language)) languageList = Arrays.asList(language.split(","));
         List<Long> catIdList = null;
@@ -59,7 +70,8 @@ public class GithubRepoService {
             // 展开一级分类为其下所有二级子分类
             catIdList = categoryService.expandCategoryIds(catIdList);
         }
-        return findPage(page, size, keyword, languageList, catIdList, sortBy, sortOrder, dateField, startDate, endDate);
+        return findPage(page, size, keyword, languageList, catIdList, sortBy, sortOrder,
+                dateField, startDate, endDate, untranslatedOnly);
     }
 
     /**
@@ -80,6 +92,18 @@ public class GithubRepoService {
                                       List<Long> categoryIds,
                                       String sortBy, String sortOrder,
                                       String dateField, String startDate, String endDate) {
+        return findPage(page, size, keyword, languages, categoryIds, sortBy, sortOrder,
+                dateField, startDate, endDate, false);
+    }
+
+    /**
+     * 分页查询Star仓库列表（支持多语言列表 + 未翻译筛选）
+     */
+    public IPage<GithubRepo> findPage(int page, int size, String keyword, List<String> languages,
+                                      List<Long> categoryIds,
+                                      String sortBy, String sortOrder,
+                                      String dateField, String startDate, String endDate,
+                                      boolean untranslatedOnly) {
         Page<GithubRepo> pageParam = new Page<>(page, size);
         LambdaQueryWrapper<GithubRepo> wrapper = new LambdaQueryWrapper<>();
 
@@ -102,6 +126,12 @@ public class GithubRepoService {
         // 多语言筛选（OR 逻辑）
         if (languages != null && !languages.isEmpty() && !languages.contains("")) {
             wrapper.in(GithubRepo::getLanguage, languages);
+        }
+
+        // 未翻译筛选：README 未被翻译为中文（readmeCn 为空）
+        if (untranslatedOnly) {
+            wrapper.and(w -> w.isNull(GithubRepo::getReadmeCn)
+                    .or().eq(GithubRepo::getReadmeCn, ""));
         }
 
         // 时间日期范围筛选（精确到天）

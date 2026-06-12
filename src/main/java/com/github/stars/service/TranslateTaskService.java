@@ -389,6 +389,91 @@ public class TranslateTaskService {
     }
 
     /**
+     * 基于筛选条件创建批量翻译任务（翻译 README，异步执行）
+     */
+    public Long createAndStartFilterBatch(String keyword, String language, String categoryIds,
+                                          String sortBy, String sortOrder,
+                                          String dateField, String startDate, String endDate) {
+        cleanOldTasks();
+
+        // 查询符合筛选条件且 README 未翻译的仓库
+        List<String> languageList = null;
+        if (org.springframework.util.StringUtils.hasText(language)) {
+            languageList = java.util.Arrays.asList(language.split(","));
+        }
+        List<Long> catIdList = null;
+        if (org.springframework.util.StringUtils.hasText(categoryIds)) {
+            catIdList = java.util.Arrays.stream(categoryIds.split(","))
+                    .filter(s -> !s.isEmpty()).map(Long::valueOf)
+                    .collect(java.util.stream.Collectors.toList());
+        }
+
+        LambdaQueryWrapper<GithubRepo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.select(GithubRepo::getId, GithubRepo::getFullName);
+
+        if (catIdList != null && !catIdList.isEmpty()) {
+            String ids = catIdList.stream().map(String::valueOf)
+                    .collect(java.util.stream.Collectors.joining(","));
+            wrapper.inSql(GithubRepo::getId,
+                    "SELECT repo_id FROM repo_category WHERE category_id IN (" + ids + ")");
+        }
+        if (org.springframework.util.StringUtils.hasText(keyword)) {
+            wrapper.and(w -> w
+                    .like(GithubRepo::getRepoName, keyword)
+                    .or().like(GithubRepo::getDescription, keyword)
+                    .or().like(GithubRepo::getOwnerName, keyword)
+                    .or().like(GithubRepo::getFullName, keyword));
+        }
+        if (languageList != null && !languageList.isEmpty() && !languageList.contains("")) {
+            wrapper.in(GithubRepo::getLanguage, languageList);
+        }
+        // 只查 README 未翻译的（readmeCn 为空）
+        wrapper.and(w -> w.isNull(GithubRepo::getReadmeCn)
+                .or().eq(GithubRepo::getReadmeCn, ""));
+
+        List<GithubRepo> repos = githubRepoService.getGithubRepoMapper().selectList(wrapper);
+        if (repos.isEmpty()) {
+            log.info("根据筛选条件没有需要翻译 README 的项目");
+            return null;
+        }
+
+        List<Long> needReadme = repos.stream().map(GithubRepo::getId).collect(java.util.stream.Collectors.toList());
+
+        log.info("创建筛选批量 README 翻译任务：{} 项", needReadme.size());
+
+        TranslationTask task = new TranslationTask();
+        task.setStatus("PENDING");
+        task.setTotalItems(needReadme.size());
+        task.setCompletedItems(0);
+        task.setFailedItems(0);
+        task.setDescTotal(0);
+        task.setDescCompleted(0);
+        task.setDescFailed(0);
+        task.setReadmeTotal(needReadme.size());
+        task.setReadmeCompleted(0);
+        task.setReadmeFailed(0);
+        task.setCreatedAt(LocalDateTime.now());
+        taskMapper.insert(task);
+
+        Long taskId = task.getId();
+
+        for (GithubRepo repo : repos) {
+            TranslationTaskItem item = new TranslationTaskItem();
+            item.setTaskId(taskId);
+            item.setRepoId(repo.getId());
+            item.setFullName(repo.getFullName());
+            item.setTranslateType("readme");
+            item.setStatus("PENDING");
+            item.setRetryCount(0);
+            item.setCreatedAt(LocalDateTime.now());
+            itemMapper.insert(item);
+        }
+
+        startTaskAsync(taskId);
+        return taskId;
+    }
+
+    /**
      * 重试失败项
      */
     public Long retryFailed(Long taskId) {
