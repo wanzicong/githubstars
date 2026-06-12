@@ -54,6 +54,7 @@ import * as cloneApi from '../api/clone'
 import { buildTargetPath, sanitizeSubdirectory } from '../utils/clonePath'
 import { formatNumberCn } from '../utils/format'
 import ReactMarkdown from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 import type { Category, GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
 
@@ -389,7 +390,9 @@ export default function StarList() {
     setUrlParams({ keyword: null, languages: null, categoryIds: null, timePreset: null, sortBy: 'starred_at', sortOrder: 'desc', dateField: null, startDate: null, endDate: null, untranslatedOnly: null })
   }, [setUrlParams])
 
-  const [batchTranslating, setBatchTranslating] = useState(false)
+  const [fullTranslating, setFullTranslating] = useState(false)
+  const [readmeTranslating, setReadmeTranslating] = useState(false)
+  const [filterTranslating, setFilterTranslating] = useState(false)
   const [translateModalVisible, setTranslateModalVisible] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeTaskId, setAnalyzeTaskId] = useState<string | null>(null)
@@ -420,7 +423,7 @@ export default function StarList() {
   }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr])
 
   const handleStartFullTranslate = useCallback(async () => {
-    setBatchTranslating(true)
+    setFullTranslating(true)
     try {
       const result = await translateApi.startFullTranslate()
       if (result.success && result.taskId) {
@@ -429,11 +432,11 @@ export default function StarList() {
         setTranslateModalVisible(true)
         startPolling(result.taskId)
       } else { message.info(result.message || '没有需要翻译的项目') }
-    } catch { message.error('启动翻译失败') } finally { setBatchTranslating(false) }
+    } catch { message.error('启动翻译失败') } finally { setFullTranslating(false) }
   }, [startPolling])
 
   const handleStartReadmeBatch = useCallback(async () => {
-    setBatchTranslating(true)
+    setReadmeTranslating(true)
     try {
       const result = await translateApi.startReadmeBatch()
       if (result.success && result.taskId) {
@@ -442,11 +445,11 @@ export default function StarList() {
         setTranslateModalVisible(true)
         startPolling(result.taskId)
       } else { message.info(result.message || '没有需要翻译 README 的项目') }
-    } catch { message.error('启动 README 批量翻译失败') } finally { setBatchTranslating(false) }
+    } catch { message.error('启动 README 批量翻译失败') } finally { setReadmeTranslating(false) }
   }, [startPolling])
 
   const handleFilterTranslate = useCallback(async () => {
-    setBatchTranslating(true)
+    setFilterTranslating(true)
     try {
       const result = await translateApi.startFilterBatch({
         keyword: keyword || undefined,
@@ -464,7 +467,7 @@ export default function StarList() {
         setTranslateModalVisible(true)
         startPolling(result.taskId)
       } else { message.info(result.message || '没有需要翻译的项目') }
-    } catch { message.error('启动筛选翻译失败') } finally { setBatchTranslating(false) }
+    } catch { message.error('启动筛选翻译失败') } finally { setFilterTranslating(false) }
   }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, startPolling])
 
   const handleAiAnalyze = useCallback(async () => {
@@ -770,7 +773,7 @@ export default function StarList() {
     return buildTree(categoryOptions.filter(c => c.level === 1 || !c.parentId))
   }, [categoryOptions])
 
-  const hasActiveFilters = keyword.trim() !== '' || languageStr !== '' || categoryIdsStr !== '' || sortBy !== 'starred_at' || sortOrder !== 'desc' || dateField !== undefined || !!startDateStr || !!endDateStr
+  const hasActiveFilters = keyword.trim() !== '' || languageStr !== '' || categoryIdsStr !== '' || sortBy !== 'starred_at' || sortOrder !== 'desc' || dateField !== undefined || !!startDateStr || !!endDateStr || untranslatedOnly
 
   const { records: repos } = pageResult
 
@@ -817,9 +820,9 @@ export default function StarList() {
             <Col span={24}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 {hasActiveFilters && <Button icon={<ClearOutlined />} onClick={handleClearFilters}>清除</Button>}
-                <Button icon={<TranslationOutlined />} loading={batchTranslating} onClick={handleStartFullTranslate}>批量翻译</Button>
-                <Button icon={<ReadOutlined />} loading={false} onClick={handleStartReadmeBatch}>批量README</Button>
-                <Button icon={<TranslationOutlined />} loading={batchTranslating} onClick={handleFilterTranslate}>筛选翻译</Button>
+                <Button icon={<TranslationOutlined />} loading={fullTranslating} onClick={handleStartFullTranslate}>批量翻译</Button>
+                <Button icon={<ReadOutlined />} loading={readmeTranslating} onClick={handleStartReadmeBatch}>批量README</Button>
+                <Button icon={<TranslationOutlined />} loading={filterTranslating} onClick={handleFilterTranslate}>筛选翻译</Button>
                 <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze}>AI 分析</Button>
                 <Button icon={<DownloadOutlined />} onClick={handleExportMd}>导出MD</Button>
                 <Button icon={<DownloadOutlined />} onClick={handleOpenCloneDirModal} disabled={cloneInProgress}>批量Clone</Button>
@@ -965,6 +968,7 @@ export default function StarList() {
         {analyzeStatus === 'COMPLETED' && analyzeResult && (
           <div style={{ maxHeight: '70vh', overflow: 'auto', padding: '8px 0' }} className="readme-markdown">
             <ReactMarkdown
+              rehypePlugins={[rehypeRaw]}
               remarkPlugins={[remarkGfm]}
               components={{
                 h1: ({ children }) => <h1 style={{ fontSize: 20, borderBottom: '2px solid #1677ff', paddingBottom: 8, marginTop: 20, marginBottom: 12 }}>{children}</h1>,

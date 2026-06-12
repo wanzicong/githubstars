@@ -3,6 +3,7 @@ import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col,
 import { StarFilled, ForkOutlined, FireOutlined, BulbOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import ReactMarkdown from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 import { fetchTrending, analyzeTrending } from '../api/trending'
 import { getAnalyzeStatus } from '../api/analyze'
@@ -182,7 +183,7 @@ export default function Trending() {
         )}
         {analyzeStatus === 'COMPLETED' && analyzeResult && (
           <div style={{ maxHeight: '65vh', overflow: 'auto' }} className="readme-markdown">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{analyzeResult}</ReactMarkdown>
+            <ReactMarkdown rehypePlugins={[rehypeRaw]} remarkPlugins={[remarkGfm]}>{analyzeResult}</ReactMarkdown>
           </div>
         )}
       </Modal>
