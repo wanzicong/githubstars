@@ -20,6 +20,7 @@ import {
   Collapse,
   Modal,
   Progress,
+  Popconfirm,
   message,
   Alert,
   Segmented,
@@ -27,7 +28,6 @@ import {
   InputNumber,
 } from 'antd'
 import {
-  SearchOutlined,
   StarFilled,
   ForkOutlined,
   ClearOutlined,
@@ -548,14 +548,16 @@ export default function StarList() {
       if (categoryIdsStr) params.set('categoryIds', categoryIdsStr)
       if (sortBy) params.set('sortBy', sortBy)
       if (sortOrder) params.set('sortOrder', sortOrder)
-      params.set('maxCount', '50')
+      const totalCount = pageResult?.total ?? 0
+      if (totalCount === 0) { message.warning('没有匹配的仓库可导出'); return }
+      params.set('maxCount', String(totalCount))
       const resp = await fetch(`/export/md?${params.toString()}`)
       const blob = await resp.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = `stars_export_${dayjs().format('YYYYMMDD_HHmmss')}.md`
       document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url)
     } catch { message.error('导出MD失败') }
-  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder])
+  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, pageResult?.total])
 
   const [cloneModalVisible, setCloneModalVisible] = useState(false)
   const [cloneDirModalVisible, setCloneDirModalVisible] = useState(false)
@@ -569,6 +571,8 @@ export default function StarList() {
   const [cloneSubDirError, setCloneSubDirError] = useState('')
   const [cloneProgress, setCloneProgress] = useState<{ status: string; errorMessage?: string; totalRepos: number; completedRepos: number; failedRepos: number; skippedRepos: number; results: { fullName: string; status: string; message: string }[] } | null>(null)
   const [cloneConcurrency, setCloneConcurrency] = useState(5)
+  const [cloneDepth, setCloneDepth] = useState(1)
+  const [cloneMaxRepoSizeMb, setCloneMaxRepoSizeMb] = useState(500)
   const clonePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const clonePollFailCountRef = useRef(0)
 
@@ -638,12 +642,15 @@ export default function StarList() {
         sortBy: sortBy || undefined,
         sortOrder: sortOrder || undefined,
         concurrency: cloneConcurrency,
+        cloneDepth: cloneDepth,
+        maxRepoSizeMb: cloneMaxRepoSizeMb,
       })
       if (!data.success) {
         message.error(data.message || '启动 Clone 失败')
         return
       }
       if (data.taskId) {
+        clonePollTaskIdRef.current = data.taskId
         setCloneTargetDir(data.targetDirectory || '')
         setCloneDirModalVisible(false)
         setCloneInProgress(true)
@@ -676,7 +683,7 @@ export default function StarList() {
     } finally {
       setCloneStarting(false)
     }
-  }, [keyword, languageStr, categoryIdsStr, cloneSubDir, dateField, startDateStr, endDateStr, sortBy, sortOrder, cloneConcurrency, pageResult.total])
+  }, [keyword, languageStr, categoryIdsStr, cloneSubDir, dateField, startDateStr, endDateStr, sortBy, sortOrder, cloneConcurrency, cloneDepth, cloneMaxRepoSizeMb, pageResult.total])
 
   const handleCloseCloneModal = () => {
     if (clonePollRef.current) clearInterval(clonePollRef.current)
@@ -689,6 +696,23 @@ export default function StarList() {
     setCloneModalVisible(false)
     setCloneTargetDir('')
   }
+
+  const handleCancelCloneTask = useCallback(async () => {
+    if (!cloneProgress || cloneProgress.status !== 'RUNNING') return
+    // 从缓存中找到当前 taskId（通过 polling 上下文）
+    try {
+      const res = await cloneApi.cancelCloneTask(clonePollTaskIdRef.current)
+      if (res.success) {
+        message.success('已发送取消请求')
+      } else {
+        message.warning(res.message || '取消失败')
+      }
+    } catch {
+      message.error('取消请求失败')
+    }
+  }, [cloneProgress])
+
+  const clonePollTaskIdRef = useRef<string>('')
 
   const handleCloneSubDirChange = useCallback((value: string) => {
     setCloneSubDir(value)
@@ -978,6 +1002,33 @@ export default function StarList() {
             />
           </div>
           <div style={{ marginBottom: 16 }}>
+            <Text>克隆深度</Text>
+            <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>浅克隆仅拉取最新提交，大幅减少时间和磁盘占用</Text>
+            <Select
+              value={cloneDepth}
+              onChange={(val) => setCloneDepth(val)}
+              style={{ width: '100%', marginTop: 8 }}
+              options={[
+                { value: 1, label: '浅克隆 (depth=1, 推荐)' },
+                { value: 3, label: '浅克隆 (depth=3)' },
+                { value: 10, label: '浅克隆 (depth=10)' },
+                { value: 0, label: '完整克隆 (所有历史记录)' },
+              ]}
+            />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <Text>最大仓库大小</Text>
+            <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>超过此大小的仓库将被跳过，0=不限制</Text>
+            <InputNumber
+              min={0}
+              max={10000}
+              value={cloneMaxRepoSizeMb}
+              onChange={(val) => setCloneMaxRepoSizeMb(val ?? 500)}
+              addonAfter="MB"
+              style={{ width: '100%', marginTop: 8 }}
+            />
+          </div>
+          <div style={{ marginBottom: 16 }}>
             <Text>子目录</Text>
             <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>留空则直接 Clone 到基础目录</Text>
             <AutoComplete
@@ -1006,7 +1057,16 @@ export default function StarList() {
 
       {/* Clone 进度弹窗 */}
       <Modal title="批量 Clone 进度" open={cloneModalVisible} onCancel={handleCloseCloneModal}
-        footer={<Button type="primary" onClick={handleCloseCloneModal}>关闭</Button>}
+        footer={
+          <Space>
+            {cloneProgress?.status === 'RUNNING' && (
+              <Popconfirm title="确定取消克隆任务吗？" onConfirm={handleCancelCloneTask} okText="确定" cancelText="返回">
+                <Button danger>取消任务</Button>
+              </Popconfirm>
+            )}
+            <Button type="primary" onClick={handleCloseCloneModal}>关闭</Button>
+          </Space>
+        }
         maskClosable={cloneProgress?.status === 'COMPLETED' || cloneProgress?.status === 'FAILED'}>
         {cloneProgress && (
           <div>

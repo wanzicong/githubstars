@@ -7,6 +7,8 @@ export interface CloneConfig {
   subdirectoryHistory: string[]
   lastSubdirectory: string
   hasActiveTask: boolean
+  defaultCloneDepth: number
+  defaultMaxRepoSizeMb: number
 }
 
 export interface CloneStartResult {
@@ -33,6 +35,8 @@ export async function startClone(params: {
   sortBy?: string
   sortOrder?: string
   concurrency?: number
+  cloneDepth?: number
+  maxRepoSizeMb?: number
 }): Promise<CloneStartResult> {
   const searchParams = new URLSearchParams()
   if (params.maxCount != null) searchParams.set('maxCount', String(params.maxCount))
@@ -46,6 +50,8 @@ export async function startClone(params: {
   if (params.sortBy) searchParams.set('sortBy', params.sortBy)
   if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder)
   if (params.concurrency != null) searchParams.set('concurrency', String(params.concurrency))
+  if (params.cloneDepth != null) searchParams.set('cloneDepth', String(params.cloneDepth))
+  if (params.maxRepoSizeMb != null) searchParams.set('maxRepoSizeMb', String(params.maxRepoSizeMb))
   const { data } = await api.post<CloneStartResult>(`/api/clone/start?${searchParams.toString()}`)
   return data
 }
@@ -90,5 +96,24 @@ export async function retryAllCloneTasks(): Promise<{ success: boolean; message?
 
 export async function togglePinCloneTask(taskId: string): Promise<{ success: boolean; pinned: boolean; message?: string }> {
   const { data } = await api.post(`/api/clone/tasks/${taskId}/pin`)
+  return data
+}
+
+export async function cancelCloneTask(taskId: string): Promise<{ success: boolean; message?: string }> {
+  const { data } = await api.post(`/api/clone/task/${taskId}/cancel`)
+  return data
+}
+
+export interface DiskSpaceInfo {
+  success: boolean
+  freeSpaceMB: number
+  estimatedSizeMB: number
+  requiredSizeMB: number
+  sufficient: boolean
+  message: string
+}
+
+export async function checkDiskSpace(subDirectory: string, repoCount: number): Promise<DiskSpaceInfo> {
+  const { data } = await api.get<DiskSpaceInfo>('/api/clone/disk-space', { params: { subDirectory, repoCount } })
   return data
 }

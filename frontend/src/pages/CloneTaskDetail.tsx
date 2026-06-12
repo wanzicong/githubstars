@@ -22,10 +22,8 @@ import {
   ArrowLeftOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  ClockCircleOutlined,
   WarningOutlined,
   DownloadOutlined,
-  ReloadOutlined,
 } from '@ant-design/icons'
 import * as cloneApi from '../api/clone'
 import type { CloneTaskItem } from '../types'
@@ -342,7 +340,7 @@ export default function CloneTaskDetail() {
           </Card>
         )}
 
-        <Divider orientation="left" orientationMargin={0}>
+        <Divider>
           <Text strong style={{ fontSize: 16 }}>仓库克隆明细</Text>
         </Divider>
 

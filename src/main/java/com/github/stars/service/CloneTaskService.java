@@ -36,22 +36,7 @@ public class CloneTaskService {
      * 获取数据库中最大的 taskCounter 编号，用于服务重启后初始化计数器
      */
     public int getMaxTaskCounterNumber() {
-        List<CloneTask> tasks = cloneTaskMapper.selectList(null);
-        int maxNum = 0;
-        for (CloneTask task : tasks) {
-            String taskId = task.getTaskId();
-            if (taskId != null && taskId.startsWith("clone_")) {
-                try {
-                    int num = Integer.parseInt(taskId.substring("clone_".length()));
-                    if (num > maxNum) {
-                        maxNum = num;
-                    }
-                } catch (NumberFormatException ignored) {
-                    // 忽略非标准格式的 taskId
-                }
-            }
-        }
-        return maxNum;
+        return cloneTaskMapper.selectMaxTaskCounterNumber();
     }
 
     /**

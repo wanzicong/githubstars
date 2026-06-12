@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col, message, Button, Modal, Alert, Progress } from 'antd'
-import { StarFilled, ForkOutlined, GithubOutlined, FireOutlined, BulbOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
+import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col, message, Button, Modal } from 'antd'
+import { StarFilled, ForkOutlined, FireOutlined, BulbOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -160,7 +160,7 @@ export default function Trending() {
                         {repo.language && <Tag color="blue" style={{ fontSize: 11, margin: 0 }}>{repo.language}</Tag>}
                         <span><StarFilled style={{ color: '#faad14', fontSize: 12 }} /> <Text style={{ fontSize: 13, fontWeight: 600 }}>{formatCount(repo.stargazers_count)}</Text></span>
                         <span><ForkOutlined style={{ fontSize: 12 }} /> <Text style={{ fontSize: 12 }}>{formatCount(repo.forks_count)}</Text></span>
-                        <Text type="secondary" style={{ fontSize: 11, marginLeft: 'auto' }}>{getRelativeTime(repo.created_at)}</Text>
+                        <Text type="secondary" style={{ fontSize: 11, marginLeft: 'auto' }}>{getRelativeTime(repo.pushed_at)}</Text>
                       </div>
                     </div>
                   </div>

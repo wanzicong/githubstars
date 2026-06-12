@@ -155,6 +155,9 @@ export interface CloneTaskRecord {
   sortBy?: string
   sortOrder?: string
   concurrency: number
+  cloneDepth?: number
+  maxRepoSizeMb?: number
+  cancelled?: number
   pinned?: number
   startedAt?: string
   finishedAt?: string

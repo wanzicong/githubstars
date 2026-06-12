@@ -85,6 +85,15 @@ public class CloneTask {
     @TableField("pinned")
     private Integer pinned;
 
+    @TableField("clone_depth")
+    private Integer cloneDepth;
+
+    @TableField("max_repo_size_mb")
+    private Integer maxRepoSizeMb;
+
+    @TableField("cancelled")
+    private Integer cancelled;
+
     /** 实时进度结果（非数据库字段，仅用于运行时缓存和 API 返回） */
     @TableField(exist = false)
     private List<CloneResult> results;

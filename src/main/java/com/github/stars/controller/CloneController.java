@@ -29,6 +29,11 @@ public class CloneController {
     @Resource
     private CloneService cloneService;
 
+    /** 默认克隆深度：1=浅克隆 */
+    private static final int DEFAULT_CLONE_DEPTH = 1;
+    /** 默认最大仓库大小(MB)，0=不限制 */
+    private static final int DEFAULT_MAX_REPO_SIZE_MB = 500;
+
     @GetMapping("/config")
     public Map<String, Object> getCloneConfig() {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -37,6 +42,22 @@ public class CloneController {
         result.put("subdirectoryHistory", cloneService.getSubdirectoryHistory());
         result.put("lastSubdirectory", cloneService.getLastSubdirectory());
         result.put("hasActiveTask", cloneService.hasActiveTask());
+        result.put("defaultCloneDepth", DEFAULT_CLONE_DEPTH);
+        result.put("defaultMaxRepoSizeMb", DEFAULT_MAX_REPO_SIZE_MB);
+        return result;
+    }
+
+    /**
+     * 检查目标磁盘空间
+     */
+    @GetMapping("/disk-space")
+    public Map<String, Object> checkDiskSpace(
+            @RequestParam(value = "subDirectory", defaultValue = "") String subDirectory,
+            @RequestParam(value = "repoCount", defaultValue = "50") int repoCount) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        Map<String, Object> diskInfo = cloneService.checkDiskSpace(subDirectory, repoCount);
+        result.put("success", true);
+        result.putAll(diskInfo);
         return result;
     }
 
@@ -52,15 +73,19 @@ public class CloneController {
             @RequestParam(value = "endDate", defaultValue = "") String endDate,
             @RequestParam(value = "sortBy", defaultValue = "starred_at") String sortBy,
             @RequestParam(value = "sortOrder", defaultValue = "desc") String sortOrder,
-            @RequestParam(value = "concurrency", defaultValue = "5") int concurrency) {
+            @RequestParam(value = "concurrency", defaultValue = "5") int concurrency,
+            @RequestParam(value = "cloneDepth", defaultValue = "1") int cloneDepth,
+            @RequestParam(value = "maxRepoSizeMb", defaultValue = "500") int maxRepoSizeMb) {
         Map<String, Object> result = new LinkedHashMap<>();
         try {
             String taskId = cloneService.startBatchClone(keyword, language, categoryIds, maxCount, subDirectory,
-                    dateField, startDate, endDate, sortBy, sortOrder, concurrency);
+                    dateField, startDate, endDate, sortBy, sortOrder, concurrency,
+                    cloneDepth, maxRepoSizeMb);
             result.put("success", true);
             result.put("taskId", taskId);
             result.put("targetDirectory", cloneService.resolveCloneDirectory(subDirectory).getAbsolutePath());
-            result.put("message", "Clone 任务已启动（最多" + concurrency + "个并发）");
+            result.put("message", String.format("Clone 任务已启动 (%d并发, depth=%d, maxSize=%dMB)",
+                    concurrency, cloneDepth, maxRepoSizeMb));
         } catch (IllegalArgumentException | IllegalStateException e) {
             result.put("success", false);
             result.put("message", e.getMessage());
@@ -85,7 +110,22 @@ public class CloneController {
         result.put("completedRepos", task.getCompletedRepos());
         result.put("failedRepos", task.getFailedRepos());
         result.put("skippedRepos", task.getSkippedRepos());
+        result.put("cloneDepth", task.getCloneDepth());
+        result.put("maxRepoSizeMb", task.getMaxRepoSizeMb());
+        result.put("cancelled", task.getCancelled());
         result.put("results", task.getResults() != null ? task.getResults() : Collections.emptyList());
+        return result;
+    }
+
+    /**
+     * 取消正在运行的任务
+     */
+    @PostMapping("/task/{taskId}/cancel")
+    public Map<String, Object> cancelTask(@PathVariable String taskId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        boolean cancelled = cloneService.cancelTask(taskId);
+        result.put("success", cancelled);
+        result.put("message", cancelled ? "任务已取消" : "无法取消（任务不存在或已完成）");
         return result;
     }
 
@@ -96,19 +136,24 @@ public class CloneController {
             @RequestParam(value = "language", defaultValue = "") String language,
             @RequestParam(value = "categoryIds", defaultValue = "") String categoryIds,
             @RequestParam(value = "maxCount", defaultValue = "50") int maxCount,
-            @RequestParam(value = "subDirectory", defaultValue = "") String subDirectory) {
+            @RequestParam(value = "subDirectory", defaultValue = "") String subDirectory,
+            @RequestParam(value = "cloneDepth", defaultValue = "1") int cloneDepth) {
 
         List<GithubRepo> repos = githubRepoService.findPage(1, maxCount, keyword, language,
                 "starred_at", "desc", null, null, null, categoryIds).getRecords();
 
         File cloneDirFile = cloneService.resolveCloneDirectory(subDirectory);
         String cloneDir = cloneDirFile.getAbsolutePath();
+
+        String depthFlag = cloneDepth > 0 ? " --depth " + cloneDepth : "";
+
         StringBuilder script = new StringBuilder();
 
         if ("windows".equals(osType)) {
             script.append("# GitHub Stars 批量 Clone 脚本\n");
             script.append("# 生成时间: ").append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("\n");
-            script.append("# 项目数量: ").append(repos.size()).append("\n\n");
+            script.append("# 项目数量: ").append(repos.size()).append("\n");
+            script.append("# 克隆深度: ").append(cloneDepth > 0 ? String.valueOf(cloneDepth) : "完整克隆").append("\n\n");
             script.append("$cloneDir = \"").append(cloneDir).append("\"\n");
             script.append("if (-not (Test-Path $cloneDir)) { New-Item -ItemType Directory -Path $cloneDir -Force | Out-Null }\n");
             script.append("Set-Location $cloneDir\n\n");
@@ -121,7 +166,7 @@ public class CloneController {
                 script.append("if (Test-Path \"").append(repo.getRepoName()).append("\") {\n");
                 script.append("  Write-Host \"[SKIP] ").append(repo.getRepoName()).append(" 已存在\"\n");
                 script.append("} else {\n");
-                script.append("  git clone ").append(cloneService.buildCloneUrl(repo.getHtmlUrl())).append("\n");
+                script.append("  git clone").append(depthFlag).append(" ").append(cloneService.buildCloneUrl(repo.getHtmlUrl())).append("\n");
                 script.append("}\n\n");
             }
             script.append("Write-Host \"Done! Cloned into $cloneDir\"\n");
@@ -129,7 +174,8 @@ public class CloneController {
             script.append("#!/bin/bash\n");
             script.append("# GitHub Stars 批量 Clone 脚本\n");
             script.append("# 生成时间: ").append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("\n");
-            script.append("# 项目数量: ").append(repos.size()).append("\n\n");
+            script.append("# 项目数量: ").append(repos.size()).append("\n");
+            script.append("# 克隆深度: ").append(cloneDepth > 0 ? String.valueOf(cloneDepth) : "完整克隆").append("\n\n");
             script.append("CLONE_DIR=\"").append(cloneDir).append("\"\n");
             script.append("mkdir -p \"$CLONE_DIR\"\n");
             script.append("cd \"$CLONE_DIR\" || exit\n\n");
@@ -142,7 +188,7 @@ public class CloneController {
                 script.append("if [ -d \"").append(repo.getRepoName()).append("\" ]; then\n");
                 script.append("  echo \"[SKIP] ").append(repo.getRepoName()).append(" already exists\"\n");
                 script.append("else\n");
-                script.append("  git clone ").append(cloneService.buildCloneUrl(repo.getHtmlUrl())).append("\n");
+                script.append("  git clone").append(depthFlag).append(" ").append(cloneService.buildCloneUrl(repo.getHtmlUrl())).append("\n");
                 script.append("fi\n\n");
             }
             script.append("echo \"Done! Cloned into $CLONE_DIR\"\n");
