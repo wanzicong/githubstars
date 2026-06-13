@@ -38,6 +38,7 @@ model GithubRepo {
 
   // 关联
   repoCategories  RepoCategory[]
+  repoTags        RepoTag[]
   translationItems TranslationTaskItem[]
 
   @@index([language])
@@ -78,6 +79,64 @@ model RepoCategory {
   @@index([categoryId])
   @@index([repoId])
   @@map("repo_category")
+}
+
+// ═══════════════════════════════════════════════════════════
+// 多维标签系统（替代二级分类树，与 Agent SDK 深度集成）
+// ═══════════════════════════════════════════════════════════
+
+model TagGroup {
+  id        BigInt   @id @default(autoincrement())
+  name      String   @db.VarChar(50) @unique
+  color     String   @default("#1677ff") @db.VarChar(20)
+  icon      String?  @db.VarChar(20)
+  sortOrder Int      @default(0) @map("sort_order")
+  isSystem  Boolean  @default(false) @map("is_system")
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime
+
+  tags Tag[]
+
+  @@map("tag_group")
+}
+
+model Tag {
+  id          BigInt   @id @default(autoincrement())
+  name        String   @db.VarChar(100)
+  groupId     BigInt   @map("group_id")
+  color       String?  @db.VarChar(20)
+  icon        String?  @db.VarChar(20)
+  parentId    BigInt?  @map("parent_id")
+  description String?  @db.VarChar(500)
+  sortOrder   Int      @default(0) @map("sort_order")
+  repoCount   Int      @default(0) @map("repo_count")
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.DateTime
+
+  group      TagGroup     @relation(fields: [groupId], references: [id])
+  parent     Tag?         @relation("TagTree", fields: [parentId], references: [id])
+  children   Tag[]        @relation("TagTree")
+  repoRelations RepoTag[]
+
+  @@unique([name, groupId])
+  @@index([groupId])
+  @@map("tag")
+}
+
+model RepoTag {
+  id        BigInt   @id @default(autoincrement())
+  repoId    BigInt   @map("repo_id")
+  tagId     BigInt   @map("tag_id")
+  source    String   @default("manual") @db.VarChar(20) // auto / manual / ai
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime
+
+  repo GithubRepo @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  tag  Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([repoId, tagId])
+  @@index([tagId])
+  @@index([repoId])
+  @@map("repo_tag")
 }
 
 model SyncLog {

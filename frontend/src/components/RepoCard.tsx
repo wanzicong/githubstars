@@ -64,16 +64,17 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
                     {repo.description}
                 </Paragraph>
             ) : null}
+            {/* 标签行 — 技术栈 + 分类 */}
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                 {repo.language && (
-                    <Tag color='blue' style={{ margin: 0, fontSize: 13 }}>
+                    <Tag color='processing' style={{ margin: 0, fontSize: 12, borderRadius: 10 }}>
                         {repo.language}
                     </Tag>
                 )}
                 {repo.categoryNames &&
                     repo.categoryNames.length > 0 &&
                     repo.categoryNames.map((cat) => (
-                        <Tag key={cat} color='green' style={{ margin: 0, fontSize: 13 }}>
+                        <Tag key={cat} color='green' style={{ margin: 0, fontSize: 12, borderRadius: 10 }}>
                             {cat}
                         </Tag>
                     ))}

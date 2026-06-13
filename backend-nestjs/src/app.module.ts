@@ -15,6 +15,7 @@ import { CloneModule } from './clone/clone.module';
 import { TrendingModule } from './trending/trending.module';
 import { ExportModule } from './export/export.module';
 import { AgentModule } from './agent/agent.module';
+import { TagModule } from './tag/tag.module';
 import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
 
 /**
@@ -41,6 +42,7 @@ import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
         TrendingModule,
         ExportModule,
         AgentModule,
+        TagModule,
     ],
     providers: [
         {

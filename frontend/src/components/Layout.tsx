@@ -24,6 +24,7 @@ import {
     MenuOutlined,
     MenuFoldOutlined,
     MenuUnfoldOutlined,
+    TagsOutlined,
 } from '@ant-design/icons'
 
 const { Header, Content, Footer } = Layout
@@ -45,6 +46,7 @@ const navItems = [
     { key: '/search', icon: <SearchOutlined />, label: 'GitHub搜索' },
     { key: '/trending', icon: <FireOutlined />, label: '趋势排行' },
     { key: '/logs', icon: <FileTextOutlined />, label: '系统日志' },
+    { key: '/tags', icon: <TagsOutlined />, label: '标签管理' },
 ]
 
 function getSelectedKey(pathname: string) {
