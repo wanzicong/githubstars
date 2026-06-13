@@ -16,6 +16,12 @@ async function bootstrap() {
     });
     app.useLogger(app.get(LoggingService));
 
+    // CORS — 允许前端开发服务器直连（SSE 流式端点需要绕过 Vite 代理缓冲）
+    app.enableCors({
+        origin: ['http://localhost:5173', 'http://localhost:5174'],
+        credentials: true,
+    });
+
     // Swagger API 文档配置
     const swaggerConfig = new DocumentBuilder()
         .setTitle('GitHub Stars 管理系统')

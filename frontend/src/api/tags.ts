@@ -55,7 +55,7 @@ export function startAgentAutoTag(repoIds: number[], callbacks: {
 }): () => void {
     const controller = new AbortController()
 
-    fetch('/api/agent/tags/stream', {
+    fetch('http://localhost:3000/api/agent/tags/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ repoIds }),

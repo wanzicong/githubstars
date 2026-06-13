@@ -64,8 +64,8 @@ export interface AgentSearchOptions {
 export function startAgentSearch(options: AgentSearchOptions): () => void {
     const { repoId, onStatus, onThinking, onToolCall, onToolResult, onResult, onError, onDone } = options
 
-    // 构建 SSE URL（Vite 代理自动转发 /api → localhost:3000）
-    const url = `/api/agent/similar/${repoId}/stream`
+    // SSE 直连后端（绕过 Vite 代理缓冲）
+    const url = `http://localhost:3000/api/agent/similar/${repoId}/stream`
     const eventSource = new EventSource(url)
 
     let aborted = false
