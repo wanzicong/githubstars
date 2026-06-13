@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
     Card, Tag, Typography, Button, Spin, Empty, Space, Modal,
-    InputNumber, Alert, message, Steps, Tooltip,
+    InputNumber, Input, Alert, message, Steps, Tooltip,
 } from 'antd'
 import {
     TagsOutlined, ReloadOutlined,
@@ -17,6 +17,7 @@ const { Title, Text } = Typography
 
 export default function TagBrowse() {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const [groups, setGroups] = useState<TagGroup[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -28,7 +29,9 @@ export default function TagBrowse() {
     const [agentResult, setAgentResult] = useState('')
     const [agentError, setAgentError] = useState('')
     const [agentRunning, setAgentRunning] = useState(false)
-    const [agentRepoCount, setAgentRepoCount] = useState(20)
+    const [agentRepoCount, setAgentRepoCount] = useState(50)
+    const [agentKeyword, setAgentKeyword] = useState(searchParams.get('keyword') || '')
+    const [agentLanguage, setAgentLanguage] = useState(searchParams.get('language') || '')
     const [agentStep, setAgentStep] = useState(0)
     const abortRef = useRef<(() => void) | null>(null)
 
@@ -56,13 +59,18 @@ export default function TagBrowse() {
         setAgentError('')
         setAgentRunning(true)
 
-        // 第一步：获取真实的仓库 ID 列表
+        // 第一步：按筛选条件获取仓库 ID
         let repoIds: number[] = []
         try {
-            const result = await fetchStarList({ page: 1, size: Math.min(agentRepoCount, 200) })
+            const result = await fetchStarList({
+                page: 1,
+                size: Math.min(agentRepoCount, 500),
+                keyword: agentKeyword || undefined,
+                language: agentLanguage || undefined,
+            })
             repoIds = result.records.map((r) => Number(r.id))
             setAgentStep(1)
-            setAgentStatus(`已获取 ${repoIds.length} 个仓库，Agent 开始分析...`)
+            setAgentStatus(`已获取 ${repoIds.length} 个仓库，分批处理中...`)
         } catch {
             setAgentError('获取仓库列表失败')
             setAgentRunning(false)
@@ -202,18 +210,47 @@ export default function TagBrowse() {
                 width={800}
                 style={{ top: 20 }}
             >
-                <div style={{ marginBottom: 16 }}>
-                    <Text>分析仓库数量（从 Star 列表按顺序取前 N 个）</Text>
-                    <InputNumber
-                        value={agentRepoCount}
-                        onChange={(v) => setAgentRepoCount(v ?? 20)}
-                        min={5}
-                        max={200}
-                        disabled={agentRunning}
-                        style={{ width: '100%', marginTop: 8 }}
-                        addonAfter='个仓库'
-                    />
+                <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                    <div style={{ flex: 1 }}>
+                        <Text>数量</Text>
+                        <InputNumber
+                            value={agentRepoCount}
+                            onChange={(v) => setAgentRepoCount(v ?? 50)}
+                            min={5}
+                            max={500}
+                            disabled={agentRunning}
+                            style={{ width: '100%', marginTop: 4 }}
+                            addonAfter='个'
+                        />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <Text>关键词（可选）</Text>
+                        <Input
+                            placeholder='筛选仓库名/描述'
+                            value={agentKeyword}
+                            onChange={(e) => setAgentKeyword(e.target.value)}
+                            disabled={agentRunning}
+                            style={{ marginTop: 4 }}
+                            allowClear
+                        />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <Text>语言（可选）</Text>
+                        <Input
+                            placeholder='如 Python,Java'
+                            value={agentLanguage}
+                            onChange={(e) => setAgentLanguage(e.target.value)}
+                            disabled={agentRunning}
+                            style={{ marginTop: 4 }}
+                            allowClear
+                        />
+                    </div>
                 </div>
+                {agentKeyword || agentLanguage ? (
+                    <Alert type='info' showIcon message='将仅分析符合筛选条件的仓库' style={{ marginBottom: 12 }} />
+                ) : (
+                    <Alert type='info' showIcon message='将按 Star 数降序分析前 N 个仓库' style={{ marginBottom: 12 }} />
+                )}
 
                 {/* 步骤指示器 */}
                 {agentRunning && (

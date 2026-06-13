@@ -41,29 +41,57 @@ export class AgentTagService {
             return;
         }
 
-        // ── 第一步：获取仓库索引（仅 ID + 名称，详情由 Agent 通过 MCP 按需查询）──
-        const repoIndex = await this.prisma.githubRepo.findMany({
+        // ── 第一步：获取仓库索引 + 标签体系（只加载一次）──
+        const allRepos = await this.prisma.githubRepo.findMany({
             where: { id: { in: repoIds.map((id) => BigInt(id)) } },
             select: { id: true, fullName: true, language: true, starsCount: true },
             orderBy: { starsCount: 'desc' },
         });
 
-        if (!repoIndex.length) {
+        if (!allRepos.length) {
             yield { type: 'error', message: '未找到匹配仓库' };
             return;
         }
 
-        yield { type: 'status', message: `已加载 ${repoIndex.length} 个仓库索引，Agent 将通过 MCP 按需读取详情...` };
-
-        // ── 第二步：获取现有标签体系 ──
         const tagGroups = await this.tagService.listAll();
         const tagSystem = tagGroups
             .map((g) => `## ${(g as any).icon || '📌'} ${g.name}\n${(g as any).tags.map((t: any) => `- ${t.name}`).join('\n')}`)
             .join('\n\n');
 
-        yield { type: 'status', message: `标签体系已加载，共 ${tagGroups.reduce((s: number, g: any) => s + g.tags.length, 0)} 个标签` };
+        const totalTags = tagGroups.reduce((s: number, g: any) => s + g.tags.length, 0);
+        yield { type: 'status', message: `已加载 ${allRepos.length} 个仓库 + ${totalTags} 个标签` };
 
-        // ── 第三步：创建 MCP 工具（纯本地数据库查询）──
+        // ── 第二步：分批处理（每批 25 个，避免 maxTurns 超限）──
+        const BATCH_SIZE = 25;
+        const batches: Array<typeof allRepos> = [];
+        for (let i = 0; i < allRepos.length; i += BATCH_SIZE) {
+            batches.push(allRepos.slice(i, i + BATCH_SIZE));
+        }
+
+        let totalTagCount = 0;
+        for (let bi = 0; bi < batches.length; bi++) {
+            if (signal.aborted) break;
+            const batch = batches[bi];
+            yield { type: 'status', message: `处理第 ${bi + 1}/${batches.length} 批 (${batch.length} 个仓库)...` };
+
+            const result = yield* this.processBatch(batch, tagSystem, signal);
+            if (result) {
+                totalTagCount += result;
+                yield { type: 'status', message: `第 ${bi + 1} 批完成，${result} 个标签` };
+            }
+        }
+
+        yield { type: 'result', content: `全部完成！共 ${allRepos.length} 个仓库，${totalTagCount} 个标签` };
+    }
+
+    /** 处理单批仓库的 Agent 打标签 */
+    private async *processBatch(
+        repoIndex: Array<{ id: bigint; fullName: string | null; language: string | null; starsCount: number }>,
+        tagSystem: string,
+        signal: AbortSignal,
+    ): AsyncGenerator<AgentTagStreamEvent, number | null> {
+        let tagCount = 0;
+        // ── 创建 MCP 工具 ──
         const prisma = this.prisma;
 
         // MCP 工具 1: 获取仓库详情（描述/README/Topics/首页/许可证）
@@ -146,40 +174,24 @@ export class AgentTagService {
             .map((r, i) => `${i}. ${r.fullName} (${r.language || '?'}, ⭐${r.starsCount}) [ID:${r.id}]`)
             .join('\n');
 
-        const prompt = `你是一位资深的 GitHub 项目分类专家。请为以下 ${repoIndex.length} 个 GitHub 开源项目自动打上合适的标签。
+        const prompt = `你是 GitHub 项目分类专家。为以下 ${repoIndex.length} 个项目打标签（2-6个/项目）。
 
-## 可用工具
+## 工具
+- get_repo_details(ids): 批量获取项目描述/README/Topics/语言
+- search_tags(keyword): 搜索现有标签
 
-- **get_repo_details**: 传入仓库 ID 列表，获取项目的描述、README摘要、Topics、语言、项目主页等详细信息
-- **search_tags**: 搜索现有标签体系中是否已有匹配的标签
-
-## 现有标签体系
-
+## 标签体系
 ${tagSystem}
 
-## 待分类项目索引
-
+## 项目列表
 ${repoIndexText}
 
-## 你的任务
-
-### 第一步：批量获取详情
-使用 get_repo_details 工具，传入所有仓库 ID，一次性获取所有项目的详细信息。
-仔细阅读每个项目的描述、README摘要、Topics，理解其核心功能和定位。
-
-### 第二步：匹配标签
-对每个项目，根据获取到的详情，从现有标签体系中选择合适的标签。
-标签应覆盖多个维度：技术栈（语言）、领域、用途等。
-每个项目打 2-6 个标签。优先复用已有标签，确实没有匹配的才创建新标签名。
-
-### 第三步：输出结果
-只输出 JSON（不要任何其他文字、不要 markdown 代码块标记）：
-
-{"0": ["标签1", "标签2"], "1": ["标签3", "标签4"], ...}
-
-数字是项目索引（0 ~ ${repoIndex.length - 1}），标签名必须与现有体系中的名称完全一致（或明确的新名称）。
-
-【重要】不要输出开头语、结束语、解释性文字。只输出纯 JSON。`;
+## 规则
+1. 用 get_repo_details 一次获取全部项目详情
+2. 优先匹配现有标签，无匹配时才创建新标签（用中文命名，简洁准确）
+3. 标签覆盖多维度：技术栈、领域、用途
+4. 只输出 JSON：{"0":["标签1"],"1":["标签2"]}  (0~${repoIndex.length - 1})
+5. 不输出任何其他文字`;
 
         yield { type: 'status', message: 'Agent 开始通过 MCP 本地数据库分析项目...' };
 
@@ -196,7 +208,7 @@ ${repoIndexText}
                     mcpServers: { githubstars: mcpServer },
                     permissionMode: 'bypassPermissions',
                     allowDangerouslySkipPermissions: true,
-                    maxTurns: 6,
+                    maxTurns: 15,
                     model: 'sonnet',
                     abortController,
                 },
@@ -243,9 +255,10 @@ ${repoIndexText}
                                     repoIndex.map((r) => Number(r.id)),
                                     parsed,
                                 );
+                                tagCount = Object.values(parsed).flat().length;
                                 yield {
                                     type: 'result',
-                                    content: `AI 自动标签完成！共为 ${repoIndex.length} 个仓库打了 ${Object.values(parsed).flat().length} 个标签。`,
+                                    content: `自动标签完成！${repoIndex.length} 个仓库 → ${tagCount} 个标签`,
                                 };
                             } else {
                                 yield { type: 'error', message: '未能解析标签结果' };
@@ -265,6 +278,7 @@ ${repoIndexText}
         } finally {
             signal.removeEventListener('abort', onAbort);
         }
+        return tagCount;
     }
 
     /** 从 Agent 输出中提取 JSON 结果 */

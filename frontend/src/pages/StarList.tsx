@@ -40,6 +40,7 @@ import {
     AppstoreOutlined,
     UnorderedListOutlined,
     BulbOutlined,
+    ThunderboltOutlined,
 } from '@ant-design/icons'
 import dayjs from '../setupDayjs'
 import * as statsApi from '../api/stats'
@@ -987,6 +988,15 @@ export default function StarList() {
                                 )}
                                 <Button icon={<TranslationOutlined />} onClick={() => setTranslatePanelOpen(true)}>
                                     翻译管理
+                                </Button>
+                                <Button icon={<ThunderboltOutlined />} onClick={() => {
+                                    const repos = pageResult.records.map(r => Number(r.id))
+                                    if (repos.length === 0) { message.warning('当前无仓库可分析'); return }
+                                    // 跳转标签管理页，带上筛选条件提示
+                                    window.open('/tags', '_blank')
+                                    message.info(`已在标签管理页打开，请点击「Agent智能打标签」，当前筛选共 ${pageResult.total} 个仓库`)
+                                }}>
+                                    🤖 Agent打标签
                                 </Button>
                                 <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze}>
                                     AI 分析
