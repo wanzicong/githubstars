@@ -1,7 +1,9 @@
 import { Controller, Get, Post, Query, Logger } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { GithubSearchService } from '../github/services/github-search.service';
 import { AiAnalyzeService } from '../ai/services/ai-analyze.service';
 
+@ApiTags('trending')
 @Controller('api/trending')
 export class TrendingController {
     private readonly logger = new Logger(TrendingController.name);
@@ -19,6 +21,10 @@ export class TrendingController {
      * @returns   Trending 仓库列表及时间范围
      */
     @Get()
+    @ApiOperation({ summary: '获取 Trending 仓库', description: '通过 GitHub Search API 查询指定时间段内创建的高星仓库' })
+    @ApiQuery({ name: 'since', required: false, description: '时间范围（daily/weekly/monthly），默认 daily' })
+    @ApiQuery({ name: 'language', required: false, description: '编程语言筛选' })
+    @ApiQuery({ name: 'perPage', required: false, description: '每页数量，默认 20' })
     async trending(@Query() q: any) {
         const since = q.since || 'daily';
         const language = q.language || '';
@@ -49,6 +55,9 @@ export class TrendingController {
      * @returns   包含 taskId 的响应，可通过 taskId 查询分析结果
      */
     @Post('analyze')
+    @ApiOperation({ summary: '启动趋势分析', description: '查询 Trending 仓库并创建 AI 分析任务（后台异步），返回 taskId' })
+    @ApiQuery({ name: 'since', required: false, description: '时间范围（daily/weekly/monthly），默认 daily' })
+    @ApiQuery({ name: 'language', required: false, description: '编程语言筛选' })
     async analyze(@Query() q: any) {
         const since = q.since || 'daily';
         const language = q.language || '';

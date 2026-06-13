@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Param, Body, Query, Res, Sse, Logger } from '@nestjs/common';
 import type { Response } from 'express';
+import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { Observable, Subject } from 'rxjs';
 import { TranslateService } from '../services/translate.service';
 import { TranslateTaskService } from '../services/translate-task.service';
@@ -13,6 +14,7 @@ export function broadcastTaskProgress(taskId: number, data: any) {
     if (subject) subject.next({ data } as MessageEvent);
 }
 
+@ApiTags('translate')
 @Controller('api/translate')
 export class TranslateController {
     private readonly logger = new Logger(TranslateController.name);
@@ -55,6 +57,8 @@ export class TranslateController {
      * @returns { success, taskId?, translatedCount?, message }
      */
     @Post()
+    @ApiOperation({ summary: '创建翻译任务', description: '支持三种 scope: selected（指定仓库）、all（全量）、filtered（筛选条件）；三种 type: description / readme / both' })
+    @ApiBody({ description: '翻译任务参数', schema: { type: 'object', properties: { type: { type: 'string', enum: ['description', 'readme', 'both'], description: '翻译类型' }, scope: { type: 'string', enum: ['selected', 'all', 'filtered'], description: '范围类型' }, repoIds: { type: 'array', items: { type: 'number' }, description: '仓库 ID 列表（scope=selected 时使用）' }, filters: { type: 'object', description: '筛选条件（scope=filtered 时使用）' } }, required: ['type', 'scope'] } })
     async createTask(
         @Body()
         body: {
@@ -115,6 +119,7 @@ export class TranslateController {
      * @returns { success, apiKeyConfigured }
      */
     @Get('config')
+    @ApiOperation({ summary: '检查翻译配置', description: '检查 DeepSeek API Key 是否已配置' })
     async translateConfig() {
         return { success: true, apiKeyConfigured: await this.taskService.isApiKeyConfigured() };
     }
@@ -128,6 +133,14 @@ export class TranslateController {
      * @returns 覆盖率统计对象
      */
     @Get('status')
+    @ApiOperation({ summary: '翻译覆盖统计', description: '返回符合条件的仓库总数及描述/README 的翻译覆盖情况' })
+    @ApiQuery({ name: 'keyword', required: false, description: '关键词筛选' })
+    @ApiQuery({ name: 'language', required: false, description: '编程语言筛选' })
+    @ApiQuery({ name: 'categoryIds', required: false, description: '分类 ID（逗号分隔）' })
+    @ApiQuery({ name: 'dateField', required: false, description: '日期筛选字段' })
+    @ApiQuery({ name: 'startDate', required: false, description: '开始日期' })
+    @ApiQuery({ name: 'endDate', required: false, description: '结束日期' })
+    @ApiQuery({ name: 'untranslatedOnly', required: false, description: '仅未翻译' })
     async translationStatus(@Query() q: any) {
         return this.service.getTranslationSummary({
             keyword: q.keyword || '',
@@ -148,6 +161,7 @@ export class TranslateController {
      * @returns 最近 20 条翻译任务摘要
      */
     @Get('tasks')
+    @ApiOperation({ summary: '获取翻译任务列表', description: '获取最近 20 条翻译任务摘要' })
     async taskList() {
         return this.taskService.getRecentTasks();
     }
@@ -159,6 +173,8 @@ export class TranslateController {
      * @returns 任务进度详情，无效 ID 时返回 { success: false, message }
      */
     @Get('tasks/:id')
+    @ApiOperation({ summary: '查询任务进度', description: '获取指定翻译任务的详情和进度信息' })
+    @ApiParam({ name: 'id', description: '翻译任务 ID' })
     async taskProgress(@Param('id') id: string) {
         const nid = this.parseId(id);
         if (!this.isValidId(nid)) return { success: false, message: '无效的任务ID' };
@@ -172,6 +188,8 @@ export class TranslateController {
      * @returns 新任务 ID，无失败项时返回 { success: false, message }
      */
     @Post('tasks/:id/retry')
+    @ApiOperation({ summary: '重试失败翻译', description: '重试指定翻译任务中的失败项，返回新任务 ID' })
+    @ApiParam({ name: 'id', description: '原翻译任务 ID' })
     async taskRetry(@Param('id') id: string) {
         const nid = this.parseId(id);
         if (!this.isValidId(nid)) return { success: false, message: '无效的任务ID' };
@@ -188,6 +206,8 @@ export class TranslateController {
      * @returns { success, failures, count }
      */
     @Get('tasks/:id/failures')
+    @ApiOperation({ summary: '获取任务失败项', description: '查询指定翻译任务的失败项列表' })
+    @ApiParam({ name: 'id', description: '翻译任务 ID' })
     async taskFailures(@Param('id') id: string) {
         const nid = this.parseId(id);
         if (!this.isValidId(nid)) return { success: false, message: '无效的任务ID' };
@@ -204,6 +224,8 @@ export class TranslateController {
      * @param res Express Response 对象
      */
     @Get('tasks/:id/stream')
+    @ApiOperation({ summary: 'SSE 进度推送', description: '建立 SSE 长连接，每 2 秒推送翻译任务进度，任务完成自动关闭' })
+    @ApiParam({ name: 'id', description: '翻译任务 ID' })
     async taskStream(@Param('id') id: string, @Res() res: Response) {
         const taskId = this.parseId(id);
         res.writeHead(200, {
@@ -247,6 +269,8 @@ export class TranslateController {
      * @returns { success, descriptionCn }
      */
     @Post(':id/description')
+    @ApiOperation({ summary: '[旧接口] 同步翻译描述', description: '对指定仓库的描述文本进行实时翻译' })
+    @ApiParam({ name: 'id', description: '仓库 ID' })
     async translateDesc(@Param('id') id: string) {
         const nid = this.parseId(id);
         if (!this.isValidId(nid)) return { success: false, message: '无效的仓库ID' };
@@ -261,6 +285,8 @@ export class TranslateController {
      * @returns { success, readmeCn }
      */
     @Post(':id/readme')
+    @ApiOperation({ summary: '[旧接口] 同步翻译 README', description: '对指定仓库的 README 进行实时翻译' })
+    @ApiParam({ name: 'id', description: '仓库 ID' })
     async translateReadme(@Param('id') id: string) {
         const nid = this.parseId(id);
         if (!this.isValidId(nid)) return { success: false, message: '无效的仓库ID' };
@@ -275,6 +301,8 @@ export class TranslateController {
      * @returns { success, taskId, message }
      */
     @Post(':id/readme/async')
+    @ApiOperation({ summary: '[旧接口] 异步翻译 README', description: '创建异步 README 翻译任务，返回 taskId' })
+    @ApiParam({ name: 'id', description: '仓库 ID' })
     async translateReadmeAsync(@Param('id') id: string) {
         const nid = this.parseId(id);
         if (!this.isValidId(nid)) return { success: false, message: '无效的仓库ID' };
@@ -290,6 +318,8 @@ export class TranslateController {
      * @returns { success, taskId, message }
      */
     @Post(':id/readme/retranslate')
+    @ApiOperation({ summary: '[旧接口] 强制重新翻译 README', description: '无视已有翻译结果，强制重新翻译指定仓库的 README' })
+    @ApiParam({ name: 'id', description: '仓库 ID' })
     async translateReadmeRetranslate(@Param('id') id: string) {
         const nid = this.parseId(id);
         if (!this.isValidId(nid)) return { success: false, message: '无效的仓库ID' };
@@ -305,6 +335,8 @@ export class TranslateController {
      * @returns { success, descriptionCn, readmeCn, readmeFetched }
      */
     @Post(':id')
+    @ApiOperation({ summary: '[旧接口] 同步翻译完整仓库', description: '同步翻译指定仓库的描述 + README（阻塞等待）' })
+    @ApiParam({ name: 'id', description: '仓库 ID' })
     async translateFull(@Param('id') id: string) {
         const nid = this.parseId(id);
         if (!this.isValidId(nid)) return { success: false, message: '无效的仓库ID' };
@@ -322,6 +354,8 @@ export class TranslateController {
      * @returns { success, descriptionTranslated, readmeFetched, readmeTranslated, ... }
      */
     @Get(':id/status')
+    @ApiOperation({ summary: '[旧接口] 查询单仓库翻译状态', description: '查询指定仓库的描述和 README 翻译状态' })
+    @ApiParam({ name: 'id', description: '仓库 ID' })
     async status(@Param('id') id: string) {
         const nid = this.parseId(id);
         if (!this.isValidId(nid)) return { success: false, message: '无效的仓库ID' };

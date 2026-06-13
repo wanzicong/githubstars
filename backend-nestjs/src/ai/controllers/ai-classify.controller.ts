@@ -1,7 +1,9 @@
 import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { AiClassifyService } from '../services/ai-classify.service';
 import { GithubRepoService } from '../../github/services/github-repo.service';
 
+@ApiTags('classify')
 @Controller('api')
 export class AiClassifyController {
     constructor(
@@ -17,6 +19,9 @@ export class AiClassifyController {
      * @returns 仓库列表和总数
      */
     @Get('ai/classify/repos')
+    @ApiOperation({ summary: '获取待分类仓库', description: '获取所有仓库列表，支持关键词和语言筛选' })
+    @ApiQuery({ name: 'keyword', required: false, description: '关键词筛选' })
+    @ApiQuery({ name: 'language', required: false, description: '编程语言筛选' })
     async repos(@Query() q: any) {
         const repos = await this.repoService.findAll({ keyword: q.keyword || '', language: q.language || '' });
         return { repos, total: repos.length };
@@ -30,6 +35,8 @@ export class AiClassifyController {
      * @returns 分类结果映射和分类总数
      */
     @Post('ai/classify/execute')
+    @ApiOperation({ summary: '执行 AI 分类', description: '对指定的仓库列表执行 AI 智能分类' })
+    @ApiBody({ description: '仓库 ID 列表和分类参数', schema: { type: 'object', properties: { repoIds: { type: 'array', items: { type: 'number' }, description: '仓库 ID 列表' }, topN: { type: 'number', description: '最大分类数量，默认 8' } }, required: ['repoIds'] } })
     async execute(@Body() b: any) {
         if (!b.repoIds?.length) return { success: false, message: '请提供仓库ID列表' };
         return this.classifyService.classify(b.repoIds, b.topN || 8);
