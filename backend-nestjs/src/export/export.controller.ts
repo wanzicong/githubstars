@@ -30,7 +30,7 @@ export class ExportController {
     @ApiQuery({ name: 'untranslatedOnly', required: false, description: '仅未翻译（true/false）' })
     @ApiQuery({ name: 'maxCount', required: false, description: '最大导出数量，默认 50' })
     async exportMd(@Query() q: any, @Res() res: Response) {
-        const maxCount = Math.min(parseInt(q.maxCount) || 50, 500);
+        const maxCount = parseInt(q.maxCount) || 50;
         this.logger.log(
             '开始导出Markdown: keyword=' + (q.keyword || '') + ', language=' + (q.language || '') + ', maxCount=' + maxCount,
         );
@@ -58,8 +58,9 @@ export class ExportController {
         if (q.untranslatedOnly === 'true') md += `> 仅未翻译\n`;
         md += `> 导出时间: ${new Date().toISOString()}\n\n---\n\n`;
 
-        for (const repo of repos) {
-            md += `## ${repo.fullName}\n\n`;
+        for (let i = 0; i < repos.length; i++) {
+            const repo = repos[i];
+            md += `## ${i + 1}. ${repo.fullName}\n\n`;
             md += `- ⭐ ${repo.starsCount} | 🍴 ${repo.forksCount} | 语言: ${repo.language || '未知'}\n`;
             md += `- 🔗 [GitHub](${repo.htmlUrl})\n`;
             if (repo.homepage) md += `- 🏠 [主页](${repo.homepage})\n`;
