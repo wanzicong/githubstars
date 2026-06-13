@@ -1054,6 +1054,7 @@ export default function StarList() {
                 concurrency: cloneConcurrency,
                 cloneDepth: cloneDepth,
                 maxRepoSizeMb: cloneMaxRepoSizeMb,
+                untranslatedOnly: untranslatedOnly || undefined,
             })
             if (!data.success) {
                 message.error(data.message || '启动 Clone 失败')
@@ -1106,6 +1107,7 @@ export default function StarList() {
         cloneConcurrency,
         cloneDepth,
         cloneMaxRepoSizeMb,
+        untranslatedOnly,
         pageResult.total,
     ])
 

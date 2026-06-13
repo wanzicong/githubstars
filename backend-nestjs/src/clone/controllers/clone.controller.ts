@@ -77,6 +77,7 @@ export class CloneController {
             concurrency: parseInt(q.concurrency) || 5,
             cloneDepth: parseInt(q.cloneDepth) || 1,
             maxRepoSizeMb: parseInt(q.maxRepoSizeMb) || 500,
+            untranslatedOnly: q.untranslatedOnly === 'true' || q.untranslatedOnly === true,
         });
     }
 
@@ -274,6 +275,11 @@ export class CloneController {
             maxCount: parseInt(q.maxCount) || 50,
             subDirectory: q.subDirectory || '',
             cloneDepth: parseInt(q.cloneDepth) || 1,
+            dateField: q.dateField || '',
+            startDate: q.startDate || '',
+            endDate: q.endDate || '',
+            sortBy: q.sortBy || 'starred_at',
+            sortOrder: q.sortOrder || 'desc',
         });
         const ext = q.osType === 'linux' ? 'sh' : 'ps1';
         res.set({

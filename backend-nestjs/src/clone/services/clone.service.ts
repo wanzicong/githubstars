@@ -312,6 +312,7 @@ export class CloneService implements OnModuleInit {
         concurrency?: number;
         cloneDepth?: number;
         maxRepoSizeMb?: number;
+        untranslatedOnly?: boolean;
     }) {
         const subDir = this.sanitizeSubdirectory(params.subDirectory || '');
         const targetDir = subDir ? path.join(await this.getBaseDir(), subDir).replace(/\\/g, '/') : await this.getBaseDir();
@@ -364,6 +365,7 @@ export class CloneService implements OnModuleInit {
                 endDate: params.endDate || '',
                 sortBy: params.sortBy || 'starred_at',
                 sortOrder: params.sortOrder || 'desc',
+                untranslatedOnly: params.untranslatedOnly,
             }).catch(console.error);
 
             return { success: true, taskId, targetDirectory: targetDir };
@@ -400,6 +402,7 @@ export class CloneService implements OnModuleInit {
             endDate: string;
             sortBy: string;
             sortOrder: string;
+            untranslatedOnly?: boolean;
         },
     ) {
         const task = await this.prisma.cloneTask.findUnique({ where: { taskId } });
@@ -410,7 +413,7 @@ export class CloneService implements OnModuleInit {
         await this.prisma.cloneTask.update({ where: { taskId }, data: { status: 'RUNNING', startedAt: new Date() } });
         this.logger.log('批量克隆开始执行: taskId=' + taskId);
 
-        const targetDir = subDir ? path.join(await this.getBaseDir(), subDir) : await this.getBaseDir();
+        const targetDir = subDir ? path.join(await this.getBaseDir(), subDir).replace(/\\/g, '/') : await this.getBaseDir();
 
         try {
             // P0 FIX: 使用过滤参数查询仓库
@@ -425,6 +428,7 @@ export class CloneService implements OnModuleInit {
                 dateField: filterParams.dateField,
                 startDate: filterParams.startDate,
                 endDate: filterParams.endDate,
+                untranslatedOnly: filterParams.untranslatedOnly,
             });
             const repos = (reposResult.records as any[]).filter((r: any) => r.fullName && r.htmlUrl);
 
@@ -587,11 +591,12 @@ export class CloneService implements OnModuleInit {
             else failed++;
         });
 
+        // P0 FIX: 使用 increment 累加到已有计数，而非覆盖
         const finalStatus = failed === 0 ? 'COMPLETED' : 'FAILED';
-        await this.prisma.cloneTask.update({
-            where: { taskId },
-            data: { status: finalStatus, completedRepos: completed, failedRepos: failed, finishedAt: new Date() },
-        });
+        const updateData: any = { status: finalStatus, finishedAt: new Date() };
+        if (completed > 0) updateData.completedRepos = { increment: completed };
+        if (failed > 0) updateData.failedRepos = { increment: failed };
+        await this.prisma.cloneTask.update({ where: { taskId }, data: updateData });
         this.logger.log('重试克隆完成: taskId=' + taskId + ', 成功=' + completed + ', 失败=' + failed);
         return { success: true, message: `重试完成: ${completed}成功, ${failed}失败`, retryCount: failedItems.length };
     }
@@ -673,6 +678,7 @@ export class CloneService implements OnModuleInit {
         endDate?: string;
         sortBy?: string;
         sortOrder?: string;
+        untranslatedOnly?: boolean;
     }) {
         const maxCount = params.maxCount || 50;
         const depth = (params.cloneDepth || 1) > 0 ? ` --depth ${params.cloneDepth}` : '';
@@ -680,7 +686,6 @@ export class CloneService implements OnModuleInit {
         const targetDir = subDir ? path.join(await this.getBaseDir(), subDir).replace(/\\/g, '/') : await this.getBaseDir();
         this.logger.log('生成克隆脚本: OS=' + params.osType + ', maxCount=' + maxCount + ', 目标目录=' + targetDir);
 
-        // P0 FIX: 使用过滤参数查询仓库
         const result = await this.githubRepoService.findPage({
             page: 1,
             size: maxCount,
@@ -692,6 +697,7 @@ export class CloneService implements OnModuleInit {
             dateField: params.dateField || '',
             startDate: params.startDate || '',
             endDate: params.endDate || '',
+            untranslatedOnly: params.untranslatedOnly,
         });
         const repos = (result.records as any[]).filter((r: any) => r.htmlUrl);
 
