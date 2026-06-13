@@ -221,8 +221,11 @@ export class GithubApiService {
 
     const url = `${GITHUB_API}/repos/${encodeURIComponent(fullName)}/readme`
 
+    const controller = new AbortController()
+    const readmeTimeout = setTimeout(() => controller.abort(), 30_000)
+
     try {
-      const response = await fetch(url, { headers })
+      const response = await fetch(url, { headers, signal: controller.signal })
 
       console.log(`[GithubApi] README 响应状态: ${response.status} (${fullName})`)
 
@@ -249,9 +252,15 @@ export class GithubApiService {
       if (err instanceof Error && err.message.startsWith('GitHub API')) {
         throw err // 重新抛出已知错误
       }
+      if ((err as Error).name === 'AbortError') {
+        console.error(`[GithubApi] README 请求超时 (30s): ${fullName}`)
+        throw new Error('GitHub API 网络超时')
+      }
       const msg = err instanceof Error ? err.message : String(err)
       console.error(`[GithubApi] README 请求异常: ${fullName}, ${msg}`)
       throw new Error(`GitHub API 网络错误: ${msg}`)
+    } finally {
+      clearTimeout(readmeTimeout)
     }
   }
 
