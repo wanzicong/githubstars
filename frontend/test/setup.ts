@@ -12,35 +12,35 @@ import { cleanup } from '@testing-library/react'
 // 启动 MSW Server
 beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }))
 afterEach(() => {
-  server.resetHandlers()
-  cleanup()
+    server.resetHandlers()
+    cleanup()
 })
 afterAll(() => server.close())
 
 // Mock window.matchMedia (Ant Design)
 Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  }),
+    writable: true,
+    value: (query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+    }),
 })
 
 // Mock IntersectionObserver
 class MockIntersectionObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
+    observe() {}
+    unobserve() {}
+    disconnect() {}
 }
 Object.defineProperty(window, 'IntersectionObserver', {
-  writable: true,
-  value: MockIntersectionObserver,
+    writable: true,
+    value: MockIntersectionObserver,
 })
 
 // Mock scrollTo
@@ -49,6 +49,6 @@ window.scrollTo = () => {}
 // Suppress Ant Design warning in tests
 const originalWarn = console.warn
 console.warn = (...args: any[]) => {
-  if (typeof args[0] === 'string' && args[0].includes('findDOMNode')) return
-  originalWarn.call(console, ...args)
+    if (typeof args[0] === 'string' && args[0].includes('findDOMNode')) return
+    originalWarn.call(console, ...args)
 }

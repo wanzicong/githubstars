@@ -7,22 +7,22 @@
  *   beforeEach(async () => { tx = new TestTransaction(prisma); await tx.begin() })
  *   afterEach(async () => { await tx.rollback() })
  */
-import { PrismaService } from '../../src/prisma/prisma.service'
+import { PrismaService } from '../../src/prisma/prisma.service';
 
 export class TestTransaction {
-  constructor(private readonly prisma: PrismaService) {}
+    constructor(private readonly prisma: PrismaService) {}
 
-  async begin(): Promise<void> {
-    await this.prisma.$executeRaw`START TRANSACTION`
-  }
+    async begin(): Promise<void> {
+        await this.prisma.$executeRaw`START TRANSACTION`;
+    }
 
-  async rollback(): Promise<void> {
-    await this.prisma.$executeRaw`ROLLBACK`
-  }
+    async rollback(): Promise<void> {
+        await this.prisma.$executeRaw`ROLLBACK`;
+    }
 
-  async commit(): Promise<void> {
-    await this.prisma.$executeRaw`COMMIT`
-  }
+    async commit(): Promise<void> {
+        await this.prisma.$executeRaw`COMMIT`;
+    }
 }
 
 /**
@@ -30,23 +30,23 @@ export class TestTransaction {
  * 用法:
  *   const { app, prisma } = await createTestingApp()
  */
-import { Test, TestingModule } from '@nestjs/testing'
-import { INestApplication, ValidationPipe } from '@nestjs/common'
-import { AppModule } from '../../src/app.module'
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { AppModule } from '../../src/app.module';
 
 export async function createTestingApp(): Promise<{
-  app: INestApplication
-  prisma: PrismaService
-  module: TestingModule
+    app: INestApplication;
+    prisma: PrismaService;
+    module: TestingModule;
 }> {
-  const moduleFixture: TestingModule = await Test.createTestingModule({
-    imports: [AppModule],
-  }).compile()
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+    }).compile();
 
-  const app = moduleFixture.createNestApplication()
-  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }))
-  await app.init()
+    const app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+    await app.init();
 
-  const prisma = moduleFixture.get<PrismaService>(PrismaService)
-  return { app, prisma, module: moduleFixture }
+    const prisma = moduleFixture.get<PrismaService>(PrismaService);
+    return { app, prisma, module: moduleFixture };
 }

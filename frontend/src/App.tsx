@@ -18,38 +18,38 @@ import CloneTasks from './pages/CloneTasks'
 import CloneTaskDetail from './pages/CloneTaskDetail'
 
 export default function App() {
-  return (
-    <ConfigProvider
-      locale={zhCN}
-      theme={{
-        token: {
-          colorPrimary: '#1a1a2e',
-          borderRadius: 8,
-        },
-      }}
-    >
-      <AntApp>
-        <BrowserRouter>
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/" element={<StarList />} />
-              <Route path="/stars/:id" element={<StarDetail />} />
-              <Route path="/stats" element={<Stats />} />
-              <Route path="/sync" element={<Sync />} />
-              <Route path="/ai/classify" element={<Classify />} />
-              <Route path="/categories" element={<CategoryList />} />
-              <Route path="/categories/:id" element={<CategoryDetail />} />
-              <Route path="/authors" element={<AuthorList />} />
-              <Route path="/authors/:ownerName" element={<AuthorDetail />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/search" element={<GithubSearch />} />
-              <Route path="/trending" element={<Trending />} />
-              <Route path="/clone-tasks" element={<CloneTasks />} />
-              <Route path="/clone-tasks/:taskId" element={<CloneTaskDetail />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </AntApp>
-    </ConfigProvider>
-  )
+    return (
+        <ConfigProvider
+            locale={zhCN}
+            theme={{
+                token: {
+                    colorPrimary: '#1a1a2e',
+                    borderRadius: 8,
+                },
+            }}
+        >
+            <AntApp>
+                <BrowserRouter>
+                    <Routes>
+                        <Route element={<AppLayout />}>
+                            <Route path='/' element={<StarList />} />
+                            <Route path='/stars/:id' element={<StarDetail />} />
+                            <Route path='/stats' element={<Stats />} />
+                            <Route path='/sync' element={<Sync />} />
+                            <Route path='/ai/classify' element={<Classify />} />
+                            <Route path='/categories' element={<CategoryList />} />
+                            <Route path='/categories/:id' element={<CategoryDetail />} />
+                            <Route path='/authors' element={<AuthorList />} />
+                            <Route path='/authors/:ownerName' element={<AuthorDetail />} />
+                            <Route path='/settings' element={<Settings />} />
+                            <Route path='/search' element={<GithubSearch />} />
+                            <Route path='/trending' element={<Trending />} />
+                            <Route path='/clone-tasks' element={<CloneTasks />} />
+                            <Route path='/clone-tasks/:taskId' element={<CloneTaskDetail />} />
+                        </Route>
+                    </Routes>
+                </BrowserRouter>
+            </AntApp>
+        </ConfigProvider>
+    )
 }
