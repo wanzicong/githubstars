@@ -8,8 +8,8 @@ export class GithubSearchService {
     private readonly logger = new Logger(GithubSearchService.name);
     constructor(private readonly config: ConfigService) {}
 
-    private buildHeaders(): Record<string, string> {
-        const token = this.config.getValueDefault('github.token', '');
+    private async buildHeaders(): Promise<Record<string, string>> {
+        const token = await this.config.getValueDefault('github.token', '');
         const h: Record<string, string> = { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'GithubStars-Search' };
         if (token) h['Authorization'] = `Bearer ${token}`;
         return h;
@@ -21,7 +21,7 @@ export class GithubSearchService {
             if (language) q += ` language:${language}`;
             if (!q.trim()) q = 'stars:>1';
             const params = new URLSearchParams({ q, sort: sort || 'stars', page: String(page), per_page: String(perPage) });
-            const res = await fetch(`${GITHUB_API}/search/repositories?${params}`, { headers: this.buildHeaders() });
+            const res = await fetch(`${GITHUB_API}/search/repositories?${params}`, { headers: await this.buildHeaders() });
             if (res.status === 200) {
                 const data = (await res.json()) as any;
                 const repos = (data.items || []).map((item: any) => ({
@@ -53,7 +53,7 @@ export class GithubSearchService {
         try {
             const res = await fetch(`${GITHUB_API}/user/starred/${owner}/${repo}`, {
                 method: 'PUT',
-                headers: { ...this.buildHeaders(), 'Content-Length': '0' },
+                headers: { ...await this.buildHeaders(), 'Content-Length': '0' },
             });
             return res.status === 204 || res.status === 304;
         } catch {
@@ -63,7 +63,7 @@ export class GithubSearchService {
 
     async unstarRepo(owner: string, repo: string): Promise<boolean> {
         try {
-            const res = await fetch(`${GITHUB_API}/user/starred/${owner}/${repo}`, { method: 'DELETE', headers: this.buildHeaders() });
+            const res = await fetch(`${GITHUB_API}/user/starred/${owner}/${repo}`, { method: 'DELETE', headers: await this.buildHeaders() });
             return res.status === 204;
         } catch {
             return false;
@@ -72,7 +72,7 @@ export class GithubSearchService {
 
     async checkStarred(owner: string, repo: string): Promise<boolean> {
         try {
-            const res = await fetch(`${GITHUB_API}/user/starred/${owner}/${repo}`, { headers: this.buildHeaders() });
+            const res = await fetch(`${GITHUB_API}/user/starred/${owner}/${repo}`, { headers: await this.buildHeaders() });
             return res.status === 204;
         } catch {
             return false;

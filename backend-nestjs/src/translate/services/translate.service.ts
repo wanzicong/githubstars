@@ -17,9 +17,9 @@ export class TranslateService {
 
     /** P1-FIX: 添加 120s 超时 + 429 限流识别 */
     private async callDeepSeek(text: string, isReadme: boolean): Promise<string | null> {
-        const apiKey = this.config.getValue('deepseek.api_key');
-        const apiUrl = this.config.getValueDefault('deepseek.api_url', 'https://api.deepseek.com/v1/chat/completions');
-        const model = this.config.getValueDefault('deepseek.model', 'deepseek-chat');
+        const apiKey = await this.config.getValue('deepseek.api_key');
+        const apiUrl = await this.config.getValueDefault('deepseek.api_url', 'https://api.deepseek.com/v1/chat/completions');
+        const model = await this.config.getValueDefault('deepseek.model', 'deepseek-chat');
         if (!apiKey) {
             this.logger.error('DeepSeek API Key 未配置');
             return null;

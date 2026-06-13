@@ -15,9 +15,9 @@ export class AiClassifyService {
     ) {}
 
     private async callDeepSeek(prompt: string, systemMsg?: string): Promise<string | null> {
-        const apiKey = this.config.getValue('deepseek.api_key');
-        const apiUrl = this.config.getValueDefault('deepseek.api_url', 'https://api.deepseek.com/v1/chat/completions');
-        const model = this.config.getValueDefault('deepseek.model', 'deepseek-chat');
+        const apiKey = await this.config.getValue('deepseek.api_key');
+        const apiUrl = await this.config.getValueDefault('deepseek.api_url', 'https://api.deepseek.com/v1/chat/completions');
+        const model = await this.config.getValueDefault('deepseek.model', 'deepseek-chat');
         if (!apiKey) return null;
         const msgs: any[] = [];
         if (systemMsg) msgs.push({ role: 'system', content: systemMsg });

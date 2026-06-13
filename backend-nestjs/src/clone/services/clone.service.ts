@@ -46,7 +46,7 @@ export class CloneService implements OnModuleInit {
         this.taskCounter = maxNum;
     }
 
-    private get baseDir(): string {
+    private async getBaseDir(): Promise<string> {
         return this.configService.getValueDefault('clone.directory', 'D:/github-stars');
     }
 
@@ -92,7 +92,7 @@ export class CloneService implements OnModuleInit {
     /** 真实磁盘空间检查 */
     async checkDiskSpace(subDirectory: string, repoCount: number) {
         try {
-            const dir = subDirectory ? path.join(this.baseDir, this.sanitizeSubdirectory(subDirectory)) : this.baseDir;
+            const dir = subDirectory ? path.join(await this.getBaseDir(), this.sanitizeSubdirectory(subDirectory)) : await this.getBaseDir();
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
             let freeMB = 0;
@@ -134,8 +134,8 @@ export class CloneService implements OnModuleInit {
     }
 
     /** 构建 clone URL（支持代理） */
-    buildCloneUrl(htmlUrl: string): string {
-        const proxyUrl = this.configService.getValueDefault('clone.proxy.url', '');
+    async buildCloneUrl(htmlUrl: string): Promise<string> {
+        const proxyUrl = await this.configService.getValueDefault('clone.proxy.url', '');
         if (proxyUrl) {
             const sep = proxyUrl.endsWith('/') ? '' : '/';
             return `${proxyUrl}${sep}${htmlUrl}`;
@@ -175,7 +175,7 @@ export class CloneService implements OnModuleInit {
             }
         }
         fs.mkdirSync(path.dirname(dir), { recursive: true });
-        const url = this.buildCloneUrl(htmlUrl);
+        const url = await this.buildCloneUrl(htmlUrl);
         const depthArg = cloneDepth > 0 ? `--depth ${cloneDepth}` : '';
         try {
             const { stderr } = await execAsync(`git clone ${depthArg} "${url}" "${dir}"`, {
@@ -238,7 +238,7 @@ export class CloneService implements OnModuleInit {
         maxRepoSizeMb?: number;
     }) {
         const subDir = this.sanitizeSubdirectory(params.subDirectory || '');
-        const targetDir = subDir ? path.join(this.baseDir, subDir).replace(/\\/g, '/') : this.baseDir;
+        const targetDir = subDir ? path.join(await this.getBaseDir(), subDir).replace(/\\/g, '/') : await this.getBaseDir();
         const maxCount = params.maxCount || 50;
         const concurrency = params.concurrency || 5;
         const cloneDepth = params.cloneDepth ?? 1;
@@ -318,7 +318,7 @@ export class CloneService implements OnModuleInit {
         if (!task) return;
         await this.prisma.cloneTask.update({ where: { taskId }, data: { status: 'RUNNING', startedAt: new Date() } });
 
-        const targetDir = subDir ? path.join(this.baseDir, subDir) : this.baseDir;
+        const targetDir = subDir ? path.join(await this.getBaseDir(), subDir) : await this.getBaseDir();
 
         try {
             // P0 FIX: 使用过滤参数查询仓库
@@ -422,7 +422,7 @@ export class CloneService implements OnModuleInit {
 
         this.cancelledTasks.delete(taskId);
         await this.prisma.cloneTask.update({ where: { taskId }, data: { status: 'RUNNING', cancelled: 0 } });
-        const targetDir = task.targetDir || this.baseDir;
+        const targetDir = task.targetDir || await this.getBaseDir();
 
         let completed = 0,
             failed = 0;
@@ -430,7 +430,7 @@ export class CloneService implements OnModuleInit {
             const repoName = item.fullName.split('/').pop() || '';
             // P0 FIX: 使用 buildCloneUrl 而不是直接拼接 URL（支持代理）
             const htmlUrl = `https://github.com/${item.fullName}`;
-            const cloneUrl = this.buildCloneUrl(htmlUrl);
+            const cloneUrl = await this.buildCloneUrl(htmlUrl);
             const repoDir = path.join(targetDir, repoName);
 
             // 重试时强制覆盖
@@ -473,7 +473,7 @@ export class CloneService implements OnModuleInit {
 
     /** 获取克隆配置 */
     async getCloneConfig() {
-        const historyStr = this.configService.getValueDefault('clone.subdirectory.history', '[]');
+        const historyStr = await this.configService.getValueDefault('clone.subdirectory.history', '[]');
         let history: string[] = [];
         try {
             history = JSON.parse(historyStr);
@@ -486,9 +486,9 @@ export class CloneService implements OnModuleInit {
         });
         return {
             success: true,
-            baseDirectory: this.baseDir,
+            baseDirectory: await this.getBaseDir(),
             subdirectoryHistory: history,
-            lastSubdirectory: this.configService.getValueDefault('clone.subdirectory.last', ''),
+            lastSubdirectory: await this.configService.getValueDefault('clone.subdirectory.last', ''),
             hasActiveTask: !!activeTask,
             defaultCloneDepth: 1,
             defaultMaxRepoSizeMb: 500,
@@ -496,7 +496,7 @@ export class CloneService implements OnModuleInit {
     }
 
     private async saveHistory(subDir: string) {
-        const str = this.configService.getValueDefault('clone.subdirectory.history', '[]');
+        const str = await this.configService.getValueDefault('clone.subdirectory.history', '[]');
         let history: string[] = [];
         try {
             history = JSON.parse(str);
@@ -526,7 +526,7 @@ export class CloneService implements OnModuleInit {
         const maxCount = params.maxCount || 50;
         const depth = (params.cloneDepth || 1) > 0 ? ` --depth ${params.cloneDepth}` : '';
         const subDir = this.sanitizeSubdirectory(params.subDirectory || '');
-        const targetDir = subDir ? path.join(this.baseDir, subDir).replace(/\\/g, '/') : this.baseDir;
+        const targetDir = subDir ? path.join(await this.getBaseDir(), subDir).replace(/\\/g, '/') : await this.getBaseDir();
 
         // P0 FIX: 使用过滤参数查询仓库
         const result = await this.githubRepoService.findPage({

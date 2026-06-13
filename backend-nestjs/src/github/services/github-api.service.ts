@@ -62,8 +62,8 @@ export class GithubApiService {
      * @returns 映射为 DB 友好格式的仓库数组
      */
     async fetchAllStarredRepos(): Promise<MappedRepoData[]> {
-        const username = this.config.getValueDefault('github.username', 'wanzicong');
-        const token = this.config.getValueDefault('github.token', '');
+        const username = await this.config.getValueDefault('github.username', 'wanzicong');
+        const token = await this.config.getValueDefault('github.token', '');
 
         console.log('[GithubApi] ===== 开始全量获取星标仓库 =====');
         console.log(`[GithubApi] 用户名: ${username}, 每页大小: 100`);
@@ -209,7 +209,7 @@ export class GithubApiService {
      * @returns README 文本内容，404 返回 null，其他错误抛出异常
      */
     async fetchReadmeFromGitHub(fullName: string): Promise<string | null> {
-        const token = this.config.getValueDefault('github.token', '');
+        const token = await this.config.getValueDefault('github.token', '');
 
         console.log(`[GithubApi] 获取 README: ${fullName}`);
 
@@ -299,7 +299,7 @@ export class GithubApiService {
      * @param perPage 每页数量，默认 10
      */
     async searchRepos(query: string, sort: string = 'stars', order: string = 'desc', perPage: number = 10): Promise<any[]> {
-        const token = this.config.getValueDefault('github.token', '');
+        const token = await this.config.getValueDefault('github.token', '');
 
         console.log(`[GithubApi] 搜索仓库: q="${query}", sort=${sort}, order=${order}, perPage=${perPage}`);
 
@@ -353,8 +353,8 @@ export class GithubApiService {
      * 如果配置了 clone.proxy.url，则拼接代理前缀；
      * 否则直接返回 htmlUrl + ".git"。
      */
-    buildCloneUrl(htmlUrl: string): string {
-        const proxyUrl = this.config.getValueDefault('clone.proxy.url', '');
+    async buildCloneUrl(htmlUrl: string): Promise<string> {
+        const proxyUrl = await this.config.getValueDefault('clone.proxy.url', '');
         if (proxyUrl) {
             const sep = proxyUrl.endsWith('/') ? '' : '/';
             return `${proxyUrl}${sep}${htmlUrl}`;

@@ -19,10 +19,4 @@ export class ConfigController {
             return { success: false, message: '保存失败: ' + (e instanceof Error ? e.message : String(e)) };
         }
     }
-
-    @Post('reload')
-    async reload() {
-        await this.configService.reloadCache();
-        return { success: true, message: '配置缓存已刷新' };
-    }
 }

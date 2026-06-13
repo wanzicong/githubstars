@@ -145,15 +145,15 @@ export class TranslateTaskService {
     }
 
     /** 检查 DeepSeek API Key 是否已配置 */
-    isApiKeyConfigured(): boolean {
-        return !!this.config.getValue('deepseek.api_key');
+    async isApiKeyConfigured(): Promise<boolean> {
+        return !!(await this.config.getValue('deepseek.api_key'));
     }
 
     private startTaskAsync(taskId: bigint) {
         (async () => {
             try {
                 // P0-FIX: API Key 未配置时，直接标记任务失败，避免无意义的重试等待
-                if (!this.isApiKeyConfigured()) {
+                if (!(await this.isApiKeyConfigured())) {
                     this.logger.error('DeepSeek API Key 未配置，任务直接失败');
                     await this.prisma.translationTaskItem.updateMany({
                         where: { taskId },

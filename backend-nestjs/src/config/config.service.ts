@@ -3,8 +3,6 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ConfigService implements OnModuleInit {
-    private cache = new Map<string, string>();
-
     private readonly defaults: Array<{ key: string; value: string; description: string }> = [
         { key: 'github.username', value: 'wanzicong', description: 'GitHub 用户名' },
         { key: 'github.token', value: '', description: 'GitHub Personal Access Token' },
@@ -21,9 +19,9 @@ export class ConfigService implements OnModuleInit {
 
     async onModuleInit() {
         await this.ensureDefaults();
-        await this.reloadCache();
     }
 
+    /** 首次启动时写入默认配置（仅当配置项不存在时） */
     private async ensureDefaults() {
         for (const cfg of this.defaults) {
             const existing = await this.prisma.systemConfig.findUnique({ where: { configKey: cfg.key } });
@@ -37,22 +35,16 @@ export class ConfigService implements OnModuleInit {
         }
     }
 
-    async reloadCache() {
-        this.cache.clear();
-        const configs = await this.prisma.systemConfig.findMany();
-        for (const c of configs) {
-            if (c.configValue != null) this.cache.set(c.configKey, c.configValue);
-        }
+    /** 每次调用直接从数据库读取最新值 */
+    async getValue(key: string): Promise<string | undefined> {
+        const row = await this.prisma.systemConfig.findUnique({ where: { configKey: key }, select: { configValue: true } });
+        return row?.configValue ?? undefined;
     }
 
-    getValue(key: string): string | undefined {
-        return this.cache.get(key);
-    }
-
-    getValueDefault(key: string, defaultValue: string): string {
-        const val = this.cache.get(key);
-        // FIX: 区分 undefined 和空字符串，空字符串是有效的配置值
-        return val !== undefined && val !== null ? val : defaultValue;
+    /** 每次调用直接从数据库读取，不存在时返回 defaultValue */
+    async getValueDefault(key: string, defaultValue: string): Promise<string> {
+        const row = await this.prisma.systemConfig.findUnique({ where: { configKey: key }, select: { configValue: true } });
+        return row?.configValue || defaultValue;
     }
 
     async listAll() {
@@ -84,8 +76,6 @@ export class ConfigService implements OnModuleInit {
         } else {
             await this.prisma.systemConfig.create({ data: { configKey: key, configValue: value, createdAt: new Date() } });
         }
-        if (value != null) this.cache.set(key, value);
-        else this.cache.delete(key);
     }
 
     async batchUpdate(updates: Record<string, string>) {

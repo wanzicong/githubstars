@@ -89,7 +89,7 @@ export class TranslateController {
     /** GET /api/translate/config — 检查翻译配置（API Key 等） */
     @Get('config')
     async translateConfig() {
-        return { success: true, apiKeyConfigured: this.taskService.isApiKeyConfigured() };
+        return { success: true, apiKeyConfigured: await this.taskService.isApiKeyConfigured() };
     }
 
     /** GET /api/translate/status — 翻译覆盖统计 */
