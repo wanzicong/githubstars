@@ -1167,8 +1167,6 @@ export default function StarList() {
         keyword.trim() !== '' ||
         languageStr !== '' ||
         categoryIdsStr !== '' ||
-        sortBy !== 'starred_at' ||
-        sortOrder !== 'desc' ||
         dateField !== undefined ||
         !!startDateStr ||
         !!endDateStr ||
@@ -1806,6 +1804,7 @@ export default function StarList() {
                     dateField: dateField || undefined,
                     startDate: startDateStr || undefined,
                     endDate: endDateStr || undefined,
+                    untranslatedOnly: untranslatedOnly || undefined,
                 }}
                 hasActiveFilters={hasActiveFilters}
                 onRefreshList={() => {

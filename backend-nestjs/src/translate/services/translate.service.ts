@@ -293,26 +293,6 @@ export class TranslateService {
         endDate?: string;
         untranslatedOnly?: boolean;
     }) {
-        // 复用 findPage 获取符合条件的仓库总数和翻译状态
-        const result = await this.githubRepo.findPage({ ...params, page: 1, size: 1 });
-        const total = result.total;
-
-        // 统计描述翻译覆盖
-        const descResult = await this.githubRepo.findPage({ ...params, page: 1, size: 1 });
-        const withDescCn = await this.prisma.githubRepo.count({
-            where: { descriptionCn: { not: null }, AND: [{ descriptionCn: { not: '' } }] },
-        });
-
-        const withReadmeCn = await this.prisma.githubRepo.count({
-            where: { readmeCn: { not: null }, AND: [{ readmeCn: { not: '' } }] },
-        });
-
-        return {
-            total,
-            descCompleted: withDescCn,
-            descPending: total - withDescCn,
-            readmeCompleted: withReadmeCn,
-            readmePending: total - withReadmeCn,
-        };
+        return this.githubRepo.countTranslationStatus(params);
     }
 }

@@ -303,4 +303,66 @@ export class GithubRepoService {
         }
         for (const r of repos) r.categoryNames = map.get(r.id) || [];
     }
+
+    /**
+     * 统计筛选条件下的翻译覆盖情况
+     *
+     * 与 findPage 使用相同的 buildWhere 构建筛选条件，
+     * 确保 total、descCompleted、readmeCompleted 都在同一筛选范围内计算。
+     * 修复之前 getTranslationSummary 中已翻译数不遵守筛选条件全库查询的 Bug。
+     *
+     * @param params 筛选参数（与 findPage / getTranslationSummary 一致）
+     * @returns { total, descCompleted, descPending, readmeCompleted, readmePending }
+     */
+    async countTranslationStatus(params: {
+        keyword?: string;
+        language?: string;
+        categoryIds?: string;
+        dateField?: string;
+        startDate?: string;
+        endDate?: string;
+        untranslatedOnly?: boolean;
+    }) {
+        const languages = params.language ? params.language.split(',').filter(Boolean) : [];
+        const catIds = await this.expandCategoryIds(params.categoryIds || '');
+        const where = this.buildWhere({
+            keyword: params.keyword,
+            languages: languages.length > 0 ? languages : undefined,
+            categoryIds: catIds.length > 0 ? catIds : undefined,
+            dateField: params.dateField,
+            startDate: params.startDate,
+            endDate: params.endDate,
+            untranslatedOnly: params.untranslatedOnly,
+        });
+
+        const [total, descCompleted, readmeCompleted] = await Promise.all([
+            this.prisma.githubRepo.count({ where }),
+            this.prisma.githubRepo.count({
+                where: {
+                    AND: [
+                        where,
+                        { descriptionCn: { not: null } },
+                        { descriptionCn: { not: '' } },
+                    ],
+                },
+            }),
+            this.prisma.githubRepo.count({
+                where: {
+                    AND: [
+                        where,
+                        { readmeCn: { not: null } },
+                        { readmeCn: { not: '' } },
+                    ],
+                },
+            }),
+        ]);
+
+        return {
+            total,
+            descCompleted,
+            descPending: total - descCompleted,
+            readmeCompleted,
+            readmePending: total - readmeCompleted,
+        };
+    }
 }

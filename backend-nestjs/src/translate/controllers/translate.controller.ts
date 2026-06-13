@@ -136,6 +136,7 @@ export class TranslateController {
             dateField: q.dateField || '',
             startDate: q.startDate || '',
             endDate: q.endDate || '',
+            untranslatedOnly: q.untranslatedOnly === 'true' || q.untranslatedOnly === true,
         });
     }
 
