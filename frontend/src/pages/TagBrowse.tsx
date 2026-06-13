@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
     Card, Tag, Typography, Button, Spin, Empty, Space, Modal,
-    Input, Alert, message,
+    InputNumber, Alert, message, Steps,
 } from 'antd'
 import {
     TagsOutlined, ReloadOutlined,
     BulbOutlined, ThunderboltOutlined,
+    LoadingOutlined, CheckCircleOutlined, ExclamationCircleOutlined,
 } from '@ant-design/icons'
 import * as tagsApi from '../api/tags'
+import { fetchStarList } from '../api/stars'
 import type { TagGroup } from '../api/tags'
 
 const { Title, Text } = Typography
@@ -20,10 +22,12 @@ export default function TagBrowse() {
     const [agentModalVisible, setAgentModalVisible] = useState(false)
     const [agentStatus, setAgentStatus] = useState('')
     const [agentThinking, setAgentThinking] = useState('')
+    const [agentToolCalls, setAgentToolCalls] = useState<string[]>([])
     const [agentResult, setAgentResult] = useState('')
     const [agentError, setAgentError] = useState('')
     const [agentRunning, setAgentRunning] = useState(false)
-    const [agentRepoCount, setAgentRepoCount] = useState(30)
+    const [agentRepoCount, setAgentRepoCount] = useState(20)
+    const [agentStep, setAgentStep] = useState(0)
     const abortRef = useRef<(() => void) | null>(null)
 
     const load = useCallback(async () => {
@@ -42,25 +46,56 @@ export default function TagBrowse() {
 
     const handleAgentAutoTag = async () => {
         setAgentModalVisible(true)
-        setAgentStatus('正在准备 Agent 分析环境...')
+        setAgentStep(0)
+        setAgentStatus('正在获取仓库列表...')
         setAgentThinking('')
+        setAgentToolCalls([])
         setAgentResult('')
         setAgentError('')
         setAgentRunning(true)
 
+        // 第一步：获取真实的仓库 ID 列表
+        let repoIds: number[] = []
+        try {
+            const result = await fetchStarList({ page: 1, size: Math.min(agentRepoCount, 200) })
+            repoIds = result.records.map((r) => Number(r.id))
+            setAgentStep(1)
+            setAgentStatus(`已获取 ${repoIds.length} 个仓库，Agent 开始分析...`)
+        } catch {
+            setAgentError('获取仓库列表失败')
+            setAgentRunning(false)
+            return
+        }
+
+        if (!repoIds.length) {
+            setAgentError('没有可分析的仓库')
+            setAgentRunning(false)
+            return
+        }
+
         abortRef.current?.()
-        const abort = tagsApi.startAgentAutoTag(
-            Array.from({ length: agentRepoCount }, (_, i) => i + 1), // 使用前 N 个仓库做演示
-            {
-            onStatus: (msg) => setAgentStatus(msg),
+        const abort = tagsApi.startAgentAutoTag(repoIds, {
+            onStatus: (msg) => {
+                setAgentStatus(msg)
+                if (msg.includes('分析完成')) setAgentStep(3)
+                else if (msg.includes('Agent 正在分析') || msg.includes('搜索')) setAgentStep(2)
+            },
             onThinking: (content) => setAgentThinking((p) => p + content),
-            onToolCall: (name) => setAgentStatus(`Agent 正在使用 ${name} 工具...`),
+            onToolCall: (name, input) => {
+                const label = name === 'WebSearch' ? `🌐 搜索: ${(input as any)?.query || ''}` :
+                              name === 'WebFetch' ? `📄 读取: ${(input as any)?.url || ''}` :
+                              name === 'search_tags' ? '🔍 查标签' : `🔧 ${name}`
+                setAgentToolCalls((p) => [...p, label])
+                setAgentStatus(`${label}`)
+            },
             onResult: (msg) => {
+                setAgentStep(4)
                 setAgentResult(msg)
                 setAgentRunning(false)
                 load()
             },
             onError: (msg) => {
+                setAgentStep(-1)
                 setAgentError(msg)
                 setAgentRunning(false)
             },
@@ -164,37 +199,72 @@ export default function TagBrowse() {
                 style={{ top: 20 }}
             >
                 <div style={{ marginBottom: 16 }}>
-                    <Text>分析仓库数量</Text>
-                    <Input
-                        type='number'
+                    <Text>分析仓库数量（从 Star 列表按顺序取前 N 个）</Text>
+                    <InputNumber
                         value={agentRepoCount}
-                        onChange={(e) => setAgentRepoCount(Number(e.target.value))}
+                        onChange={(v) => setAgentRepoCount(v ?? 20)}
                         min={5}
                         max={200}
                         disabled={agentRunning}
-                        style={{ marginTop: 8 }}
-                        addonAfter='个'
+                        style={{ width: '100%', marginTop: 8 }}
+                        addonAfter='个仓库'
                     />
                 </div>
 
-                {agentStatus && (
-                    <Alert type='info' showIcon message={agentStatus} style={{ marginBottom: 12 }} />
+                {/* 步骤指示器 */}
+                {agentRunning && (
+                    <Steps
+                        current={agentStep}
+                        size='small'
+                        status={agentStep === -1 ? 'error' : 'process'}
+                        style={{ marginBottom: 16 }}
+                        items={[
+                            { title: '获取仓库' },
+                            { title: 'Agent 分析' },
+                            { title: '搜索了解' },
+                            { title: '保存标签' },
+                        ]}
+                    />
                 )}
 
-                {agentThinking && (
-                    <Card size='small' title='💭 Agent 思考过程' style={{ marginBottom: 12 }}>
-                        <div style={{ maxHeight: 300, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 13, color: '#555' }}>
-                            {agentThinking}
+                {agentError && (
+                    <Alert type='error' showIcon icon={<ExclamationCircleOutlined />} message='分析失败' description={agentError} style={{ marginBottom: 12 }} />
+                )}
+
+                {agentResult && (
+                    <Alert type='success' showIcon icon={<CheckCircleOutlined />} message='标签完成' description={agentResult} style={{ marginBottom: 12 }} />
+                )}
+
+                {/* Agent 工作状态 */}
+                {(agentRunning || agentStatus) && !agentError && !agentResult && (
+                    <Card size='small' style={{ marginBottom: 12, background: '#f6ffed', borderColor: '#b7eb8f' }}>
+                        <Space>
+                            {agentRunning && <LoadingOutlined spin style={{ color: '#1677ff' }} />}
+                            <Text>{agentStatus}</Text>
+                        </Space>
+                    </Card>
+                )}
+
+                {/* 工具调用日志 */}
+                {agentToolCalls.length > 0 && (
+                    <Card size='small' title='🔧 工具调用记录' style={{ marginBottom: 12 }}>
+                        <div style={{ maxHeight: 150, overflow: 'auto' }}>
+                            {agentToolCalls.map((tc, i) => (
+                                <div key={i} style={{ fontSize: 12, color: '#666', padding: '2px 0' }}>
+                                    {tc}
+                                </div>
+                            ))}
                         </div>
                     </Card>
                 )}
 
-                {agentResult && (
-                    <Alert type='success' showIcon message='' description={agentResult} />
-                )}
-
-                {agentError && (
-                    <Alert type='error' showIcon message='分析失败' description={agentError} />
+                {/* Agent 思考过程 */}
+                {agentThinking && (
+                    <Card size='small' title='💭 Agent 思考过程' style={{ marginBottom: 12 }}>
+                        <div style={{ maxHeight: 250, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 13, color: '#555', lineHeight: 1.6 }}>
+                            {agentThinking}
+                        </div>
+                    </Card>
                 )}
             </Modal>
         </div>
