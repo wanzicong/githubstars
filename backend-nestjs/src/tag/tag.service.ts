@@ -100,34 +100,82 @@ export class TagService {
         }));
     }
 
-    /** 批量保存AI标签结果（原子操作） */
+    /**
+     * 批量保存 AI 标签结果（原子操作）
+     *
+     * 支持两种格式：
+     * A) Agent 格式 — { "0": ["Python","AI/ML"], "1": ["TypeScript"] }  ← key=仓库索引, value=标签名数组
+     * B) 旧分类格式 — { "Python": [0,1,2], "AI/ML": [0,3] }             ← key=标签名, value=仓库索引数组
+     */
     async saveAiTagResult(repoIds: number[], tagAssignments: Record<string, string[]>) {
-        this.logger.log(`保存AI标签结果: repoCount=${repoIds.length}, tagCount=${Object.keys(tagAssignments).length}`);
-        await this.prisma.$transaction(async (tx) => {
-            // 先清除这些仓库的所有 AI 来源标签
-            for (const repoId of repoIds) {
-                await tx.repoTag.deleteMany({ where: { repoId: BigInt(repoId), source: 'ai' } });
+        this.logger.log(`保存AI标签结果: repoCount=${repoIds.length}, entries=${Object.keys(tagAssignments).length}`);
+
+        // 判断格式：如果 key 是纯数字（如 "0"），则是 Agent 格式，需要转换
+        const keys = Object.keys(tagAssignments);
+        const isAgentFormat = keys.length > 0 && /^\d+$/.test(keys[0]);
+
+        let normalized: Record<string, number[]>; // tagName → repoId[]
+
+        if (isAgentFormat) {
+            // Agent 格式: {"0": ["Python","AI/ML"]} → 转为 {"Python": [repoId0], "AI/ML": [repoId0]}
+            normalized = {};
+            for (const [idxStr, tagNames] of Object.entries(tagAssignments)) {
+                const idx = parseInt(idxStr, 10);
+                if (isNaN(idx) || idx < 0 || idx >= repoIds.length || !Array.isArray(tagNames)) continue;
+                const repoId = repoIds[idx];
+                for (const tagName of tagNames) {
+                    const name = String(tagName).trim();
+                    if (!name) continue;
+                    if (!normalized[name]) normalized[name] = [];
+                    normalized[name].push(repoId);
+                }
             }
-            // 逐个应用新标签
+            this.logger.log(`Agent格式转换为标签格式: ${Object.keys(normalized).length} 个标签`);
+        } else {
+            // 旧格式: {"Python": [0,1]} → {"Python": [repoId0, repoId1]}
+            normalized = {};
             for (const [tagName, indices] of Object.entries(tagAssignments)) {
                 if (!indices.length) continue;
-                // 查找或创建标签（默认放到"自定义"维度，groupId=6）
-                let tag = await tx.tag.findFirst({ where: { name: tagName } });
-                if (!tag) {
-                    tag = await tx.tag.create({ data: { name: tagName, groupId: BigInt(6), repoCount: 0 } });
-                }
+                const name = String(tagName).trim();
+                if (!name) continue;
+                normalized[name] = [];
                 for (const idx of indices) {
                     const i = parseInt(String(idx), 10);
                     if (!isNaN(i) && i >= 0 && i < repoIds.length) {
-                        const repoId = repoIds[i];
-                        await tx.repoTag.create({
-                            data: { repoId: BigInt(repoId), tagId: tag.id, source: 'ai' },
-                        }).catch(() => {}); // skip duplicates
-                        await tx.tag.update({ where: { id: tag.id }, data: { repoCount: { increment: 1 } } });
+                        normalized[name].push(repoIds[i]);
                     }
                 }
             }
+        }
+
+        if (!Object.keys(normalized).length) {
+            this.logger.warn('没有有效的标签数据可保存');
+            return;
+        }
+
+        // 原子写入
+        await this.prisma.$transaction(async (tx) => {
+            // 清除这些仓库的所有 AI 来源旧标签
+            for (const repoId of repoIds) {
+                await tx.repoTag.deleteMany({ where: { repoId: BigInt(repoId), source: 'ai' } });
+            }
+            // 逐个标签写入
+            for (const [tagName, ids] of Object.entries(normalized)) {
+                let tag = await tx.tag.findFirst({ where: { name: tagName } });
+                if (!tag) {
+                    tag = await tx.tag.create({ data: { name: tagName, groupId: BigInt(6), repoCount: 0 } });
+                    this.logger.log(`创建新标签: ${tagName}`);
+                }
+                for (const repoId of ids) {
+                    await tx.repoTag.create({
+                        data: { repoId: BigInt(repoId), tagId: tag.id, source: 'ai' },
+                    }).catch(() => {}); // 跳过重复
+                }
+                // 批量更新 repo_count
+                const realCount = await tx.repoTag.count({ where: { tagId: tag.id } });
+                await tx.tag.update({ where: { id: tag.id }, data: { repoCount: realCount } });
+            }
         });
-        this.logger.log('AI标签结果保存完成');
+        this.logger.log(`AI标签保存完成: ${Object.keys(normalized).length} 个标签`);
     }
 }
