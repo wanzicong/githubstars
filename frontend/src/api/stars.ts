@@ -20,7 +20,7 @@ export async function fetchStarList(params: StarListParams): Promise<PageResult<
 
 export async function fetchStarDetail(id: number, backQuery?: string): Promise<string> {
   const params = backQuery ? { backQuery } : {}
-  const { data } = await api.get<string>(`/stars/${id}`, { params })
+  const { data } = await api.get<string>(`/api/stars/${id}`, { params })
   return data
 }
 

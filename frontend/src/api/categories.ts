@@ -83,7 +83,7 @@ export async function fetchReposByCategoryIdPaged(
   if (params.language) searchParams.set('language', params.language)
   if (params.sortBy) searchParams.set('sortBy', params.sortBy)
   if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder)
-  const { data } = await api.get<PageResult<GithubRepo>>(`/categories/${categoryId}/repos/paged`, {
+  const { data } = await api.get<PageResult<GithubRepo>>(`/categories/${categoryId}/repos`, {
     params: searchParams,
   })
   return data
