@@ -358,6 +358,7 @@ export class GithubRepoService {
         ]);
 
         return {
+            success: true,
             total,
             descCompleted,
             descPending: total - descCompleted,

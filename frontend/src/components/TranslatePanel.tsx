@@ -52,6 +52,7 @@ interface Props {
         dateField?: string
         startDate?: string
         endDate?: string
+        untranslatedOnly?: boolean | string
     }
     hasActiveFilters: boolean
     onRefreshList: () => void
