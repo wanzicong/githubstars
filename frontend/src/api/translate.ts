@@ -105,19 +105,19 @@ export async function startReadmeBatch(): Promise<{ success: boolean; taskId?: n
 
 /** 获取翻译任务进度 */
 export async function getTaskProgress(taskId: number): Promise<TranslateTaskProgress> {
-  const { data } = await api.get<TranslateTaskProgress>(`/api/translate/task/${taskId}`)
+  const { data } = await api.get<TranslateTaskProgress>(`/api/translate/tasks/${taskId}`)
   return data
 }
 
 /** 重试失败项 */
 export async function retryFailed(taskId: number): Promise<{ success: boolean; taskId?: number; message?: string }> {
-  const { data } = await api.post(`/api/translate/task/${taskId}/retry`)
+  const { data } = await api.post(`/api/translate/tasks/${taskId}/retry`)
   return data
 }
 
 /** 获取失败项列表 */
 export async function getTaskFailures(taskId: number): Promise<{ success: boolean; failures: Array<{ id: number; repoId: number; fullName: string; translateType: string; errorMessage: string }>; count: number }> {
-  const { data } = await api.get(`/api/translate/task/${taskId}/failures`)
+  const { data } = await api.get(`/api/translate/tasks/${taskId}/failures`)
   return data
 }
 
@@ -162,7 +162,13 @@ export async function createTranslateTask(params: {
   return data
 }
 
-/** 【新】获取翻译覆盖统计 */
+/** 获取翻译配置（检查 API Key 是否已配置） */
+export async function getTranslateConfig(): Promise<{ success: boolean; apiKeyConfigured: boolean }> {
+  const { data } = await api.get('/api/translate/config')
+  return data
+}
+
+/** 获取翻译覆盖统计 */
 export async function getTranslationStatus(filters?: Record<string, string | undefined>): Promise<{
   success: boolean; total: number; descCompleted: number; descPending: number
   readmeCompleted: number; readmePending: number

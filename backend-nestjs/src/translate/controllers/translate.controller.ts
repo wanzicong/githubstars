@@ -78,6 +78,12 @@ export class TranslateController {
     return { success: true, taskId, message: `筛选翻译已启动 (类型: ${type})` }
   }
 
+  /** GET /api/translate/config — 检查翻译配置（API Key 等） */
+  @Get('config')
+  async translateConfig() {
+    return { success: true, apiKeyConfigured: this.taskService.isApiKeyConfigured() }
+  }
+
   /** GET /api/translate/status — 翻译覆盖统计 */
   @Get('status')
   async translationStatus(@Query() q: any) {

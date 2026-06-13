@@ -13,11 +13,17 @@ export class ExportController {
       keyword: q.keyword || '', language: q.language || '',
       categoryIds: q.categoryIds || '', sortBy: q.sortBy || 'starred_at',
       sortOrder: q.sortOrder || 'desc',
+      dateField: q.dateField || '', startDate: q.startDate || '',
+      endDate: q.endDate || '', untranslatedOnly: q.untranslatedOnly === 'true',
     })
     const repos = result.records as any[]
     let md = '# GitHub Stars 导出\n\n'
     if (q.keyword) md += `> 关键词: ${q.keyword}\n`
     if (q.language) md += `> 语言: ${q.language}\n`
+    if (q.dateField && (q.startDate || q.endDate)) {
+      md += `> 时间范围: ${q.startDate || '不限'} ~ ${q.endDate || '不限'}\n`
+    }
+    if (q.untranslatedOnly === 'true') md += `> 仅未翻译\n`
     md += `> 导出时间: ${new Date().toISOString()}\n\n---\n\n`
 
     for (const repo of repos) {

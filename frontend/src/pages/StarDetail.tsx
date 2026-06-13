@@ -133,12 +133,16 @@ export default function StarDetail() {
   const stopPolling = useCallback(() => { if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null } }, [])
   const startPolling = useCallback((taskId: number) => {
     stopPolling()
+    let elapsed = 0
+    const MAX_POLL_MS = 10 * 60 * 1000 // 单条目任务最多等待 10 分钟
     pollingRef.current = setInterval(async () => {
+      elapsed += 2000
       try {
         const res = await translateApi.getTaskProgress(taskId)
         if (res.success) {
           setTranslateProgress({ status: res.status, progress: res.progress, readmeCompleted: res.readmeCompleted, readmeFailed: res.readmeFailed, readmeTotal: res.readmeTotal })
-          if (res.status === 'COMPLETED' || res.status === 'FAILED') {
+          // COMPLETED / FAILED / PARTIAL 都是终态
+          if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
             stopPolling()
             const rid = repoIdRef.current
             if (rid) {
@@ -147,7 +151,16 @@ export default function StarDetail() {
             }
           }
         }
-      } catch { }
+        // 超时保护：超过最大轮询时间自动停止
+        if (elapsed >= MAX_POLL_MS) {
+          stopPolling()
+          setTranslateProgress(prev => prev ? { ...prev, status: 'FAILED' } : null)
+          message.warning('翻译超时，请稍后重试')
+        }
+      } catch {
+        // 连续多次失败也停止（最多容忍 5 次连续失败 = 10s）
+        // 注意：不在这里硬停止，让超时保护兜底
+      }
     }, 2000)
   }, [stopPolling])
 
@@ -207,8 +220,24 @@ export default function StarDetail() {
     return () => { cancelled = true }
   }, [id])
 
+  /** 翻译前校验 API Key 是否已配置 */
+  const ensureApiKey = async (): Promise<boolean> => {
+    try {
+      const config = await translateApi.getTranslateConfig()
+      if (!config.apiKeyConfigured) {
+        message.warning('DeepSeek API Key 未配置，请在系统配置页面设置后重试', 5)
+        return false
+      }
+      return true
+    } catch {
+      // 接口不通时放行，让后续逻辑自己报错
+      return true
+    }
+  }
+
   const handleTranslateDescription = async () => {
     if (!repo?.id) return
+    if (!(await ensureApiKey())) return
     setTranslatingDesc(true)
     try {
       const result = await translateApi.translateDescription(repo.id)
@@ -229,6 +258,7 @@ export default function StarDetail() {
 
   const handleTranslateReadme = async () => {
     if (!repo?.id) return
+    if (!(await ensureApiKey())) return
     setTranslatingReadme(true)
     try {
       const result = await translateApi.startSingleReadme(repo.id)
@@ -250,6 +280,7 @@ export default function StarDetail() {
 
   const handleRetranslateReadme = async () => {
     if (!repo?.id) return
+    if (!(await ensureApiKey())) return
     setTranslatingReadme(true)
     try {
       const result = await translateApi.retranslateReadme(repo.id)
@@ -766,15 +797,16 @@ export default function StarDetail() {
                 <Progress
                   type="circle"
                   percent={translateProgress.progress}
-                  status={translateProgress.status === 'COMPLETED' ? (translateProgress.readmeFailed > 0 ? 'exception' : 'success') : translateProgress.status === 'FAILED' ? 'exception' : 'active'}
+                  status={translateProgress.status === 'COMPLETED' ? (translateProgress.readmeFailed > 0 ? 'exception' : 'success') : (translateProgress.status === 'FAILED' || translateProgress.status === 'PARTIAL') ? 'exception' : 'active'}
                   size={120}
                 />
                 <div style={{ marginTop: 16, fontSize: 14, color: '#666' }}>
                   {translateProgress.status === 'PENDING' && '等待执行...'}
                   {translateProgress.status === 'PROCESSING' && '正在翻译 README...'}
                   {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed === 0 && '翻译完成！'}
-                  {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed > 0 && '翻译完成（失败）'}
-                  {translateProgress.status === 'FAILED' && '翻译失败'}
+                  {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed > 0 && '翻译完成（部分失败）'}
+                  {translateProgress.status === 'PARTIAL' && '部分翻译完成'}
+                  {translateProgress.status === 'FAILED' && '翻译失败，请检查 DeepSeek API Key 是否配置正确'}
                 </div>
               </div>
             </Spin>

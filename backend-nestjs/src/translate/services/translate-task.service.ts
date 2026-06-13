@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
 import { GithubRepoService } from '../../github/services/github-repo.service'
 import { TranslateService } from './translate.service'
+import { ConfigService } from '../../config/config.service'
 
 /** P2-FIX: 重命名为 MAX_ATTEMPTS (实际尝试次数，含首次) */
 const MAX_ATTEMPTS = 4
@@ -18,6 +19,7 @@ export class TranslateTaskService {
     private readonly prisma: PrismaService,
     private readonly githubRepo: GithubRepoService,
     private readonly translate: TranslateService,
+    private readonly config: ConfigService,
   ) {}
 
   private acquire(): Promise<void> {
@@ -114,9 +116,21 @@ export class TranslateTaskService {
     })
   }
 
+  /** 检查 DeepSeek API Key 是否已配置 */
+  isApiKeyConfigured(): boolean {
+    return !!this.config.getValue('deepseek.api_key')
+  }
+
   private startTaskAsync(taskId: bigint) {
     ;(async () => {
       try {
+        // P0-FIX: API Key 未配置时，直接标记任务失败，避免无意义的重试等待
+        if (!this.isApiKeyConfigured()) {
+          this.logger.error('DeepSeek API Key 未配置，任务直接失败')
+          await this.prisma.translationTaskItem.updateMany({ where: { taskId }, data: { status: 'FAILED', errorMessage: 'DeepSeek API Key 未配置' } })
+          await this.prisma.translationTask.update({ where: { id: taskId }, data: { status: 'FAILED', finishedAt: new Date() } })
+          return
+        }
         const task = await this.prisma.translationTask.findUnique({ where: { id: taskId } })
         if (!task) return
         await this.prisma.translationTask.update({ where: { id: taskId }, data: { status: 'PROCESSING' } })

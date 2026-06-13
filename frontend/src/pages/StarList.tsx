@@ -569,6 +569,10 @@ export default function StarList() {
       if (categoryIdsStr) params.set('categoryIds', categoryIdsStr)
       if (sortBy) params.set('sortBy', sortBy)
       if (sortOrder) params.set('sortOrder', sortOrder)
+      if (dateField) params.set('dateField', dateField)
+      if (startDateStr) params.set('startDate', startDateStr)
+      if (endDateStr) params.set('endDate', endDateStr)
+      if (untranslatedOnly) params.set('untranslatedOnly', 'true')
       const totalCount = pageResult?.total ?? 0
       if (totalCount === 0) { message.warning('没有匹配的仓库可导出'); return }
       params.set('maxCount', String(totalCount))
@@ -578,7 +582,7 @@ export default function StarList() {
       const a = document.createElement('a'); a.href = url; a.download = `stars_export_${dayjs().format('YYYYMMDD_HHmmss')}.md`
       document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url)
     } catch { message.error('导出MD失败') }
-  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, pageResult?.total])
+  }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, pageResult?.total])
 
   const [cloneModalVisible, setCloneModalVisible] = useState(false)
   const [cloneDirModalVisible, setCloneDirModalVisible] = useState(false)
