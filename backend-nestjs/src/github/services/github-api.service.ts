@@ -208,7 +208,9 @@ export class GithubApiService {
      * @param fullName 仓库全名，如 "owner/repo"
      * @returns README 文本内容，404 返回 null，其他错误抛出异常
      */
-    async fetchReadmeFromGitHub(fullName: string): Promise<string | null> {
+    async fetchReadmeFromGitHub(
+        fullName: string,
+    ): Promise<{ content: string | null; githubStatus: number; githubBody: string | null }> {
         const token = await this.config.getValueDefault('github.token', '');
 
         console.log(`[GithubApi] 获取 README: ${fullName}`);
@@ -230,7 +232,8 @@ export class GithubApiService {
                 const hdrs = { ...headers };
                 if (!useAuth) delete hdrs['Authorization'];
                 const response = await fetch(url, { headers: hdrs, signal: controller.signal });
-                const body = response.status === 200 ? await response.text() : null;
+                // 始终读取响应体（非 200 时 GitHub 返回 JSON 错误信息）
+                const body = await response.text();
                 return { status: response.status, body };
             } catch (e) {
                 if ((e as Error).name === 'AbortError') {
@@ -250,7 +253,7 @@ export class GithubApiService {
 
             if (result.status === 200) {
                 console.log(`[GithubApi] README 获取成功: ${fullName}, 大小=${result.body!.length} 字符`);
-                return result.body;
+                return { content: result.body, githubStatus: 200, githubBody: null };
             }
 
             // P0-FIX: 带 Token 返回 404 时，可能是 Token 无该组织 SSO 授权，回退到无认证重试
@@ -260,22 +263,26 @@ export class GithubApiService {
                 console.log(`[GithubApi] 无认证重试状态: ${result.status} (${fullName})`);
                 if (result.status === 200) {
                     console.log(`[GithubApi] README 无认证获取成功: ${fullName}, 大小=${result.body!.length} 字符`);
-                    return result.body;
+                    return { content: result.body, githubStatus: 200, githubBody: null };
                 }
             }
 
             if (result.status === 404) {
                 console.log(`[GithubApi] 仓库 ${fullName} 没有 README 文件`);
-                return null;
+                return { content: null, githubStatus: 404, githubBody: result.body };
             }
 
             if (result.status === 403) {
                 console.error(`[GithubApi] README API 限流: ${fullName}`);
-                throw new Error('GitHub API rate limited');
+                const err = new Error('GitHub API rate limited');
+                (err as any).githubBody = result.body;
+                throw err;
             }
 
             console.error(`[GithubApi] README 请求失败: ${fullName}, status=${result.status}`);
-            throw new Error(`GitHub API error: ${result.status}`);
+            const err2 = new Error(`GitHub API error: ${result.status}`);
+            (err2 as any).githubBody = result.body;
+            throw err2;
         } catch (err) {
             if (err instanceof Error && err.message.startsWith('GitHub API')) {
                 throw err;

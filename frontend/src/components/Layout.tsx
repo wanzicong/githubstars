@@ -12,6 +12,7 @@ import {
     SearchOutlined,
     FireOutlined,
     CloudDownloadOutlined,
+    FileTextOutlined,
     MenuOutlined,
     MenuFoldOutlined,
     MenuUnfoldOutlined,
@@ -35,6 +36,7 @@ const navItems = [
     { key: '/settings', icon: <SettingOutlined />, label: '系统配置' },
     { key: '/search', icon: <SearchOutlined />, label: 'GitHub搜索' },
     { key: '/trending', icon: <FireOutlined />, label: '趋势排行' },
+    { key: '/logs', icon: <FileTextOutlined />, label: '系统日志' },
 ]
 
 function getSelectedKey(pathname: string) {

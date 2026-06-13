@@ -16,6 +16,7 @@ import GithubSearch from './pages/GithubSearch'
 import Trending from './pages/Trending'
 import CloneTasks from './pages/CloneTasks'
 import CloneTaskDetail from './pages/CloneTaskDetail'
+import Logs from './pages/Logs'
 
 export default function App() {
     return (
@@ -46,6 +47,7 @@ export default function App() {
                             <Route path='/trending' element={<Trending />} />
                             <Route path='/clone-tasks' element={<CloneTasks />} />
                             <Route path='/clone-tasks/:taskId' element={<CloneTaskDetail />} />
+                            <Route path='/logs' element={<Logs />} />
                         </Route>
                     </Routes>
                 </BrowserRouter>

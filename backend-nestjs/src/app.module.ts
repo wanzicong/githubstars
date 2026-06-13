@@ -3,6 +3,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from './config/config.module';
+import { LoggingModule } from './logging/logging.module';
 import { GithubModule } from './github/github.module';
 import { SyncModule } from './sync/sync.module';
 import { CategoryModule } from './category/category.module';
@@ -20,6 +21,7 @@ import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
         ScheduleModule.forRoot(),
         PrismaModule,
         ConfigModule,
+        LoggingModule,
         GithubModule,
         SyncModule,
         CategoryModule,

@@ -946,26 +946,37 @@ export default function StarDetail() {
                         {/* 每项执行的详细状态 */}
                         {translateProgress.completedDetails?.length || translateProgress.failedDetails?.length ? (
                             <div style={{ marginTop: 16, textAlign: 'left' }}>
-                                {translateProgress.completedDetails?.map((item, i) => (
-                                    <Alert
-                                        key={'ok-' + i}
-                                        style={{ marginBottom: 8 }}
-                                        type={item.note === '该仓库没有 README 文件' ? 'warning' : 'success'}
-                                        showIcon
-                                        message={
-                                            <div style={{ fontSize: 13 }}>
-                                                <Text strong>{item.fullName}</Text>
-                                                <Text type='secondary' style={{ marginLeft: 8 }}>
-                                                    {item.note === '翻译成功'
-                                                        ? '✅ 翻译成功，页面已更新'
-                                                        : item.note === '该仓库没有 README 文件'
-                                                          ? '⚠️ 该仓库在 GitHub 上没有 README 文件'
-                                                          : '📝 ' + item.note}
-                                                </Text>
-                                            </div>
-                                        }
-                                    />
-                                ))}
+                                {translateProgress.completedDetails?.map((item, i) => {
+                                    const isNoReadme = item.note.startsWith('该仓库没有 README 文件')
+                                    const ghBodyMatch = item.note.match(/^该仓库没有 README 文件\nGitHub 响应: (.+)$/s)
+                                    const ghResponse = ghBodyMatch ? (() => { try { return JSON.parse(ghBodyMatch[1]) } catch { return ghBodyMatch[1] } })() : null
+                                    return (
+                                        <Alert
+                                            key={'ok-' + i}
+                                            style={{ marginBottom: 8 }}
+                                            type={isNoReadme ? 'warning' : 'success'}
+                                            showIcon
+                                            message={
+                                                <div style={{ fontSize: 13 }}>
+                                                    <Text strong>{item.fullName}</Text>
+                                                    <Text type='secondary' style={{ marginLeft: 8 }}>
+                                                        {item.note === '翻译成功'
+                                                            ? '✅ 翻译成功，页面已更新'
+                                                            : isNoReadme
+                                                              ? '⚠️ 该仓库在 GitHub 上没有 README 文件'
+                                                              : '📝 ' + item.note}
+                                                    </Text>
+                                                    {ghResponse && (
+                                                        <div style={{ marginTop: 6, padding: '6px 10px', background: '#fff7e6', borderRadius: 4, border: '1px solid #ffd591', maxHeight: 120, overflow: 'auto' }}>
+                                                            <Text type='secondary' style={{ fontSize: 11 }}>GitHub API 响应：</Text>
+                                                            <pre style={{ margin: '4px 0 0', fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{JSON.stringify(ghResponse, null, 2)}</pre>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            }
+                                        />
+                                    )
+                                })}
                                 {translateProgress.failedDetails?.map((item, i) => (
                                     <Alert
                                         key={'fail-' + i}

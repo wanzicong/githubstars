@@ -81,9 +81,14 @@ export class TranslateTaskService {
                         } else resultNote = r === ('__RATE_LIMITED__' as any) ? 'DeepSeek API 限流' : '翻译返回空结果';
                     } else {
                         const r = await this.translate.translateReadme(repoId);
-                        if ((r as any) === '__NO_README__') {
+                        const rStr = (r as any) as string;
+                        if (rStr === '__NO_README__') {
                             success = true;
                             resultNote = '该仓库没有 README 文件';
+                        } else if (rStr.startsWith('__NO_README__|')) {
+                            success = true;
+                            const ghBody = rStr.substring('__NO_README__|'.length);
+                            resultNote = '该仓库没有 README 文件\nGitHub 响应: ' + ghBody;
                         } else if (r !== null && (r as any) !== '__RATE_LIMITED__') {
                             success = true;
                             resultNote = '翻译成功';
