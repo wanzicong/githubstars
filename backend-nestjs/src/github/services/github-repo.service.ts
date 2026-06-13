@@ -75,7 +75,15 @@ export class GithubRepoService {
       this.prisma.githubRepo.findMany({ where, orderBy: { [sortField]: sortDir }, skip: (page - 1) * size, take: size }),
     ])
     await this.fillCategoryNames(records)
-    return { records, total, size, current: page, pages: Math.ceil(total / size) }
+    // 附加翻译状态（前端列表可直接展示翻译徽标）
+    const enriched = records.map(r => ({
+      ...r,
+      translationStatus: {
+        description: r.descriptionCn ? 'completed' : (r.description ? 'pending' : 'none'),
+        readme: r.readmeCn ? 'completed' : (r.readmeFetched ? 'none' : 'pending'),
+      },
+    }))
+    return { records: enriched, total, size, current: page, pages: Math.ceil(total / size) }
   }
 
   async findById(id: number) {

@@ -381,6 +381,16 @@ export default function StarDetail() {
                     {repo.description}
                   </Paragraph>
                 )}
+                <Button
+                  size="small"
+                  type="link"
+                  icon={<ReloadOutlined />}
+                  loading={translatingDesc}
+                  onClick={handleTranslateDescription}
+                  style={{ padding: 0, marginTop: 4 }}
+                >
+                  重新翻译
+                </Button>
               </div>
             ) : repo.description ? (
               <div>

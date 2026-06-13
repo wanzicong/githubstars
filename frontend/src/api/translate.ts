@@ -150,3 +150,27 @@ export async function getRecentTasks(): Promise<TaskListResult> {
   const { data } = await api.get<TaskListResult>('/api/translate/tasks')
   return data
 }
+
+/** 【新】统一创建翻译任务 (合并了 start/filter-batch/readme-start/batch) */
+export async function createTranslateTask(params: {
+  type: 'description' | 'readme' | 'both'
+  scope: 'filtered' | 'all' | 'selected'
+  repoIds?: number[]
+  filters?: Record<string, string | undefined>
+}): Promise<{ success: boolean; taskId?: number; message?: string; translatedCount?: number }> {
+  const { data } = await api.post('/api/translate', params)
+  return data
+}
+
+/** 【新】获取翻译覆盖统计 */
+export async function getTranslationStatus(filters?: Record<string, string | undefined>): Promise<{
+  success: boolean; total: number; descCompleted: number; descPending: number
+  readmeCompleted: number; readmePending: number
+}> {
+  const searchParams = new URLSearchParams()
+  if (filters) {
+    Object.entries(filters).forEach(([k, v]) => { if (v) searchParams.set(k, v) })
+  }
+  const { data } = await api.get(`/api/translate/status?${searchParams.toString()}`)
+  return data
+}

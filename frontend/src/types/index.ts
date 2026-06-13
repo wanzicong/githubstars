@@ -24,6 +24,11 @@ export interface GithubRepo {
   repoPushedAt: string | null
   starredAt: string | null
   categoryNames: string[]
+  /** 翻译状态 (NestJS 增强字段) */
+  translationStatus?: {
+    description: 'completed' | 'pending' | 'none'
+    readme: 'completed' | 'pending' | 'none'
+  }
 }
 
 export interface Category {

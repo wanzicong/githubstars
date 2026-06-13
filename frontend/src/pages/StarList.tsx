@@ -56,6 +56,7 @@ import { formatNumberCn } from '../utils/format'
 import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
+import TranslatePanel from '../components/TranslatePanel'
 import type { Category, GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
 
 const { Title, Text, Paragraph } = Typography
@@ -393,6 +394,7 @@ export default function StarList() {
   const [fullTranslating, setFullTranslating] = useState(false)
   const [readmeTranslating, setReadmeTranslating] = useState(false)
   const [filterTranslating, setFilterTranslating] = useState(false)
+  const [translatePanelOpen, setTranslatePanelOpen] = useState(false)
   const [translateModalVisible, setTranslateModalVisible] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeTaskId, setAnalyzeTaskId] = useState<string | null>(null)
@@ -550,16 +552,7 @@ export default function StarList() {
     )
   }
 
-  const handleBatchTranslate = useCallback(async () => {
-    setBatchTranslating(true)
-    try {
-      const result = await translateApi.translateBatch()
-      if (result.translatedCount && result.translatedCount > 0) {
-        const res = await starsApi.fetchStarList({ page: currentPage, size: pageSize, keyword: keyword || undefined, language: languageStr || undefined, sortBy: sortBy || undefined, sortOrder: sortOrder || undefined, dateField: dateField || undefined, startDate: startDateStr || undefined, endDate: endDateStr || undefined })
-        setPageResult(res)
-      }
-    } catch { } finally { setBatchTranslating(false) }
-  }, [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr])
+  // (已移除废弃的单独批量翻译入口 handleBatchTranslate)
 
   const handleExport = useCallback(async () => {
     try {
@@ -820,9 +813,12 @@ export default function StarList() {
             <Col span={24}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 {hasActiveFilters && <Button icon={<ClearOutlined />} onClick={handleClearFilters}>清除</Button>}
-                <Button icon={<TranslationOutlined />} loading={fullTranslating} onClick={handleStartFullTranslate}>批量翻译</Button>
-                <Button icon={<ReadOutlined />} loading={readmeTranslating} onClick={handleStartReadmeBatch}>批量README</Button>
-                <Button icon={<TranslationOutlined />} loading={filterTranslating} onClick={handleFilterTranslate}>筛选翻译</Button>
+                <Button
+                  icon={<TranslationOutlined />}
+                  onClick={() => setTranslatePanelOpen(true)}
+                >
+                  翻译管理
+                </Button>
                 <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze}>AI 分析</Button>
                 <Button icon={<DownloadOutlined />} onClick={handleExportMd}>导出MD</Button>
                 <Button icon={<DownloadOutlined />} onClick={handleOpenCloneDirModal} disabled={cloneInProgress}>批量Clone</Button>
@@ -1137,6 +1133,40 @@ export default function StarList() {
           </div>
         )}
       </Modal>
+
+      {/* 翻译管理面板 */}
+      <TranslatePanel
+        open={translatePanelOpen}
+        onClose={() => setTranslatePanelOpen(false)}
+        filters={{
+          keyword: keyword || undefined,
+          language: languageStr || undefined,
+          categoryIds: categoryIdsStr || undefined,
+          sortBy: sortBy || undefined,
+          sortOrder: sortOrder || undefined,
+          dateField: dateField || undefined,
+          startDate: startDateStr || undefined,
+          endDate: endDateStr || undefined,
+        }}
+        hasActiveFilters={hasActiveFilters}
+        onRefreshList={() => {
+          const fetchList = async () => {
+            const res = await starsApi.fetchStarList({
+              page: currentPage, size: pageSize,
+              keyword: keyword || undefined,
+              language: languageStr || undefined,
+              categoryIds: categoryIdsStr || undefined,
+              sortBy: sortBy || undefined,
+              sortOrder: sortOrder || undefined,
+              dateField: dateField || undefined,
+              startDate: startDateStr || undefined,
+              endDate: endDateStr || undefined,
+            })
+            setPageResult(res)
+          }
+          fetchList().catch(console.error)
+        }}
+      />
     </div>
   )
 }
