@@ -65,6 +65,7 @@ export class GithubApiService {
         const username = await this.config.getValueDefault('github.username', 'wanzicong');
         const token = await this.config.getValueDefault('github.token', '');
 
+        this.logger.log('开始全量获取星标仓库, 用户名=' + username + ', 每页大小=100');
         console.log('[GithubApi] ===== 开始全量获取星标仓库 =====');
         console.log(`[GithubApi] 用户名: ${username}, 每页大小: 100`);
 
@@ -91,6 +92,7 @@ export class GithubApiService {
                 response = await fetch(nextUrl, { headers });
             } catch (fetchErr) {
                 const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+                this.logger.error('网络请求失败! 第' + currentPage + '页, 错误=' + errMsg);
                 console.error(`[GithubApi] 网络请求失败! 第${currentPage}页, URL=${nextUrl}, 错误: ${errMsg}`);
                 if (all.length > 0) {
                     console.log(`[GithubApi] 第${currentPage}页网络失败，但已有${all.length}条数据，停止翻页`);
@@ -103,6 +105,7 @@ export class GithubApiService {
 
             if (response.status !== 200) {
                 const errorBody = await response.text().catch(() => '(无法读取响应体)');
+                this.logger.error('API 响应异常! 第' + currentPage + '页, 状态码=' + response.status);
                 console.error(`[GithubApi] API 响应异常! 状态码=${response.status}, 响应体: ${errorBody.substring(0, 500)}`);
                 if (all.length > 0) {
                     console.log(`[GithubApi] 第${currentPage}页失败(status=${response.status})，但已有${all.length}条数据，停止翻页`);
@@ -121,6 +124,9 @@ export class GithubApiService {
                     throw new Error('响应体不是 JSON 数组');
                 }
             } catch (parseErr) {
+                this.logger.error(
+                    'JSON 解析失败! 第' + currentPage + '页, 错误=' + (parseErr instanceof Error ? parseErr.message : String(parseErr)),
+                );
                 console.error(`[GithubApi] ===== JSON 解析失败! 第${currentPage}页 =====`);
                 console.error(`[GithubApi] 错误信息: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
                 console.error(`[GithubApi] 原始响应内容 (前2000字符):`);
@@ -208,11 +214,10 @@ export class GithubApiService {
      * @param fullName 仓库全名，如 "owner/repo"
      * @returns README 文本内容，404 返回 null，其他错误抛出异常
      */
-    async fetchReadmeFromGitHub(
-        fullName: string,
-    ): Promise<{ content: string | null; githubStatus: number; githubBody: string | null }> {
+    async fetchReadmeFromGitHub(fullName: string): Promise<{ content: string | null; githubStatus: number; githubBody: string | null }> {
         const token = await this.config.getValueDefault('github.token', '');
 
+        this.logger.log('获取 README: ' + fullName);
         console.log(`[GithubApi] 获取 README: ${fullName}`);
 
         const headers: Record<string, string> = {
@@ -273,12 +278,14 @@ export class GithubApiService {
             }
 
             if (result.status === 403) {
+                this.logger.error('README API 限流: ' + fullName);
                 console.error(`[GithubApi] README API 限流: ${fullName}`);
                 const err = new Error('GitHub API rate limited');
                 (err as any).githubBody = result.body;
                 throw err;
             }
 
+            this.logger.error('README 请求失败: ' + fullName + ', status=' + result.status);
             console.error(`[GithubApi] README 请求失败: ${fullName}, status=${result.status}`);
             const err2 = new Error(`GitHub API error: ${result.status}`);
             (err2 as any).githubBody = result.body;
@@ -288,10 +295,12 @@ export class GithubApiService {
                 throw err;
             }
             if ((err as Error).name === 'AbortError') {
+                this.logger.error('README 请求超时 (30s): ' + fullName);
                 console.error(`[GithubApi] README 请求超时 (30s): ${fullName}`);
                 throw new Error('GitHub API 网络超时');
             }
             const msg = err instanceof Error ? err.message : String(err);
+            this.logger.error('README 请求异常: ' + fullName + ', ' + msg);
             console.error(`[GithubApi] README 请求异常: ${fullName}, ${msg}`);
             throw new Error(`GitHub API 网络错误: ${msg}`);
         }
@@ -308,6 +317,7 @@ export class GithubApiService {
     async searchRepos(query: string, sort: string = 'stars', order: string = 'desc', perPage: number = 10): Promise<any[]> {
         const token = await this.config.getValueDefault('github.token', '');
 
+        this.logger.log('搜索仓库: q="' + query + '", sort=' + sort + ', order=' + order);
         console.log(`[GithubApi] 搜索仓库: q="${query}", sort=${sort}, order=${order}, perPage=${perPage}`);
 
         const headers: Record<string, string> = {
@@ -333,7 +343,7 @@ export class GithubApiService {
             console.log(`[GithubApi] 搜索响应状态: ${response.status}`);
 
             if (response.status === 200) {
-                const data = (await response.json()) as any;
+                const data = await response.json();
                 const items = (data.items || []) as any[];
                 console.log(`[GithubApi] 搜索结果: 共${data.total_count || 0}个, 返回${items.length}个`);
                 return items;
@@ -349,6 +359,7 @@ export class GithubApiService {
             return [];
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
+            this.logger.error('搜索请求异常: ' + msg);
             console.error(`[GithubApi] 搜索请求异常: ${msg}`);
             return [];
         }
@@ -388,6 +399,9 @@ export class GithubApiService {
      *     fork, archived, created_at, updated_at, pushed_at
      *   }
      * }
+     *
+     * @param item GitHub starred API 返回的单条原始数据
+     * @returns 映射后的 MappedRepoData 对象，无效数据返回 null
      */
     private mapStarredItem(item: Record<string, any>): MappedRepoData | null {
         const repo = item.repo || {};

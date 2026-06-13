@@ -16,6 +16,13 @@ import { TrendingModule } from './trending/trending.module';
 import { ExportModule } from './export/export.module';
 import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
 
+/**
+ * 应用根模块
+ *
+ * 注册所有业务子模块（GitHub、同步、分类、翻译、AI、克隆、统计、导出等），
+ * 导入定时任务调度器、Prisma ORM、配置管理、日志服务等基础设施，
+ * 并在全局范围注册 BigInt 拦截器，将 BigInt 类型的 ID 序列化为 Number。
+ */
 @Module({
     imports: [
         ScheduleModule.forRoot(),

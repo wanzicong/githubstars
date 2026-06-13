@@ -22,6 +22,11 @@ export class TranslateTaskService {
         private readonly config: ConfigService,
     ) {}
 
+    /**
+     * 获取信号量许可
+     *
+     * 若当前并发数未达上限则立即放行，否则加入等待队列。
+     */
     private acquire(): Promise<void> {
         return new Promise((resolve) => {
             if (this.semaphore < MAX_CONCURRENT) {
@@ -34,11 +39,21 @@ export class TranslateTaskService {
                 });
         });
     }
+    /**
+     * 释放信号量许可
+     *
+     * 递减并发计数，并唤醒队列中第一个等待的任务。
+     */
     private release() {
         this.semaphore--;
         this.waitQueue.shift()?.();
     }
 
+    /**
+     * 清理历史翻译任务
+     *
+     * 保留最近 10 条已完成/失败/部分完成的任务，删除更早的任务及其子项。
+     */
     private async cleanOld() {
         const old = await this.prisma.translationTask.findMany({
             where: { status: { in: ['COMPLETED', 'FAILED', 'PARTIAL'] } },
@@ -47,13 +62,23 @@ export class TranslateTaskService {
             take: 1000,
             select: { id: true },
         });
+        if (old.length > 0) {
+            this.logger.log(`清理 ${old.length} 条历史翻译任务`);
+        }
         for (const t of old) {
             await this.prisma.translationTaskItem.deleteMany({ where: { taskId: t.id } });
             await this.prisma.translationTask.delete({ where: { id: t.id } });
         }
     }
 
-    /** 处理单个翻译项，带重试 + 状态记录 */
+    /**
+     * 处理单个翻译子项，带指数退避重试 + 原子状态记录
+     *
+     * 最多重试 MAX_ATTEMPTS 次，限流时等待 60s，其余错误使用指数退避。
+     * 成功或最终失败后通过 Prisma 事务更新子项状态并递增父任务计数器。
+     *
+     * @param item 翻译子项记录（含 id、repoId、translateType、taskId 等字段）
+     */
     private async processItem(item: any) {
         await this.acquire();
         try {
@@ -138,7 +163,16 @@ export class TranslateTaskService {
         }
     }
 
-    /** P0-FIX: 根据 failedItems 设置真实的最终状态 */
+    /**
+     * 完成任务并设置最终状态
+     *
+     * 根据 failedItems 计数判断:
+     * - 全部成功 → COMPLETED
+     * - 全部失败 → FAILED
+     * - 部分成功 → PARTIAL
+     *
+     * @param taskId 翻译任务 ID
+     */
     private async finishTask(taskId: bigint) {
         const task = await this.prisma.translationTask.findUnique({ where: { id: taskId } });
         if (!task) return;
@@ -147,13 +181,26 @@ export class TranslateTaskService {
             where: { id: taskId },
             data: { status, finishedAt: new Date() },
         });
+        this.logger.log(`翻译任务完成: taskId=${taskId} status=${status} completed=${task.completedItems} failed=${task.failedItems}`);
     }
 
-    /** 检查 DeepSeek API Key 是否已配置 */
+    /**
+     * 检查 DeepSeek API Key 是否已配置
+     *
+     * @returns true 表示 API Key 已配置，可以正常调用翻译
+     */
     async isApiKeyConfigured(): Promise<boolean> {
         return !!(await this.config.getValue('deepseek.api_key'));
     }
 
+    /**
+     * 异步启动翻译任务执行
+     *
+     * 以 fire-and-forget 方式启动: 先检查 API Key，然后并发处理所有 PENDING 子项，
+     * 完成后调用 finishTask 标记终态。执行过程中捕获异常并直接标记任务失败。
+     *
+     * @param taskId 翻译任务 ID
+     */
     private startTaskAsync(taskId: bigint) {
         (async () => {
             try {
@@ -171,6 +218,7 @@ export class TranslateTaskService {
                 if (!task) return;
                 await this.prisma.translationTask.update({ where: { id: taskId }, data: { status: 'PROCESSING' } });
                 const items = await this.prisma.translationTaskItem.findMany({ where: { taskId, status: 'PENDING' } });
+                this.logger.log(`翻译任务开始执行: taskId=${taskId} pendingItems=${items.length}`);
                 await Promise.all(items.map((i) => this.processItem(i)));
                 await this.finishTask(taskId);
             } catch (e) {
@@ -182,6 +230,12 @@ export class TranslateTaskService {
         })().catch((e) => this.logger.error(e));
     }
 
+    /**
+     * 创建并启动单个仓库的 README 异步翻译任务
+     *
+     * @param repoId 仓库 ID
+     * @returns 新创建的任务 ID，仓库不存在时返回 null
+     */
     async createAndStartSingleReadme(repoId: number) {
         const repo = await this.githubRepo.findById(repoId);
         if (!repo) return null;
@@ -200,9 +254,18 @@ export class TranslateTaskService {
             },
         });
         this.startTaskAsync(task.id);
+        this.logger.log(`创建单仓库 README 翻译任务: taskId=${task.id} repoId=${repoId}`);
         return Number(task.id);
     }
 
+    /**
+     * 创建并启动单个仓库的 README 强制重新翻译任务
+     *
+     * 先重置仓库的 readmeFetched/readmeOriginal/readmeCn 字段，再创建翻译任务。
+     *
+     * @param repoId 仓库 ID
+     * @returns 新创建的任务 ID，仓库不存在时返回 null
+     */
     async createAndStartSingleReadmeForce(repoId: number) {
         await this.prisma.githubRepo.update({
             where: { id: BigInt(repoId) },
@@ -211,7 +274,14 @@ export class TranslateTaskService {
         return this.createAndStartSingleReadme(repoId);
     }
 
-    /** P2-FIX: 使用数据库 WHERE 条件过滤，而不是 findAll + 内存 filter */
+    /**
+     * 创建并启动全量 README 批量翻译任务
+     *
+     * 使用数据库 WHERE 条件过滤出所有未翻译 README 的仓库（而非 findAll + 内存过滤）。
+     * 创建任务前会先清理旧任务。
+     *
+     * @returns 新创建的任务 ID，无待翻译项时返回 null
+     */
     async createAndStartReadmeBatch() {
         await this.cleanOld();
         const need = await this.prisma.githubRepo.findMany({
@@ -234,10 +304,18 @@ export class TranslateTaskService {
             })),
         });
         this.startTaskAsync(task.id);
+        this.logger.log(`创建全量 README 批量翻译任务: taskId=${task.id} count=${need.length}`);
         return Number(task.id);
     }
 
-    /** P2-FIX: 使用数据库 WHERE 条件过滤 */
+    /**
+     * 创建并启动全量翻译任务（描述 + README）
+     *
+     * 同时处理未翻译的描述和未 fetch 的 README，使用数据库 WHERE 条件过滤。
+     * 创建任务前会先清理旧任务。
+     *
+     * @returns 新创建的任务 ID，无待翻译项时返回 null
+     */
     async createAndStartFullTranslate() {
         await this.cleanOld();
         const [needDesc, needReadme] = await Promise.all([
@@ -280,9 +358,19 @@ export class TranslateTaskService {
         }));
         await this.prisma.translationTaskItem.createMany({ data: [...descItems, ...readmeItems] });
         this.startTaskAsync(task.id);
+        this.logger.log(`创建全量翻译任务: taskId=${task.id} descCount=${needDesc.length} readmeCount=${needReadme.length}`);
         return Number(task.id);
     }
 
+    /**
+     * 创建并启动筛选条件批量翻译任务
+     *
+     * 根据前端传入的筛选条件（关键词、语言、分类、日期等）查询仓库并创建批量翻译子任务。
+     * 仅翻译 README 类型。
+     *
+     * @param params 筛选条件对象
+     * @returns 新创建的任务 ID，无符合条件仓库时返回 null
+     */
     async createAndStartFilterBatch(params: {
         keyword?: string;
         language?: string;
@@ -313,9 +401,18 @@ export class TranslateTaskService {
             })),
         });
         this.startTaskAsync(task.id);
+        this.logger.log(`创建筛选批量翻译任务: taskId=${task.id} count=${repos.length}`);
         return Number(task.id);
     }
 
+    /**
+     * 查询翻译任务进度
+     *
+     * 返回任务状态、各类计数器、已完成/失败子项明细（含备注信息）。
+     *
+     * @param taskId 翻译任务 ID
+     * @returns 任务进度详情，任务不存在时返回 { success: false, message: '任务不存在' }
+     */
     async getTaskProgress(taskId: number) {
         const task = await this.prisma.translationTask.findUnique({ where: { id: BigInt(taskId) } });
         if (!task) return { success: false, message: '任务不存在' };
@@ -355,6 +452,14 @@ export class TranslateTaskService {
         };
     }
 
+    /**
+     * 重试任务中所有失败的子项
+     *
+     * 从旧任务中取出 status='FAILED' 的子项，为新任务重新创建一批 PENDING 子项并启动。
+     *
+     * @param taskId 原翻译任务 ID
+     * @returns 新创建的任务 ID，无失败项时返回 null
+     */
     async retryFailed(taskId: number) {
         const items = await this.prisma.translationTaskItem.findMany({ where: { taskId: BigInt(taskId), status: 'FAILED' } });
         if (!items.length) return null;
@@ -379,14 +484,26 @@ export class TranslateTaskService {
             })),
         });
         this.startTaskAsync(task.id);
+        this.logger.log(`创建重试翻译任务: newTaskId=${task.id} failedCount=${items.length}`);
         return Number(task.id);
     }
 
+    /**
+     * 获取任务中的所有失败子项
+     *
+     * @param taskId 翻译任务 ID
+     * @returns { success: true, failures: 失败子项列表, count: 失败数量 }
+     */
     async getFailures(taskId: number) {
         const items = await this.prisma.translationTaskItem.findMany({ where: { taskId: BigInt(taskId), status: 'FAILED' } });
         return { success: true, failures: items, count: items.length };
     }
 
+    /**
+     * 获取最近的翻译任务列表（最多 20 条）
+     *
+     * @returns { success: true, tasks: 任务摘要列表 }
+     */
     async getRecentTasks() {
         const tasks = await this.prisma.translationTask.findMany({ orderBy: { createdAt: 'desc' }, take: 20 });
         return {

@@ -33,6 +33,7 @@ export class SyncService {
         }
         this.syncing = true;
         this.syncStatus = '同步中...';
+        this.logger.log(`开始 ${syncType}: REPLACE=${replace}`);
 
         let syncLog: any = null;
         try {
@@ -100,18 +101,42 @@ export class SyncService {
         }
     }
 
-    /** 手动同步：REPLACE 模式，全量替换 */
+    /**
+     * 手动同步：REPLACE 模式，全量替换
+     *
+     * 仅在没有正在进行的同步任务时启动新同步，避免并发冲突
+     */
     startManualSync() {
-        if (!this.syncing) this.doSync('手动同步', true).catch((e) => this.logger.error(e));
+        if (this.syncing) {
+            this.logger.warn('手动同步：已有同步任务在执行中，跳过');
+            return;
+        }
+        this.logger.log('手动同步任务已启动');
+        this.doSync('手动同步', true).catch((e) => this.logger.error(e));
     }
-    /** 定时同步：REPLACE 模式，全量替换 */
+    /**
+     * 定时同步：REPLACE 模式，全量替换
+     *
+     * 由定时调度触发，doSync 内部通过同步锁防止并发
+     */
     startScheduledSync() {
+        this.logger.log('定时同步任务已触发');
         this.doSync('定时同步', true).catch((e) => this.logger.error(e));
     }
+    /**
+     * 获取当前同步锁状态
+     *
+     * @returns true 表示有同步任务正在执行
+     */
     isSyncing() {
         return this.syncing;
     }
 
+    /**
+     * 获取同步状态概览
+     *
+     * @returns 包含同步状态、上次同步时间、仓库总数等信息
+     */
     async getSyncStatus() {
         const total = await this.prisma.githubRepo.count();
         const lastOk = await this.prisma.syncLog.findFirst({ where: { status: '成功' }, orderBy: { finishedAt: 'desc' } });
@@ -126,6 +151,13 @@ export class SyncService {
         };
     }
 
+    /**
+     * 分页查询同步日志
+     *
+     * @param pageNum 页码（从1开始）
+     * @param pageSize 每页条数
+     * @returns 分页后的同步日志记录及分页元数据
+     */
     async getSyncLogs(pageNum: number, pageSize: number) {
         const [total, records] = await Promise.all([
             this.prisma.syncLog.count(),

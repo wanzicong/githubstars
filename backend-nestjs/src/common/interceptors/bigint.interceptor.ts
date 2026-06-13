@@ -14,10 +14,30 @@ import { map } from 'rxjs/operators';
  */
 @Injectable()
 export class BigIntInterceptor implements NestInterceptor {
+    /**
+     * 拦截 HTTP 响应，递归转换 BigInt 为 Number
+     *
+     * 在 NestJS 默认的 JSON 序列化之前对响应数据做预处理，
+     * 将 Prisma 返回的 BigInt 类型转换为安全的 Number 类型。
+     *
+     * @param context 执行上下文
+     * @param next 调用处理链的下一环节
+     * @returns Observable 流，其中的数据已完成 BigInt 转换
+     */
     intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
         return next.handle().pipe(map((data) => this.convertBigInt(data)));
     }
 
+    /**
+     * 递归转换 BigInt 值
+     *
+     * 遍历 value 的所有层级，将遇到的 BigInt 值转为 Number。
+     * 支持 null/undefined、原始值、数组、普通对象的递归处理。
+     * Date 等特殊对象不会被遍历内部属性，直接原样返回。
+     *
+     * @param value 需要转换的任意值
+     * @returns 转换后的值，BigInt 已被替换为 Number
+     */
     private convertBigInt(value: any): any {
         if (value === null || value === undefined) return value;
         if (typeof value === 'bigint') return Number(value);

@@ -10,7 +10,7 @@
  *   P0-6: generateCloneScript 使用过滤参数
  *   P0-7: 同步锁/信号量并发控制
  */
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
@@ -32,6 +32,7 @@ export class CloneService implements OnModuleInit {
     private taskCounter = 0;
     private runningTasks = new Map<string, any>();
     private cancelledTasks = new Set<string>();
+    private readonly logger = new Logger(CloneService.name);
 
     constructor(
         private readonly prisma: PrismaService,
@@ -40,17 +41,31 @@ export class CloneService implements OnModuleInit {
         private readonly githubRepoService: GithubRepoService,
     ) {}
 
-    /** 从数据库恢复 taskCounter */
+    /**
+     * 模块初始化时从数据库恢复 taskCounter，确保重启后任务编号连续
+     */
     async onModuleInit() {
         const maxNum = await this.cloneTaskService.getMaxTaskCounterNumber();
         this.taskCounter = maxNum;
+        this.logger.log('CloneService 初始化完成, taskCounter 恢复到: ' + maxNum);
     }
 
+    /**
+     * 获取克隆根目录路径，优先使用系统配置中的 clone.directory
+     *
+     * @returns 克隆根目录路径
+     */
     private async getBaseDir(): Promise<string> {
         return this.configService.getValueDefault('clone.directory', 'D:/github-stars');
     }
 
-    /** 路径规范化与安全检查 */
+    /**
+     * 路径规范化与安全检查，防止路径遍历攻击和无效路径
+     *
+     * @param subDir 用户输入的子目录
+     * @returns 规范化后的子目录路径
+     * @throws 路径包含盘符、无效路径段或非法字符时抛出异常
+     */
     sanitizeSubdirectory(subDir: string): string {
         let dir = (subDir || '')
             .trim()
@@ -89,7 +104,13 @@ export class CloneService implements OnModuleInit {
         return dir;
     }
 
-    /** 真实磁盘空间检查 */
+    /**
+     * 真实磁盘空间检查，估算克隆所需空间并与可用空间对比
+     *
+     * @param subDirectory 子目录路径
+     * @param repoCount 预计克隆的仓库数量
+     * @returns 磁盘空间检查结果，包含可用空间、估算所需空间、是否充足等信息
+     */
     async checkDiskSpace(subDirectory: string, repoCount: number) {
         try {
             const dir = subDirectory ? path.join(await this.getBaseDir(), this.sanitizeSubdirectory(subDirectory)) : await this.getBaseDir();
@@ -123,6 +144,7 @@ export class CloneService implements OnModuleInit {
                         : `磁盘空间不足 (${freeMB}MB < ${Math.round(estimatedMB)}MB)，请清理后重试`,
             };
         } catch (e) {
+            this.logger.error('磁盘检查失败: ' + (e instanceof Error ? e.message : String(e)));
             return {
                 success: true,
                 freeSpaceMB: 0,
@@ -133,7 +155,12 @@ export class CloneService implements OnModuleInit {
         }
     }
 
-    /** 构建 clone URL（支持代理） */
+    /**
+     * 构建克隆 URL，支持通过代理加速访问 GitHub
+     *
+     * @param htmlUrl GitHub 仓库的 HTML 地址（如 https://github.com/user/repo）
+     * @returns 完整的克隆地址，优先使用配置中的代理 URL
+     */
     async buildCloneUrl(htmlUrl: string): Promise<string> {
         const proxyUrl = await this.configService.getValueDefault('clone.proxy.url', '');
         if (proxyUrl) {
@@ -143,7 +170,13 @@ export class CloneService implements OnModuleInit {
         return htmlUrl + '.git';
     }
 
-    /** 信号量并发控制 */
+    /**
+     * 使用信号量模式控制并发执行，限制同时运行的任务数量
+     *
+     * @param items 待处理的数据项列表
+     * @param concurrency 最大并发数
+     * @param fn 对每个数据项执行的处理函数
+     */
     private async executeWithSemaphore<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
         const sem = new Array(concurrency).fill(0) as number[];
         let idx = 0;
@@ -156,7 +189,17 @@ export class CloneService implements OnModuleInit {
         await Promise.all(sem.map(() => worker()));
     }
 
-    /** 单次克隆 */
+    /**
+     * 执行单次 git clone 操作，包含目录存在性检查、强制重试目录清理
+     *
+     * @param fullName 仓库完整名称（如 user/repo）
+     * @param repoName 仓库名
+     * @param dir 目标目录路径
+     * @param htmlUrl GitHub HTML 地址
+     * @param forceRetry 是否强制清理已存在目录后重试
+     * @param cloneDepth 克隆深度（--depth 参数值）
+     * @returns 克隆结果，包含状态（CLONED/SKIPPED/FAILED）和消息
+     */
     private async doClone(
         fullName: string,
         repoName: string,
@@ -187,6 +230,7 @@ export class CloneService implements OnModuleInit {
                 : { status: 'FAILED', message: '克隆后目录为空' };
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
+            this.logger.error('git clone 失败: 仓库=' + fullName + ', 错误=' + msg.substring(0, 200));
             try {
                 fs.rmSync(dir, { recursive: true, force: true });
             } catch {}
@@ -194,7 +238,17 @@ export class CloneService implements OnModuleInit {
         }
     }
 
-    /** 带重试+保留原始错误 */
+    /**
+     * 带重试机制的克隆操作，失败时按退避策略自动重试，最多重试 MAX_RETRIES 次
+     *
+     * @param fullName 仓库完整名称（如 user/repo）
+     * @param repoName 仓库名
+     * @param dir 目标目录路径
+     * @param htmlUrl GitHub HTML 地址
+     * @param cloneDepth 克隆深度
+     * @param taskId 任务 ID，用于检查取消状态
+     * @returns 克隆结果，包含仓库名、最终状态和消息
+     */
     private async cloneWithRetry(
         fullName: string,
         repoName: string,
@@ -213,15 +267,35 @@ export class CloneService implements OnModuleInit {
             if (NON_RETRYABLE.some((e) => result.message.toLowerCase().includes(e)))
                 return { fullName, status: 'FAILED', message: result.message };
             if (attempt < MAX_RETRIES - 1) await new Promise((r) => setTimeout(r, RETRY_BACKOFF[attempt] * 1000));
-            else
+            else {
+                this.logger.error('克隆重试耗尽: 仓库=' + fullName + ', 错误=' + lastResult.message.substring(0, 200));
                 try {
                     fs.rmSync(dir, { recursive: true, force: true });
                 } catch {}
+            }
         }
         return { fullName, status: 'FAILED', message: `[已重试${MAX_RETRIES}次] ${lastResult.message}` };
     }
 
-    /** 启动批量clone */
+    /**
+     * 启动批量克隆任务，进行磁盘空间检查后异步执行克隆
+     *
+     * @param params 批量克隆参数
+     * @param params.keyword 搜索关键词
+     * @param params.language 编程语言过滤
+     * @param params.categoryIds 分类 ID 过滤
+     * @param params.maxCount 最大克隆数量
+     * @param params.subDirectory 目标子目录
+     * @param params.dateField 日期过滤字段
+     * @param params.startDate 起始日期
+     * @param params.endDate 结束日期
+     * @param params.sortBy 排序字段
+     * @param params.sortOrder 排序方向
+     * @param params.concurrency 并发数
+     * @param params.cloneDepth 克隆深度
+     * @param params.maxRepoSizeMb 单仓库最大体积（MB）
+     * @returns 任务创建结果，包含 taskId 和目标目录
+     */
     async startBatchClone(params: {
         keyword?: string;
         language?: string;
@@ -252,6 +326,7 @@ export class CloneService implements OnModuleInit {
             }
 
             const taskId = 'clone_' + ++this.taskCounter;
+            this.logger.log('开始批量克隆: taskId=' + taskId + ', maxCount=' + maxCount + ', 目标目录=' + targetDir);
 
             const task = await this.prisma.cloneTask.create({
                 data: {
@@ -291,11 +366,22 @@ export class CloneService implements OnModuleInit {
 
             return { success: true, taskId, targetDirectory: targetDir };
         } catch (e) {
+            this.logger.error('启动批量克隆失败: ' + (e instanceof Error ? e.message : String(e)));
             return { success: false, message: e instanceof Error ? e.message : String(e) };
         }
     }
 
-    /** 执行批量clone */
+    /**
+     * 异步执行批量克隆的核心方法，查询仓库列表后并发克隆每个仓库
+     *
+     * @param taskId 任务 ID
+     * @param maxCount 最大克隆数量
+     * @param concurrency 并发数
+     * @param cloneDepth 克隆深度
+     * @param maxRepoSizeMb 单仓库最大体积（MB）
+     * @param subDir 目标子目录
+     * @param filterParams 仓库筛选参数
+     */
     private async executeBatchClone(
         taskId: string,
         maxCount: number,
@@ -315,8 +401,12 @@ export class CloneService implements OnModuleInit {
         },
     ) {
         const task = await this.prisma.cloneTask.findUnique({ where: { taskId } });
-        if (!task) return;
+        if (!task) {
+            this.logger.error('执行批量克隆: 任务不存在 taskId=' + taskId);
+            return;
+        }
         await this.prisma.cloneTask.update({ where: { taskId }, data: { status: 'RUNNING', startedAt: new Date() } });
+        this.logger.log('批量克隆开始执行: taskId=' + taskId);
 
         const targetDir = subDir ? path.join(await this.getBaseDir(), subDir) : await this.getBaseDir();
 
@@ -377,18 +467,26 @@ export class CloneService implements OnModuleInit {
 
             const finalStatus = failed === 0 ? 'COMPLETED' : 'FAILED';
             await this.prisma.cloneTask.update({ where: { taskId }, data: { status: finalStatus, finishedAt: new Date() } });
+            this.logger.log('批量克隆完成: taskId=' + taskId + ', 状态=' + finalStatus + ', 完成=' + completed + ', 失败=' + failed + ', 跳过=' + skipped);
             await this.saveHistory(subDir);
         } catch (e) {
+            const errMsg = e instanceof Error ? e.message : String(e);
+            this.logger.error('批量克隆异常: taskId=' + taskId + ', 错误=' + errMsg);
             await this.prisma.cloneTask.update({
                 where: { taskId },
-                data: { status: 'FAILED', errorMessage: e instanceof Error ? e.message : String(e), finishedAt: new Date() },
+                data: { status: 'FAILED', errorMessage: errMsg, finishedAt: new Date() },
             });
         } finally {
             setTimeout(() => this.runningTasks.delete(taskId), 5000);
         }
     }
 
-    /** 获取任务 */
+    /**
+     * 获取克隆任务详情（优先从内存缓存读取运行中的任务）
+     *
+     * @param taskId 任务 ID
+     * @returns 任务详情，包含任务项列表
+     */
     async getTask(taskId: string) {
         const cached = this.runningTasks.get(taskId);
         if (cached)
@@ -399,11 +497,17 @@ export class CloneService implements OnModuleInit {
         return this.prisma.cloneTask.findUnique({ where: { taskId }, include: { items: { take: 100, orderBy: { createdAt: 'asc' } } } });
     }
 
-    /** 取消任务 */
+    /**
+     * 取消正在运行或等待中的克隆任务
+     *
+     * @param taskId 任务 ID
+     * @returns 是否取消成功
+     */
     async cancelTask(taskId: string) {
         const task = await this.prisma.cloneTask.findUnique({ where: { taskId } });
         if (!task || (task.status !== 'RUNNING' && task.status !== 'PENDING')) return false;
         this.cancelledTasks.add(taskId);
+        this.logger.log('取消克隆任务: taskId=' + taskId);
         await this.prisma.cloneTask.update({
             where: { taskId },
             data: { status: 'FAILED', errorMessage: '用户取消', finishedAt: new Date(), cancelled: 1 },
@@ -411,7 +515,12 @@ export class CloneService implements OnModuleInit {
         return true;
     }
 
-    /** 重试失败项 — P0 FIX: 只重试 FAILED（不含 SKIPPED），使用 buildCloneUrl */
+    /**
+     * 重试克隆失败项，只重试状态为 FAILED 的项（不含 SKIPPED），使用 buildCloneUrl 支持代理
+     *
+     * @param taskId 任务 ID
+     * @returns 重试结果，包含成功/失败计数
+     */
     async retryFailedClones(taskId: string) {
         const task = await this.prisma.cloneTask.findUnique({ where: { taskId } });
         if (!task || task.status === 'PENDING') return { success: false, message: '任务无法重试' };
@@ -421,6 +530,7 @@ export class CloneService implements OnModuleInit {
         if (failedItems.length === 0) return { success: false, message: '没有需要重试的失败项' };
 
         this.cancelledTasks.delete(taskId);
+        this.logger.log('重试克隆失败项: taskId=' + taskId + ', 失败项数=' + failedItems.length);
         await this.prisma.cloneTask.update({ where: { taskId }, data: { status: 'RUNNING', cancelled: 0 } });
         const targetDir = task.targetDir || await this.getBaseDir();
 
@@ -452,6 +562,7 @@ export class CloneService implements OnModuleInit {
                         : { status: 'FAILED', message: '克隆后目录为空' };
             } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
+                this.logger.error('重试克隆失败: 仓库=' + item.fullName + ', 错误=' + msg.substring(0, 200));
                 try {
                     fs.rmSync(repoDir, { recursive: true, force: true });
                 } catch {}
@@ -468,10 +579,15 @@ export class CloneService implements OnModuleInit {
             where: { taskId },
             data: { status: finalStatus, completedRepos: completed, failedRepos: failed, finishedAt: new Date() },
         });
+        this.logger.log('重试克隆完成: taskId=' + taskId + ', 成功=' + completed + ', 失败=' + failed);
         return { success: true, message: `重试完成: ${completed}成功, ${failed}失败`, retryCount: failedItems.length };
     }
 
-    /** 获取克隆配置 */
+    /**
+     * 获取克隆配置信息，包含基础目录、子目录历史、活动任务等
+     *
+     * @returns 克隆配置对象
+     */
     async getCloneConfig() {
         const historyStr = await this.configService.getValueDefault('clone.subdirectory.history', '[]');
         let history: string[] = [];
@@ -495,6 +611,11 @@ export class CloneService implements OnModuleInit {
         };
     }
 
+    /**
+     * 将子目录路径保存到历史记录，去重后限制最大条数
+     *
+     * @param subDir 子目录路径
+     */
     private async saveHistory(subDir: string) {
         const str = await this.configService.getValueDefault('clone.subdirectory.history', '[]');
         let history: string[] = [];
@@ -508,7 +629,24 @@ export class CloneService implements OnModuleInit {
         }
     }
 
-    /** P0 FIX: generateCloneScript 使用过滤参数 */
+    /**
+     * 生成可执行的克隆脚本（Windows PowerShell 或 Linux Bash），使用过滤参数筛选仓库
+     *
+     * @param params 脚本生成参数
+     * @param params.osType 操作系统类型（windows/linux）
+     * @param params.keyword 搜索关键词
+     * @param params.language 编程语言过滤
+     * @param params.categoryIds 分类 ID 过滤
+     * @param params.maxCount 最大仓库数量
+     * @param params.subDirectory 目标子目录
+     * @param params.cloneDepth 克隆深度
+     * @param params.dateField 日期过滤字段
+     * @param params.startDate 起始日期
+     * @param params.endDate 结束日期
+     * @param params.sortBy 排序字段
+     * @param params.sortOrder 排序方向
+     * @returns 克隆脚本内容（字符串）
+     */
     async generateCloneScript(params: {
         osType: string;
         keyword?: string;
@@ -527,6 +665,7 @@ export class CloneService implements OnModuleInit {
         const depth = (params.cloneDepth || 1) > 0 ? ` --depth ${params.cloneDepth}` : '';
         const subDir = this.sanitizeSubdirectory(params.subDirectory || '');
         const targetDir = subDir ? path.join(await this.getBaseDir(), subDir).replace(/\\/g, '/') : await this.getBaseDir();
+        this.logger.log('生成克隆脚本: OS=' + params.osType + ', maxCount=' + maxCount + ', 目标目录=' + targetDir);
 
         // P0 FIX: 使用过滤参数查询仓库
         const result = await this.githubRepoService.findPage({

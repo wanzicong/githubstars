@@ -9,6 +9,13 @@ import { CategoryModule } from '../category/category.module';
 import { GithubModule } from '../github/github.module';
 import { ConfigModule } from '../config/config.module';
 
+/**
+ * AI 功能模块
+ *
+ * 提供 AI 分析（仓库集合分析、Trending 趋势分析）、
+ * AI 分类（普通分类、智能分类）和相似仓库推荐功能。
+ * 依赖 GithubModule、ConfigModule（配置读取）和 CategoryModule（分类数据）。
+ */
 @Module({
     imports: [GithubModule, forwardRef(() => CategoryModule), ConfigModule],
     controllers: [AiAnalyzeController, AiClassifyController, SimilarRepoController],

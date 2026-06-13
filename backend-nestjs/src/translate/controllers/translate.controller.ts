@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Query, Res, Sse } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, Res, Sse, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 import { Observable, Subject } from 'rxjs';
 import { TranslateService } from '../services/translate.service';
@@ -15,25 +15,45 @@ export function broadcastTaskProgress(taskId: number, data: any) {
 
 @Controller('api/translate')
 export class TranslateController {
+    private readonly logger = new Logger(TranslateController.name);
+
     constructor(
         private readonly service: TranslateService,
         private readonly taskService: TranslateTaskService,
         private readonly repoService: GithubRepoService,
     ) {}
 
-    /** 解析并校验路径参数 id，非法时返回 NaN */
+    /**
+     * 解析并校验路径参数 id
+     *
+     * @param id 路径参数字符串
+     * @returns 解析后的数字，非法时返回 NaN
+     */
     private parseId(id: string): number {
         const n = parseInt(id);
         return isNaN(n) ? NaN : n;
     }
-    /** 校验 id 是否有效 */
+    /**
+     * 校验 id 是否有效（正数整数）
+     *
+     * @param id 待校验的数值
+     * @returns true 表示 id 为正整数
+     */
     private isValidId(id: number): boolean {
         return !isNaN(id) && id > 0;
     }
 
     // ===== 合并后的核心端点 =====
 
-    /** POST /api/translate — 创建翻译任务 (合并了 start/filter-batch/readme-start/batch) */
+    /**
+     * POST /api/translate — 创建翻译任务
+     *
+     * 合并了原 start/filter-batch/readme-start/batch 等多个端点。
+     * 支持三种 scope: selected（指定仓库）、all（全量）、filtered（筛选条件）。
+     *
+     * @param body 请求体 { type, scope, repoIds?, filters? }
+     * @returns { success, taskId?, translatedCount?, message }
+     */
     @Post()
     async createTask(
         @Body()
@@ -54,6 +74,7 @@ export class TranslateController {
         },
     ) {
         const { type = 'readme', scope = 'filtered', repoIds, filters } = body;
+        this.logger.log(`创建翻译任务: type=${type} scope=${scope} repoCount=${repoIds?.length || 0}`);
 
         if (scope === 'selected' && repoIds?.length) {
             // 选中模式：指定仓库
@@ -86,13 +107,26 @@ export class TranslateController {
         return { success: true, taskId, message: `筛选翻译已启动 (类型: ${type})` };
     }
 
-    /** GET /api/translate/config — 检查翻译配置（API Key 等） */
+    /**
+     * GET /api/translate/config — 检查翻译配置
+     *
+     * 返回 DeepSeek API Key 是否已配置。
+     *
+     * @returns { success, apiKeyConfigured }
+     */
     @Get('config')
     async translateConfig() {
         return { success: true, apiKeyConfigured: await this.taskService.isApiKeyConfigured() };
     }
 
-    /** GET /api/translate/status — 翻译覆盖统计 */
+    /**
+     * GET /api/translate/status — 翻译覆盖统计
+     *
+     * 返回符合条件的仓库总数及描述/README 的翻译覆盖情况。
+     *
+     * @param q 查询参数（keyword、language、categoryIds、日期范围等）
+     * @returns 覆盖率统计对象
+     */
     @Get('status')
     async translationStatus(@Query() q: any) {
         return this.service.getTranslationSummary({
@@ -107,13 +141,22 @@ export class TranslateController {
 
     // ===== 任务管理 =====
 
-    /** GET /api/translate/tasks — 任务列表 */
+    /**
+     * GET /api/translate/tasks — 获取最近的翻译任务列表
+     *
+     * @returns 最近 20 条翻译任务摘要
+     */
     @Get('tasks')
     async taskList() {
         return this.taskService.getRecentTasks();
     }
 
-    /** GET /api/translate/tasks/:id — 任务详情 + 进度 */
+    /**
+     * GET /api/translate/tasks/:id — 查询任务详情与进度
+     *
+     * @param id 翻译任务 ID
+     * @returns 任务进度详情，无效 ID 时返回 { success: false, message }
+     */
     @Get('tasks/:id')
     async taskProgress(@Param('id') id: string) {
         const nid = this.parseId(id);
@@ -121,17 +164,28 @@ export class TranslateController {
         return this.taskService.getTaskProgress(nid);
     }
 
-    /** POST /api/translate/tasks/:id/retry — 重试失败项 */
+    /**
+     * POST /api/translate/tasks/:id/retry — 重试任务中的失败项
+     *
+     * @param id 原翻译任务 ID
+     * @returns 新任务 ID，无失败项时返回 { success: false, message }
+     */
     @Post('tasks/:id/retry')
     async taskRetry(@Param('id') id: string) {
         const nid = this.parseId(id);
         if (!this.isValidId(nid)) return { success: false, message: '无效的任务ID' };
+        this.logger.log(`重试翻译任务失败项: taskId=${nid}`);
         const newId = await this.taskService.retryFailed(nid);
         if (!newId) return { success: false, message: '没有失败项需要重试' };
         return { success: true, taskId: newId, message: '重试任务已启动' };
     }
 
-    /** GET /api/translate/tasks/:id/failures — 失败项 */
+    /**
+     * GET /api/translate/tasks/:id/failures — 获取任务失败项列表
+     *
+     * @param id 翻译任务 ID
+     * @returns { success, failures, count }
+     */
     @Get('tasks/:id/failures')
     async taskFailures(@Param('id') id: string) {
         const nid = this.parseId(id);
@@ -139,7 +193,15 @@ export class TranslateController {
         return this.taskService.getFailures(nid);
     }
 
-    /** GET /api/translate/tasks/:id/stream — SSE 实时进度流 */
+    /**
+     * GET /api/translate/tasks/:id/stream — SSE 实时进度推送
+     *
+     * 建立 SSE 长连接，每 2 秒推送一次任务进度，
+     * 任务完成（COMPLETED/FAILED/PARTIAL）或客户端断开时自动关闭。
+     *
+     * @param id 翻译任务 ID
+     * @param res Express Response 对象
+     */
     @Get('tasks/:id/stream')
     async taskStream(@Param('id') id: string, @Res() res: Response) {
         const taskId = this.parseId(id);
@@ -177,6 +239,12 @@ export class TranslateController {
 
     // ===== 兼容旧端点 (向后兼容) =====
 
+    /**
+     * POST /api/translate/:id/description — 同步翻译描述（旧接口）
+     *
+     * @param id 仓库 ID
+     * @returns { success, descriptionCn }
+     */
     @Post(':id/description')
     async translateDesc(@Param('id') id: string) {
         const nid = this.parseId(id);
@@ -185,6 +253,12 @@ export class TranslateController {
         return { success: true, descriptionCn: result };
     }
 
+    /**
+     * POST /api/translate/:id/readme — 同步翻译 README（旧接口）
+     *
+     * @param id 仓库 ID
+     * @returns { success, readmeCn }
+     */
     @Post(':id/readme')
     async translateReadme(@Param('id') id: string) {
         const nid = this.parseId(id);
@@ -193,6 +267,12 @@ export class TranslateController {
         return { success: true, readmeCn: result };
     }
 
+    /**
+     * POST /api/translate/:id/readme/async — 异步翻译 README（旧接口）
+     *
+     * @param id 仓库 ID
+     * @returns { success, taskId, message }
+     */
     @Post(':id/readme/async')
     async translateReadmeAsync(@Param('id') id: string) {
         const nid = this.parseId(id);
@@ -202,6 +282,12 @@ export class TranslateController {
         return { success: true, taskId, message: '翻译任务已启动' };
     }
 
+    /**
+     * POST /api/translate/:id/readme/retranslate — 强制重新翻译 README（旧接口）
+     *
+     * @param id 仓库 ID
+     * @returns { success, taskId, message }
+     */
     @Post(':id/readme/retranslate')
     async translateReadmeRetranslate(@Param('id') id: string) {
         const nid = this.parseId(id);
@@ -211,6 +297,12 @@ export class TranslateController {
         return { success: true, taskId, message: '重新翻译任务已启动' };
     }
 
+    /**
+     * POST /api/translate/:id — 同步翻译完整仓库（描述 + README）（旧接口）
+     *
+     * @param id 仓库 ID
+     * @returns { success, descriptionCn, readmeCn, readmeFetched }
+     */
     @Post(':id')
     async translateFull(@Param('id') id: string) {
         const nid = this.parseId(id);
@@ -222,6 +314,12 @@ export class TranslateController {
         return { success: true, descriptionCn: desc, readmeCn: readme, readmeFetched: !!readme };
     }
 
+    /**
+     * GET /api/translate/:id/status — 查询单仓库翻译状态（旧接口）
+     *
+     * @param id 仓库 ID
+     * @returns { success, descriptionTranslated, readmeFetched, readmeTranslated, ... }
+     */
     @Get(':id/status')
     async status(@Param('id') id: string) {
         const nid = this.parseId(id);

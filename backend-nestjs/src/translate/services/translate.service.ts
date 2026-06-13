@@ -15,7 +15,15 @@ export class TranslateService {
         private readonly githubRepo: GithubRepoService,
     ) {}
 
-    /** P1-FIX: 添加 120s 超时 + 429 限流识别 */
+    /**
+     * 调用 DeepSeek API 进行文本翻译
+     *
+     * 带 120s 超时 + 429 限流识别，被限流时返回哨兵常量 __RATE_LIMITED__
+     *
+     * @param text 待翻译的原始文本
+     * @param isReadme 是否为 README 翻译（影响 prompt 和 max_tokens）
+     * @returns 翻译结果字符串，限流时返回 '__RATE_LIMITED__'，失败返回 null
+     */
     private async callDeepSeek(text: string, isReadme: boolean): Promise<string | null> {
         const apiKey = await this.config.getValue('deepseek.api_key');
         const apiUrl = await this.config.getValueDefault('deepseek.api_url', 'https://api.deepseek.com/v1/chat/completions');
@@ -90,6 +98,14 @@ export class TranslateService {
         }
     }
 
+    /**
+     * 翻译单个仓库的描述文本
+     *
+     * 幂等操作：若已有中文描述则直接返回缓存值
+     *
+     * @param repoId 仓库 ID
+     * @returns 翻译后的中文描述，无描述或限流时返回 null
+     */
     async translateDescription(repoId: number): Promise<string | null> {
         const repo = await this.githubRepo.findById(repoId);
         if (!repo) return null;
@@ -98,14 +114,24 @@ export class TranslateService {
         const result = await this.callDeepSeek(repo.description, false);
         if (result && result !== '__RATE_LIMITED__') {
             await this.prisma.githubRepo.update({ where: { id: BigInt(repoId) }, data: { descriptionCn: result, updatedAt: new Date() } });
+            this.logger.log(`描述翻译成功: ${repo.fullName}`);
         }
         return result === '__RATE_LIMITED__' ? null : result;
     }
 
     /**
-     * P0-FIX: 翻译 README
-     * - 如果 original 已获取但翻译失败 → 跳过 GitHub 请求，直接重试翻译
-     * - 翻译失败时不永久标记 readmeFetched
+     * 翻译单个仓库的 README 文档
+     *
+     * 三种路径：
+     * - 已成功翻译过 → 直接返回缓存
+     * - 已获取原始内容但翻译失败 → 复用已有原始内容重试翻译（节省 GitHub API 调用）
+     * - 首次获取 → 先拉取 GitHub README，再调用 DeepSeek 翻译
+     *
+     * 翻译失败时不永久标记 readmeFetched，允许下次重试。
+     * 确认无 README 时返回 '__NO_README__' 哨兵值，让上层识别为终态。
+     *
+     * @param repoId 仓库 ID
+     * @returns 翻译后的中文 README，无 README 时返回 '__NO_README__'，失败返回 null
      */
     async translateReadme(repoId: number): Promise<string | null> {
         const repo = await this.githubRepo.findById(repoId);
@@ -163,6 +189,7 @@ export class TranslateService {
                 where: { id: BigInt(repoId) },
                 data: { readmeCn: result, readmeFetched: true, updatedAt: new Date() },
             });
+            this.logger.log(`README 翻译成功: ${repo.fullName}`);
             return result;
         }
 
@@ -171,6 +198,15 @@ export class TranslateService {
         return null;
     }
 
+    /**
+     * 强制重新翻译 README（忽略已有缓存和标记）
+     *
+     * 先重置 readmeFetched/readmeOriginal/readmeCn 字段，然后重新从 GitHub 拉取原文并翻译。
+     * 适用于用户主动触发"重新翻译"的场景。
+     *
+     * @param repoId 仓库 ID
+     * @returns 翻译后的中文 README，无 README 时返回 '__NO_README__'，失败返回 null
+     */
     async translateReadmeForce(repoId: number): Promise<string | null> {
         const repo = await this.githubRepo.findById(repoId);
         if (!repo) return null;
@@ -190,11 +226,20 @@ export class TranslateService {
                 where: { id: BigInt(repoId) },
                 data: { readmeCn: result, readmeFetched: true, updatedAt: new Date() },
             });
+            this.logger.log(`README 强制重新翻译成功: ${repo.fullName}`);
             return result;
         }
         return null;
     }
 
+    /**
+     * 批量翻译描述文本
+     *
+     * 指定 repoIds 时翻译指定仓库，否则自动选取前 100 条未翻译描述的仓库。
+     *
+     * @param repoIds 可选，指定仓库 ID 列表
+     * @returns 成功翻译的描述数量
+     */
     async translateDescriptionsBatch(repoIds?: number[]): Promise<number> {
         let repos: Array<{ id: bigint; description: string | null }>;
         if (repoIds?.length) {
@@ -228,7 +273,14 @@ export class TranslateService {
         return count;
     }
 
-    /** 获取筛选条件下的翻译覆盖统计 */
+    /**
+     * 获取筛选条件下的翻译覆盖统计
+     *
+     * 统计符合条件的仓库总数，以及描述和 README 的翻译完成/待处理数量。
+     *
+     * @param params 筛选参数（keyword、language、categoryIds、日期范围等）
+     * @returns 翻译覆盖率统计 { total, descCompleted, descPending, readmeCompleted, readmePending }
+     */
     async getTranslationSummary(params: {
         keyword?: string;
         language?: string;

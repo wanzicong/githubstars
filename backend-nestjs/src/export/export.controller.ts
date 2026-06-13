@@ -1,13 +1,23 @@
-import { Controller, Get, Query, Res } from '@nestjs/common';
+import { Controller, Get, Query, Res, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 import { GithubRepoService } from '../github/services/github-repo.service';
 
 @Controller('api/export')
 export class ExportController {
+    private readonly logger = new Logger(ExportController.name);
+
     constructor(private readonly repoService: GithubRepoService) {}
 
+    /**
+     * 导出仓库列表为 Markdown 文件，支持按关键词、语言、时间范围、分类、翻译状态筛选
+     *
+     * @param q   查询参数：keyword、language、categoryIds、sortBy、sortOrder、
+     *            dateField、startDate、endDate、untranslatedOnly、maxCount
+     * @param res Express Response 对象，用于设置 Content-Disposition 并返回文件
+     */
     @Get('md')
     async exportMd(@Query() q: any, @Res() res: Response) {
+        this.logger.log('开始导出Markdown: keyword=' + (q.keyword || '') + ', language=' + (q.language || '') + ', maxCount=' + (q.maxCount || 50));
         const result = await this.repoService.findPage({
             page: 1,
             size: parseInt(q.maxCount) || 50,
@@ -22,6 +32,7 @@ export class ExportController {
             untranslatedOnly: q.untranslatedOnly === 'true',
         });
         const repos = result.records as any[];
+        this.logger.log('查询到 ' + repos.length + ' 个仓库，开始生成Markdown');
         let md = '# GitHub Stars 导出\n\n';
         if (q.keyword) md += `> 关键词: ${q.keyword}\n`;
         if (q.language) md += `> 语言: ${q.language}\n`;
@@ -48,5 +59,6 @@ export class ExportController {
             'Content-Disposition': "attachment; filename*=UTF-8''" + encodeURIComponent('github-stars.md'),
         });
         res.send(md);
+        this.logger.log('导出Markdown完成: ' + repos.length + ' 个仓库');
     }
 }
