@@ -908,6 +908,7 @@ export default function StarList() {
                 dateField: dateField || undefined,
                 startDate: startDateStr || undefined,
                 endDate: endDateStr || undefined,
+                untranslatedOnly: untranslatedOnly || undefined,
             })
             const url = window.URL.createObjectURL(blob)
             const a = document.createElement('a')
@@ -920,7 +921,7 @@ export default function StarList() {
         } catch {
             console.error('导出失败')
         }
-    }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr])
+    }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly])
 
     const handleExportMd = useCallback(async () => {
         try {
@@ -941,6 +942,11 @@ export default function StarList() {
             }
             params.set('maxCount', String(totalCount))
             const resp = await fetch(`/export/md?${params.toString()}`)
+            if (!resp.ok) {
+                const errText = await resp.text().catch(() => '')
+                message.error(`导出失败: HTTP ${resp.status}${errText ? ' — ' + errText.substring(0, 200) : ''}`)
+                return
+            }
             const blob = await resp.blob()
             const url = window.URL.createObjectURL(blob)
             const a = document.createElement('a')

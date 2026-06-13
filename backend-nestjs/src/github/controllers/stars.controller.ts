@@ -96,6 +96,7 @@ export class StarsController {
             dateField: q.dateField || '',
             startDate: q.startDate || '',
             endDate: q.endDate || '',
+            untranslatedOnly: q.untranslatedOnly === 'true' || q.untranslatedOnly === true,
         });
         res.set({ 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': 'attachment; filename="stars-export.txt"' });
         res.send(urls.join('\n'));

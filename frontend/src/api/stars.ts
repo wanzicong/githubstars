@@ -34,6 +34,7 @@ export async function exportStarsUrls(params: StarListParams): Promise<Blob> {
     if (params.dateField) searchParams.set('dateField', params.dateField)
     if (params.startDate) searchParams.set('startDate', params.startDate)
     if (params.endDate) searchParams.set('endDate', params.endDate)
+    if (params.untranslatedOnly) searchParams.set('untranslatedOnly', 'true')
     const { data } = await api.get('/stars/export', {
         params: searchParams,
         responseType: 'blob',

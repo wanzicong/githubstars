@@ -30,12 +30,13 @@ export class ExportController {
     @ApiQuery({ name: 'untranslatedOnly', required: false, description: '仅未翻译（true/false）' })
     @ApiQuery({ name: 'maxCount', required: false, description: '最大导出数量，默认 50' })
     async exportMd(@Query() q: any, @Res() res: Response) {
+        const maxCount = Math.min(parseInt(q.maxCount) || 50, 500);
         this.logger.log(
-            '开始导出Markdown: keyword=' + (q.keyword || '') + ', language=' + (q.language || '') + ', maxCount=' + (q.maxCount || 50),
+            '开始导出Markdown: keyword=' + (q.keyword || '') + ', language=' + (q.language || '') + ', maxCount=' + maxCount,
         );
         const result = await this.repoService.findPage({
             page: 1,
-            size: parseInt(q.maxCount) || 50,
+            size: maxCount,
             keyword: q.keyword || '',
             language: q.language || '',
             categoryIds: q.categoryIds || '',
@@ -70,7 +71,7 @@ export class ExportController {
         }
 
         res.set({
-            'Content-Type': 'text/plain; charset=utf-8',
+            'Content-Type': 'text/markdown; charset=utf-8',
             'Content-Disposition': "attachment; filename*=UTF-8''" + encodeURIComponent('github-stars.md'),
         });
         res.send(md);

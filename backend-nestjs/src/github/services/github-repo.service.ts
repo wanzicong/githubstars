@@ -203,6 +203,7 @@ export class GithubRepoService {
         dateField?: string;
         startDate?: string;
         endDate?: string;
+        untranslatedOnly?: boolean;
     }) {
         const languages = params.language ? params.language.split(',').filter(Boolean) : [];
         const catIds = await this.expandCategoryIds(params.categoryIds || '');
@@ -215,6 +216,7 @@ export class GithubRepoService {
             dateField: params.dateField,
             startDate: params.startDate,
             endDate: params.endDate,
+            untranslatedOnly: params.untranslatedOnly,
         });
         const repos = await this.prisma.githubRepo.findMany({ where, select: { htmlUrl: true }, orderBy: { [sortField]: sortDir } });
         return repos.map((r) => r.htmlUrl).filter(Boolean) as string[];
