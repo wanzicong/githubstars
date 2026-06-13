@@ -17,7 +17,10 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:unit": "jest --testPathPattern='test/unit|src/.*\\.spec\\.ts'",
+    "test:integration": "jest --config ./test/jest-e2e.json --testPathPattern='test/integration'",
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:all": "npm run test:unit && npm run test:integration"
   },
   "dependencies": {
     "@nestjs/bull": "^11.0.4",
@@ -64,8 +67,8 @@
       "json",
       "ts"
     ],
-    "rootDir": "src",
-    "testRegex": ".*\\.spec\\.ts$",
+    "rootDir": ".",
+    "testRegex": "(src/.*\\.spec\\.ts|test/unit/.*\\.spec\\.ts)$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
