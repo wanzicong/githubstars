@@ -270,12 +270,12 @@ export class CategoryController {
      * @returns  AI 智能分类结果
      */
     @Post('categories/smart-classify')
-    @ApiOperation({ summary: 'AI 智能分类', description: '对未分类的仓库（最多 15 个）执行 AI 智能分类，自动生成分类并归入' })
+    @ApiOperation({ summary: 'AI 智能分类', description: '对未分类的仓库（最多 50 个）执行 AI 智能分类，自动生成分类并归入' })
     async smartClassify() {
         try {
             const uncat = await this.service.getUncategorized();
             if (!uncat.length) return { success: false, message: '没有未分类的仓库' };
-            const ids = uncat.slice(0, 15).map((r) => Number(r.id));
+            const ids = uncat.slice(0, 50).map((r) => Number(r.id));
             this.logger.log('开始智能分类: 未分类仓库数=' + uncat.length + ', 实际处理=' + ids.length);
             return this.aiClassify.smartClassify(ids);
         } catch (e) {

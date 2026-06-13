@@ -13,8 +13,6 @@ import {
     App,
     Row,
     Col,
-    Tag,
-    Avatar,
     Space,
     Pagination,
     Segmented,
@@ -23,15 +21,14 @@ import {
     ArrowLeftOutlined,
     ThunderboltOutlined,
     FolderOutlined,
-    StarFilled,
-    ForkOutlined,
-    GithubOutlined,
     ClearOutlined,
     AppstoreOutlined,
     UnorderedListOutlined,
 } from '@ant-design/icons'
 import * as categoriesApi from '../api/categories'
 import * as statsApi from '../api/stats'
+import RepoCard from '../components/RepoCard'
+import RepoRow from '../components/RepoRow'
 import type { Category, GithubRepo, PageResult, LanguageStatsDTO } from '../types'
 import dayjs from 'dayjs'
 
@@ -56,90 +53,6 @@ const PAGE_SIZE_OPTIONS = [12, 24, 48]
 function formatDateTime(value: string | null): string {
     if (!value) return '-'
     return dayjs(value).format('YYYY-MM-DD HH:mm:ss')
-}
-
-function formatDate(dateStr: string | null): string {
-    if (!dateStr) return '-'
-    return dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr
-}
-
-function RepoRow({ repo }: { repo: GithubRepo }) {
-    return (
-        <Card
-            hoverable
-            style={{ cursor: 'pointer' }}
-            styles={{ body: { padding: 12 } }}
-            onClick={() => {
-                window.location.href = `/stars/${repo.id}`
-            }}
-        >
-            <Row align='middle' gutter={[12, 8]}>
-                <Col xs={24} sm={12} md={14}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={36} style={{ flexShrink: 0 }} />
-                        <div style={{ minWidth: 0 }}>
-                            <Text strong style={{ fontSize: 14 }} ellipsis>
-                                <a
-                                    style={{ color: '#1677ff' }}
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        window.location.href = `/stars/${repo.id}`
-                                    }}
-                                >
-                                    {repo.repoName}
-                                </a>
-                            </Text>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                                <Text type='secondary' style={{ fontSize: 11 }}>
-                                    {repo.ownerName}
-                                </Text>
-                                {repo.language && (
-                                    <Tag color='blue' style={{ margin: 0, fontSize: 10 }}>
-                                        {repo.language}
-                                    </Tag>
-                                )}
-                            </div>
-                            {repo.descriptionCn ? (
-                                <Paragraph ellipsis={{ rows: 1 }} style={{ margin: '4px 0 0', fontSize: 12, color: '#333' }}>
-                                    {repo.descriptionCn}
-                                </Paragraph>
-                            ) : repo.description ? (
-                                <Paragraph type='secondary' ellipsis={{ rows: 1 }} style={{ margin: '4px 0 0', fontSize: 12 }}>
-                                    {repo.description}
-                                </Paragraph>
-                            ) : null}
-                        </div>
-                    </div>
-                </Col>
-                <Col xs={24} sm={12} md={10}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-                        <span>
-                            <StarFilled style={{ color: '#faad14', fontSize: 12 }} />{' '}
-                            <Text style={{ fontSize: 13 }}>{repo.starsCount}</Text>
-                        </span>
-                        <span>
-                            <ForkOutlined style={{ fontSize: 12 }} /> <Text style={{ fontSize: 13 }}>{repo.forksCount}</Text>
-                        </span>
-                        {repo.repoPushedAt &&
-                            (() => {
-                                const days = dayjs().diff(dayjs(repo.repoPushedAt), 'day')
-                                let color = 'green'
-                                if (days > 180) color = 'red'
-                                else if (days > 30) color = 'orange'
-                                return (
-                                    <Tag color={color} style={{ margin: 0, fontSize: 10 }}>
-                                        未更新 {days} 天
-                                    </Tag>
-                                )
-                            })()}
-                        <Text type='secondary' style={{ fontSize: 11 }}>
-                            Star 于 {formatDate(repo.starredAt)}
-                        </Text>
-                    </div>
-                </Col>
-            </Row>
-        </Card>
-    )
 }
 
 export default function CategoryDetail() {
@@ -422,124 +335,7 @@ export default function CategoryDetail() {
                                 <Row gutter={[16, 16]}>
                                     {repos.map((repo) => (
                                         <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
-                                            <Card
-                                                hoverable
-                                                style={{ height: '100%', cursor: 'pointer' }}
-                                                styles={{ body: { padding: 16 } }}
-                                                onClick={() => {
-                                                    window.location.href = `/stars/${repo.id}`
-                                                }}
-                                            >
-                                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-                                                    <Avatar
-                                                        src={repo.ownerAvatarUrl}
-                                                        alt={repo.ownerName}
-                                                        size={40}
-                                                        style={{ flexShrink: 0 }}
-                                                    />
-                                                    <div style={{ minWidth: 0, flex: 1 }}>
-                                                        <Text
-                                                            strong
-                                                            style={{ fontSize: 14, display: 'block', lineHeight: '20px' }}
-                                                            ellipsis
-                                                        >
-                                                            <a
-                                                                style={{ color: '#1677ff' }}
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation()
-                                                                    window.location.href = `/stars/${repo.id}`
-                                                                }}
-                                                            >
-                                                                {repo.repoName}
-                                                            </a>
-                                                        </Text>
-                                                        <Text type='secondary' style={{ fontSize: 12 }} ellipsis>
-                                                            {repo.ownerName}
-                                                        </Text>
-                                                    </div>
-                                                </div>
-                                                {repo.descriptionCn ? (
-                                                    <Paragraph
-                                                        ellipsis={{ rows: 2 }}
-                                                        style={{ marginBottom: 10, fontSize: 12, minHeight: 36, color: '#333' }}
-                                                    >
-                                                        {repo.descriptionCn}
-                                                        <Text type='secondary' style={{ fontSize: 10, marginLeft: 4 }}>
-                                                            🇨🇳
-                                                        </Text>
-                                                    </Paragraph>
-                                                ) : repo.description ? (
-                                                    <Paragraph
-                                                        type='secondary'
-                                                        ellipsis={{ rows: 2 }}
-                                                        style={{ marginBottom: 10, fontSize: 12, minHeight: 36 }}
-                                                    >
-                                                        {repo.description}
-                                                    </Paragraph>
-                                                ) : (
-                                                    <div style={{ marginBottom: 10, minHeight: 36 }} />
-                                                )}
-                                                <div
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        flexWrap: 'wrap',
-                                                        gap: 6,
-                                                        marginBottom: 8,
-                                                    }}
-                                                >
-                                                    {repo.language && (
-                                                        <Tag color='blue' style={{ margin: 0 }}>
-                                                            {repo.language}
-                                                        </Tag>
-                                                    )}
-                                                    <Space size={4}>
-                                                        <StarFilled style={{ color: '#faad14', fontSize: 12 }} />
-                                                        <Text style={{ fontSize: 12 }}>{repo.starsCount}</Text>
-                                                    </Space>
-                                                    <Space size={4}>
-                                                        <ForkOutlined style={{ fontSize: 12 }} />
-                                                        <Text style={{ fontSize: 12 }}>{repo.forksCount}</Text>
-                                                    </Space>
-                                                </div>
-                                                <div
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'space-between',
-                                                        flexWrap: 'wrap',
-                                                        gap: 4,
-                                                    }}
-                                                >
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                        <Text type='secondary' style={{ fontSize: 11 }}>
-                                                            Star 于 {formatDate(repo.starredAt)}
-                                                        </Text>
-                                                        {repo.repoPushedAt &&
-                                                            (() => {
-                                                                const days = dayjs().diff(dayjs(repo.repoPushedAt), 'day')
-                                                                let color = 'green'
-                                                                if (days > 180) color = 'red'
-                                                                else if (days > 30) color = 'orange'
-                                                                return (
-                                                                    <Tag color={color} style={{ margin: 0, fontSize: 10 }}>
-                                                                        未更新 {days} 天
-                                                                    </Tag>
-                                                                )
-                                                            })()}
-                                                    </div>
-                                                    <Button
-                                                        type='link'
-                                                        size='small'
-                                                        icon={<GithubOutlined />}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            window.open(repo.htmlUrl, '_blank')
-                                                        }}
-                                                        style={{ padding: 0 }}
-                                                    />
-                                                </div>
-                                            </Card>
+                                            <RepoCard repo={repo} />
                                         </Col>
                                     ))}
                                 </Row>

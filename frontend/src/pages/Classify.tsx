@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Card, Button, Table, Tag, Select, Input, Row, Col, Typography, Spin, App } from 'antd'
-import { GithubOutlined, RobotOutlined, ClearOutlined, FilterOutlined } from '@ant-design/icons'
+import { GithubOutlined, RobotOutlined, ClearOutlined, FilterOutlined, CloseOutlined } from '@ant-design/icons'
 import * as classifyApi from '../api/classify'
 import * as categoriesApi from '../api/categories'
 import type { GithubRepo } from '../types'
@@ -24,11 +24,13 @@ export default function Classify() {
     const [topN, setTopN] = useState(8)
     const [loading, setLoading] = useState(false)
     const [classifying, setClassifying] = useState(false)
+    const [classifyMsg, setClassifyMsg] = useState('AI 正在分析仓库...')
     const [results, setResults] = useState<Record<string, GithubRepo[]>>({})
     const [uncategorizedIds, setUncategorizedIds] = useState<Set<number>>(new Set())
     const [showUncategorizedOnly, setShowUncategorizedOnly] = useState(false)
 
     const resultsRef = useRef<HTMLDivElement>(null)
+    const abortRef = useRef<AbortController | null>(null)
 
     const fetchRepos = async () => {
         setLoading(true)
@@ -92,11 +94,24 @@ export default function Classify() {
         setSelectedIds([])
     }
 
+    const cancelClassify = () => {
+        abortRef.current?.abort()
+        abortRef.current = null
+        setClassifying(false)
+        setClassifyMsg('AI 正在分析仓库...')
+        message.info('已取消分类操作')
+    }
+
     const handleSmartClassify = async () => {
+        abortRef.current?.abort()
+        const controller = new AbortController()
+        abortRef.current = controller
         setClassifying(true)
+        setClassifyMsg('AI 正在智能匹配现有分类...')
         setResults({})
         try {
             const res = await categoriesApi.smartClassify()
+            if (controller.signal.aborted) return
             if (res.success) {
                 message.success(
                     `智能分类完成！处理 ${res.totalProcessed || 0} 个项目，匹配现有分类 ${res.matchedExisting || 0} 个，新建 ${res.createdNew || 0} 个`,
@@ -106,18 +121,24 @@ export default function Classify() {
                 message.info(res.message || '没有需要分类的仓库')
             }
         } catch {
-            message.error('智能分类请求失败')
+            if (!controller.signal.aborted) message.error('智能分类请求失败')
         } finally {
-            setClassifying(false)
+            if (abortRef.current === controller) abortRef.current = null
+            if (!controller.signal.aborted) setClassifying(false)
         }
     }
 
     const handleClassify = async () => {
         if (selectedIds.length === 0) return
+        abortRef.current?.abort()
+        const controller = new AbortController()
+        abortRef.current = controller
         setClassifying(true)
+        setClassifyMsg(`AI 正在分析 ${selectedIds.length} 个仓库，预计需要数十秒...`)
         setResults({})
         try {
             const res = await classifyApi.executeClassify(selectedIds, topN)
+            if (controller.signal.aborted) return
             if (res.success && res.categories) {
                 setResults(res.categories)
                 message.success(`AI 分类完成，共 ${Object.keys(res.categories).length} 个分类`)
@@ -128,9 +149,10 @@ export default function Classify() {
                 message.error('AI 分类失败，请稍后重试')
             }
         } catch {
-            message.error('AI 分类请求失败')
+            if (!controller.signal.aborted) message.error('AI 分类请求失败')
         } finally {
-            setClassifying(false)
+            if (abortRef.current === controller) abortRef.current = null
+            if (!controller.signal.aborted) setClassifying(false)
         }
     }
 
@@ -320,7 +342,15 @@ export default function Classify() {
                     }}
                 >
                     <Spin size='large' />
-                    <div style={{ color: '#fff', fontSize: 16, marginTop: 16 }}>AI 正在分析仓库...</div>
+                    <div style={{ color: '#fff', fontSize: 16, marginTop: 16 }}>{classifyMsg}</div>
+                    <Button
+                        danger
+                        icon={<CloseOutlined />}
+                        onClick={cancelClassify}
+                        style={{ marginTop: 20 }}
+                    >
+                        取消分类
+                    </Button>
                 </div>
             )}
         </div>

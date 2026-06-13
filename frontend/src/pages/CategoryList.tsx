@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Card, Modal, Input, Typography, App, Space, Tag, Select, Popconfirm, Divider, Radio, Empty, Spin } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined, ReloadOutlined, FolderOutlined, FolderAddOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, EditOutlined, ReloadOutlined, FolderOutlined, FolderAddOutlined, SearchOutlined } from '@ant-design/icons'
 import * as categoriesApi from '../api/categories'
 import type { Category } from '../types'
 
@@ -14,6 +14,7 @@ export default function CategoryList() {
 
     const [categories, setCategories] = useState<Category[]>([])
     const [loading, setLoading] = useState(false)
+    const [searchText, setSearchText] = useState('')
 
     // ---- Create form state (right panel) ----
     const [createType, setCreateType] = useState<'level1' | 'level2'>('level1')
@@ -70,8 +71,15 @@ export default function CategoryList() {
         return result
     }, [categories])
 
-    // Level 1 categories: only actual Level 1 (L2 without parent go to unassigned section)
-    const level1Categories = categories.filter((c) => c.level === 1)
+    // Level 1 categories: only actual Level 1, with search filtering
+    const level1Categories = useMemo(() => {
+        let list = categories.filter((c) => c.level === 1)
+        if (searchText) {
+            const kw = searchText.toLowerCase()
+            list = list.filter((c) => c.name.toLowerCase().includes(kw) || (c.description || '').toLowerCase().includes(kw))
+        }
+        return list
+    }, [categories, searchText])
 
     // Unassigned Level 2: parentId === null but level === 2 (orphaned after move-out)
     const unassignedLevel2 = allCategories.filter((c) => c.parentId === null && c.level === 2)
@@ -218,18 +226,29 @@ export default function CategoryList() {
         <div style={{ display: 'flex', gap: 24, minHeight: 'calc(100vh - 200px)' }}>
             {/* ==================== Left Panel: Tree View ==================== */}
             <div style={{ flex: 1, overflow: 'auto', paddingBottom: 40 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
                     <Title level={4} style={{ margin: 0 }}>
                         分类管理
                     </Title>
-                    <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}>
-                        刷新
-                    </Button>
+                    <Space>
+                        <Input.Search
+                            placeholder='搜索分类名称...'
+                            allowClear
+                            value={searchText}
+                            onChange={(e) => setSearchText(e.target.value)}
+                            onSearch={setSearchText}
+                            style={{ width: 220 }}
+                            prefix={<SearchOutlined />}
+                        />
+                        <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}>
+                            刷新
+                        </Button>
+                    </Space>
                 </div>
 
                 <Spin spinning={loading}>
                     {level1Categories.length === 0 && !loading ? (
-                        <Empty description='暂无分类，请在右侧创建' style={{ marginTop: 80 }} />
+                        <Empty description={searchText ? '未找到匹配的分类' : '暂无分类，请在右侧创建'} style={{ marginTop: 80 }} />
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                             {level1Categories.map((cat) => (
@@ -397,16 +416,16 @@ export default function CategoryList() {
                                         size='small'
                                         title={
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                <FolderOutlined style={{ color: '#faad14', fontSize: 18 }} />
-                                                <span style={{ fontWeight: 600, fontSize: 15 }}>未归属的二级分类</span>
-                                                <Tag color='warning'>{unassignedLevel2.length} 个</Tag>
+                                                <FolderOutlined style={{ color: '#1677ff', fontSize: 18 }} />
+                                                <span style={{ fontWeight: 600, fontSize: 15 }}>待归类的子分类</span>
+                                                <Tag color='blue'>{unassignedLevel2.length} 个</Tag>
                                             </div>
                                         }
-                                        style={{ borderStyle: 'dashed', borderColor: '#faad14' }}
+                                        style={{ borderStyle: 'dashed', borderColor: '#1677ff' }}
                                         styles={{ body: { padding: '12px 16px' } }}
                                     >
                                         <Text type='secondary' style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
-                                            以下二级分类尚未归属到任何一级分类，请使用「移动到...」为其指定父分类。
+                                            以下子分类尚未归属到任何父分类，请使用下拉选择为其指定父分类。
                                         </Text>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                             {unassignedLevel2.map((child) => (
@@ -417,9 +436,9 @@ export default function CategoryList() {
                                                         alignItems: 'center',
                                                         justifyContent: 'space-between',
                                                         padding: '10px 14px',
-                                                        background: '#fffbe6',
+                                                        background: '#f0f5ff',
                                                         borderRadius: 8,
-                                                        border: '1px solid #ffe58f',
+                                                        border: '1px solid #d6e4ff',
                                                     }}
                                                 >
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

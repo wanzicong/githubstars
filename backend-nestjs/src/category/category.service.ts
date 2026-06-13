@@ -90,36 +90,91 @@ export class CategoryService {
     }
 
     /**
-     * 删除分类及其所有仓库关联关系
+     * 删除分类及其所有子分类和仓库关联关系（级联删除）
      *
      * @param id  分类 ID
      */
     async delete(id: number) {
-        this.logger.log('删除分类: id=' + id);
+        this.logger.log('删除分类(级联): id=' + id);
+        // 先递归删除子分类
+        const children = await this.prisma.category.findMany({ where: { parentId: BigInt(id) } });
+        for (const child of children) {
+            await this.delete(Number(child.id));
+        }
+        // 删除仓库关联
         await this.prisma.repoCategory.deleteMany({ where: { categoryId: BigInt(id) } });
+        // 删除自身
         await this.prisma.category.delete({ where: { id: BigInt(id) } });
-        this.logger.log('分类删除成功: id=' + id);
+        this.logger.log('分类删除成功(含子分类): id=' + id + ', 子分类数=' + children.length);
     }
 
     /**
-     * 批量删除分类，逐个调用 delete 方法
+     * 批量删除分类，使用事务保障原子性
      *
      * @param ids  待删除的分类 ID 列表
      */
     async batchDelete(ids: number[]) {
-        this.logger.log('批量删除分类: count=' + ids.length + ', ids=' + ids.join(','));
-        for (const id of ids) await this.delete(id);
+        this.logger.log('批量删除分类(事务): count=' + ids.length + ', ids=' + ids.join(','));
+        await this.prisma.$transaction(async (tx) => {
+            for (const id of ids) {
+                // 递归删除子分类
+                const children = await tx.category.findMany({ where: { parentId: BigInt(id) } });
+                for (const child of children) {
+                    await tx.repoCategory.deleteMany({ where: { categoryId: child.id } });
+                    await tx.category.delete({ where: { id: child.id } });
+                }
+                await tx.repoCategory.deleteMany({ where: { categoryId: BigInt(id) } });
+                await tx.category.delete({ where: { id: BigInt(id) } });
+            }
+        });
+        this.logger.log('批量删除完成: count=' + ids.length);
     }
 
     /**
-     * 将分类移动到新的父分类下
+     * 将分类移动到新的父分类下（或移至顶级）
      *
      * @param id       被移动的分类 ID
-     * @param parentId 目标父分类 ID
+     * @param parentId 目标父分类 ID，null 表示移至顶级
      */
-    async moveToParent(id: number, parentId: number) {
-        this.logger.log('移动分类: id=' + id + ' -> parentId=' + parentId);
-        await this.prisma.category.update({ where: { id: BigInt(id) }, data: { parentId: BigInt(parentId), updatedAt: new Date() } });
+    async moveToParent(id: number, parentId: number | null) {
+        const cat = await this.prisma.category.findUnique({ where: { id: BigInt(id) } });
+        if (!cat) throw new Error('分类不存在');
+
+        // 移至顶级
+        if (parentId === null || parentId === undefined) {
+            this.logger.log('移动分类到顶级: id=' + id);
+            await this.prisma.category.update({
+                where: { id: BigInt(id) },
+                data: { parentId: null, level: 1, updatedAt: new Date() },
+            });
+            return;
+        }
+
+        // 校验：不能将自己作为父分类
+        if (parentId === id) throw new Error('不能将分类移动到自身下');
+
+        // 校验：目标父分类必须存在
+        const parent = await this.prisma.category.findUnique({ where: { id: BigInt(parentId) } });
+        if (!parent) throw new Error('目标父分类不存在');
+
+        // 校验：不能形成循环引用（检测移动后是否会导致祖先链包含自身）
+        if (parent.parentId) {
+            let ancestorId: bigint | null = parent.parentId;
+            while (ancestorId) {
+                if (ancestorId === BigInt(id)) throw new Error('不能形成循环引用');
+                const ancestor = await this.prisma.category.findUnique({ where: { id: ancestorId } });
+                ancestorId = ancestor?.parentId ?? null;
+            }
+        }
+
+        // 自动更新 level：父分类是顶级 → 子为 level 2
+        const newLevel = parent.level === 1 ? 2 : (parent.level ?? 1) + 1;
+
+        this.logger.log('移动分类: id=' + id + ' -> parentId=' + parentId + ', newLevel=' + newLevel);
+        await this.prisma.category.update({
+            where: { id: BigInt(id) },
+            data: { parentId: BigInt(parentId), level: newLevel, updatedAt: new Date() },
+        });
         this.logger.log('分类移动成功: id=' + id);
     }
 
@@ -226,7 +281,7 @@ export class CategoryService {
     }
 
     /**
-     * 批量将仓库从源分类转移到目标分类
+     * 批量将仓库从源分类转移到目标分类（使用批量操作）
      *
      * @param repoIds  仓库 ID 列表
      * @param fromId   源分类 ID
@@ -234,10 +289,16 @@ export class CategoryService {
      */
     async batchTransferRepos(repoIds: number[], fromId: number, toId: number) {
         this.logger.log('批量转移仓库: fromId=' + fromId + ' -> toId=' + toId + ', count=' + repoIds.length);
-        for (const r of repoIds) {
-            await this.prisma.repoCategory.deleteMany({ where: { repoId: BigInt(r), categoryId: BigInt(fromId) } });
-            await this.prisma.repoCategory.create({ data: { repoId: BigInt(r), categoryId: BigInt(toId), createdAt: new Date() } });
-        }
+        const bidRepoIds = repoIds.map((r) => BigInt(r));
+        await this.prisma.$transaction([
+            this.prisma.repoCategory.deleteMany({
+                where: { repoId: { in: bidRepoIds }, categoryId: BigInt(fromId) },
+            }),
+            this.prisma.repoCategory.createMany({
+                data: repoIds.map((r) => ({ repoId: BigInt(r), categoryId: BigInt(toId), createdAt: new Date() })),
+                skipDuplicates: true,
+            }),
+        ]);
         this.logger.log('批量转移完成: count=' + repoIds.length);
     }
 
@@ -304,18 +365,47 @@ export class CategoryService {
 
     /**
      * 将分类 ID 列表展开为叶子分类 ID：一级分类自动展开为其所有子分类
+     * 使用批量查询避免 N+1 问题
      *
      * @param ids  分类 ID 列表（可能包含一级和二级分类）
      * @returns    仅包含二级分类（叶子节点）的 ID 列表
      */
     async expandCategoryIds(ids: number[]): Promise<number[]> {
+        if (!ids.length) return [];
+        const bidIds = ids.map((id) => BigInt(id));
+        // 一次查询获取所有分类
+        const allCats = await this.prisma.category.findMany({ where: { id: { in: bidIds } } });
+        // 收集所有需要查询子分类的一级分类 ID
+        const level1Ids = allCats.filter((c) => c.level === 1).map((c) => c.id);
+        // 一次查询获取所有子分类
+        const children = level1Ids.length
+            ? await this.prisma.category.findMany({ where: { parentId: { in: level1Ids } }, select: { id: true, parentId: true } })
+            : [];
+        // 按 parentId 分组
+        const childrenByParent = new Map<string, bigint[]>();
+        for (const c of children) {
+            const pid = String(c.parentId);
+            if (!childrenByParent.has(pid)) childrenByParent.set(pid, []);
+            childrenByParent.get(pid)!.push(c.id);
+        }
+        // 构建结果
         const result: number[] = [];
-        for (const id of ids) {
-            const cat = await this.prisma.category.findUnique({ where: { id: BigInt(id) } });
-            if (cat?.level === 1) {
-                const children = await this.prisma.category.findMany({ where: { parentId: BigInt(id) }, select: { id: true } });
-                result.push(...(children.length > 0 ? children.map((c) => Number(c.id)) : [id]));
-            } else result.push(id);
+        const seen = new Set<number>();
+        for (const cat of allCats) {
+            if (cat.level === 1) {
+                const childIds = childrenByParent.get(String(cat.id)) || [];
+                for (const cid of childIds) {
+                    const nid = Number(cid);
+                    if (!seen.has(nid)) { seen.add(nid); result.push(nid); }
+                }
+                if (!childIds.length && !seen.has(Number(cat.id))) {
+                    seen.add(Number(cat.id));
+                    result.push(Number(cat.id));
+                }
+            } else {
+                const nid = Number(cat.id);
+                if (!seen.has(nid)) { seen.add(nid); result.push(nid); }
+            }
         }
         return result;
     }
