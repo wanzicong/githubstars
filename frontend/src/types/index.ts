@@ -24,6 +24,8 @@ export interface GithubRepo {
     repoPushedAt: string | null
     starredAt: string | null
     categoryNames: string[]
+    /** 新标签系统 — 仓库的多维标签名列表 */
+    tagNames?: string[]
     /** 翻译状态 (NestJS 增强字段) */
     translationStatus?: {
         description: 'completed' | 'pending' | 'none'

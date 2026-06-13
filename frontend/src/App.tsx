@@ -10,9 +10,6 @@ const StarList = lazy(() => import('./pages/StarList'))
 const StarDetail = lazy(() => import('./pages/StarDetail'))
 const Stats = lazy(() => import('./pages/Stats'))
 const Sync = lazy(() => import('./pages/Sync'))
-const Classify = lazy(() => import('./pages/Classify'))
-const CategoryList = lazy(() => import('./pages/CategoryList'))
-const CategoryDetail = lazy(() => import('./pages/CategoryDetail'))
 const AuthorList = lazy(() => import('./pages/AuthorList'))
 const AuthorDetail = lazy(() => import('./pages/AuthorDetail'))
 const Settings = lazy(() => import('./pages/Settings'))
@@ -70,9 +67,6 @@ export default function App() {
                                 <Route path='/stars/:id' element={<LazyPage Page={StarDetail} />} />
                                 <Route path='/stats' element={<LazyPage Page={Stats} />} />
                                 <Route path='/sync' element={<LazyPage Page={Sync} />} />
-                                <Route path='/ai/classify' element={<LazyPage Page={Classify} />} />
-                                <Route path='/categories' element={<LazyPage Page={CategoryList} />} />
-                                <Route path='/categories/:id' element={<LazyPage Page={CategoryDetail} />} />
                                 <Route path='/authors' element={<LazyPage Page={AuthorList} />} />
                                 <Route path='/authors/:ownerName' element={<LazyPage Page={AuthorDetail} />} />
                                 <Route path='/settings' element={<LazyPage Page={Settings} />} />

@@ -159,6 +159,7 @@ export class GithubRepoService {
             this.prisma.githubRepo.findMany({ where, orderBy: { [sortField]: sortDir }, skip: (page - 1) * size, take: size }),
         ]);
         await this.fillCategoryNames(records);
+        await this.fillTagNames(records);
         // 附加翻译状态（前端列表可直接展示翻译徽标）
         const enriched = records.map((r) => ({
             ...r,
@@ -183,6 +184,7 @@ export class GithubRepoService {
         if (!repo) return null;
         const result = { ...repo, categoryNames: [] as string[] };
         await this.fillCategoryNames([result]);
+        await this.fillTagNames([result]);
         return result;
     }
 
@@ -304,6 +306,30 @@ export class GithubRepoService {
             map.set(m.repoId, list);
         }
         for (const r of repos) r.categoryNames = map.get(r.id) || [];
+    }
+
+    /**
+     * 为仓库列表批量填充标签名称（按维度分组）
+     *
+     * 通过 repo_tag 关联表查询每个仓库的标签信息（含维度名），
+     * 并将结果写入每个仓库对象的 tagNames 属性。
+     *
+     * @param repos 仓库对象数组（会被原地修改写入 tagNames）
+     */
+    async fillTagNames(repos: Array<{ id: bigint; tagNames?: string[] }>) {
+        if (!repos.length) return;
+        const ids = repos.map((r) => r.id);
+        const mappings = await this.prisma.repoTag.findMany({
+            where: { repoId: { in: ids } },
+            include: { tag: { include: { group: true } } },
+        });
+        const map = new Map<bigint, string[]>();
+        for (const m of mappings) {
+            const list = map.get(m.repoId) || [];
+            list.push(m.tag.name);
+            map.set(m.repoId, list);
+        }
+        for (const r of repos) r.tagNames = map.get(r.id) || [];
     }
 
     /**

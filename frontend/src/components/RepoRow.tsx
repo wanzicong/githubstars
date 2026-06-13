@@ -51,11 +51,11 @@ const RepoRow = memo(function RepoRow({ repo }: RepoRowProps) {
                                         {repo.language}
                                     </Tag>
                                 )}
-                                {repo.categoryNames &&
-                                    repo.categoryNames.length > 0 &&
-                                    repo.categoryNames.slice(0, 2).map((cat) => (
-                                        <Tag key={cat} color='green' style={{ margin: 0, fontSize: 12 }}>
-                                            {cat}
+                                {repo.tagNames &&
+                                    repo.tagNames.length > 0 &&
+                                    repo.tagNames.slice(0, 2).map((t) => (
+                                        <Tag key={t} color='cyan' style={{ margin: 0, fontSize: 12, borderRadius: 10 }}>
+                                            {t}
                                         </Tag>
                                     ))}
                                 {repo.readmeFetched && repo.readmeCn ? (

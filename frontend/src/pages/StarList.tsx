@@ -4,7 +4,6 @@ import {
     Card,
     Input,
     Select,
-    TreeSelect,
     Button,
     Row,
     Col,
@@ -46,7 +45,6 @@ import dayjs from '../setupDayjs'
 import * as statsApi from '../api/stats'
 import * as starsApi from '../api/stars'
 import * as translateApi from '../api/translate'
-import * as categoriesApi from '../api/categories'
 import * as analyzeApi from '../api/analyze'
 import * as cloneApi from '../api/clone'
 import { buildTargetPath, sanitizeSubdirectory } from '../utils/clonePath'
@@ -54,7 +52,7 @@ import RepoCard from '../components/RepoCard'
 import RepoRow from '../components/RepoRow'
 import TranslatePanel from '../components/TranslatePanel'
 import MarkdownRenderer from '../components/MarkdownRenderer'
-import type { Category, GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
+import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
 
 const { Title, Text } = Typography
 
@@ -99,8 +97,6 @@ export default function StarList() {
     const keyword = searchParams.get('keyword') || ''
     const languageStr = searchParams.get('languages') || ''
     const selectedLanguages = languageStr ? languageStr.split(',') : []
-    const categoryIdsStr = searchParams.get('categoryIds') || ''
-    const selectedCategoryIds = categoryIdsStr ? categoryIdsStr.split(',') : []
     const sortBy = searchParams.get('sortBy') || 'starred_at'
     const sortOrder = searchParams.get('sortOrder') || 'desc'
     const dateField = searchParams.get('dateField') || undefined
@@ -240,21 +236,18 @@ export default function StarList() {
     const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({ records: [], total: 0, size: 12, current: 1, pages: 0 })
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
-    const [categoryOptions, setCategoryOptions] = useState<Category[]>([])
     const [loading, setLoading] = useState(true)
     const [initialLoading, setInitialLoading] = useState(true)
 
     useEffect(() => {
         const loadMeta = async () => {
             try {
-                const [overviewRes, langRes, catRes] = await Promise.allSettled([
+                const [overviewRes, langRes] = await Promise.allSettled([
                     statsApi.fetchOverviewStats(),
                     statsApi.fetchLanguageStats(),
-                    categoriesApi.fetchAllCategories(),
                 ])
                 if (overviewRes.status === 'fulfilled') setOverview(overviewRes.value)
                 if (langRes.status === 'fulfilled') setLanguageOptions(langRes.value)
-                if (catRes.status === 'fulfilled') setCategoryOptions(catRes.value)
             } catch {
             } finally {
                 setInitialLoading(false)
@@ -273,7 +266,7 @@ export default function StarList() {
                     size: pageSize,
                     keyword: keyword || undefined,
                     language: languageStr || undefined,
-                    categoryIds: categoryIdsStr || undefined,
+                    
                     sortBy: sortBy || undefined,
                     sortOrder: sortOrder || undefined,
                     dateField: dateField || undefined,
@@ -297,7 +290,7 @@ export default function StarList() {
         pageSize,
         keyword,
         languageStr,
-        categoryIdsStr,
+        
         sortBy,
         sortOrder,
         dateField,
@@ -311,7 +304,6 @@ export default function StarList() {
         setUrlParams({
             keyword: null,
             languages: null,
-            categoryIds: null,
             timePreset: null,
             sortBy: 'starred_at',
             sortOrder: 'desc',
@@ -378,7 +370,7 @@ export default function StarList() {
                                 size: pageSize,
                                 keyword: keyword || undefined,
                                 language: languageStr || undefined,
-                                categoryIds: categoryIdsStr || undefined,
+                                
                                 sortBy: sortBy || undefined,
                                 sortOrder: sortOrder || undefined,
                                 dateField: dateField || undefined,
@@ -391,7 +383,7 @@ export default function StarList() {
                 } catch {}
             }, 2000)
         },
-        [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr],
+        [currentPage, pageSize, keyword, languageStr,  sortBy, sortOrder, dateField, startDateStr, endDateStr],
     )
 
     const handleAiAnalyze = useCallback(async () => {
@@ -400,7 +392,7 @@ export default function StarList() {
             const result = await analyzeApi.startAnalyze({
                 keyword: keyword || undefined,
                 language: languageStr || undefined,
-                categoryIds: categoryIdsStr || undefined,
+                
                 sortBy: sortBy || undefined,
                 sortOrder: sortOrder || undefined,
             })
@@ -429,7 +421,7 @@ export default function StarList() {
         } finally {
             setAnalyzing(false)
         }
-    }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder])
+    }, [keyword, languageStr,  sortBy, sortOrder])
 
     const handleCloseAnalyzeModal = useCallback(() => {
         if (analyzePollingRef.current) clearInterval(analyzePollingRef.current)
@@ -566,7 +558,7 @@ export default function StarList() {
             const blob = await starsApi.exportStarsUrls({
                 keyword: keyword || undefined,
                 language: languageStr || undefined,
-                categoryIds: categoryIdsStr || undefined,
+                
                 sortBy: sortBy || undefined,
                 sortOrder: sortOrder || undefined,
                 dateField: dateField || undefined,
@@ -585,14 +577,13 @@ export default function StarList() {
         } catch {
             console.error('导出失败')
         }
-    }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly])
+    }, [keyword, languageStr,  sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly])
 
     const handleExportMd = useCallback(async () => {
         try {
             const params = new URLSearchParams()
             if (keyword) params.set('keyword', keyword)
             if (languageStr) params.set('language', languageStr)
-            if (categoryIdsStr) params.set('categoryIds', categoryIdsStr)
             if (sortBy) params.set('sortBy', sortBy)
             if (sortOrder) params.set('sortOrder', sortOrder)
             if (dateField) params.set('dateField', dateField)
@@ -623,7 +614,7 @@ export default function StarList() {
         } catch {
             message.error('导出MD失败')
         }
-    }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, pageResult?.total])
+    }, [keyword, languageStr,  sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, pageResult?.total])
 
     const [cloneModalVisible, setCloneModalVisible] = useState(false)
     const [cloneDirModalVisible, setCloneDirModalVisible] = useState(false)
@@ -707,7 +698,7 @@ export default function StarList() {
             const data = await cloneApi.startClone({
                 keyword: keyword || undefined,
                 language: languageStr || undefined,
-                categoryIds: categoryIdsStr || undefined,
+                
                 maxCount: totalCount,
                 subDirectory: cloneSubDir.trim() || undefined,
                 dateField: dateField || undefined,
@@ -761,7 +752,7 @@ export default function StarList() {
     }, [
         keyword,
         languageStr,
-        categoryIdsStr,
+        
         cloneSubDir,
         dateField,
         startDateStr,
@@ -818,8 +809,7 @@ export default function StarList() {
         () => languageOptions.map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })),
         [languageOptions],
     )
-    const categoryTreeData = useMemo(() => {
-        const buildTree = (cats: Category[]): any[] => {
+        const buildTree = (cats: any[]): any[] => {
             return cats.map((cat) => {
                 const node: any = {
                     title: (cat.level === 1 ? '📁 ' : '📂 ') + cat.name + ' (' + cat.repoCount + ')',
@@ -832,13 +822,10 @@ export default function StarList() {
                 return node
             })
         }
-        return buildTree(categoryOptions.filter((c) => c.level === 1 || !c.parentId))
-    }, [categoryOptions])
 
     const hasActiveFilters =
         keyword.trim() !== '' ||
         languageStr !== '' ||
-        categoryIdsStr !== '' ||
         dateField !== undefined ||
         !!startDateStr ||
         !!endDateStr ||
@@ -941,21 +928,6 @@ export default function StarList() {
                                 showSearch
                                 maxTagCount={3}
                                 filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
-                                style={{ width: '100%' }}
-                            />
-                        </Col>
-                        <Col xs={24} sm={12} md={6} lg={4}>
-                            <TreeSelect
-                                treeData={categoryTreeData}
-                                value={selectedCategoryIds}
-                                onChange={(vals) => setUrlParam('categoryIds', vals.length > 0 ? vals.join(',') : null)}
-                                placeholder='筛选分类'
-                                treeCheckable
-                                showCheckedStrategy={TreeSelect.SHOW_CHILD}
-                                allowClear
-                                showSearch
-                                maxTagCount={2}
-                                filterTreeNode={(input, node) => (node?.title as string)?.toLowerCase().includes(input.toLowerCase())}
                                 style={{ width: '100%' }}
                             />
                         </Col>
@@ -1388,7 +1360,7 @@ export default function StarList() {
                 filters={{
                     keyword: keyword || undefined,
                     language: languageStr || undefined,
-                    categoryIds: categoryIdsStr || undefined,
+                    
                     sortBy: sortBy || undefined,
                     sortOrder: sortOrder || undefined,
                     dateField: dateField || undefined,
@@ -1404,7 +1376,7 @@ export default function StarList() {
                             size: pageSize,
                             keyword: keyword || undefined,
                             language: languageStr || undefined,
-                            categoryIds: categoryIdsStr || undefined,
+                            
                             sortBy: sortBy || undefined,
                             sortOrder: sortOrder || undefined,
                             dateField: dateField || undefined,
