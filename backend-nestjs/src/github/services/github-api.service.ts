@@ -221,36 +221,62 @@ export class GithubApiService {
 
     const url = `${GITHUB_API}/repos/${encodeURIComponent(fullName)}/readme`
 
-    const controller = new AbortController()
-    const readmeTimeout = setTimeout(() => controller.abort(), 30_000)
+    const doFetch = async (useAuth: boolean): Promise<{ status: number; body: string | null }> => {
+      const controller = new AbortController()
+      const readmeTimeout = setTimeout(() => controller.abort(), 30_000)
+      try {
+        const hdrs = { ...headers }
+        if (!useAuth) delete hdrs['Authorization']
+        const response = await fetch(url, { headers: hdrs, signal: controller.signal })
+        const body = response.status === 200 ? await response.text() : null
+        return { status: response.status, body }
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') {
+          throw new Error('GitHub API 网络超时')
+        }
+        const msg = e instanceof Error ? e.message : String(e)
+        throw new Error(`GitHub API 网络错误: ${msg}`)
+      } finally {
+        clearTimeout(readmeTimeout)
+      }
+    }
 
     try {
-      const response = await fetch(url, { headers, signal: controller.signal })
+      let result = await doFetch(!!token)
 
-      console.log(`[GithubApi] README 响应状态: ${response.status} (${fullName})`)
+      console.log(`[GithubApi] README 响应状态: ${result.status} (${fullName})`)
 
-      if (response.status === 200) {
-        const content = await response.text()
-        console.log(`[GithubApi] README 获取成功: ${fullName}, 大小=${content.length} 字符`)
-        return content
+      if (result.status === 200) {
+        console.log(`[GithubApi] README 获取成功: ${fullName}, 大小=${result.body!.length} 字符`)
+        return result.body
       }
 
-      if (response.status === 404) {
+      // P0-FIX: 带 Token 返回 404 时，可能是 Token 无该组织 SSO 授权，回退到无认证重试
+      if (result.status === 404 && token) {
+        console.log(`[GithubApi] 带 Token 返回 404，回退到无认证重试: ${fullName}`)
+        result = await doFetch(false)
+        console.log(`[GithubApi] 无认证重试状态: ${result.status} (${fullName})`)
+        if (result.status === 200) {
+          console.log(`[GithubApi] README 无认证获取成功: ${fullName}, 大小=${result.body!.length} 字符`)
+          return result.body
+        }
+      }
+
+      if (result.status === 404) {
         console.log(`[GithubApi] 仓库 ${fullName} 没有 README 文件`)
         return null
       }
 
-      if (response.status === 403) {
+      if (result.status === 403) {
         console.error(`[GithubApi] README API 限流: ${fullName}`)
         throw new Error('GitHub API rate limited')
       }
 
-      const errorBody = await response.text().catch(() => '(无法读取响应体)')
-      console.error(`[GithubApi] README 请求失败: ${fullName}, status=${response.status}, body=${errorBody.substring(0, 300)}`)
-      throw new Error(`GitHub API error: ${response.status}`)
+      console.error(`[GithubApi] README 请求失败: ${fullName}, status=${result.status}`)
+      throw new Error(`GitHub API error: ${result.status}`)
     } catch (err) {
       if (err instanceof Error && err.message.startsWith('GitHub API')) {
-        throw err // 重新抛出已知错误
+        throw err
       }
       if ((err as Error).name === 'AbortError') {
         console.error(`[GithubApi] README 请求超时 (30s): ${fullName}`)
@@ -259,8 +285,6 @@ export class GithubApiService {
       const msg = err instanceof Error ? err.message : String(err)
       console.error(`[GithubApi] README 请求异常: ${fullName}, ${msg}`)
       throw new Error(`GitHub API 网络错误: ${msg}`)
-    } finally {
-      clearTimeout(readmeTimeout)
     }
   }
 
