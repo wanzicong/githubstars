@@ -123,7 +123,7 @@ export default function StarDetail() {
   // 异步翻译进度
   const [translateTaskId, setTranslateTaskId] = useState<number | null>(null)
   const [translateModalVisible, setTranslateModalVisible] = useState(false)
-  const [translateProgress, setTranslateProgress] = useState<{ status: string; progress: number; readmeCompleted: number; readmeFailed: number; readmeTotal: number } | null>(null)
+  const [translateProgress, setTranslateProgress] = useState<translateApi.TranslateTaskProgress | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const repoIdRef = useRef<number | null>(null)
 
@@ -140,7 +140,7 @@ export default function StarDetail() {
       try {
         const res = await translateApi.getTaskProgress(taskId)
         if (res.success) {
-          setTranslateProgress({ status: res.status, progress: res.progress, readmeCompleted: res.readmeCompleted, readmeFailed: res.readmeFailed, readmeTotal: res.readmeTotal })
+          setTranslateProgress(res)
           // COMPLETED / FAILED / PARTIAL 都是终态
           if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
             stopPolling()
@@ -264,7 +264,7 @@ export default function StarDetail() {
       const result = await translateApi.startSingleReadme(repo.id)
       if (result.success && result.taskId) {
         setTranslateTaskId(result.taskId)
-        setTranslateProgress({ status: 'PENDING', progress: 0, readmeCompleted: 0, readmeFailed: 0, readmeTotal: 1 })
+        setTranslateProgress({ status: 'PENDING', progress: 0, readmeCompleted: 0, readmeFailed: 0, readmeTotal: 1 } as translateApi.TranslateTaskProgress)
         setTranslateModalVisible(true)
         startPolling(result.taskId)
         message.success('翻译任务已提交，正在后台执行...')
@@ -286,7 +286,7 @@ export default function StarDetail() {
       const result = await translateApi.retranslateReadme(repo.id)
       if (result.success && result.taskId) {
         setTranslateTaskId(result.taskId)
-        setTranslateProgress({ status: 'PENDING', progress: 0, readmeCompleted: 0, readmeFailed: 0, readmeTotal: 1 })
+        setTranslateProgress({ status: 'PENDING', progress: 0, readmeCompleted: 0, readmeFailed: 0, readmeTotal: 1 } as translateApi.TranslateTaskProgress)
         setTranslateModalVisible(true)
         startPolling(result.taskId)
         message.success('重新翻译任务已提交，正在后台执行...')
@@ -791,7 +791,10 @@ export default function StarDetail() {
                 {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed === 0 && (
                   <div style={{ fontSize: 48, marginBottom: 8 }}><CheckCircleOutlined style={{ color: '#52c41a' }} /></div>
                 )}
-                {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed > 0 && (
+                {(translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed > 0) || translateProgress.status === 'PARTIAL' && (
+                  <div style={{ fontSize: 48, marginBottom: 8 }}><CloseCircleOutlined style={{ color: '#ff4d4f' }} /></div>
+                )}
+                {translateProgress.status === 'FAILED' && (
                   <div style={{ fontSize: 48, marginBottom: 8 }}><CloseCircleOutlined style={{ color: '#ff4d4f' }} /></div>
                 )}
                 <Progress
@@ -802,7 +805,7 @@ export default function StarDetail() {
                 />
                 <div style={{ marginTop: 16, fontSize: 14, color: '#666' }}>
                   {translateProgress.status === 'PENDING' && '等待执行...'}
-                  {translateProgress.status === 'PROCESSING' && '正在翻译 README...'}
+                  {translateProgress.status === 'PROCESSING' && '正在获取 GitHub README → 调用 DeepSeek 翻译...'}
                   {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed === 0 && '翻译完成！'}
                   {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed > 0 && '翻译完成（部分失败）'}
                   {translateProgress.status === 'PARTIAL' && '部分翻译完成'}
@@ -810,17 +813,56 @@ export default function StarDetail() {
                 </div>
               </div>
             </Spin>
-            <Alert
-              style={{ marginTop: 12, textAlign: 'left' }}
-              type="info"
-              showIcon
-              message={
-                <div style={{ fontSize: 13 }}>
-                  <div>正在获取 GitHub README 并调用 DeepSeek 翻译，请耐心等待...</div>
-                  <div style={{ marginTop: 4 }}>超时时间：5 分钟 | 失败自动重试 3 次</div>
-                </div>
-              }
-            />
+
+            {/* 每项执行的详细状态 */}
+            {(translateProgress.completedDetails?.length || translateProgress.failedDetails?.length) ? (
+              <div style={{ marginTop: 16, textAlign: 'left' }}>
+                {translateProgress.completedDetails?.map((item, i) => (
+                  <Alert
+                    key={'ok-' + i}
+                    style={{ marginBottom: 8 }}
+                    type={item.note === '该仓库没有 README 文件' ? 'warning' : 'success'}
+                    showIcon
+                    message={
+                      <div style={{ fontSize: 13 }}>
+                        <Text strong>{item.fullName}</Text>
+                        <Text type="secondary" style={{ marginLeft: 8 }}>
+                          {item.note === '翻译成功' ? '✅ 翻译成功，页面已更新' : item.note === '该仓库没有 README 文件' ? '⚠️ 该仓库在 GitHub 上没有 README 文件' : '📝 ' + item.note}
+                        </Text>
+                      </div>
+                    }
+                  />
+                ))}
+                {translateProgress.failedDetails?.map((item, i) => (
+                  <Alert
+                    key={'fail-' + i}
+                    style={{ marginBottom: 8 }}
+                    type="error"
+                    showIcon
+                    message={
+                      <div style={{ fontSize: 13 }}>
+                        <Text strong>{item.fullName}</Text>
+                        <div>
+                          <Text type="danger">❌ {item.error}</Text>
+                        </div>
+                      </div>
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <Alert
+                style={{ marginTop: 12, textAlign: 'left' }}
+                type="info"
+                showIcon
+                message={
+                  <div style={{ fontSize: 13 }}>
+                    <div>正在获取 GitHub README 并调用 DeepSeek 翻译，请耐心等待...</div>
+                    <div style={{ marginTop: 4 }}>超时时间：约 8 分钟 | 失败自动重试 3 次</div>
+                  </div>
+                }
+              />
+            )}
           </div>
         )}
       </Modal>

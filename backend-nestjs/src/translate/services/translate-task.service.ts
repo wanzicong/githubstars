@@ -41,16 +41,15 @@ export class TranslateTaskService {
     }
   }
 
-  /** P1-FIX: 识别限流错误用更长退避 */
+  /** 处理单个翻译项，带重试 + 状态记录 */
   private async processItem(item: any) {
     await this.acquire()
     try {
-      let success = false, attempts = 0, lastError = ''
+      let success = false, attempts = 0, resultNote = ''
 
       while (attempts < MAX_ATTEMPTS && !success) {
         if (attempts > 0) {
-          // 限流错误用 60s 退避，普通错误用指数退避
-          const isRateLimited = lastError.toLowerCase().includes('rate limit')
+          const isRateLimited = resultNote.toLowerCase().includes('rate limit')
           const delay = isRateLimited ? RATE_LIMIT_BACKOFF_MS : Math.pow(2, attempts) * 1000
           this.logger.warn(`翻译重试 item=${item.id} attempt=${attempts}/${MAX_ATTEMPTS} delay=${delay}ms`)
           await new Promise(r => setTimeout(r, delay))
@@ -62,24 +61,31 @@ export class TranslateTaskService {
           const repoId = Number(item.repoId)
           if (item.translateType === 'description') {
             const r = await this.translate.translateDescription(repoId)
-            if (r !== null && (r as any) !== '__RATE_LIMITED__') success = true
-            else lastError = r === ('__RATE_LIMITED__' as any) ? 'DeepSeek API rate limited' : '翻译返回空结果'
+            if (r !== null && (r as any) !== '__RATE_LIMITED__') { success = true; resultNote = '翻译成功' }
+            else resultNote = r === ('__RATE_LIMITED__' as any) ? 'DeepSeek API 限流' : '翻译返回空结果'
           } else {
             const r = await this.translate.translateReadme(repoId)
-            if (r !== null && (r as any) !== '__RATE_LIMITED__') success = true
-            else lastError = r === ('__RATE_LIMITED__' as any) ? 'DeepSeek API rate limited' : '翻译返回空结果'
+            if ((r as any) === '__NO_README__') {
+              success = true
+              resultNote = '该仓库没有 README 文件'
+            } else if (r !== null && (r as any) !== '__RATE_LIMITED__') {
+              success = true
+              resultNote = '翻译成功'
+            } else {
+              resultNote = r === ('__RATE_LIMITED__' as any) ? 'DeepSeek API 限流' : '翻译返回空结果'
+            }
           }
         } catch (e) {
-          lastError = e instanceof Error ? e.message : String(e)
-          this.logger.error(`翻译失败 r${attempts}: ${lastError}`)
+          resultNote = e instanceof Error ? e.message : String(e)
+          this.logger.error(`翻译失败 r${attempts}: ${resultNote}`)
         }
         if (!success) attempts++
       }
 
-      // P2-FIX: 使用事务包裹状态更新
       if (success) {
+        // 成功时也保存 resultNote，让前端能感知"翻译成功"还是"没有 README"
         await this.prisma.$transaction([
-          this.prisma.translationTaskItem.update({ where: { id: item.id }, data: { status: 'SUCCESS', updatedAt: new Date() } }),
+          this.prisma.translationTaskItem.update({ where: { id: item.id }, data: { status: 'SUCCESS', errorMessage: resultNote, updatedAt: new Date() } }),
         ])
         const task = await this.prisma.translationTask.findUnique({ where: { id: item.taskId } })
         if (task) {
@@ -90,7 +96,7 @@ export class TranslateTaskService {
         }
       } else {
         await this.prisma.$transaction([
-          this.prisma.translationTaskItem.update({ where: { id: item.id }, data: { status: 'FAILED', errorMessage: lastError, retryCount: attempts, updatedAt: new Date() } }),
+          this.prisma.translationTaskItem.update({ where: { id: item.id }, data: { status: 'FAILED', errorMessage: resultNote, retryCount: attempts, updatedAt: new Date() } }),
         ])
         const task = await this.prisma.translationTask.findUnique({ where: { id: item.taskId } })
         if (task) {
@@ -204,6 +210,17 @@ export class TranslateTaskService {
     if (!task) return { success: false, message: '任务不存在' }
     const total = task.totalItems
     const pending = total - task.completedItems - task.failedItems
+
+    // 获取已完成子项的备注，让前端看到每个仓库的实际状态
+    const successItems = await this.prisma.translationTaskItem.findMany({
+      where: { taskId: BigInt(taskId), status: 'SUCCESS' },
+      select: { fullName: true, translateType: true, errorMessage: true },
+    })
+    const failedItems = await this.prisma.translationTaskItem.findMany({
+      where: { taskId: BigInt(taskId), status: 'FAILED' },
+      select: { fullName: true, translateType: true, errorMessage: true },
+    })
+
     return {
       success: true, taskId: Number(task.id), status: task.status,
       totalItems: total, completedItems: task.completedItems, failedItems: task.failedItems, pendingItems: pending,
@@ -211,6 +228,9 @@ export class TranslateTaskService {
       readmeTotal: task.readmeTotal, readmeCompleted: task.readmeCompleted, readmeFailed: task.readmeFailed,
       createdAt: task.createdAt?.toISOString(), finishedAt: task.finishedAt?.toISOString(),
       progress: total > 0 ? Math.round(((task.completedItems + task.failedItems) * 100) / total) : 0,
+      // 前端可直接展示的状态明细
+      completedDetails: successItems.map(i => ({ fullName: i.fullName, type: i.translateType, note: i.errorMessage })),
+      failedDetails: failedItems.map(i => ({ fullName: i.fullName, type: i.translateType, error: i.errorMessage })),
     }
   }
 

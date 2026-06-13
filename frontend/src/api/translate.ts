@@ -18,6 +18,7 @@ export interface TranslateTaskProgress {
   totalItems: number
   completedItems: number
   failedItems: number
+  pendingItems: number
   descTotal: number
   descCompleted: number
   descFailed: number
@@ -27,6 +28,10 @@ export interface TranslateTaskProgress {
   createdAt: string
   finishedAt: string | null
   progress: number
+  /** 已完成项明细（成功时也有备注，如"该仓库没有 README 文件"） */
+  completedDetails?: Array<{ fullName: string; type: string; note: string }>
+  /** 失败项明细 */
+  failedDetails?: Array<{ fullName: string; type: string; error: string }>
 }
 
 export interface TaskListResult {

@@ -107,8 +107,8 @@ export class TranslateService {
       return result === '__RATE_LIMITED__' ? null : result
     }
 
-    // 404 过 → 没有 README
-    if (repo.readmeFetched && !repo.readmeOriginal && !repo.readmeCn) return ''
+    // 已确认过没有 README → 不再重试，返回哨兵让 processItem 识别为终态
+    if (repo.readmeFetched && !repo.readmeOriginal && !repo.readmeCn) return '__NO_README__' as any
 
     // 首次获取 README
     let content: string | null = null
@@ -120,9 +120,10 @@ export class TranslateService {
     }
 
     if (content === null) {
-      // 404: 仓库没有 README
+      // 确认无 README（带/不带 Token 均 404），哨兵值让 processItem 识别为终态
       await this.prisma.githubRepo.update({ where: { id: BigInt(repoId) }, data: { readmeFetched: true, readmeCn: null, updatedAt: new Date() } })
-      return ''
+      this.logger.log(`仓库 ${repo.fullName} 没有 README 文件（已确认）`)
+      return '__NO_README__' as any
     }
 
     // 保存原始内容（先不标记 fetched，等翻译成功再标记）
