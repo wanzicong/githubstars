@@ -242,8 +242,8 @@ describe('Clone API (e2e)', () => {
         });
 
         it('置顶任务排在最前（pinned 排序）', async () => {
-            const t1 = await insertCloneTask(prisma, { pinned: 0 } as any);
-            const t2 = await insertCloneTask(prisma, { pinned: 1 } as any);
+            const t1 = await insertCloneTask(prisma, { pinned: 0 });
+            const t2 = await insertCloneTask(prisma, { pinned: 1 });
 
             const res = await request(app.getHttpServer()).get('/api/clone/tasks').expect(200);
 
@@ -343,7 +343,7 @@ describe('Clone API (e2e)', () => {
 
     describe('POST /api/clone/tasks/:taskId/pin', () => {
         it('置顶未置顶任务 → 返回 pinned=true', async () => {
-            const t = await insertCloneTask(prisma, { pinned: 0 } as any);
+            const t = await insertCloneTask(prisma, { pinned: 0 });
 
             const res = await request(app.getHttpServer()).post(`/api/clone/tasks/${t.taskId}/pin`).expect(201);
 
@@ -352,7 +352,7 @@ describe('Clone API (e2e)', () => {
         });
 
         it('取消已置顶任务 → 返回 pinned=false', async () => {
-            const t = await insertCloneTask(prisma, { pinned: 1 } as any);
+            const t = await insertCloneTask(prisma, { pinned: 1 });
 
             const res = await request(app.getHttpServer()).post(`/api/clone/tasks/${t.taskId}/pin`).expect(201);
 
@@ -373,7 +373,7 @@ describe('Clone API (e2e)', () => {
 
     describe('POST /api/clone/tasks/:taskId/cancel', () => {
         it('取消 PENDING 任务 → 成功', async () => {
-            const t = await insertCloneTask(prisma, { status: 'PENDING' } as any);
+            const t = await insertCloneTask(prisma, { status: 'PENDING' });
 
             const res = await request(app.getHttpServer()).post(`/api/clone/tasks/${t.taskId}/cancel`).expect(201);
 
@@ -382,7 +382,7 @@ describe('Clone API (e2e)', () => {
         });
 
         it('取消 COMPLETED 任务 → 失败（已不可取消）', async () => {
-            const t = await insertCloneTask(prisma, { status: 'COMPLETED' } as any);
+            const t = await insertCloneTask(prisma, { status: 'COMPLETED' });
 
             const res = await request(app.getHttpServer()).post(`/api/clone/tasks/${t.taskId}/cancel`).expect(201);
 

@@ -38,7 +38,11 @@ export class LoggingService implements LoggerService, OnModuleDestroy {
 
         this.winstonLogger = winston.createLogger({
             level: 'debug',
-            format: winston.format.combine(winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }), winston.format.errors({ stack: true }), customFormat),
+            format: winston.format.combine(
+                winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
+                winston.format.errors({ stack: true }),
+                customFormat,
+            ),
             transports: [
                 // 控制台输出
                 new winston.transports.Console({

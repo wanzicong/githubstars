@@ -88,9 +88,13 @@ export class TranslateTaskService {
 
             while (attempts < MAX_ATTEMPTS && !success) {
                 if (attempts > 0) {
-                    const isRateLimited = resultNote.toLowerCase().includes('rate limit');
+                    const noteLower = resultNote.toLowerCase();
+                    const isRateLimited =
+                        noteLower.includes('rate limit') || noteLower.includes('限流') || noteLower.includes('rate limited');
                     const delay = isRateLimited ? RATE_LIMIT_BACKOFF_MS : Math.pow(2, attempts) * 1000;
-                    this.logger.warn(`翻译重试 item=${item.id} attempt=${attempts}/${MAX_ATTEMPTS} delay=${delay}ms`);
+                    this.logger.warn(
+                        `翻译重试 item=${item.id} attempt=${attempts}/${MAX_ATTEMPTS} delay=${delay}ms rateLimit=${isRateLimited} note=${resultNote.substring(0, 100)}`,
+                    );
                     await new Promise((r) => setTimeout(r, delay));
                 }
 
@@ -106,11 +110,11 @@ export class TranslateTaskService {
                         } else resultNote = r === ('__RATE_LIMITED__' as any) ? 'DeepSeek API 限流' : '翻译返回空结果';
                     } else {
                         const r = await this.translate.translateReadme(repoId);
-                        const rStr = (r as any) as string;
+                        const rStr = r as any as string;
                         if (rStr === '__NO_README__') {
                             success = true;
                             resultNote = '该仓库没有 README 文件';
-                        } else if (rStr.startsWith('__NO_README__|')) {
+                        } else if (typeof rStr === 'string' && rStr.startsWith('__NO_README__|')) {
                             success = true;
                             const ghBody = rStr.substring('__NO_README__|'.length);
                             resultNote = '该仓库没有 README 文件\nGitHub 响应: ' + ghBody;

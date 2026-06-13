@@ -44,7 +44,7 @@ export class AiClassifyService {
                 this.logger.error('DeepSeek API 返回非 200: status=' + res.status);
                 return null;
             }
-            const data = (await res.json()) as any;
+            const data = await res.json();
             let content = data.choices?.[0]?.message?.content?.trim() || null;
             if (content)
                 content = content
@@ -101,7 +101,7 @@ export class AiClassifyService {
      * @returns 分类提示词字符串
      */
     private buildPrompt(repos: any[], topN: number): string {
-        let list = repos
+        const list = repos
             .map((r, i) => {
                 const name = r.repoName || (r.fullName ? r.fullName.split('/').pop() : '');
                 const desc = String(r.descriptionCn || r.description || '').substring(0, 200);
@@ -127,7 +127,7 @@ export class AiClassifyService {
             if (cat.level === 2) names.push(cat.name);
             if (cat.children) for (const child of cat.children) if (child.level === 2) names.push(child.name);
         }
-        let catsHint = names.length > 0 ? `\n现有分类（优先匹配）：${names.join('、')}\n` : '';
+        const catsHint = names.length > 0 ? `\n现有分类（优先匹配）：${names.join('、')}\n` : '';
         const list = repos
             .map((r, i) => {
                 const desc = String(r.descriptionCn || r.description || '').substring(0, 200);

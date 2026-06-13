@@ -37,7 +37,7 @@ export class SimilarRepoService {
                 body: JSON.stringify({ model, temperature: 0.5, max_tokens: 2048, messages: msgs }),
             });
             if (!res.ok) return null;
-            const data = (await res.json()) as any;
+            const data = await res.json();
             return data.choices?.[0]?.message?.content?.trim() || null;
         } catch {
             return null;
@@ -129,7 +129,7 @@ export class SimilarRepoService {
     private async enrichWithAI(repos: any[], source: any) {
         if (!repos.length) return;
         const top = repos.slice(0, 10);
-        let list = top.map((r, i) => `${i}. ${r.fullName} ⭐${r.stars} - ${r.language} - ${r.description.substring(0, 100)}`).join('\n');
+        const list = top.map((r, i) => `${i}. ${r.fullName} ⭐${r.stars} - ${r.language} - ${r.description.substring(0, 100)}`).join('\n');
         const prompt = `源项目: ${source.fullName} (${source.descriptionCn || source.description || ''})\n\n相似项目:\n${list}\n\n为每个项目写一句推荐理由，返回 JSON 数组: ["理由1", "理由2"]`;
         try {
             const result = await this.callDeepSeek(prompt, '你是GitHub项目推荐专家。只返回要求格式的JSON，不说任何废话。');
@@ -169,7 +169,7 @@ export class SimilarRepoService {
         const seen = new Set<string>();
         seen.add(source.fullName || '');
         const keywords = await this.extractKeywords(source);
-        let allResults: any[] = [];
+        const allResults: any[] = [];
 
         for (const kw of keywords) {
             if (allResults.length >= MAX_RESULTS * 2) break;

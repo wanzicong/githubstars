@@ -337,7 +337,7 @@ describe('CategoryService', () => {
             const calls = [mockPrisma.repoCategory.deleteMany, mockPrisma.category.delete];
             const ordered = calls.every((fn, i) => {
                 if (i === 0) return true;
-                return fn.mock.invocationCallOrder[0]! > calls[i - 1]!.mock.invocationCallOrder[0]!;
+                return fn.mock.invocationCallOrder[0] > calls[i - 1].mock.invocationCallOrder[0];
             });
             expect(ordered).toBe(true);
         });
@@ -438,9 +438,9 @@ describe('CategoryService', () => {
             const deleteCalls = mockPrisma.repoCategory.deleteMany.mock.invocationCallOrder;
             const createCalls = mockPrisma.repoCategory.create.mock.invocationCallOrder;
             // repo 10: delete 先于 create
-            expect(deleteCalls[0]).toBeLessThan(createCalls[0]!);
+            expect(deleteCalls[0]).toBeLessThan(createCalls[0]);
             // repo 20: delete 先于 create
-            expect(deleteCalls[1]).toBeLessThan(createCalls[1]!);
+            expect(deleteCalls[1]).toBeLessThan(createCalls[1]);
         });
 
         it('空 repoIds 时不执行任何操作', async () => {

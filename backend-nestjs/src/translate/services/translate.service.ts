@@ -78,13 +78,13 @@ export class TranslateService {
             });
             if (res.status === 429) {
                 this.logger.warn('DeepSeek API 限流 (429)，需等待');
-                return '__RATE_LIMITED__' as any;
+                return '__RATE_LIMITED__';
             }
             if (!res.ok) {
                 this.logger.error(`DeepSeek API ${res.status}`);
                 return null;
             }
-            const data = (await res.json()) as any;
+            const data = await res.json();
             return data.choices?.[0]?.message?.content?.trim() || null;
         } catch (e) {
             if ((e as Error).name === 'AbortError') {
@@ -154,7 +154,7 @@ export class TranslateService {
         }
 
         // 已确认过没有 README → 不再重试，返回哨兵让 processItem 识别为终态
-        if (repo.readmeFetched && !repo.readmeOriginal && !repo.readmeCn) return '__NO_README__' as any;
+        if (repo.readmeFetched && !repo.readmeOriginal && !repo.readmeCn) return '__NO_README__';
 
         // 首次获取 README
         let content: string | null = null;
@@ -176,7 +176,7 @@ export class TranslateService {
             });
             this.logger.log(`仓库 ${repo.fullName} 没有 README 文件（已确认）`);
             const sentinel = githubBody ? `__NO_README__|${githubBody}` : '__NO_README__';
-            return sentinel as any;
+            return sentinel;
         }
 
         // 保存原始内容（先不标记 fetched，等翻译成功再标记）
@@ -217,10 +217,13 @@ export class TranslateService {
                 data: { readmeFetched: true, readmeCn: null, readmeOriginal: null, updatedAt: new Date() },
             });
             const sentinel = ghResult.githubBody ? `__NO_README__|${ghResult.githubBody}` : '__NO_README__';
-            return sentinel as any;
+            return sentinel;
         }
-        await this.prisma.githubRepo.update({ where: { id: BigInt(repoId) }, data: { readmeOriginal: ghResult.content, updatedAt: new Date() } });
-        const result = await this.callDeepSeek(ghResult.content!, true);
+        await this.prisma.githubRepo.update({
+            where: { id: BigInt(repoId) },
+            data: { readmeOriginal: ghResult.content, updatedAt: new Date() },
+        });
+        const result = await this.callDeepSeek(ghResult.content, true);
         if (result && result !== '__RATE_LIMITED__') {
             await this.prisma.githubRepo.update({
                 where: { id: BigInt(repoId) },

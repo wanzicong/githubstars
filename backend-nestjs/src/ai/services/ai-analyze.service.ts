@@ -70,7 +70,7 @@ export class AiAnalyzeService implements OnModuleInit {
         }
         const where: any = AND.length ? { AND } : {};
         const sortField = params.sortBy === 'stars_count' ? 'starsCount' : params.sortBy === 'forks_count' ? 'forksCount' : 'starredAt';
-        const sortDir = (params.sortOrder === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc';
+        const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
         return this.prisma.githubRepo.findMany({ where, orderBy: { [sortField]: sortDir }, take: MAX_REPOS });
     }
 
@@ -130,7 +130,7 @@ ${list}
                 }),
             });
             if (!res.ok) return `AI 服务异常 (${res.status})`;
-            const data = (await res.json()) as any;
+            const data = await res.json();
             return data.choices?.[0]?.message?.content?.trim() || null;
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);

@@ -228,7 +228,8 @@ export class GithubApiService {
             headers['Authorization'] = `Bearer ${token}`;
         }
 
-        const url = `${GITHUB_API}/repos/${encodeURIComponent(fullName)}/readme`;
+        const [owner, repo] = fullName.split('/');
+        const url = `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`;
 
         const doFetch = async (useAuth: boolean): Promise<{ status: number; body: string | null }> => {
             const controller = new AbortController();
@@ -277,10 +278,47 @@ export class GithubApiService {
                 return { content: null, githubStatus: 404, githubBody: result.body };
             }
 
+            /**
+             * P0-FIX: 403 不等于限流。GitHub 返回 403 的常见原因：
+             * 1. API rate limit exceeded（真正的限流）
+             * 2. Secondary rate limit（并发过高）
+             * 3. README > 1MB 时用 vnd.github.v3.raw 会返回 403（应回退到 json 格式）
+             * 4. 仓库被 DMCA/封锁
+             * 5. Token 无该仓库权限
+             *
+             * 这里先检查响应体是否真的是 rate limit，再决定处理方式。
+             */
             if (result.status === 403) {
-                this.logger.error('README API 限流: ' + fullName);
-                console.error(`[GithubApi] README API 限流: ${fullName}`);
-                const err = new Error('GitHub API rate limited');
+                const bodyLower = (result.body || '').toLowerCase();
+                const isRealRateLimit =
+                    bodyLower.includes('rate limit') ||
+                    bodyLower.includes('api rate limit exceeded') ||
+                    bodyLower.includes('secondary rate limit');
+
+                console.error(`[GithubApi] README 403: ${fullName}, 响应体=${result.body?.substring(0, 300)}`);
+
+                if (isRealRateLimit) {
+                    this.logger.error('README API 真正限流: ' + fullName);
+                    const err = new Error('GitHub API rate limited');
+                    (err as any).githubBody = result.body;
+                    (err as any).isRateLimit = true;
+                    throw err;
+                }
+
+                // 非限流的 403 → 可能是 raw 格式不兼容大文件，回退到 json 格式
+                console.log(`[GithubApi] 403 非限流，回退到 vnd.github.v3+json 格式: ${fullName}`);
+                const jsonResult = await this.fetchReadmeAsJson(fullName, token);
+                if (jsonResult.content !== null) {
+                    console.log(`[GithubApi] JSON 格式回退成功: ${fullName}, 大小=${jsonResult.content.length} 字符`);
+                    return { content: jsonResult.content, githubStatus: 200, githubBody: null };
+                }
+                if (jsonResult.status === 404) {
+                    return { content: null, githubStatus: 404, githubBody: jsonResult.githubBody };
+                }
+                // 回退也失败，抛出原始错误信息而非笼统的 "rate limited"
+                // 注意：错误消息中不能出现"限流"二字，否则 processItem 会误判为限流
+                const shortBody = (result.body || '无响应体').substring(0, 200);
+                const err = new Error(`GitHub API 403 (非速率限制/其他原因): ${shortBody}`);
                 (err as any).githubBody = result.body;
                 throw err;
             }
@@ -303,6 +341,55 @@ export class GithubApiService {
             this.logger.error('README 请求异常: ' + fullName + ', ' + msg);
             console.error(`[GithubApi] README 请求异常: ${fullName}, ${msg}`);
             throw new Error(`GitHub API 网络错误: ${msg}`);
+        }
+    }
+
+    /**
+     * 使用 standard JSON API 获取 README（回退方案）
+     *
+     * 当 vnd.github.v3.raw 格式因文件过大 (>1MB) 返回 403 时，
+     * 回退到标准 JSON API，返回 base64 编码的内容，需要解码。
+     *
+     * @param fullName 仓库全名
+     * @param token   GitHub Token
+     * @returns 解码后的 README 文本，失败时返回 status 和 body
+     */
+    private async fetchReadmeAsJson(
+        fullName: string,
+        token: string,
+    ): Promise<{ content: string | null; status: number; githubBody: string | null }> {
+        const headers: Record<string, string> = {
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'GithubStars-Manager',
+        };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const [owner, repo] = fullName.split('/');
+        const url = `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`;
+
+        try {
+            const response = await fetch(url, { headers });
+            const body = await response.text();
+
+            if (response.status === 200) {
+                const data = JSON.parse(body);
+                // content 是 base64 编码的，需要解码
+                if (data.content) {
+                    const decoded = Buffer.from(data.content, 'base64').toString('utf-8');
+                    console.log(`[GithubApi] JSON 格式 README 解码成功: ${fullName}, 大小=${decoded.length}`);
+                    return { content: decoded, status: 200, githubBody: null };
+                }
+                return { content: null, status: 200, githubBody: body };
+            }
+
+            console.log(`[GithubApi] JSON 格式 README 响应: status=${response.status}`);
+            return { content: null, status: response.status, githubBody: body };
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error(`[GithubApi] JSON 格式 README 请求失败: ${fullName}, ${msg}`);
+            return { content: null, status: 0, githubBody: msg };
         }
     }
 

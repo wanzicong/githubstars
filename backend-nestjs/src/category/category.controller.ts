@@ -169,7 +169,9 @@ export class CategoryController {
             await this.service.removeRepoFromCategory(parseInt(repoId), parseInt(catId));
             return { success: true, message: '移除成功' };
         } catch (e) {
-            this.logger.error('从分类移除仓库失败: catId=' + catId + ', repoId=' + repoId + ', 错误=' + (e instanceof Error ? e.message : String(e)));
+            this.logger.error(
+                '从分类移除仓库失败: catId=' + catId + ', repoId=' + repoId + ', 错误=' + (e instanceof Error ? e.message : String(e)),
+            );
             return { success: false, message: e instanceof Error ? e.message : String(e) };
         }
     }
@@ -236,7 +238,7 @@ export class CategoryController {
         try {
             const uncat = await this.service.getUncategorized();
             if (!uncat.length) return { success: false, message: '没有未分类的仓库' };
-            const ids = (uncat as any[]).slice(0, 15).map((r) => Number(r.id));
+            const ids = uncat.slice(0, 15).map((r) => Number(r.id));
             this.logger.log('开始智能分类: 未分类仓库数=' + uncat.length + ', 实际处理=' + ids.length);
             return this.aiClassify.smartClassify(ids);
         } catch (e) {

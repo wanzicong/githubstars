@@ -170,7 +170,7 @@ export class CategoryService {
                     ? 'repoUpdatedAt'
                     : 'starredAt'
         ) as string;
-        const sortDir = (params.sortOrder === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc';
+        const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
         const where: any = { id: { in: repoIds } };
         if (params.keyword)
             where.OR = [

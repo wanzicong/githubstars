@@ -79,7 +79,7 @@ export class CloneController {
             failedRepos: t.failedRepos,
             skippedRepos: t.skippedRepos,
             cancelled: t.cancelled,
-            results: (t as any).items?.map((i: any) => ({ fullName: i.fullName, status: i.status, message: i.message })),
+            results: t.items?.map((i: any) => ({ fullName: i.fullName, status: i.status, message: i.message })),
         };
     }
 

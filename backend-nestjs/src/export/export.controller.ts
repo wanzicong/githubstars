@@ -17,7 +17,9 @@ export class ExportController {
      */
     @Get('md')
     async exportMd(@Query() q: any, @Res() res: Response) {
-        this.logger.log('开始导出Markdown: keyword=' + (q.keyword || '') + ', language=' + (q.language || '') + ', maxCount=' + (q.maxCount || 50));
+        this.logger.log(
+            '开始导出Markdown: keyword=' + (q.keyword || '') + ', language=' + (q.language || '') + ', maxCount=' + (q.maxCount || 50),
+        );
         const result = await this.repoService.findPage({
             page: 1,
             size: parseInt(q.maxCount) || 50,

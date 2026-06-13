@@ -79,7 +79,7 @@ export class AuthorService {
                         : sortBy === 'starred_at'
                           ? 'starredAt'
                           : 'starredAt';
-        const d = (sortOrder === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc';
+        const d = sortOrder === 'asc' ? 'asc' : 'desc';
         const where = { ownerName };
         const [total, records] = await Promise.all([
             this.prisma.githubRepo.count({ where }),
@@ -112,7 +112,7 @@ export class AuthorService {
                       : sortBy === 'repo_pushed_at'
                         ? 'repoPushedAt'
                         : 'starredAt';
-        const d = (sortOrder === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc';
+        const d = sortOrder === 'asc' ? 'asc' : 'desc';
         const repos = await this.prisma.githubRepo.findMany({ where: { ownerName }, select: { htmlUrl: true }, orderBy: { [f]: d } });
         return repos.map((r) => r.htmlUrl).filter(Boolean);
     }

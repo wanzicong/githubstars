@@ -67,7 +67,7 @@ export class CloneService implements OnModuleInit {
      * @throws 路径包含盘符、无效路径段或非法字符时抛出异常
      */
     sanitizeSubdirectory(subDir: string): string {
-        let dir = (subDir || '')
+        const dir = (subDir || '')
             .trim()
             .replace(/\\/g, '/')
             .replace(/^\/+|\/+$/g, '');
@@ -113,7 +113,9 @@ export class CloneService implements OnModuleInit {
      */
     async checkDiskSpace(subDirectory: string, repoCount: number) {
         try {
-            const dir = subDirectory ? path.join(await this.getBaseDir(), this.sanitizeSubdirectory(subDirectory)) : await this.getBaseDir();
+            const dir = subDirectory
+                ? path.join(await this.getBaseDir(), this.sanitizeSubdirectory(subDirectory))
+                : await this.getBaseDir();
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
             let freeMB = 0;
@@ -467,7 +469,18 @@ export class CloneService implements OnModuleInit {
 
             const finalStatus = failed === 0 ? 'COMPLETED' : 'FAILED';
             await this.prisma.cloneTask.update({ where: { taskId }, data: { status: finalStatus, finishedAt: new Date() } });
-            this.logger.log('批量克隆完成: taskId=' + taskId + ', 状态=' + finalStatus + ', 完成=' + completed + ', 失败=' + failed + ', 跳过=' + skipped);
+            this.logger.log(
+                '批量克隆完成: taskId=' +
+                    taskId +
+                    ', 状态=' +
+                    finalStatus +
+                    ', 完成=' +
+                    completed +
+                    ', 失败=' +
+                    failed +
+                    ', 跳过=' +
+                    skipped,
+            );
             await this.saveHistory(subDir);
         } catch (e) {
             const errMsg = e instanceof Error ? e.message : String(e);
@@ -532,7 +545,7 @@ export class CloneService implements OnModuleInit {
         this.cancelledTasks.delete(taskId);
         this.logger.log('重试克隆失败项: taskId=' + taskId + ', 失败项数=' + failedItems.length);
         await this.prisma.cloneTask.update({ where: { taskId }, data: { status: 'RUNNING', cancelled: 0 } });
-        const targetDir = task.targetDir || await this.getBaseDir();
+        const targetDir = task.targetDir || (await this.getBaseDir());
 
         let completed = 0,
             failed = 0;
