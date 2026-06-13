@@ -58,9 +58,11 @@ export class ExportController {
         if (q.untranslatedOnly === 'true') md += `> 仅未翻译\n`;
         md += `> 导出时间: ${new Date().toISOString()}\n\n---\n\n`;
 
+        const total = repos.length;
         for (let i = 0; i < repos.length; i++) {
             const repo = repos[i];
             md += `## ${i + 1}. ${repo.fullName}\n\n`;
+            md += `> 📋 **第 ${i + 1} / ${total} 个项目**\n\n`;
             md += `- ⭐ ${repo.starsCount} | 🍴 ${repo.forksCount} | 语言: ${repo.language || '未知'}\n`;
             md += `- 🔗 [GitHub](${repo.htmlUrl})\n`;
             if (repo.homepage) md += `- 🏠 [主页](${repo.homepage})\n`;
