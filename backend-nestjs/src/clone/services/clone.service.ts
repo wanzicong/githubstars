@@ -47,7 +47,19 @@ export class CloneService implements OnModuleInit {
     async onModuleInit() {
         const maxNum = await this.cloneTaskService.getMaxTaskCounterNumber();
         this.taskCounter = maxNum;
-        this.logger.log('CloneService 初始化完成, taskCounter 恢复到: ' + maxNum);
+        // 清理重启前遗留的僵尸任务（状态为 RUNNING/PENDING 但进程已不存在）
+        const zombieTasks = await this.prisma.cloneTask.findMany({
+            where: { status: { in: ['RUNNING', 'PENDING'] } },
+            select: { taskId: true },
+        });
+        for (const t of zombieTasks) {
+            await this.prisma.cloneTask.update({
+                where: { taskId: t.taskId },
+                data: { status: 'FAILED', errorMessage: '服务重启，任务中断', finishedAt: new Date() },
+            });
+            this.logger.warn('清理僵尸克隆任务: taskId=' + t.taskId);
+        }
+        this.logger.log('CloneService 初始化完成, taskCounter 恢复到: ' + maxNum + ', 清理僵尸任务: ' + zombieTasks.length);
     }
 
     /**
@@ -148,10 +160,11 @@ export class CloneService implements OnModuleInit {
         } catch (e) {
             this.logger.error('磁盘检查失败: ' + (e instanceof Error ? e.message : String(e)));
             return {
-                success: true,
+                success: false,
                 freeSpaceMB: 0,
                 estimatedSizeMB: repoCount * 50 * 2,
-                sufficient: true,
+                requiredSizeMB: 0,
+                sufficient: false,
                 message: '磁盘检查失败: ' + (e instanceof Error ? e.message : String(e)),
             };
         }
@@ -324,7 +337,7 @@ export class CloneService implements OnModuleInit {
         try {
             // P0 FIX: 检查磁盘空间结果
             const diskCheck = await this.checkDiskSpace(params.subDirectory || '', maxCount);
-            if (!diskCheck.sufficient) {
+            if (!diskCheck.success || !diskCheck.sufficient) {
                 return { success: false, message: diskCheck.message };
             }
 
@@ -366,7 +379,7 @@ export class CloneService implements OnModuleInit {
                 sortBy: params.sortBy || 'starred_at',
                 sortOrder: params.sortOrder || 'desc',
                 untranslatedOnly: params.untranslatedOnly,
-            }).catch(console.error);
+            }).catch((e) => this.logger.error('executeBatchClone 异常: ' + (e instanceof Error ? e.message : String(e))));
 
             return { success: true, taskId, targetDirectory: targetDir };
         } catch (e) {
@@ -471,7 +484,7 @@ export class CloneService implements OnModuleInit {
                 });
             });
 
-            const finalStatus = failed === 0 ? 'COMPLETED' : 'FAILED';
+            const finalStatus = failed > 0 ? 'FAILED' : completed === 0 && skipped > 0 ? 'COMPLETED' : 'COMPLETED';
             await this.prisma.cloneTask.update({ where: { taskId }, data: { status: finalStatus, finishedAt: new Date() } });
             this.logger.log(
                 '批量克隆完成: taskId=' +
@@ -554,6 +567,7 @@ export class CloneService implements OnModuleInit {
         let completed = 0,
             failed = 0;
         await this.executeWithSemaphore(failedItems, task.concurrency, async (item) => {
+            if (this.cancelledTasks.has(taskId)) return;
             const repoName = item.fullName.split('/').pop() || '';
             // P0 FIX: 使用 buildCloneUrl 而不是直接拼接 URL（支持代理）
             const htmlUrl = `https://github.com/${item.fullName}`;
@@ -702,17 +716,19 @@ export class CloneService implements OnModuleInit {
         const repos = (result.records as any[]).filter((r: any) => r.htmlUrl);
 
         if (params.osType === 'windows') {
-            let script = `$targetDir = "${targetDir}"\nif (!(Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force }\ncd $targetDir\n\n`;
+            let script = `$targetDir = "${targetDir}"\nif (!(Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force }\nSet-Location $targetDir\n\n`;
             for (const r of repos) {
                 const name = r.repoName || r.fullName?.split('/').pop() || '';
-                script += `if (Test-Path "${name}") { Write-Host "SKIP: ${name}" } else { git clone${depth} "${r.htmlUrl}.git" "${name}" }\n`;
+                const cloneUrl = await this.buildCloneUrl(r.htmlUrl);
+                script += `if (Test-Path "${name}") { Write-Host "SKIP: ${name}" } else { git clone${depth} "${cloneUrl}" "${name}" }\n`;
             }
             return script;
         }
-        let script = `#!/bin/bash\nTARGET="${targetDir}"\nmkdir -p "$TARGET"\ncd "$TARGET"\n\n`;
+        let script = `#!/bin/bash\nset -e\nTARGET="${targetDir}"\nmkdir -p "$TARGET" || exit 1\ncd "$TARGET" || exit 1\n\n`;
         for (const r of repos) {
             const name = r.repoName || r.fullName?.split('/').pop() || '';
-            script += `if [ -d "${name}" ]; then echo "SKIP: ${name}"; else git clone${depth} "${r.htmlUrl}.git" "${name}"; fi\n`;
+            const cloneUrl = await this.buildCloneUrl(r.htmlUrl);
+            script += `if [ -d "${name}" ]; then echo "SKIP: ${name}"; else git clone${depth} "${cloneUrl}" "${name}"; fi\n`;
         }
         return script;
     }

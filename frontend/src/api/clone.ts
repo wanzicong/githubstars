@@ -37,6 +37,7 @@ export async function startClone(params: {
     concurrency?: number
     cloneDepth?: number
     maxRepoSizeMb?: number
+    untranslatedOnly?: boolean
 }): Promise<CloneStartResult> {
     const searchParams = new URLSearchParams()
     if (params.maxCount != null) searchParams.set('maxCount', String(params.maxCount))
@@ -52,6 +53,7 @@ export async function startClone(params: {
     if (params.concurrency != null) searchParams.set('concurrency', String(params.concurrency))
     if (params.cloneDepth != null) searchParams.set('cloneDepth', String(params.cloneDepth))
     if (params.maxRepoSizeMb != null) searchParams.set('maxRepoSizeMb', String(params.maxRepoSizeMb))
+    if (params.untranslatedOnly) searchParams.set('untranslatedOnly', 'true')
     const { data } = await api.post<CloneStartResult>(`/api/clone/start?${searchParams.toString()}`)
     return data
 }
