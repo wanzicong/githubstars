@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '../../config/config.service'
+import { PrismaService } from '../../prisma/prisma.service'
 import { GithubRepoService } from '../../github/services/github-repo.service'
 import { CategoryService } from '../../category/category.service'
 
@@ -8,6 +9,7 @@ export class AiClassifyService {
   private readonly logger = new Logger(AiClassifyService.name)
   constructor(
     private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
     private readonly githubRepo: GithubRepoService,
     private readonly categoryService: CategoryService,
   ) {}
@@ -84,28 +86,28 @@ export class AiClassifyService {
 
   async classify(repoIds: number[], topN = 8) {
     if (!repoIds?.length) return { success: false, message: '没有需要分类的仓库' }
-    const repos: any[] = []
-    for (const id of repoIds) { const r = await this.githubRepo.findById(id); if (r) repos.push(r) }
+    // FIX: 批量查询替代循环 N+1 查询
+    const repos = await this.prisma.githubRepo.findMany({ where: { id: { in: repoIds.map(BigInt) } } })
     if (!repos.length) return { success: false, message: '没有找到仓库' }
     const prompt = this.buildPrompt(repos, topN)
     const result = await this.callDeepSeek(prompt, '你是GitHub项目推荐专家。只返回要求格式的JSON，不说任何废话。')
     const cats = this.parseResponse(result, repos)
     if (cats && !cats['分类失败']) {
-      try { await this.categoryService.saveAiClassifyResult(cats) } catch (e) { return { success: true, message: '保存失败: ' + (e instanceof Error ? e.message : String(e)), categories: cats } }
+      try { await this.categoryService.saveAiClassifyResult(cats) } catch (e) { return { success: false, message: '保存失败: ' + (e instanceof Error ? e.message : String(e)), categories: cats } }
     }
     return { success: true, categories: cats, totalClassified: Object.values(cats).reduce((s, ids) => s + ids.length, 0) }
   }
 
   async smartClassify(repoIds: number[]) {
     if (!repoIds?.length) return { success: false, message: '没有需要分类的仓库' }
-    const repos: any[] = []
-    for (const id of repoIds) { const r = await this.githubRepo.findById(id); if (r) repos.push(r) }
+    // FIX: 批量查询替代循环 N+1 查询
+    const repos = await this.prisma.githubRepo.findMany({ where: { id: { in: repoIds.map(BigInt) } } })
     if (!repos.length) return { success: false, message: '没有找到仓库' }
     const prompt = await this.buildSmartPrompt(repos)
     const result = await this.callDeepSeek(prompt, '你是GitHub项目推荐专家。只返回要求格式的JSON，不说任何废话。')
     const assignments = this.parseResponse(result, repos)
     if (assignments && !assignments['分类失败']) {
-      try { await this.categoryService.applySmartClassifyResult(assignments) } catch (e) { return { success: true, message: '保存失败: ' + (e instanceof Error ? e.message : String(e)), assignments } }
+      try { await this.categoryService.applySmartClassifyResult(assignments) } catch (e) { return { success: false, message: '保存失败: ' + (e instanceof Error ? e.message : String(e)), assignments } }
     }
     const allCats = await this.categoryService.listAll()
     const allNames = allCats.flatMap(c => [c.name, ...(c.children || []).map(ch => ch.name)])

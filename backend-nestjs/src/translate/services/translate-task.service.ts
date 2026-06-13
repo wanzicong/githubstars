@@ -47,22 +47,18 @@ export class TranslateTaskService {
       }
       if (success) {
         await this.prisma.translationTaskItem.update({ where: { id: item.id }, data: { status: 'SUCCESS', updatedAt: new Date() } })
-        const task = await this.prisma.translationTask.findUnique({ where: { id: item.taskId } })
-        if (task) {
-          const upd: any = { completedItems: (task.completedItems || 0) + 1 }
-          if (item.translateType === 'description') upd.descCompleted = (task.descCompleted || 0) + 1
-          else upd.readmeCompleted = (task.readmeCompleted || 0) + 1
-          await this.prisma.translationTask.update({ where: { id: item.taskId }, data: upd })
-        }
+        // FIX: 使用 increment 原子更新计数器，避免竞态
+        const incData: any = { completedItems: { increment: 1 } }
+        if (item.translateType === 'description') incData.descCompleted = { increment: 1 }
+        else incData.readmeCompleted = { increment: 1 }
+        await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incData })
       } else {
         await this.prisma.translationTaskItem.update({ where: { id: item.id }, data: { status: 'FAILED', errorMessage: lastError, retryCount: retries, updatedAt: new Date() } })
-        const task = await this.prisma.translationTask.findUnique({ where: { id: item.taskId } })
-        if (task) {
-          const upd: any = { failedItems: (task.failedItems || 0) + 1 }
-          if (item.translateType === 'description') upd.descFailed = (task.descFailed || 0) + 1
-          else upd.readmeFailed = (task.readmeFailed || 0) + 1
-          await this.prisma.translationTask.update({ where: { id: item.taskId }, data: upd })
-        }
+        // FIX: 使用 increment 原子更新计数器
+        const incData: any = { failedItems: { increment: 1 } }
+        if (item.translateType === 'description') incData.descFailed = { increment: 1 }
+        else incData.readmeFailed = { increment: 1 }
+        await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incData })
       }
     } finally { this.release() }
   }

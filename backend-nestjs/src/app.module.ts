@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { APP_INTERCEPTOR } from '@nestjs/core'
 import { ScheduleModule } from '@nestjs/schedule'
 import { PrismaModule } from './prisma/prisma.module'
 import { ConfigModule } from './config/config.module'
@@ -12,6 +13,7 @@ import { AiModule } from './ai/ai.module'
 import { CloneModule } from './clone/clone.module'
 import { TrendingModule } from './trending/trending.module'
 import { ExportModule } from './export/export.module'
+import { BigIntInterceptor } from './common/interceptors/bigint.interceptor'
 
 @Module({
   imports: [
@@ -28,6 +30,12 @@ import { ExportModule } from './export/export.module'
     CloneModule,
     TrendingModule,
     ExportModule,
+  ],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: BigIntInterceptor,
+    },
   ],
 })
 export class AppModule {}

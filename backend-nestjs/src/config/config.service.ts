@@ -51,7 +51,8 @@ export class ConfigService implements OnModuleInit {
 
   getValueDefault(key: string, defaultValue: string): string {
     const val = this.cache.get(key)
-    return val ? val : defaultValue
+    // FIX: 区分 undefined 和空字符串，空字符串是有效的配置值
+    return val !== undefined && val !== null ? val : defaultValue
   }
 
   async listAll() {

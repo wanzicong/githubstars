@@ -1,19 +1,32 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
 import { ConfigService } from '../../config/config.service'
 
 const MAX_REPOS = 30
 
 @Injectable()
-export class AiAnalyzeService {
+export class AiAnalyzeService implements OnModuleInit {
   private readonly logger = new Logger(AiAnalyzeService.name)
-  private results = new Map<string, string>()
-  private statuses = new Map<string, string>()
   private counter = 0
 
-  constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
-  /** P1-8 FIX: 支持 forks_count 排序 */
+  /** 从数据库恢复 counter（避免重启后 ID 冲突） */
+  async onModuleInit() {
+    const latest = await this.prisma.aiAnalyzeTask.findFirst({
+      where: { taskId: { startsWith: 'analyze_' } },
+      orderBy: { createdAt: 'desc' },
+      select: { taskId: true },
+    })
+    if (latest) {
+      const match = latest.taskId.match(/analyze_(\d+)/)
+      if (match) this.counter = parseInt(match[1], 10)
+    }
+  }
+
   private async queryRepos(params: { keyword?: string; language?: string; categoryIds?: string; sortBy?: string; sortOrder?: string }) {
     const AND: any[] = []
     if (params.categoryIds) {
@@ -72,39 +85,96 @@ ${list}
     }
   }
 
-  private async executeAnalyze(taskId: string, keyword: string, language: string, categoryIds: string, sortBy: string, sortOrder: string) {
+  private async executeAnalyze(
+    taskId: string, keyword: string, language: string,
+    categoryIds: string, sortBy: string, sortOrder: string,
+  ) {
     try {
       const repos = await this.queryRepos({ keyword, language, categoryIds, sortBy, sortOrder })
-      if (!repos.length) { this.results.set(taskId, '没有找到任何项目'); this.statuses.set(taskId, 'COMPLETED'); return }
+      if (!repos.length) {
+        await this.prisma.aiAnalyzeTask.update({
+          where: { taskId },
+          data: { status: 'COMPLETED', content: '没有找到任何项目', finishedAt: new Date() },
+        })
+        return
+      }
       const prompt = this.buildAnalyzePrompt(repos)
       const result = await this.callDeepSeek(prompt)
-      this.results.set(taskId, result || 'AI 返回空结果'); this.statuses.set(taskId, 'COMPLETED')
-    } catch (e) { this.results.set(taskId, '分析失败: ' + (e instanceof Error ? e.message : String(e))); this.statuses.set(taskId, 'COMPLETED') }
+      await this.prisma.aiAnalyzeTask.update({
+        where: { taskId },
+        data: { status: 'COMPLETED', content: result || 'AI 返回空结果', finishedAt: new Date() },
+      })
+    } catch (e) {
+      await this.prisma.aiAnalyzeTask.update({
+        where: { taskId },
+        data: { status: 'COMPLETED', content: '分析失败: ' + (e instanceof Error ? e.message : String(e)), finishedAt: new Date() },
+      })
+    }
   }
 
-  createAnalyzeTask(keyword: string, language: string, categoryIds: string, sortBy: string, sortOrder: string) {
+  async createAnalyzeTask(keyword: string, language: string, categoryIds: string, sortBy: string, sortOrder: string) {
     const taskId = 'analyze_' + (++this.counter)
-    this.statuses.set(taskId, 'PROCESSING'); this.results.set(taskId, '')
-    this.executeAnalyze(taskId, keyword, language, categoryIds, sortBy, sortOrder).catch(e => this.logger.error(e))
+    await this.prisma.aiAnalyzeTask.create({
+      data: {
+        taskId, type: 'analyze', status: 'PROCESSING',
+        params: JSON.stringify({ keyword, language, categoryIds, sortBy, sortOrder }),
+        createdAt: new Date(),
+      },
+    })
+    this.executeAnalyze(taskId, keyword, language, categoryIds, sortBy, sortOrder)
+      .catch(e => this.logger.error('分析任务执行失败', e))
     return taskId
   }
 
-  createTrendingAnalyzeTask(since: string, language: string, repos: any[]) {
+  async createTrendingAnalyzeTask(since: string, language: string, repos: any[]) {
     const taskId = 'trending_' + (++this.counter)
-    this.statuses.set(taskId, 'PROCESSING')
     const period = { daily: '今日', weekly: '本周', monthly: '本月' }[since] || since
-    if (!repos.length) { this.results.set(taskId, '暂无数据'); this.statuses.set(taskId, 'COMPLETED'); return taskId }
-    let list = repos.map((r: any, i: number) => `${i + 1}. **${r.fullName}** (⭐${r.starsCount}, ${r.language || '未知'})`).join('\n')
+
+    if (!repos.length) {
+      await this.prisma.aiAnalyzeTask.create({
+        data: { taskId, type: 'trending', status: 'COMPLETED', content: '暂无数据', createdAt: new Date(), finishedAt: new Date() },
+      })
+      return taskId
+    }
+
+    await this.prisma.aiAnalyzeTask.create({
+      data: {
+        taskId, type: 'trending', status: 'PROCESSING',
+        params: JSON.stringify({ since, language }),
+        createdAt: new Date(),
+      },
+    })
+
+    const list = repos.map((r: any, i: number) => `${i + 1}. **${r.fullName}** (⭐${r.starsCount}, ${r.language || '未知'})`).join('\n')
     const prompt = `分析 GitHub ${period}趋势：\n\n${language ? '语言: ' + language + '\n' : ''}${list}\n\n分析热门方向、用途分类、最值得关注的3个项目、趋势洞察。\n\n【重要】直接开始正文，不要加开头语或结尾语。`
+
     ;(async () => {
-      try { const r = await this.callDeepSeek(prompt); this.results.set(taskId, r || '分析失败') } catch (e) { this.results.set(taskId, '分析失败') }
-      this.statuses.set(taskId, 'COMPLETED')
-    })().catch(e => this.logger.error(e))
+      try {
+        const r = await this.callDeepSeek(prompt)
+        await this.prisma.aiAnalyzeTask.update({
+          where: { taskId },
+          data: { status: 'COMPLETED', content: r || '分析失败', finishedAt: new Date() },
+        })
+      } catch (e) {
+        await this.prisma.aiAnalyzeTask.update({
+          where: { taskId },
+          data: { status: 'COMPLETED', content: '分析失败', finishedAt: new Date() },
+        })
+      }
+    })().catch(e => this.logger.error('趋势分析任务失败', e))
+
     return taskId
   }
 
-  getTaskStatus(taskId: string) {
-    const status = this.statuses.get(taskId) || 'NOT_FOUND'
-    return { success: status !== 'NOT_FOUND', taskId, status, content: status === 'COMPLETED' ? this.results.get(taskId) : undefined }
+  /** P0 FIX: 从数据库读取任务状态 */
+  async getTaskStatus(taskId: string) {
+    const task = await this.prisma.aiAnalyzeTask.findUnique({ where: { taskId } })
+    if (!task) return { success: false, taskId, status: 'NOT_FOUND' }
+    return {
+      success: true,
+      taskId: task.taskId,
+      status: task.status,
+      content: task.status === 'COMPLETED' ? task.content : undefined,
+    }
   }
 }

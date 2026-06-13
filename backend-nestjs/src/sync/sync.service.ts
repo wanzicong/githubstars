@@ -28,17 +28,19 @@ export class SyncService {
   async doSync(syncType: string, replace: boolean = true) {
     // 同步锁：原子检查-设置，防止并发 doSync 调用
     if (this.syncing) {
-      console.log(`[Sync] 同步锁已被持有，拒绝 ${syncType}`)
+      this.logger.warn(`同步锁已被持有，拒绝 ${syncType}`)
       return
     }
     this.syncing = true
     this.syncStatus = '同步中...'
 
-    const syncLog = await this.prisma.syncLog.create({
-      data: { syncType, status: '进行中', totalCount: 0, syncedCount: 0, startedAt: new Date(), createdAt: new Date() },
-    })
-
+    let syncLog: any = null
     try {
+      // P0 FIX: syncLog 创建移入 try，避免异常时锁永久卡死
+      syncLog = await this.prisma.syncLog.create({
+        data: { syncType, status: '进行中', totalCount: 0, syncedCount: 0, startedAt: new Date(), createdAt: new Date() },
+      })
+
       // 从 GitHub API 拉取所有 Star 仓库
       const remoteRepos = await this.githubApi.fetchAllStarredRepos()
       // 去重：构建远端 map
@@ -60,21 +62,18 @@ export class SyncService {
         synced++
       }
 
-      // REPLACE 模式：删除本地存在但远端已不存在的仓库（已取消Star）
+      // REPLACE 模式：批量删除本地存在但远端已不存在的仓库
       if (replace) {
-        let deletedCount = 0
+        const missingFullNames: string[] = []
         for (const [fullName] of localMap) {
-          if (!remoteMap.has(fullName)) {
-            await this.prisma.githubRepo.deleteMany({ where: { fullName } })
-            console.log(`[Sync] 已删除取消Star的仓库: ${fullName}`)
-            deletedCount++
-          }
+          if (!remoteMap.has(fullName)) missingFullNames.push(fullName)
         }
-        if (deletedCount > 0) {
-          console.log(`[Sync] 共删除 ${deletedCount} 个已取消Star的仓库`)
+        if (missingFullNames.length > 0) {
+          await this.prisma.githubRepo.deleteMany({ where: { fullName: { in: missingFullNames } } })
+          this.logger.log(`已删除 ${missingFullNames.length} 个已取消Star的仓库`)
         }
       } else {
-        console.log(`[Sync] 非 REPLACE 模式，跳过删除未Star仓库，本地 ${localMap.size} 个`)
+        this.logger.log(`非 REPLACE 模式，跳过删除未Star仓库，本地 ${localMap.size} 个`)
       }
 
       await this.prisma.syncLog.update({
@@ -86,7 +85,9 @@ export class SyncService {
       this.logger.log(`${syncType} 完成: ${synced} 个仓库`)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      await this.prisma.syncLog.update({ where: { id: syncLog.id }, data: { status: '失败', errorMessage: msg, finishedAt: new Date() } })
+      if (syncLog) {
+        await this.prisma.syncLog.update({ where: { id: syncLog.id }, data: { status: '失败', errorMessage: msg, finishedAt: new Date() } })
+      }
       this.syncStatus = '同步失败: ' + msg
     } finally {
       this.syncing = false

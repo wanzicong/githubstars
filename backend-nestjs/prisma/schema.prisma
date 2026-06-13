@@ -157,6 +157,21 @@ model CloneTaskItem {
   @@map("clone_task_item")
 }
 
+model AiAnalyzeTask {
+  id         BigInt    @id @default(autoincrement())
+  taskId     String    @map("task_id") @db.VarChar(64) @unique
+  type       String    @db.VarChar(32)
+  status     String    @default("PROCESSING") @db.VarChar(32)
+  content    String?   @db.LongText
+  params     String?   @db.Text
+  createdAt  DateTime? @default(now()) @map("created_at") @db.DateTime
+  finishedAt DateTime? @map("finished_at") @db.DateTime
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("ai_analyze_task")
+}
+
 model TranslationTask {
   id               BigInt    @id @default(autoincrement())
   status           String?   @default("PENDING") @map("status") @db.VarChar(50)
