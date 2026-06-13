@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useLocation } from 'react-router-dom'
 import {
     Card,
     Input,
@@ -322,6 +322,7 @@ function RepoRow({ repo }: { repo: GithubRepo }) {
 
 export default function StarList() {
     const [searchParams, setSearchParams] = useSearchParams()
+    const location = useLocation()
 
     const keyword = searchParams.get('keyword') || ''
     const languageStr = searchParams.get('languages') || ''
@@ -531,6 +532,7 @@ export default function StarList() {
         startDateStr,
         endDateStr,
         untranslatedOnly,
+        location.pathname, // 从详情页返回列表时触发刷新
     ])
 
     const handleClearFilters = useCallback(() => {
