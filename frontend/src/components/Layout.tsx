@@ -1,5 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+
+/** 路由切换时自动滚动到页面顶部 */
+function useScrollToTop() {
+    const { pathname } = useLocation()
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
+    }, [pathname])
+}
 import { Layout, Menu, theme, Typography, Button, Tooltip, Space } from 'antd'
 import {
     StarOutlined,
@@ -94,6 +102,7 @@ function MenuStyles({ token }: { token: any }) {
 }
 
 export default function AppLayout() {
+    useScrollToTop()
     const navigate = useNavigate()
     const location = useLocation()
     const { token } = theme.useToken()

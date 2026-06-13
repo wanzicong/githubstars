@@ -9,7 +9,6 @@ import {
     Row,
     Col,
     Tag,
-    Avatar,
     Typography,
     Pagination,
     Empty,
@@ -41,7 +40,6 @@ import {
     CloseCircleOutlined,
     AppstoreOutlined,
     UnorderedListOutlined,
-    ReadOutlined,
     BulbOutlined,
 } from '@ant-design/icons'
 import dayjs from '../setupDayjs'
@@ -52,26 +50,13 @@ import * as categoriesApi from '../api/categories'
 import * as analyzeApi from '../api/analyze'
 import * as cloneApi from '../api/clone'
 import { buildTargetPath, sanitizeSubdirectory } from '../utils/clonePath'
-import { formatNumberCn } from '../utils/format'
-import ReactMarkdown from 'react-markdown'
-import rehypeRaw from 'rehype-raw'
-import remarkGfm from 'remark-gfm'
+import RepoCard from '../components/RepoCard'
+import RepoRow from '../components/RepoRow'
 import TranslatePanel from '../components/TranslatePanel'
+import MarkdownRenderer from '../components/MarkdownRenderer'
 import type { Category, GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
 
-const { Title, Text, Paragraph } = Typography
-
-function formatDate(dateStr: string | number[] | null): string {
-    if (!dateStr) return '-'
-    if (Array.isArray(dateStr)) {
-        const [y, m, d] = dateStr
-        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    }
-    if (typeof dateStr === 'string') {
-        return dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr
-    }
-    return String(dateStr)
-}
+const { Title, Text } = Typography
 
 const SORT_BY_OPTIONS = [
     { label: 'Star 时间', value: 'starred_at' },
@@ -106,219 +91,6 @@ const TIME_PRESETS: { label: string; value: string; days: number }[] = [
     { label: '一年内', value: '365d', days: 365 },
 ]
 
-function RepoCard({ repo }: { repo: GithubRepo }) {
-    return (
-        <Card
-            hoverable
-            style={{ height: '100%', cursor: 'pointer' }}
-            styles={{ body: { padding: 16 } }}
-            onClick={() => {
-                window.location.href = `/stars/${repo.id}`
-            }}
-        >
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
-                <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={48} style={{ flexShrink: 0 }} />
-                <div style={{ minWidth: 0, flex: 1 }}>
-                    <Text strong style={{ fontSize: 16, display: 'block', lineHeight: '24px' }} ellipsis>
-                        <a
-                            style={{ color: '#1677ff' }}
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                window.location.href = `/stars/${repo.id}`
-                            }}
-                        >
-                            {repo.repoName}
-                        </a>
-                    </Text>
-                    <Text type='secondary' style={{ fontSize: 14 }} ellipsis>
-                        {repo.ownerName}
-                    </Text>
-                </div>
-            </div>
-            {repo.descriptionCn ? (
-                <Paragraph
-                    ellipsis={{ rows: 2 }}
-                    style={{ marginBottom: 10, fontSize: 14, minHeight: 40, color: '#333', lineHeight: '1.6' }}
-                >
-                    {repo.descriptionCn}
-                    <Text type='secondary' style={{ fontSize: 12, marginLeft: 4 }}>
-                        🇨🇳
-                    </Text>
-                </Paragraph>
-            ) : repo.description ? (
-                <Paragraph
-                    type='secondary'
-                    ellipsis={{ rows: 2 }}
-                    style={{ marginBottom: 10, fontSize: 14, minHeight: 40, lineHeight: '1.6' }}
-                >
-                    {repo.description}
-                </Paragraph>
-            ) : null}
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                {repo.language && (
-                    <Tag color='blue' style={{ margin: 0, fontSize: 13 }}>
-                        {repo.language}
-                    </Tag>
-                )}
-                {repo.categoryNames &&
-                    repo.categoryNames.length > 0 &&
-                    repo.categoryNames.map((cat) => (
-                        <Tag key={cat} color='green' style={{ margin: 0, fontSize: 13 }}>
-                            {cat}
-                        </Tag>
-                    ))}
-                {repo.readmeFetched && repo.readmeCn ? (
-                    <Tag color='purple' style={{ margin: 0, fontSize: 12 }}>
-                        <ReadOutlined style={{ fontSize: 11 }} /> 已翻译
-                    </Tag>
-                ) : repo.readmeFetched ? (
-                    <Tag color='default' style={{ margin: 0, fontSize: 12 }}>
-                        无README
-                    </Tag>
-                ) : null}
-                <Space size={4}>
-                    <StarFilled style={{ color: '#faad14', fontSize: 14 }} />
-                    <Text style={{ fontSize: 14 }}>{repo.starsCount}</Text>
-                    <Text type='secondary' style={{ fontSize: 12 }}>
-                        {formatNumberCn(repo.starsCount)}
-                    </Text>
-                </Space>
-                <Space size={4}>
-                    <ForkOutlined style={{ fontSize: 14 }} />
-                    <Text style={{ fontSize: 14 }}>{repo.forksCount}</Text>
-                    <Text type='secondary' style={{ fontSize: 12 }}>
-                        {formatNumberCn(repo.forksCount)}
-                    </Text>
-                </Space>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
-                <Text type='secondary' style={{ fontSize: 13 }}>
-                    Star 于 {formatDate(repo.starredAt)}
-                </Text>
-                {repo.repoPushedAt &&
-                    (() => {
-                        const days = dayjs().diff(dayjs(repo.repoPushedAt), 'day')
-                        let color = 'green'
-                        if (days > 180) color = 'red'
-                        else if (days > 30) color = 'orange'
-                        return (
-                            <Tag color={color} style={{ margin: 0, fontSize: 12 }}>
-                                未更新 {days} 天
-                            </Tag>
-                        )
-                    })()}
-            </div>
-        </Card>
-    )
-}
-
-function RepoRow({ repo }: { repo: GithubRepo }) {
-    return (
-        <Card
-            hoverable
-            style={{ cursor: 'pointer' }}
-            styles={{ body: { padding: 12 } }}
-            onClick={() => {
-                window.location.href = `/stars/${repo.id}`
-            }}
-        >
-            <Row align='middle' gutter={[12, 8]}>
-                <Col xs={24} sm={12} md={14}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={44} style={{ flexShrink: 0 }} />
-                        <div style={{ minWidth: 0 }}>
-                            <Text strong style={{ fontSize: 16 }} ellipsis>
-                                <a
-                                    style={{ color: '#1677ff' }}
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        window.location.href = `/stars/${repo.id}`
-                                    }}
-                                >
-                                    {repo.repoName}
-                                </a>
-                            </Text>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                                <Text type='secondary' style={{ fontSize: 13 }}>
-                                    {repo.ownerName}
-                                </Text>
-                                {repo.language && (
-                                    <Tag color='blue' style={{ margin: 0, fontSize: 12 }}>
-                                        {repo.language}
-                                    </Tag>
-                                )}
-                                {repo.categoryNames &&
-                                    repo.categoryNames.length > 0 &&
-                                    repo.categoryNames.slice(0, 2).map((cat) => (
-                                        <Tag key={cat} color='green' style={{ margin: 0, fontSize: 12 }}>
-                                            {cat}
-                                        </Tag>
-                                    ))}
-                                {repo.readmeFetched && repo.readmeCn ? (
-                                    <Tag color='purple' style={{ margin: 0, fontSize: 11 }}>
-                                        <ReadOutlined style={{ fontSize: 10 }} /> 已翻译
-                                    </Tag>
-                                ) : repo.readmeFetched ? (
-                                    <Tag color='default' style={{ margin: 0, fontSize: 11 }}>
-                                        无README
-                                    </Tag>
-                                ) : null}
-                            </div>
-                            {repo.descriptionCn ? (
-                                <Paragraph
-                                    ellipsis={{ rows: 1 }}
-                                    style={{ margin: '4px 0 0', fontSize: 14, color: '#333', lineHeight: '1.6' }}
-                                >
-                                    {repo.descriptionCn}
-                                </Paragraph>
-                            ) : repo.description ? (
-                                <Paragraph
-                                    type='secondary'
-                                    ellipsis={{ rows: 1 }}
-                                    style={{ margin: '4px 0 0', fontSize: 14, lineHeight: '1.6' }}
-                                >
-                                    {repo.description}
-                                </Paragraph>
-                            ) : null}
-                        </div>
-                    </div>
-                </Col>
-                <Col xs={24} sm={12} md={10}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-                        <span>
-                            <StarFilled style={{ color: '#faad14', fontSize: 14 }} />{' '}
-                            <Text style={{ fontSize: 15 }}>{repo.starsCount}</Text>
-                            <Text type='secondary' style={{ fontSize: 12, marginLeft: 2 }}>
-                                {formatNumberCn(repo.starsCount)}
-                            </Text>
-                        </span>
-                        <span>
-                            <ForkOutlined style={{ fontSize: 14 }} /> <Text style={{ fontSize: 15 }}>{repo.forksCount}</Text>
-                            <Text type='secondary' style={{ fontSize: 12, marginLeft: 2 }}>
-                                {formatNumberCn(repo.forksCount)}
-                            </Text>
-                        </span>
-                        {repo.repoPushedAt &&
-                            (() => {
-                                const days = dayjs().diff(dayjs(repo.repoPushedAt), 'day')
-                                let color = 'green'
-                                if (days > 180) color = 'red'
-                                else if (days > 30) color = 'orange'
-                                return (
-                                    <Tag color={color} style={{ margin: 0, fontSize: 12 }}>
-                                        未更新 {days} 天
-                                    </Tag>
-                                )
-                            })()}
-                        <Text type='secondary' style={{ fontSize: 13 }}>
-                            Star 于 {formatDate(repo.starredAt)}
-                        </Text>
-                    </div>
-                </Col>
-            </Row>
-        </Card>
-    )
-}
 
 export default function StarList() {
     const [searchParams, setSearchParams] = useSearchParams()
@@ -550,13 +322,9 @@ export default function StarList() {
         })
     }, [setUrlParams])
 
-    const [fullTranslating, setFullTranslating] = useState(false)
-    const [readmeTranslating, setReadmeTranslating] = useState(false)
-    const [filterTranslating, setFilterTranslating] = useState(false)
     const [translatePanelOpen, setTranslatePanelOpen] = useState(false)
     const [translateModalVisible, setTranslateModalVisible] = useState(false)
     const [analyzing, setAnalyzing] = useState(false)
-    const [analyzeTaskId, setAnalyzeTaskId] = useState<string | null>(null)
     const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
     const [analyzeResult, setAnalyzeResult] = useState<string | null>(null)
     const [analyzeStatus, setAnalyzeStatus] = useState<string>('')
@@ -626,108 +394,6 @@ export default function StarList() {
         [currentPage, pageSize, keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr],
     )
 
-    const handleStartFullTranslate = useCallback(async () => {
-        setFullTranslating(true)
-        try {
-            const result = await translateApi.startFullTranslate()
-            if (result.success && result.taskId) {
-                setTranslateTaskId(result.taskId)
-                setTranslateProgress({
-                    status: 'PENDING',
-                    totalItems: 0,
-                    completedItems: 0,
-                    failedItems: 0,
-                    descTotal: 0,
-                    descCompleted: 0,
-                    descFailed: 0,
-                    readmeTotal: 0,
-                    readmeCompleted: 0,
-                    readmeFailed: 0,
-                    progress: 0,
-                })
-                setTranslateModalVisible(true)
-                startPolling(result.taskId)
-            } else {
-                message.info(result.message || '没有需要翻译的项目')
-            }
-        } catch {
-            message.error('启动翻译失败')
-        } finally {
-            setFullTranslating(false)
-        }
-    }, [startPolling])
-
-    const handleStartReadmeBatch = useCallback(async () => {
-        setReadmeTranslating(true)
-        try {
-            const result = await translateApi.startReadmeBatch()
-            if (result.success && result.taskId) {
-                setTranslateTaskId(result.taskId)
-                setTranslateProgress({
-                    status: 'PENDING',
-                    totalItems: 0,
-                    completedItems: 0,
-                    failedItems: 0,
-                    descTotal: 0,
-                    descCompleted: 0,
-                    descFailed: 0,
-                    readmeTotal: 0,
-                    readmeCompleted: 0,
-                    readmeFailed: 0,
-                    progress: 0,
-                })
-                setTranslateModalVisible(true)
-                startPolling(result.taskId)
-            } else {
-                message.info(result.message || '没有需要翻译 README 的项目')
-            }
-        } catch {
-            message.error('启动 README 批量翻译失败')
-        } finally {
-            setReadmeTranslating(false)
-        }
-    }, [startPolling])
-
-    const handleFilterTranslate = useCallback(async () => {
-        setFilterTranslating(true)
-        try {
-            const result = await translateApi.startFilterBatch({
-                keyword: keyword || undefined,
-                language: languageStr || undefined,
-                categoryIds: categoryIdsStr || undefined,
-                sortBy: sortBy || undefined,
-                sortOrder: sortOrder || undefined,
-                dateField: dateField || undefined,
-                startDate: startDateStr || undefined,
-                endDate: endDateStr || undefined,
-            })
-            if (result.success && result.taskId) {
-                setTranslateTaskId(result.taskId)
-                setTranslateProgress({
-                    status: 'PENDING',
-                    totalItems: 0,
-                    completedItems: 0,
-                    failedItems: 0,
-                    descTotal: 0,
-                    descCompleted: 0,
-                    descFailed: 0,
-                    readmeTotal: 0,
-                    readmeCompleted: 0,
-                    readmeFailed: 0,
-                    progress: 0,
-                })
-                setTranslateModalVisible(true)
-                startPolling(result.taskId)
-            } else {
-                message.info(result.message || '没有需要翻译的项目')
-            }
-        } catch {
-            message.error('启动筛选翻译失败')
-        } finally {
-            setFilterTranslating(false)
-        }
-    }, [keyword, languageStr, categoryIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, startPolling])
-
     const handleAiAnalyze = useCallback(async () => {
         setAnalyzing(true)
         try {
@@ -739,7 +405,6 @@ export default function StarList() {
                 sortOrder: sortOrder || undefined,
             })
             if (result.success && result.taskId) {
-                setAnalyzeTaskId(result.taskId)
                 setAnalyzeStatus('PROCESSING')
                 setAnalyzeResult(null)
                 setAnalyzeModalVisible(true)
@@ -769,7 +434,6 @@ export default function StarList() {
     const handleCloseAnalyzeModal = useCallback(() => {
         if (analyzePollingRef.current) clearInterval(analyzePollingRef.current)
         setAnalyzeModalVisible(false)
-        setAnalyzeTaskId(null)
         setAnalyzeResult(null)
         setAnalyzeStatus('')
     }, [])
@@ -1513,92 +1177,10 @@ export default function StarList() {
                     </div>
                 )}
                 {analyzeStatus === 'COMPLETED' && analyzeResult && (
-                    <div style={{ maxHeight: '70vh', overflow: 'auto', padding: '8px 0' }} className='readme-markdown'>
-                        <ReactMarkdown
-                            rehypePlugins={[rehypeRaw]}
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                                h1: ({ children }) => (
-                                    <h1
-                                        style={{
-                                            fontSize: 20,
-                                            borderBottom: '2px solid #1677ff',
-                                            paddingBottom: 8,
-                                            marginTop: 20,
-                                            marginBottom: 12,
-                                        }}
-                                    >
-                                        {children}
-                                    </h1>
-                                ),
-                                h2: ({ children }) => (
-                                    <h2
-                                        style={{
-                                            fontSize: 17,
-                                            borderBottom: '1px solid #eee',
-                                            paddingBottom: 6,
-                                            marginTop: 16,
-                                            marginBottom: 10,
-                                        }}
-                                    >
-                                        {children}
-                                    </h2>
-                                ),
-                                h3: ({ children }) => <h3 style={{ fontSize: 15, marginTop: 14, marginBottom: 8 }}>{children}</h3>,
-                                p: ({ children }) => <p style={{ lineHeight: 1.8, marginBottom: 10, fontSize: 14 }}>{children}</p>,
-                                a: ({ href, children }) => (
-                                    <a href={href} target='_blank' rel='noopener noreferrer' style={{ color: '#1677ff' }}>
-                                        {children}
-                                    </a>
-                                ),
-                                ul: ({ children }) => <ul style={{ paddingLeft: 24, marginBottom: 10, lineHeight: 1.8 }}>{children}</ul>,
-                                ol: ({ children }) => <ol style={{ paddingLeft: 24, marginBottom: 10, lineHeight: 1.8 }}>{children}</ol>,
-                                li: ({ children }) => <li style={{ marginBottom: 4, fontSize: 14 }}>{children}</li>,
-                                code: ({ children }) => (
-                                    <code style={{ backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: 3, fontSize: 13 }}>
-                                        {children}
-                                    </code>
-                                ),
-                                pre: ({ children }) => (
-                                    <pre
-                                        style={{
-                                            backgroundColor: '#f6f8fa',
-                                            padding: 14,
-                                            borderRadius: 6,
-                                            overflow: 'auto',
-                                            fontSize: 13,
-                                            lineHeight: 1.5,
-                                            marginBottom: 14,
-                                        }}
-                                    >
-                                        {children}
-                                    </pre>
-                                ),
-                                strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{children}</strong>,
-                                table: ({ children }) => (
-                                    <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: 14 }}>{children}</table>
-                                ),
-                                th: ({ children }) => (
-                                    <th
-                                        style={{
-                                            border: '1px solid #ddd',
-                                            padding: '8px 12px',
-                                            backgroundColor: '#f5f5f5',
-                                            fontWeight: 600,
-                                            fontSize: 13,
-                                        }}
-                                    >
-                                        {children}
-                                    </th>
-                                ),
-                                td: ({ children }) => (
-                                    <td style={{ border: '1px solid #ddd', padding: '8px 12px', fontSize: 13 }}>{children}</td>
-                                ),
-                            }}
-                        >
-                            {analyzeResult}
-                        </ReactMarkdown>
-                    </div>
+                    <MarkdownRenderer
+                        content={analyzeResult}
+                        style={{ maxHeight: '70vh', overflow: 'auto', padding: '8px 0' }}
+                    />
                 )}
             </Modal>
 

@@ -2,11 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col, message, Button, Modal } from 'antd'
 import { StarFilled, ForkOutlined, FireOutlined, BulbOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import ReactMarkdown from 'react-markdown'
-import rehypeRaw from 'rehype-raw'
-import remarkGfm from 'remark-gfm'
 import { fetchTrending, analyzeTrending } from '../api/trending'
 import { getAnalyzeStatus } from '../api/analyze'
+import MarkdownRenderer from '../components/MarkdownRenderer'
 import type { GithubSearchRepo } from '../api/github'
 
 const { Title, Text, Paragraph } = Typography
@@ -262,11 +260,7 @@ export default function Trending() {
                     </div>
                 )}
                 {analyzeStatus === 'COMPLETED' && analyzeResult && (
-                    <div style={{ maxHeight: '65vh', overflow: 'auto' }} className='readme-markdown'>
-                        <ReactMarkdown rehypePlugins={[rehypeRaw]} remarkPlugins={[remarkGfm]}>
-                            {analyzeResult}
-                        </ReactMarkdown>
-                    </div>
+                    <MarkdownRenderer content={analyzeResult} style={{ maxHeight: '65vh', overflow: 'auto' }} />
                 )}
             </Modal>
         </div>

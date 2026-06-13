@@ -29,3 +29,53 @@ export function formatNumberCn(n: number): string {
 
     return String(n)
 }
+
+/**
+ * 统一日期格式化 — 替代各页面中重复的 formatDate 函数。
+ *
+ * @param dateStr 日期字符串、number[] 元组、或 null/undefined
+ * @param format  输出格式：'date' (YYYY-MM-DD)、'datetime' (YYYY-MM-DD HH:mm:ss)、'relative' (x天前)
+ */
+export function formatDate(
+    dateStr: string | number[] | null | undefined,
+    format: 'date' | 'datetime' | 'relative' = 'date',
+): string {
+    if (!dateStr) return '-'
+
+    let date: Date
+
+    if (Array.isArray(dateStr)) {
+        const [y, m, d, h = 0, min = 0, s = 0] = dateStr
+        date = new Date(y, m - 1, d, h, min, s)
+    } else if (typeof dateStr === 'string') {
+        date = new Date(dateStr.replace(' ', 'T'))
+    } else {
+        return '-'
+    }
+
+    if (isNaN(date.getTime())) return '-'
+
+    const y = date.getFullYear()
+    const mo = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    const hour = String(date.getHours()).padStart(2, '0')
+    const min = String(date.getMinutes()).padStart(2, '0')
+    const sec = String(date.getSeconds()).padStart(2, '0')
+
+    if (format === 'datetime') {
+        return `${y}-${mo}-${d} ${hour}:${min}:${sec}`
+    }
+
+    if (format === 'relative') {
+        const diffMs = Date.now() - date.getTime()
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+        if (diffDays < 0) return '-'
+        if (diffDays === 0) return '今天'
+        if (diffDays < 30) return `${diffDays}天前`
+        if (diffDays < 365) return `${Math.floor(diffDays / 30)}月前`
+        return `${Math.floor(diffDays / 365)}年前`
+    }
+
+    return `${y}-${mo}-${d}`
+}
+

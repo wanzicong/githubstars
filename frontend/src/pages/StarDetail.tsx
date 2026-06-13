@@ -19,9 +19,6 @@ import {
     Progress,
     Alert,
 } from 'antd'
-import ReactMarkdown from 'react-markdown'
-import rehypeRaw from 'rehype-raw'
-import remarkGfm from 'remark-gfm'
 import {
     ArrowLeftOutlined,
     GithubOutlined,
@@ -44,6 +41,7 @@ import * as translateApi from '../api/translate'
 import * as similarApi from '../api/similar'
 import { startAgentSearch } from '../api/agent-similar'
 import { formatNumberCn } from '../utils/format'
+import MarkdownRenderer from '../components/MarkdownRenderer'
 import type { GithubRepo } from '../types'
 
 const { Title, Text, Paragraph } = Typography
@@ -85,84 +83,6 @@ function parseTopics(topics: string | null): string[] {
     } catch {
         return []
     }
-}
-
-// README 渲染组件配置（卡片和全屏弹窗共用）
-const README_COMPONENTS = {
-    h1: ({ children }: { children: React.ReactNode }) => (
-        <h1 style={{ fontSize: 22, borderBottom: '1px solid #eee', paddingBottom: 8, marginTop: 24, marginBottom: 12 }}>{children}</h1>
-    ),
-    h2: ({ children }: { children: React.ReactNode }) => (
-        <h2 style={{ fontSize: 19, borderBottom: '1px solid #eee', paddingBottom: 6, marginTop: 20, marginBottom: 10 }}>{children}</h2>
-    ),
-    h3: ({ children }: { children: React.ReactNode }) => <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>{children}</h3>,
-    h4: ({ children }: { children: React.ReactNode }) => <h4 style={{ fontSize: 14, marginTop: 12, marginBottom: 6 }}>{children}</h4>,
-    p: ({ children }: { children: React.ReactNode }) => <p style={{ lineHeight: 1.8, marginBottom: 12, fontSize: 14 }}>{children}</p>,
-    a: ({ href, children }: { href?: string; children: React.ReactNode }) => (
-        <a href={href} target='_blank' rel='noopener noreferrer' style={{ color: '#1677ff' }}>
-            {children}
-        </a>
-    ),
-    ul: ({ children }: { children: React.ReactNode }) => <ul style={{ paddingLeft: 24, marginBottom: 12, lineHeight: 1.8 }}>{children}</ul>,
-    ol: ({ children }: { children: React.ReactNode }) => <ol style={{ paddingLeft: 24, marginBottom: 12, lineHeight: 1.8 }}>{children}</ol>,
-    li: ({ children }: { children: React.ReactNode }) => <li style={{ marginBottom: 4, fontSize: 14 }}>{children}</li>,
-    code: ({ children }: { children: React.ReactNode }) => (
-        <code
-            style={{
-                backgroundColor: '#f5f5f5',
-                padding: '2px 6px',
-                borderRadius: 3,
-                fontSize: 13,
-                fontFamily: "'SFMono-Regular', Consolas, monospace",
-            }}
-        >
-            {children}
-        </code>
-    ),
-    pre: ({ children }: { children: React.ReactNode }) => (
-        <pre
-            style={{
-                backgroundColor: '#f6f8fa',
-                padding: 16,
-                borderRadius: 6,
-                overflow: 'auto',
-                fontSize: 13,
-                lineHeight: 1.5,
-                marginBottom: 16,
-                border: '1px solid #e8e8e8',
-            }}
-        >
-            {children}
-        </pre>
-    ),
-    blockquote: ({ children }: { children: React.ReactNode }) => (
-        <blockquote style={{ borderLeft: '4px solid #1677ff', paddingLeft: 16, color: '#666', margin: '12px 0', fontStyle: 'italic' }}>
-            {children}
-        </blockquote>
-    ),
-    table: ({ children }: { children: React.ReactNode }) => (
-        <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: 16 }}>{children}</table>
-    ),
-    th: ({ children }: { children: React.ReactNode }) => (
-        <th style={{ border: '1px solid #ddd', padding: '8px 12px', backgroundColor: '#f5f5f5', fontWeight: 600, fontSize: 13 }}>
-            {children}
-        </th>
-    ),
-    td: ({ children }: { children: React.ReactNode }) => (
-        <td style={{ border: '1px solid #ddd', padding: '8px 12px', fontSize: 13 }}>{children}</td>
-    ),
-    img: ({ src, alt }: { src?: string; alt?: string }) => (
-        <img
-            src={src}
-            alt={alt || ''}
-            style={{ maxWidth: '100%', marginBottom: 12 }}
-            onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                ;(e.target as HTMLImageElement).style.display = 'none'
-            }}
-        />
-    ),
-    hr: () => <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '20px 0' }} />,
-    strong: ({ children }: { children: React.ReactNode }) => <strong style={{ fontWeight: 600 }}>{children}</strong>,
 }
 
 export default function StarDetail() {
@@ -765,18 +685,10 @@ export default function StarDetail() {
                 }
             >
                 {repo.readmeFetched && repo.readmeCn ? (
-                    <div
-                        style={{
-                            overflow: 'auto',
-                            maxHeight: 600,
-                            padding: '8px 16px',
-                        }}
-                        className='readme-markdown'
-                    >
-                        <ReactMarkdown rehypePlugins={[rehypeRaw]} remarkPlugins={[remarkGfm]} components={README_COMPONENTS}>
-                            {repo.readmeCn}
-                        </ReactMarkdown>
-                    </div>
+                    <MarkdownRenderer
+                        content={repo.readmeCn}
+                        style={{ overflow: 'auto', maxHeight: 600, padding: '8px 16px' }}
+                    />
                 ) : repo.readmeFetched && !repo.readmeCn ? (
                     <div style={{ textAlign: 'center', padding: 24 }}>
                         <ReadOutlined style={{ fontSize: 32, color: '#d9d9d9', marginBottom: 8 }} />
@@ -921,15 +833,7 @@ export default function StarDetail() {
                                     </Space>
                                 }
                             >
-                                <div className='readme-markdown' style={{ fontSize: 13, lineHeight: 1.8 }}>
-                                    <ReactMarkdown
-                                        rehypePlugins={[rehypeRaw]}
-                                        remarkPlugins={[remarkGfm]}
-                                        components={README_COMPONENTS}
-                                    >
-                                        {agentResult}
-                                    </ReactMarkdown>
-                                </div>
+                                <MarkdownRenderer content={agentResult} style={{ fontSize: 13, lineHeight: 1.8 }} />
                             </Card>
                         )}
 
@@ -1088,13 +992,7 @@ export default function StarDetail() {
                 style={{ top: 20, paddingBottom: 0 }}
                 styles={{ body: { maxHeight: 'calc(100vh - 160px)', overflow: 'auto', padding: '16px 24px' } }}
             >
-                <div className='readme-markdown' style={{ padding: '8px 16px' }}>
-                    {repo?.readmeCn && (
-                        <ReactMarkdown rehypePlugins={[rehypeRaw]} remarkPlugins={[remarkGfm]} components={README_COMPONENTS}>
-                            {repo.readmeCn}
-                        </ReactMarkdown>
-                    )}
-                </div>
+                <MarkdownRenderer content={repo?.readmeCn || ''} style={{ padding: '8px 16px' }} />
             </Modal>
 
             {/* 异步翻译进度弹窗 */}
