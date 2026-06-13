@@ -30,6 +30,7 @@ export class StarsController {
     @ApiQuery({ name: 'dateField', required: false, description: '日期筛选字段' })
     @ApiQuery({ name: 'startDate', required: false, description: '开始日期' })
     @ApiQuery({ name: 'endDate', required: false, description: '结束日期' })
+    @ApiQuery({ name: 'tagIds', required: false, description: '标签 ID（逗号分隔，交集筛选）' })
     @ApiQuery({ name: 'untranslatedOnly', required: false, description: '仅显示未翻译仓库（true/false）' })
     async list(@Query() q: any) {
         const page = Math.max(1, parseInt(q.page) || 1);
@@ -41,6 +42,7 @@ export class StarsController {
             keyword: q.keyword || '',
             language: q.language || '',
             categoryIds: q.categoryIds || '',
+            tagIds: q.tagIds || '',
             sortBy: q.sortBy || 'starred_at',
             sortOrder: q.sortOrder || 'desc',
             dateField: q.dateField || '',

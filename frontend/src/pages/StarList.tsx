@@ -47,6 +47,7 @@ import * as starsApi from '../api/stars'
 import * as translateApi from '../api/translate'
 import * as analyzeApi from '../api/analyze'
 import * as cloneApi from '../api/clone'
+import { fetchAllTags } from '../api/tags'
 import { buildTargetPath, sanitizeSubdirectory } from '../utils/clonePath'
 import RepoCard from '../components/RepoCard'
 import RepoRow from '../components/RepoRow'
@@ -97,6 +98,8 @@ export default function StarList() {
     const keyword = searchParams.get('keyword') || ''
     const languageStr = searchParams.get('languages') || ''
     const selectedLanguages = languageStr ? languageStr.split(',') : []
+    const tagIdsStr = searchParams.get('tagIds') || ''
+    const selectedTagIds = tagIdsStr ? tagIdsStr.split(',').map(Number) : []
     const sortBy = searchParams.get('sortBy') || 'starred_at'
     const sortOrder = searchParams.get('sortOrder') || 'desc'
     const dateField = searchParams.get('dateField') || undefined
@@ -234,6 +237,7 @@ export default function StarList() {
     const dateFilterExpanded = !!(dateField || startDateStr || endDateStr || timePreset)
 
     const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({ records: [], total: 0, size: 12, current: 1, pages: 0 })
+    const [tagOptions, setTagOptions] = useState<{label:string,value:number}[]>([])
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
     const [loading, setLoading] = useState(true)
@@ -242,6 +246,9 @@ export default function StarList() {
     useEffect(() => {
         const loadMeta = async () => {
             try {
+                const tagRes = await fetchAllTags().catch(() => [])
+                const tagFlat = tagRes.flatMap((g: any) => g.tags.map((t: any) => ({ label: t.name, value: t.id })))
+                setTagOptions(tagFlat)
                 const [overviewRes, langRes] = await Promise.allSettled([
                     statsApi.fetchOverviewStats(),
                     statsApi.fetchLanguageStats(),
@@ -266,6 +273,7 @@ export default function StarList() {
                     size: pageSize,
                     keyword: keyword || undefined,
                     language: languageStr || undefined,
+                    tagIds: tagIdsStr || undefined,
                     
                     sortBy: sortBy || undefined,
                     sortOrder: sortOrder || undefined,
@@ -304,6 +312,7 @@ export default function StarList() {
         setUrlParams({
             keyword: null,
             languages: null,
+            tagIds: null,
             timePreset: null,
             sortBy: 'starred_at',
             sortOrder: 'desc',
@@ -370,6 +379,7 @@ export default function StarList() {
                                 size: pageSize,
                                 keyword: keyword || undefined,
                                 language: languageStr || undefined,
+                    tagIds: tagIdsStr || undefined,
                                 
                                 sortBy: sortBy || undefined,
                                 sortOrder: sortOrder || undefined,
@@ -392,6 +402,7 @@ export default function StarList() {
             const result = await analyzeApi.startAnalyze({
                 keyword: keyword || undefined,
                 language: languageStr || undefined,
+                    tagIds: tagIdsStr || undefined,
                 
                 sortBy: sortBy || undefined,
                 sortOrder: sortOrder || undefined,
@@ -558,6 +569,7 @@ export default function StarList() {
             const blob = await starsApi.exportStarsUrls({
                 keyword: keyword || undefined,
                 language: languageStr || undefined,
+                    tagIds: tagIdsStr || undefined,
                 
                 sortBy: sortBy || undefined,
                 sortOrder: sortOrder || undefined,
@@ -826,6 +838,7 @@ export default function StarList() {
     const hasActiveFilters =
         keyword.trim() !== '' ||
         languageStr !== '' ||
+        tagIdsStr !== '' ||
         dateField !== undefined ||
         !!startDateStr ||
         !!endDateStr ||
@@ -924,6 +937,20 @@ export default function StarList() {
                                 value={selectedLanguages}
                                 onChange={(vals) => setUrlParam('languages', vals.length > 0 ? vals.join(',') : null)}
                                 options={languageSelectOptions}
+                                allowClear
+                                showSearch
+                                maxTagCount={3}
+                                filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
+                                style={{ width: '100%' }}
+                            />
+                        </Col>
+                        <Col xs={24} sm={12} md={6} lg={4}>
+                            <Select
+                                mode='multiple'
+                                placeholder='筛选标签'
+                                value={selectedTagIds}
+                                onChange={(vals) => setUrlParam('tagIds', vals.length > 0 ? vals.join(',') : null)}
+                                options={tagOptions}
                                 allowClear
                                 showSearch
                                 maxTagCount={3}
@@ -1376,6 +1403,7 @@ export default function StarList() {
                             size: pageSize,
                             keyword: keyword || undefined,
                             language: languageStr || undefined,
+                    tagIds: tagIdsStr || undefined,
                             
                             sortBy: sortBy || undefined,
                             sortOrder: sortOrder || undefined,

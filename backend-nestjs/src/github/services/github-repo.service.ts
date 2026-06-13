@@ -70,6 +70,7 @@ export class GithubRepoService {
         keyword?: string;
         languages?: string[];
         categoryIds?: number[];
+        tagIds?: number[];
         dateField?: string;
         startDate?: string;
         endDate?: string;
@@ -78,6 +79,9 @@ export class GithubRepoService {
         const AND: Prisma.GithubRepoWhereInput[] = [];
         if (params.categoryIds?.length) {
             AND.push({ repoCategories: { some: { categoryId: { in: params.categoryIds.map(BigInt) } } } });
+        }
+        if (params.tagIds?.length) {
+            AND.push({ repoTags: { some: { tagId: { in: params.tagIds.map(BigInt) } } } });
         }
         if (params.keyword?.trim()) {
             const kw = params.keyword.trim();
@@ -131,6 +135,7 @@ export class GithubRepoService {
         keyword?: string;
         language?: string;
         categoryIds?: string;
+        tagIds?: string;
         sortBy?: string;
         sortOrder?: string;
         dateField?: string;
@@ -143,12 +148,14 @@ export class GithubRepoService {
         this.logger.log('分页查询仓库列表: page=' + page + ', size=' + size + ', keyword=' + (params.keyword || ''));
         const languages = params.language ? params.language.split(',').filter(Boolean) : [];
         const catIds = await this.expandCategoryIds(params.categoryIds || '');
+        const tagIds = params.tagIds ? params.tagIds.split(',').map(Number).filter((n) => !isNaN(n)) : [];
         const sortField = SORT_MAP[params.sortBy || 'starred_at'] || 'starredAt';
         const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
         const where = this.buildWhere({
             keyword: params.keyword,
             languages: languages.length > 0 ? languages : undefined,
             categoryIds: catIds.length > 0 ? catIds : undefined,
+            tagIds: tagIds.length > 0 ? tagIds : undefined,
             dateField: params.dateField,
             startDate: params.startDate,
             endDate: params.endDate,

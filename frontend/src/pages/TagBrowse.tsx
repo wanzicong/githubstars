@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
     Card, Tag, Typography, Button, Spin, Empty, Space, Modal,
-    InputNumber, Alert, message, Steps,
+    InputNumber, Alert, message, Steps, Tooltip,
 } from 'antd'
 import {
     TagsOutlined, ReloadOutlined,
@@ -15,6 +16,7 @@ import type { TagGroup } from '../api/tags'
 const { Title, Text } = Typography
 
 export default function TagBrowse() {
+    const navigate = useNavigate()
     const [groups, setGroups] = useState<TagGroup[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -144,21 +146,23 @@ export default function TagBrowse() {
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                                     {group.tags.length > 0 ? (
                                         group.tags.map((tag) => (
-                                            <Tag
-                                                key={tag.id}
-                                                color={tag.color || group.color}
-                                                style={{
-                                                    fontSize: 13,
-                                                    padding: '2px 10px',
-                                                    cursor: 'pointer',
-                                                    borderRadius: 12,
-                                                }}
-                                            >
-                                                {tag.name}
-                                                <span style={{ marginLeft: 4, opacity: 0.7, fontSize: 11 }}>
-                                                    {tag.repoCount}
-                                                </span>
-                                            </Tag>
+                                            <Tooltip title={`查看 ${tag.repoCount} 个仓库`} key={tag.id}>
+                                                <Tag
+                                                    color={tag.color || group.color}
+                                                    style={{
+                                                        fontSize: 13,
+                                                        padding: '2px 10px',
+                                                        cursor: 'pointer',
+                                                        borderRadius: 12,
+                                                    }}
+                                                    onClick={() => tag.repoCount > 0 && navigate(`/?tagIds=${tag.id}`)}
+                                                >
+                                                    {tag.name}
+                                                    <span style={{ marginLeft: 4, opacity: 0.7, fontSize: 11 }}>
+                                                        {tag.repoCount}
+                                                    </span>
+                                                </Tag>
+                                            </Tooltip>
                                         ))
                                     ) : (
                                         <Text type='secondary' style={{ fontSize: 13 }}>暂无标签</Text>
