@@ -316,7 +316,7 @@ export default function CategoryList() {
                                                             placeholder='移动到...'
                                                             style={{ width: 150 }}
                                                             value={undefined}
-                                                            onChange={(val) => handleMove(child.id, val)}
+                                                            onChange={(val) => val !== undefined && val !== null && handleMove(child.id, val)}
                                                             options={level1Options.filter((o) => o.value !== cat.id)}
                                                         />
                                                         <Popconfirm
@@ -437,7 +437,7 @@ export default function CategoryList() {
                                                         placeholder='移动到一级分类'
                                                         style={{ width: 200 }}
                                                         value={undefined}
-                                                        onChange={(val) => handleMove(child.id, val)}
+                                                        onChange={(val) => val !== undefined && val !== null && handleMove(child.id, val)}
                                                         options={level1Options}
                                                     />
                                                 </div>

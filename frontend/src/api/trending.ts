@@ -1,6 +1,5 @@
 import api from './request'
 import type { GithubSearchRepo } from './github'
-import { getAnalyzeStatus } from '../api/analyze'
 
 export interface TrendingResult {
     success: boolean

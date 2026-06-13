@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Card, Input, Row, Col, Tag, Avatar, Typography, Pagination, Empty, Spin, Statistic } from 'antd'
-import { SearchOutlined, StarFilled, GithubOutlined } from '@ant-design/icons'
+import { StarFilled, GithubOutlined } from '@ant-design/icons'
 import * as authorsApi from '../api/authors'
 import { formatNumberCn } from '../utils/format'
 import type { AuthorDTO, PageResult } from '../types'

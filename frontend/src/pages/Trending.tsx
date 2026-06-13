@@ -48,7 +48,7 @@ export default function Trending() {
     const [dateRange, setDateRange] = useState('')
     const [loading, setLoading] = useState(false)
     const [analyzing, setAnalyzing] = useState(false)
-    const [analyzeTaskId, setAnalyzeTaskId] = useState<string | null>(null)
+    const [, setAnalyzeTaskId] = useState<string | null>(null)
     const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
     const [analyzeResult, setAnalyzeResult] = useState<string | null>(null)
     const [analyzeStatus, setAnalyzeStatus] = useState('')

@@ -13,7 +13,6 @@ import {
     Col,
     Spin,
     Empty,
-    Divider,
     message,
     Modal,
     Progress,
@@ -98,7 +97,7 @@ export default function StarDetail() {
     const [translatingReadme, setTranslatingReadme] = useState(false)
 
     // 异步翻译进度
-    const [translateTaskId, setTranslateTaskId] = useState<number | null>(null)
+    const [, setTranslateTaskId] = useState<number | null>(null)
     const [translateModalVisible, setTranslateModalVisible] = useState(false)
     const [translateProgress, setTranslateProgress] = useState<translateApi.TranslateTaskProgress | null>(null)
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)

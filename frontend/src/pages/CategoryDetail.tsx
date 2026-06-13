@@ -26,7 +26,6 @@ import {
     StarFilled,
     ForkOutlined,
     GithubOutlined,
-    SearchOutlined,
     ClearOutlined,
     AppstoreOutlined,
     UnorderedListOutlined,
@@ -158,7 +157,6 @@ export default function CategoryDetail() {
     const pageSize = parseInt(searchParams.get('size') || '12', 10)
 
     const [category, setCategory] = useState<Category | null>(null)
-    const [allCategories, setAllCategories] = useState<Category[]>([])
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
     const [reclassifying, setReclassifying] = useState(false)
     const [loading, setLoading] = useState(false)
@@ -191,7 +189,6 @@ export default function CategoryDetail() {
         setLoading(true)
         try {
             const data = await categoriesApi.fetchAllCategories()
-            setAllCategories(data)
             // 递归搜索树形结构(L1+children), 匹配任意层级的分类
             const findInTree = (cats: typeof data): (typeof data)[0] | undefined => {
                 for (const cat of cats) {
@@ -246,12 +243,10 @@ export default function CategoryDetail() {
     }, [id, currentPage, pageSize, keyword, selectedLanguages.join(','), sortBy, sortOrder])
 
     const handleClearFilters = () => {
-        setSearchParams((prev) => {
-            const next = new URLSearchParams()
-            next.set('sortBy', 'starred_at')
-            next.set('sortOrder', 'desc')
-            return next
-        })
+        const next = new URLSearchParams()
+        next.set('sortBy', 'starred_at')
+        next.set('sortOrder', 'desc')
+        setSearchParams(next)
     }
 
     const handleReclassify = () => {
@@ -400,7 +395,7 @@ export default function CategoryDetail() {
                                 )}
                                 <Segmented
                                     value={viewMode}
-                                    onChange={(val) => setUrlParam('view', val === 'list' ? null : (val as string), false)}
+                                    onChange={(val) => setUrlParam('view', val === 'list' ? null : (val as string))}
                                     options={[
                                         { value: 'grid', icon: <AppstoreOutlined /> },
                                         { value: 'list', icon: <UnorderedListOutlined /> },

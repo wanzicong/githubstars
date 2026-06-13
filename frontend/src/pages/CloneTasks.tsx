@@ -93,7 +93,7 @@ export default function CloneTasks() {
     }, [hasRunning, currentPage, pageSize, fetchData])
 
     const handlePin = useCallback(
-        async (taskId: string, currentPinned: boolean) => {
+        async (taskId: string, _currentPinned: boolean) => {
             try {
                 const res = await cloneApi.togglePinCloneTask(taskId)
                 if (res.success) {

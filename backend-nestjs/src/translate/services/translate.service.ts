@@ -18,7 +18,7 @@ export class TranslateService {
     /**
      * 调用 DeepSeek API 进行文本翻译
      *
-     * 带 120s 超时 + 429 限流识别，被限流时返回哨兵常量 __RATE_LIMITED__
+     * 带 300s 超时 (5 分钟) + 429 限流识别，被限流时返回哨兵常量 __RATE_LIMITED__
      *
      * @param text 待翻译的原始文本
      * @param isReadme 是否为 README 翻译（影响 prompt 和 max_tokens）
@@ -62,7 +62,7 @@ export class TranslateService {
 请翻译以下内容：`;
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 120_000); // 120s 超时
+        const timeout = setTimeout(() => controller.abort(), 300_000); // 300s 超时 (5 分钟)
 
         try {
             const res = await fetch(apiUrl, {
@@ -88,7 +88,7 @@ export class TranslateService {
             return data.choices?.[0]?.message?.content?.trim() || null;
         } catch (e) {
             if ((e as Error).name === 'AbortError') {
-                this.logger.error('DeepSeek 调用超时 (120s)');
+                this.logger.error('DeepSeek 调用超时 (300s)');
                 return null;
             }
             this.logger.error('DeepSeek 调用失败', e);

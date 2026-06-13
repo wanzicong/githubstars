@@ -17,28 +17,23 @@ import {
     Typography,
     Divider,
     Alert,
-    message,
     Empty,
-    Descriptions,
-    Badge,
     Tooltip,
+    message,
 } from 'antd'
 import {
     TranslationOutlined,
     ReloadOutlined,
     BarChartOutlined,
-    CheckCircleOutlined,
-    CloseCircleOutlined,
     ClockCircleOutlined,
     ReadOutlined,
     FileTextOutlined,
     FilterOutlined,
     SyncOutlined,
-    ApartmentOutlined,
 } from '@ant-design/icons'
 import * as translateApi from '../api/translate'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
 interface Props {
     open: boolean
@@ -66,6 +61,16 @@ interface TaskSummary {
     failedItems: number
     createdAt?: string
     finishedAt?: string
+}
+
+/** 规范化 filters 为 API 期望的 Record<string, string | undefined> 格式 */
+function normalizeFilters(filters: Props['filters']): Record<string, string | undefined> {
+    const result: Record<string, string | undefined> = {}
+    for (const [key, value] of Object.entries(filters)) {
+        if (value === undefined || value === null || value === false) continue
+        result[key] = typeof value === 'boolean' ? 'true' : String(value)
+    }
+    return result
 }
 
 export default function TranslatePanel({ open, onClose, filters, hasActiveFilters, onRefreshList }: Props) {
@@ -98,13 +103,13 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
     // 历史任务
     const [recentTasks, setRecentTasks] = useState<TaskSummary[]>([])
 
-    const [loading, setLoading] = useState<'desc' | 'readme' | 'both' | null>(null)
+    const [loading, setLoading] = useState<'description' | 'readme' | 'both' | null>(null)
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     // 加载覆盖统计
     const loadCoverage = useCallback(async () => {
         try {
-            const res = await translateApi.getTranslationStatus(filters)
+            const res = await translateApi.getTranslationStatus(normalizeFilters(filters))
             if (res.success) setCoverage(res as any)
         } catch {
             /* ignore */
@@ -115,7 +120,7 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
     const loadRecentTasks = useCallback(async () => {
         try {
             const res = await translateApi.getRecentTasks()
-            if (res.success) setRecentTasks((res.tasks || []) as TaskSummary[])
+            if (res.success) setRecentTasks((res.tasks || []) as unknown as TaskSummary[])
         } catch {
             /* ignore */
         }
@@ -163,7 +168,7 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
             const res = await translateApi.createTranslateTask({
                 type,
                 scope: hasActiveFilters ? 'filtered' : 'all',
-                filters: hasActiveFilters ? filters : undefined,
+                filters: hasActiveFilters ? normalizeFilters(filters) : undefined,
             })
             if (res.success && res.taskId) {
                 setActiveTaskId(res.taskId)
@@ -225,7 +230,7 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
 
     const descPercent = coverage ? (coverage.total > 0 ? Math.round((coverage.descCompleted * 100) / coverage.total) : 100) : 0
     const readmePercent = coverage ? (coverage.total > 0 ? Math.round((coverage.readmeCompleted * 100) / coverage.total) : 100) : 0
-    const isRunning = taskProgress && (taskProgress.status === 'PENDING' || taskProgress.status === 'PROCESSING')
+    const isRunning = !!taskProgress && (taskProgress.status === 'PENDING' || taskProgress.status === 'PROCESSING')
 
     return (
         <Modal
@@ -296,7 +301,7 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
                     <Tooltip title={`翻译${hasActiveFilters ? '当前筛选下' : '全部'}仓库的**描述**(列表中的简短介绍文字)，通常几秒内完成`}>
                         <Button
                             icon={<FileTextOutlined />}
-                            loading={loading === 'desc'}
+                            loading={loading === 'description'}
                             onClick={() => handleStartTranslate('description')}
                         >
                             翻译描述 {hasActiveFilters ? '' : '(全部)'}
