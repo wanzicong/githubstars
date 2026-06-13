@@ -1,14 +1,16 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
     Card, Tag, Typography, Button, Spin, Empty, Space, Modal,
-    InputNumber, Input, Alert, message, Steps, Tooltip,
+    Input, Alert, message, Steps, Tooltip, Popconfirm, Divider,
 } from 'antd'
 import {
     TagsOutlined, ReloadOutlined,
-    BulbOutlined, ThunderboltOutlined,
+    BulbOutlined, ThunderboltOutlined, SearchOutlined,
     LoadingOutlined, CheckCircleOutlined, ExclamationCircleOutlined,
+    DeleteOutlined, ClearOutlined, PlayCircleOutlined,
 } from '@ant-design/icons'
+import api from '../api/request'
 import * as tagsApi from '../api/tags'
 import { fetchStarList } from '../api/stars'
 import type { TagGroup } from '../api/tags'
@@ -21,19 +23,29 @@ export default function TagBrowse() {
     const [groups, setGroups] = useState<TagGroup[]>([])
     const [loading, setLoading] = useState(true)
 
-    // Agent 自动标签状态
+    // 标签搜索
+    const [tagSearch, setTagSearch] = useState('')
+
+    // Agent 自动标签 — Modal 配置参数（与执行分离）
     const [agentModalVisible, setAgentModalVisible] = useState(false)
-    const [agentStatus, setAgentStatus] = useState('')
-    const [agentThinking, setAgentThinking] = useState('')
-    const [agentToolCalls, setAgentToolCalls] = useState<string[]>([])
-    const [agentResult, setAgentResult] = useState('')
-    const [agentError, setAgentError] = useState('')
-    const [agentRunning, setAgentRunning] = useState(false)
-    const [agentRepoCount, setAgentRepoCount] = useState(50)
     const [agentKeyword, setAgentKeyword] = useState(searchParams.get('keyword') || '')
     const [agentLanguage, setAgentLanguage] = useState(searchParams.get('language') || '')
+
+    // Agent 执行状态
+    const [agentRunning, setAgentRunning] = useState(false)
+    const [agentStatus, setAgentStatus] = useState('')
+    const [agentThinking, setAgentThinking] = useState('')
+    const [agentToolCalls, setAgentToolCalls] = useState<{ label: string; result?: string }[]>([])
+    const [agentResult, setAgentResult] = useState('')
+    const [agentError, setAgentError] = useState('')
     const [agentStep, setAgentStep] = useState(0)
+    const [agentBatchProgress, setAgentBatchProgress] = useState('')
     const abortRef = useRef<(() => void) | null>(null)
+    const thinkingEndRef = useRef<HTMLDivElement>(null)
+
+    // 操作 loading
+    const [deletingEmpty, setDeletingEmpty] = useState(false)
+    const [deletingAll, setDeletingAll] = useState(false)
 
     const load = useCallback(async () => {
         setLoading(true)
@@ -49,26 +61,138 @@ export default function TagBrowse() {
 
     useEffect(() => { load() }, [load])
 
-    const handleAgentAutoTag = async () => {
+    // ── sessionStorage 持久化：Agent 状态变化时自动保存（不保存错误态）──
+    useEffect(() => {
+        if ((agentRunning || agentResult) && !agentError) {
+            const state = {
+                agentRunning, agentStatus, agentThinking, agentToolCalls,
+                agentResult, agentStep, agentBatchProgress,
+                agentKeyword, agentLanguage,
+                savedAt: Date.now(),
+            }
+            sessionStorage.setItem('agent_tag_state', JSON.stringify(state))
+        }
+    }, [agentRunning, agentStatus, agentThinking, agentToolCalls, agentResult, agentStep, agentBatchProgress, agentKeyword, agentLanguage])
+
+    // ── 页面加载时恢复状态 + 检查后台任务 ──
+    useEffect(() => {
+        // 1. 先尝试从 sessionStorage 恢复（5 分钟内有效）
+        const saved = sessionStorage.getItem('agent_tag_state')
+        if (saved) {
+            try {
+                const s = JSON.parse(saved)
+                if (Date.now() - s.savedAt < 300000) {
+                    setAgentRunning(s.agentRunning || false)
+                    setAgentStatus(s.agentStatus || '')
+                    setAgentThinking(s.agentThinking || '')
+                    setAgentToolCalls(s.agentToolCalls || [])
+                    setAgentResult(s.agentResult || '')
+                    setAgentError(s.agentError || '')
+                    setAgentStep(s.agentStep || 0)
+                    setAgentBatchProgress(s.agentBatchProgress || '')
+                    if (s.agentKeyword) setAgentKeyword(s.agentKeyword)
+                    if (s.agentLanguage) setAgentLanguage(s.agentLanguage)
+                }
+            } catch { sessionStorage.removeItem('agent_tag_state') }
+        }
+
+        // 2. 检查后端是否还有运行中的任务
+        api.get('/api/agent/tags/running')
+            .then(({ data }: any) => {
+                if (data?.tasks?.length > 0) {
+                    const t = data.tasks[0]
+                    setAgentRunning(true)
+                    setAgentStatus(t.status || '后台分析中...')
+                    setAgentStep(2)
+                    message.info(`检测到后台分析任务运行中（已处理 ${t.processedCount}/${t.repoCount} 个仓库，点击「Agent 智能打标签」查看详情）`, 6)
+                    // 保存到 sessionStorage
+                    sessionStorage.setItem('agent_tag_state', JSON.stringify({
+                        agentRunning: true, agentStatus: t.status,
+                        agentStep: 2, savedAt: Date.now(),
+                    }))
+                } else if (saved) {
+                    // 任务已完成，清除旧状态
+                    sessionStorage.removeItem('agent_tag_state')
+                }
+            })
+            .catch(() => {})
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // 搜索过滤后的标签组
+    const filteredGroups = useMemo(() => {
+        if (!tagSearch.trim()) return groups
+        const kw = tagSearch.toLowerCase()
+        return groups
+            .map((g) => ({
+                ...g,
+                tags: g.tags.filter((t) => t.name.toLowerCase().includes(kw)),
+            }))
+            .filter((g) => g.tags.length > 0)
+    }, [groups, tagSearch])
+
+    // 空标签数量
+    const emptyTagCount = useMemo(() => {
+        let count = 0
+        for (const g of groups) {
+            for (const t of g.tags) {
+                if (t.repoCount === 0) count++
+            }
+        }
+        return count
+    }, [groups])
+
+    // ======================== Agent: 打开配置弹窗（保留运行状态，清除错误态） ========================
+    const handleOpenAgentModal = () => {
+        // 错误态 → 重置为配置模式，允许重试
+        if (agentError && !agentRunning) {
+            setAgentError('')
+            setAgentResult('')
+            setAgentStep(0)
+            setAgentStatus('')
+            setAgentThinking('')
+            setAgentToolCalls([])
+            setAgentBatchProgress('')
+            sessionStorage.removeItem('agent_tag_state')
+        }
         setAgentModalVisible(true)
+    }
+
+    // ======================== Agent: 确认并开始执行 ========================
+    const handleStartAgent = async () => {
+        setAgentRunning(true)
         setAgentStep(0)
         setAgentStatus('正在获取仓库列表...')
         setAgentThinking('')
         setAgentToolCalls([])
         setAgentResult('')
         setAgentError('')
-        setAgentRunning(true)
+        setAgentBatchProgress('')
 
-        // 第一步：按筛选条件获取仓库 ID
+        // 收集仓库：无筛选条件 → 全部仓库；有筛选条件 → 按条件过滤（不分页，取全部匹配）
+        const hasFilter = !!(agentKeyword || agentLanguage)
         let repoIds: number[] = []
         try {
-            const result = await fetchStarList({
-                page: 1,
-                size: Math.min(agentRepoCount, 500),
-                keyword: agentKeyword || undefined,
-                language: agentLanguage || undefined,
-            })
-            repoIds = result.records.map((r) => Number(r.id))
+            if (hasFilter) {
+                // 按筛选条件取匹配仓库（最多 2000，实际够用）
+                const result = await fetchStarList({
+                    page: 1,
+                    size: 2000,
+                    keyword: agentKeyword || undefined,
+                    language: agentLanguage || undefined,
+                })
+                repoIds = result.records.map((r) => Number(r.id))
+            } else {
+                // 无筛选 → 获取全部仓库
+                let page = 1
+                const allIds: number[] = []
+                while (true) {
+                    const result = await fetchStarList({ page, size: 500 })
+                    allIds.push(...result.records.map((r) => Number(r.id)))
+                    if (allIds.length >= result.total) break
+                    page++
+                }
+                repoIds = allIds
+            }
             setAgentStep(1)
             setAgentStatus(`已获取 ${repoIds.length} 个仓库，分批处理中...`)
         } catch {
@@ -78,7 +202,7 @@ export default function TagBrowse() {
         }
 
         if (!repoIds.length) {
-            setAgentError('没有可分析的仓库')
+            setAgentError('没有可分析的仓库，请调整筛选条件')
             setAgentRunning(false)
             return
         }
@@ -87,16 +211,41 @@ export default function TagBrowse() {
         const abort = tagsApi.startAgentAutoTag(repoIds, {
             onStatus: (msg) => {
                 setAgentStatus(msg)
-                if (msg.includes('分析完成')) setAgentStep(3)
-                else if (msg.includes('Agent 正在分析') || msg.includes('搜索')) setAgentStep(2)
+                // 更新步骤指示器
+                if (msg.includes('已加载')) setAgentStep(1)
+                else if (msg.includes('第 ') && msg.includes(' 批')) setAgentStep(2)
+                else if (msg.includes('全部完成')) setAgentStep(4)
+                // 批次进度
+                if (msg.startsWith('━━━') || msg.startsWith('✅ 第') || msg.startsWith('⚠️ 第')) {
+                    setAgentBatchProgress((p) => p + msg + '\n')
+                }
             },
-            onThinking: (content) => setAgentThinking((p) => p + content),
+            onThinking: (content) => {
+                setAgentThinking((p) => p + content)
+                // 自动滚动到底部
+                setTimeout(() => {
+                    thinkingEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+                }, 50)
+            },
             onToolCall: (name, input) => {
-                const label = name === 'WebSearch' ? `🌐 搜索: ${(input as any)?.query || ''}` :
-                              name === 'WebFetch' ? `📄 读取: ${(input as any)?.url || ''}` :
-                              name === 'search_tags' ? '🔍 查标签' : `🔧 ${name}`
-                setAgentToolCalls((p) => [...p, label])
-                setAgentStatus(`${label}`)
+                const label = name === 'get_repo_details'
+                    ? `📋 get_repo_details(${(input as any)?.repoIds?.length || '?'} 个仓库)`
+                    : name === 'search_tags'
+                    ? `🔍 search_tags("${(input as any)?.keyword || ''}")`
+                    : `⛔ ${name}（已拦截）`
+                setAgentToolCalls((p) => [...p, { label }])
+                setAgentStatus(label)
+            },
+            onToolResult: (content) => {
+                // 将工具返回内容关联到最后一次调用
+                setAgentToolCalls((p) => {
+                    const updated = [...p]
+                    if (updated.length > 0) {
+                        const last = { ...updated[updated.length - 1], result: content }
+                        updated[updated.length - 1] = last
+                    }
+                    return updated
+                })
             },
             onResult: (msg) => {
                 setAgentStep(4)
@@ -105,7 +254,6 @@ export default function TagBrowse() {
                 load()
             },
             onError: (msg) => {
-                setAgentStep(-1)
                 setAgentError(msg)
                 setAgentRunning(false)
             },
@@ -114,15 +262,122 @@ export default function TagBrowse() {
         abortRef.current = abort
     }
 
+    // ======================== 标签操作 ========================
+
+    const handleDeleteTag = async (tagId: number, tagName: string) => {
+        try {
+            const res = await tagsApi.deleteTag(tagId)
+            if (res.success) {
+                message.success(`已删除标签「${tagName}」`)
+                load()
+            } else {
+                message.error(res.message || '删除失败')
+            }
+        } catch {
+            message.error('删除失败')
+        }
+    }
+
+    const handleDeleteEmpty = async () => {
+        setDeletingEmpty(true)
+        try {
+            const res = await tagsApi.deleteEmptyTags()
+            if (res.success) {
+                message.success(res.message || `已删除 ${res.deleted} 个空标签`)
+                load()
+            } else {
+                message.error(res.message || '操作失败')
+            }
+        } catch {
+            message.error('操作失败')
+        } finally {
+            setDeletingEmpty(false)
+        }
+    }
+
+    const handleDeleteAll = async () => {
+        setDeletingAll(true)
+        try {
+            const res = await tagsApi.deleteAllTags()
+            if (res.success) {
+                message.success(res.message || `已清空 ${res.deleted} 个标签`)
+                load()
+            } else {
+                message.error(res.message || '操作失败')
+            }
+        } catch {
+            message.error('操作失败')
+        } finally {
+            setDeletingAll(false)
+        }
+    }
+
+    // ======================== 渲染 ========================
+
     return (
         <div>
+            {/* ── Agent 后台运行状态条（Modal 关闭时可见）── */}
+            {agentRunning && !agentModalVisible && (
+                <Alert
+                    type='info'
+                    showIcon
+                    icon={<LoadingOutlined spin style={{ color: '#1677ff' }} />}
+                    message={
+                        <Space>
+                            <span>Agent 正在后台分析标签...</span>
+                            <Text type='secondary' style={{ fontSize: 12 }}>{agentStatus}</Text>
+                            <Button size='small' type='link' onClick={handleOpenAgentModal}>
+                                查看详情
+                            </Button>
+                        </Space>
+                    }
+                    style={{ marginBottom: 16 }}
+                />
+            )}
+
+            {/* ── 顶部操作栏 ── */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
                 <Title level={3} style={{ margin: 0 }}>
                     <TagsOutlined style={{ marginRight: 8 }} />
                     标签管理
                 </Title>
-                <Space>
-                    <Button icon={<ThunderboltOutlined />} type='primary' onClick={handleAgentAutoTag} loading={agentRunning}>
+                <Space wrap>
+                    {/* 搜索标签 */}
+                    <Input
+                        placeholder='搜索标签...'
+                        prefix={<SearchOutlined />}
+                        value={tagSearch}
+                        onChange={(e) => setTagSearch(e.target.value)}
+                        allowClear
+                        style={{ width: 200 }}
+                    />
+                    {emptyTagCount > 0 && (
+                        <Button
+                            icon={<ClearOutlined />}
+                            onClick={handleDeleteEmpty}
+                            loading={deletingEmpty}
+                            danger
+                        >
+                            清除空标签 ({emptyTagCount})
+                        </Button>
+                    )}
+                    <Popconfirm
+                        title='确认重置'
+                        description='将删除全部标签及仓库关联，确定重置？'
+                        onConfirm={handleDeleteAll}
+                        okText='确认重置'
+                        okType='danger'
+                        cancelText='取消'
+                    >
+                        <Button
+                            icon={<DeleteOutlined />}
+                            loading={deletingAll}
+                            danger
+                        >
+                            重置全部标签
+                        </Button>
+                    </Popconfirm>
+                    <Button icon={<ThunderboltOutlined />} type='primary' onClick={handleOpenAgentModal}>
                         🤖 Agent 智能打标签
                     </Button>
                     <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
@@ -131,12 +386,22 @@ export default function TagBrowse() {
                 </Space>
             </div>
 
+            {/* ── 标签列表 ── */}
             <Spin spinning={loading}>
-                {groups.length === 0 && !loading ? (
-                    <Empty description='暂无标签数据' style={{ marginTop: 80 }} />
+                {filteredGroups.length === 0 && !loading ? (
+                    <Empty
+                        description={tagSearch ? `未找到匹配「${tagSearch}」的标签` : '暂无标签数据，点击「Agent 智能打标签」开始分析'}
+                        style={{ marginTop: 80 }}
+                    >
+                        {!tagSearch && (
+                            <Button type='primary' icon={<ThunderboltOutlined />} onClick={handleOpenAgentModal}>
+                                🤖 Agent 智能打标签
+                            </Button>
+                        )}
+                    </Empty>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                        {groups.map((group) => (
+                        {filteredGroups.map((group) => (
                             <Card
                                 key={group.id}
                                 size='small'
@@ -147,23 +412,47 @@ export default function TagBrowse() {
                                         <Tag color={group.isSystem ? 'blue' : 'default'} style={{ fontSize: 11 }}>
                                             {group.isSystem ? '系统' : '自定义'}
                                         </Tag>
+                                        <Text type='secondary' style={{ fontSize: 12 }}>
+                                            {group.tags.length} 个标签
+                                        </Text>
                                     </Space>
                                 }
                                 styles={{ body: { padding: '12px 16px' } }}
                             >
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                    {group.tags.length > 0 ? (
-                                        group.tags.map((tag) => (
-                                            <Tooltip title={`查看 ${tag.repoCount} 个仓库`} key={tag.id}>
+                                {group.tags.length > 0 ? (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                                        {group.tags.map((tag) => (
+                                            <Tooltip
+                                                title={tag.repoCount > 0 ? `查看 ${tag.repoCount} 个仓库` : '暂无仓库使用此标签'}
+                                                key={tag.id}
+                                            >
                                                 <Tag
-                                                    color={tag.color || group.color}
+                                                    color={tag.repoCount > 0 ? (tag.color || group.color) : '#d9d9d9'}
                                                     style={{
                                                         fontSize: 13,
                                                         padding: '2px 10px',
-                                                        cursor: 'pointer',
+                                                        cursor: tag.repoCount > 0 ? 'pointer' : 'default',
                                                         borderRadius: 12,
+                                                        opacity: tag.repoCount > 0 ? 1 : 0.5,
                                                     }}
                                                     onClick={() => tag.repoCount > 0 && navigate(`/?tagIds=${tag.id}`)}
+                                                    closable
+                                                    onClose={(e) => {
+                                                        e.preventDefault()
+                                                        handleDeleteTag(tag.id, tag.name)
+                                                    }}
+                                                    closeIcon={
+                                                        <Popconfirm
+                                                            title={`删除标签「${tag.name}」？`}
+                                                            description={tag.repoCount > 0 ? `该标签下有 ${tag.repoCount} 个仓库，删除后仓库将失去此标签` : '此标签暂无仓库使用'}
+                                                            onConfirm={() => handleDeleteTag(tag.id, tag.name)}
+                                                            okText='删除'
+                                                            okType='danger'
+                                                            cancelText='取消'
+                                                        >
+                                                            <DeleteOutlined style={{ fontSize: 10 }} />
+                                                        </Popconfirm>
+                                                    }
                                                 >
                                                     {tag.name}
                                                     <span style={{ marginLeft: 4, opacity: 0.7, fontSize: 11 }}>
@@ -171,18 +460,18 @@ export default function TagBrowse() {
                                                     </span>
                                                 </Tag>
                                             </Tooltip>
-                                        ))
-                                    ) : (
-                                        <Text type='secondary' style={{ fontSize: 13 }}>暂无标签</Text>
-                                    )}
-                                </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <Text type='secondary' style={{ fontSize: 13 }}>暂无标签</Text>
+                                )}
                             </Card>
                         ))}
                     </div>
                 )}
             </Spin>
 
-            {/* Agent 自动标签弹窗 */}
+            {/* ── Agent 配置弹窗（参数设置 + 执行进度合并展示）── */}
             <Modal
                 title={
                     <Space>
@@ -192,39 +481,34 @@ export default function TagBrowse() {
                 }
                 open={agentModalVisible}
                 onCancel={() => {
-                    abortRef.current?.()
+                    // 关闭弹窗但不断开 SSE 连接，Agent 继续后台运行
                     setAgentModalVisible(false)
                 }}
                 footer={
                     <Space>
                         {agentRunning && (
-                            <Button danger onClick={() => { abortRef.current?.(); setAgentRunning(false) }}>
-                                中止
+                            <Button danger onClick={() => { abortRef.current?.(); setAgentRunning(false); setAgentStatus('已中止'); }}>
+                                🛑 中止分析
+                            </Button>
+                        )}
+                        {agentError && !agentRunning && (
+                            <Button type='primary' onClick={() => { setAgentError(''); setAgentResult(''); handleOpenAgentModal(); }}>
+                                重试
                             </Button>
                         )}
                         <Button type='primary' onClick={() => setAgentModalVisible(false)}>
-                            关闭
+                            {agentRunning ? '收起窗口（后台继续）' : '关闭'}
                         </Button>
                     </Space>
                 }
                 width={800}
                 style={{ top: 20 }}
+                destroyOnClose
             >
+                {/* ── 参数配置区（执行前显示，执行中也显示但禁用）── */}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
                     <div style={{ flex: 1 }}>
-                        <Text>数量</Text>
-                        <InputNumber
-                            value={agentRepoCount}
-                            onChange={(v) => setAgentRepoCount(v ?? 50)}
-                            min={5}
-                            max={500}
-                            disabled={agentRunning}
-                            style={{ width: '100%', marginTop: 4 }}
-                            addonAfter='个'
-                        />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                        <Text>关键词（可选）</Text>
+                        <Text strong>关键词（可选）</Text>
                         <Input
                             placeholder='筛选仓库名/描述'
                             value={agentKeyword}
@@ -235,7 +519,7 @@ export default function TagBrowse() {
                         />
                     </div>
                     <div style={{ flex: 1 }}>
-                        <Text>语言（可选）</Text>
+                        <Text strong>语言（可选）</Text>
                         <Input
                             placeholder='如 Python,Java'
                             value={agentLanguage}
@@ -246,13 +530,29 @@ export default function TagBrowse() {
                         />
                     </div>
                 </div>
-                {agentKeyword || agentLanguage ? (
-                    <Alert type='info' showIcon message='将仅分析符合筛选条件的仓库' style={{ marginBottom: 12 }} />
-                ) : (
-                    <Alert type='info' showIcon message='将按 Star 数降序分析前 N 个仓库' style={{ marginBottom: 12 }} />
+
+                {!agentRunning && !agentResult && !agentError && (
+                    <>
+                        {agentKeyword || agentLanguage ? (
+                            <Alert type='info' showIcon message='将仅分析符合筛选条件的全部仓库' style={{ marginBottom: 12 }} />
+                        ) : (
+                            <Alert type='info' showIcon message='未设筛选条件，将分析全部仓库（按 Star 数降序分批处理）' style={{ marginBottom: 12 }} />
+                        )}
+                        <div style={{ textAlign: 'center', padding: '20px 0 8px' }}>
+                            <Button
+                                type='primary'
+                                size='large'
+                                icon={<PlayCircleOutlined />}
+                                onClick={handleStartAgent}
+                                style={{ minWidth: 200 }}
+                            >
+                                开始分析
+                            </Button>
+                        </div>
+                    </>
                 )}
 
-                {/* 步骤指示器 */}
+                {/* ── 执行进度区 ── */}
                 {agentRunning && (
                     <Steps
                         current={agentStep}
@@ -260,10 +560,10 @@ export default function TagBrowse() {
                         status={agentStep === -1 ? 'error' : 'process'}
                         style={{ marginBottom: 16 }}
                         items={[
-                            { title: '获取仓库' },
-                            { title: 'Agent 分析' },
-                            { title: '搜索了解' },
-                            { title: '保存标签' },
+                            { title: '获取仓库列表' },
+                            { title: 'Agent 分析中' },
+                            { title: '搜索匹配标签' },
+                            { title: '保存标签结果' },
                         ]}
                     />
                 )}
@@ -273,10 +573,10 @@ export default function TagBrowse() {
                 )}
 
                 {agentResult && (
-                    <Alert type='success' showIcon icon={<CheckCircleOutlined />} message='标签完成' description={agentResult} style={{ marginBottom: 12 }} />
+                    <Alert type='success' showIcon icon={<CheckCircleOutlined />} message='分析完成' description={agentResult} style={{ marginBottom: 12 }} />
                 )}
 
-                {/* Agent 工作状态 */}
+                {/* Agent 状态卡片 */}
                 {(agentRunning || agentStatus) && !agentError && !agentResult && (
                     <Card size='small' style={{ marginBottom: 12, background: '#f6ffed', borderColor: '#b7eb8f' }}>
                         <Space>
@@ -286,13 +586,39 @@ export default function TagBrowse() {
                     </Card>
                 )}
 
-                {/* 工具调用日志 */}
+                {/* 批次进度汇总 */}
+                {agentBatchProgress && (
+                    <Card size='small' title='📊 批次进度' style={{ marginBottom: 12, background: '#fffbe6', borderColor: '#ffe58f' }}>
+                        <div style={{ maxHeight: 120, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 12, fontFamily: 'monospace' }}>
+                            {agentBatchProgress}
+                        </div>
+                    </Card>
+                )}
+
+                {/* 工具调用记录（含返回结果） */}
                 {agentToolCalls.length > 0 && (
-                    <Card size='small' title='🔧 工具调用记录' style={{ marginBottom: 12 }}>
-                        <div style={{ maxHeight: 150, overflow: 'auto' }}>
+                    <Card size='small' title={`🔧 工具调用 (${agentToolCalls.length} 次)`} style={{ marginBottom: 12 }}>
+                        <div style={{ maxHeight: 250, overflow: 'auto' }}>
                             {agentToolCalls.map((tc, i) => (
-                                <div key={i} style={{ fontSize: 12, color: '#666', padding: '2px 0' }}>
-                                    {tc}
+                                <div key={i} style={{ marginBottom: 8, borderBottom: '1px solid #f0f0f0', paddingBottom: 6 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1677ff' }}>
+                                        {tc.label}
+                                    </div>
+                                    {tc.result && (
+                                        <div style={{
+                                            fontSize: 11,
+                                            color: '#666',
+                                            marginTop: 4,
+                                            padding: '4px 8px',
+                                            background: '#fafafa',
+                                            borderRadius: 4,
+                                            whiteSpace: 'pre-wrap',
+                                            maxHeight: 80,
+                                            overflow: 'auto',
+                                        }}>
+                                            {tc.result}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -302,8 +628,11 @@ export default function TagBrowse() {
                 {/* Agent 思考过程 */}
                 {agentThinking && (
                     <Card size='small' title='💭 Agent 思考过程' style={{ marginBottom: 12 }}>
-                        <div style={{ maxHeight: 250, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 13, color: '#555', lineHeight: 1.6 }}>
+                        <div
+                            style={{ maxHeight: 350, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 13, color: '#555', lineHeight: 1.6 }}
+                        >
                             {agentThinking}
+                            <div ref={thinkingEndRef} />
                         </div>
                     </Card>
                 )}

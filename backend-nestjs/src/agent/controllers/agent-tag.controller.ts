@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Req, Res } from '@nestjs/common';
+import { Controller, Post, Body, Req, Res, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AgentTagService, AgentTagStreamEvent } from '../services/agent-tag.service';
@@ -15,6 +15,13 @@ import { AgentTagService, AgentTagStreamEvent } from '../services/agent-tag.serv
 @Controller('api/agent/tags')
 export class AgentTagController {
     constructor(private readonly agentTag: AgentTagService) {}
+
+    /** 查询当前运行中的分析任务 */
+    @Get('running')
+    @ApiOperation({ summary: '查询运行中的分析任务', description: '用于页面刷新后恢复状态' })
+    async getRunning() {
+        return { tasks: this.agentTag.getRunningTasks() };
+    }
 
     @Post('stream')
     @ApiOperation({

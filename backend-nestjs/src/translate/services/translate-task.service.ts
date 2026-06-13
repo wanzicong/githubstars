@@ -223,7 +223,17 @@ export class TranslateTaskService {
                 await this.prisma.translationTask.update({ where: { id: taskId }, data: { status: 'PROCESSING' } });
                 const items = await this.prisma.translationTaskItem.findMany({ where: { taskId, status: 'PENDING' } });
                 this.logger.log(`翻译任务开始执行: taskId=${taskId} pendingItems=${items.length}`);
-                await Promise.all(items.map((i) => this.processItem(i)));
+
+                // 分批处理，每批 500 个
+                const BATCH_SIZE = 500;
+                const totalBatches = Math.ceil(items.length / BATCH_SIZE);
+                for (let bi = 0; bi < totalBatches; bi++) {
+                    const batch = items.slice(bi * BATCH_SIZE, (bi + 1) * BATCH_SIZE);
+                    this.logger.log(`翻译批次 ${bi + 1}/${totalBatches}: ${batch.length} 项`);
+                    await Promise.all(batch.map((i) => this.processItem(i)));
+                    this.logger.log(`翻译批次 ${bi + 1}/${totalBatches} 完成`);
+                }
+
                 await this.finishTask(taskId);
             } catch (e) {
                 this.logger.error('任务执行异常', e);

@@ -26,16 +26,35 @@ export interface AgentTagStreamEvent {
  * 3. Agent 通过 MCP 逐项目读取详情 → 判断标签
  * 4. JSON 结果 → 保存到数据库
  */
+export interface RunningTask {
+    taskId: string;
+    repoCount: number;
+    processedCount: number;
+    currentBatch: number;
+    totalBatches: number;
+    status: string;
+    startedAt: number;
+}
+
 @Injectable()
 export class AgentTagService {
     private readonly logger = new Logger(AgentTagService.name);
+    /** 运行中的分析任务注册表（内存级，用于刷新页面后恢复） */
+    private readonly runningTasks = new Map<string, RunningTask>();
 
     constructor(private readonly prisma: PrismaService, private readonly tagService: TagService) {}
+
+    /** 获取当前运行中的任务列表 */
+    getRunningTasks(): RunningTask[] {
+        return Array.from(this.runningTasks.values());
+    }
 
     /**
      * 流式执行智能标签分析
      */
     async *streamAutoTag(repoIds: number[], signal: AbortSignal): AsyncGenerator<AgentTagStreamEvent> {
+        const taskId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        this.logger.log(`[${taskId}] 开始分析 ${repoIds.length} 个仓库`);
         if (!repoIds.length) {
             yield { type: 'error', message: '请提供仓库ID列表' };
             return;
@@ -61,36 +80,92 @@ export class AgentTagService {
         const totalTags = tagGroups.reduce((s: number, g: any) => s + g.tags.length, 0);
         yield { type: 'status', message: `已加载 ${allRepos.length} 个仓库 + ${totalTags} 个标签` };
 
-        // ── 第二步：分批处理（每批 25 个，避免 maxTurns 超限）──
-        const BATCH_SIZE = 25;
+        // ── 第二步：分批处理（每批 100 个，3 批并发）──
+        const BATCH_SIZE = 100;
+        const CONCURRENCY = 3;
         const batches: Array<typeof allRepos> = [];
         for (let i = 0; i < allRepos.length; i += BATCH_SIZE) {
             batches.push(allRepos.slice(i, i + BATCH_SIZE));
         }
 
-        let totalTagCount = 0;
-        for (let bi = 0; bi < batches.length; bi++) {
-            if (signal.aborted) break;
-            const batch = batches[bi];
-            yield { type: 'status', message: `处理第 ${bi + 1}/${batches.length} 批 (${batch.length} 个仓库)...` };
+        // 注册运行任务
+        const task: RunningTask = {
+            taskId, repoCount: allRepos.length, processedCount: 0,
+            currentBatch: 0, totalBatches: batches.length,
+            status: '已加载仓库，启动并发分析...', startedAt: Date.now(),
+        };
+        this.runningTasks.set(taskId, task);
+        yield { type: 'status', message: `[${taskId}] 共 ${batches.length} 批，每批 ${BATCH_SIZE} 个，${CONCURRENCY} 批并发` };
 
-            const result = yield* this.processBatch(batch, tagSystem, signal);
-            if (result) {
-                totalTagCount += result;
-                yield { type: 'status', message: `第 ${bi + 1} 批完成，${result} 个标签` };
+        // 将 generator 转为收集事件的 Promise
+        const collectBatchEvents = async (batch: typeof allRepos, bi: number): Promise<{
+            bi: number; events: AgentTagStreamEvent[]; result: { tagCount: number; error?: string };
+        }> => {
+            const events: AgentTagStreamEvent[] = [];
+            try {
+                const gen = this.processBatch(batch, tagSystem, signal);
+                let resultValue: { tagCount: number; error?: string } = { tagCount: 0, error: '无结果' };
+                while (true) {
+                    const { value, done } = await gen.next();
+                    if (done) { resultValue = value; break; }
+                    if (value) events.push(value);
+                }
+                return { bi, events, result: resultValue ?? { tagCount: 0, error: '无结果' } };
+            } catch (e: any) {
+                return { bi, events, result: { tagCount: 0, error: e?.message || String(e) } };
+            }
+        };
+
+        let totalTagCount = 0;
+        let failedBatches = 0;
+        // 按并发组执行
+        for (let gi = 0; gi < batches.length; gi += CONCURRENCY) {
+            if (signal.aborted) break;
+            const group = batches.slice(gi, gi + CONCURRENCY);
+            const startIdx = gi;
+            yield { type: 'status', message: `━━━ 并发处理第 ${gi + 1}-${Math.min(gi + CONCURRENCY, batches.length)}/${batches.length} 批 ━━━` };
+
+            task.currentBatch = gi + 1;
+            task.processedCount = gi * BATCH_SIZE;
+            task.status = `并发处理第 ${gi + 1} 组...`;
+
+            const groupResults = await Promise.all(
+                group.map((batch, i) => collectBatchEvents(batch, startIdx + i)),
+            );
+
+            for (const { bi, events, result } of groupResults) {
+                // 输出该批的所有事件
+                for (const e of events) yield e;
+                // 输出结果
+                if (result.tagCount > 0) {
+                    totalTagCount += result.tagCount;
+                    yield { type: 'status', message: `✅ 第 ${bi + 1} 批完成: ${result.tagCount} 个标签` };
+                } else {
+                    failedBatches++;
+                    yield { type: 'status', message: `⚠️ 第 ${bi + 1} 批跳过: ${result.error || '无结果'}` };
+                }
             }
         }
 
-        yield { type: 'result', content: `全部完成！共 ${allRepos.length} 个仓库，${totalTagCount} 个标签` };
+        if (signal.aborted) {
+            task.status = '已中止';
+        } else {
+            task.processedCount = allRepos.length;
+            task.status = '完成';
+        }
+        this.runningTasks.delete(taskId);
+
+        const summary = `全部完成！${allRepos.length} 个仓库 → ${totalTagCount} 个标签` +
+            (failedBatches > 0 ? `（${failedBatches} 批失败）` : '');
+        yield { type: 'result', content: summary };
     }
 
-    /** 处理单批仓库的 Agent 打标签 */
+    /** 处理单批仓库的 Agent 打标签，返回 { tagCount, error? } */
     private async *processBatch(
         repoIndex: Array<{ id: bigint; fullName: string | null; language: string | null; starsCount: number }>,
         tagSystem: string,
         signal: AbortSignal,
-    ): AsyncGenerator<AgentTagStreamEvent, number | null> {
-        let tagCount = 0;
+    ): AsyncGenerator<AgentTagStreamEvent, { tagCount: number; error?: string }> {
         // ── 创建 MCP 工具 ──
         const prisma = this.prisma;
 
@@ -176,22 +251,38 @@ export class AgentTagService {
 
         const prompt = `你是 GitHub 项目分类专家。为以下 ${repoIndex.length} 个项目打标签（2-6个/项目）。
 
+⚠️ 你只有 2 个工具可用，不要尝试 Read/Write/Grep/WebSearch/ToolSearch 等其他工具。
+
 ## 工具
-- get_repo_details(ids): 批量获取项目描述/README/Topics/语言
+- get_repo_details(ids): 批量获取项目描述/README/Topics/语言（一次性传入所有 ID）
 - search_tags(keyword): 搜索现有标签
 
-## 标签体系
+## 现有标签体系
 ${tagSystem}
+
+## 标签维度说明（每个标签必须归属到一个维度）
+- 📚 技术栈: 编程语言、框架、运行时（如 Python, React, Docker）
+- 🏷️ 领域: 应用领域、行业方向（如 AI/ML, Security, Finance）
+- 🔧 用途: 项目类型/形态（如 CLI Tool, Library, Web App, Scraper）
+- 📊 状态: 关注程度/使用状态（如 活跃关注, 仅供参考, 已归档）
+- 👥 服务人群: 目标用户群体（如 开发者, 企业, 个人, 学生）
+- 💡 解决什么问题: 项目解决的核心痛点（如 自动化, 数据分析, 效率提升）
+- 🏢 生态: 所属平台/生态系统（如 GitHub, 开源社区）
+- ✨ 自定义: 以上维度都不匹配时的兜底
 
 ## 项目列表
 ${repoIndexText}
 
 ## 规则
 1. 用 get_repo_details 一次获取全部项目详情
-2. 优先匹配现有标签，无匹配时才创建新标签（用中文命名，简洁准确）
-3. 标签覆盖多维度：技术栈、领域、用途
-4. 只输出 JSON：{"0":["标签1"],"1":["标签2"]}  (0~${repoIndex.length - 1})
-5. 不输出任何其他文字`;
+2. 优先匹配现有标签，无匹配时创建新标签（中文命名，2-6字）
+3. 每个标签必须标注所属维度，格式: "维度简称:标签名"
+   维度简称: 技术栈/领域/用途/状态/服务人群/解决问题/生态/自定义
+   示例: "技术栈:Python", "领域:AI/ML", "用途:CLI Tool", "服务人群:开发者"
+4. 每个项目覆盖≥3个维度（技术栈、领域、用途必有，状态/服务人群/解决问题至少一个）
+5. 只输出 JSON: {"0":["技术栈:Python","领域:AI/ML"],"1":["用途:Library","技术栈:Rust"]}
+6. 禁止使用 Read/Write/Grep/WebSearch 等工具，你只有 get_repo_details 和 search_tags
+7. 不输出任何其他文字`;
 
         yield { type: 'status', message: 'Agent 开始通过 MCP 本地数据库分析项目...' };
 
@@ -204,11 +295,12 @@ ${repoIndexText}
             const q = query({
                 prompt,
                 options: {
-                    allowedTools: [], // 只允许 MCP 工具，禁止文件/网络
+                    tools: [], // 禁用所有内置工具（Read/Write/Grep/WebSearch 等），仅 MCP 工具可用
+                    disallowedTools: ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'Bash', 'Task', 'TaskOutput', 'TodoWrite', 'NotebookEdit', 'Agent', 'Skill', 'ExitPlanMode', 'EnterPlanMode'],
                     mcpServers: { githubstars: mcpServer },
                     permissionMode: 'bypassPermissions',
                     allowDangerouslySkipPermissions: true,
-                    maxTurns: 15,
+                    maxTurns: 30,
                     model: 'sonnet',
                     abortController,
                 },
@@ -239,14 +331,31 @@ ${repoIndexText}
                         break;
                     case 'user':
                         if ((msg as any).tool_use_result) {
-                            yield { type: 'tool_result', message: '工具执行完成' };
+                            // 展示工具返回的内容详情
+                            const result = (msg as any).tool_use_result;
+                            let preview = '';
+                            try {
+                                if (result.content && Array.isArray(result.content)) {
+                                    for (const c of result.content) {
+                                        if (c.type === 'text' && c.text) {
+                                            const text = String(c.text);
+                                            preview += text.length > 300 ? text.substring(0, 300) + '...(截断)' : text;
+                                        }
+                                    }
+                                }
+                            } catch { preview = '(工具返回)'; }
+                            yield {
+                                type: 'tool_result',
+                                message: preview || '工具执行完成',
+                                content: preview || undefined,
+                            };
                         }
                         break;
                     case 'result':
                         if (msg.subtype === 'success') {
                             yield {
                                 type: 'status',
-                                message: `分析完成，耗时 ${(msg.duration_ms / 1000).toFixed(1)} 秒`,
+                                message: `Agent 分析完成，耗时 ${(msg.duration_ms / 1000).toFixed(1)} 秒，正在解析结果...`,
                             };
                             // 解析并保存结果
                             const parsed = this.parseTagResult(fullResult, repoIndex.map((r) => Number(r.id)));
@@ -255,16 +364,27 @@ ${repoIndexText}
                                     repoIndex.map((r) => Number(r.id)),
                                     parsed,
                                 );
-                                tagCount = Object.values(parsed).flat().length;
+                                const tc = Object.values(parsed).flat().length;
                                 yield {
-                                    type: 'result',
-                                    content: `自动标签完成！${repoIndex.length} 个仓库 → ${tagCount} 个标签`,
+                                    type: 'status',
+                                    message: `✅ 批次完成: ${repoIndex.length} 个仓库 → ${tc} 个标签`,
                                 };
+                                return { tagCount: tc };
                             } else {
-                                yield { type: 'error', message: '未能解析标签结果' };
+                                this.logger.warn(`JSON解析失败，Agent输出前200字符: ${fullResult.substring(0, 200)}`);
+                                yield {
+                                    type: 'status',
+                                    message: `⚠️ JSON 解析失败，Agent 可能未按格式输出，跳过本批`,
+                                };
+                                return { tagCount: 0, error: 'JSON解析失败' };
                             }
                         } else {
-                            yield { type: 'error', message: `Agent 执行异常: ${msg.subtype}` };
+                            this.logger.error(`Agent 执行异常: ${msg.subtype}`);
+                            yield {
+                                type: 'status',
+                                message: `⚠️ Agent 执行异常: ${msg.subtype}，跳过本批`,
+                            };
+                            return { tagCount: 0, error: `Agent异常: ${msg.subtype}` };
                         }
                         break;
                 }
@@ -273,12 +393,13 @@ ${repoIndexText}
             if (!signal.aborted) {
                 const errMsg = e instanceof Error ? e.message : String(e);
                 this.logger.error('Agent 标签分析异常', errMsg);
-                yield { type: 'error', message: `Agent 分析失败: ${errMsg}` };
+                yield { type: 'status', message: `⚠️ Agent 异常: ${errMsg}` };
+                return { tagCount: 0, error: errMsg };
             }
         } finally {
             signal.removeEventListener('abort', onAbort);
         }
-        return tagCount;
+        return { tagCount: 0, error: '未知错误' };
     }
 
     /** 从 Agent 输出中提取 JSON 结果 */
