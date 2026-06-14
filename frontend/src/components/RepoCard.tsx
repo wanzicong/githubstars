@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Tag, Typography, Avatar, Space } from 'antd'
+import { Card, Tag, Typography, Avatar, Space, Tooltip } from 'antd'
 import { StarFilled, ForkOutlined, ReadOutlined } from '@ant-design/icons'
 import { formatNumberCn } from '@/utils/format'
 import type { GithubRepo } from '@/types'
@@ -21,10 +21,14 @@ function formatDate(dateStr: string | number[] | null): string {
 
 interface RepoCardProps {
     repo: GithubRepo
+    /** 点击标签下钻：传入 tagId 触发筛选 */
+    onTagClick?: (tagId: number) => void
+    /** 当前已选中的 tagId 集合（高亮已选标签） */
+    selectedTagIds?: Set<number>
 }
 
 /** 网格卡片视图 — 每个仓库展示为可点击卡片（React.memo 避免列表项无效重渲染） */
-const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
+const RepoCard = memo(function RepoCard({ repo, onTagClick, selectedTagIds }: RepoCardProps) {
     const navigate = useNavigate()
 
     return (
@@ -64,20 +68,45 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
                     {repo.description}
                 </Paragraph>
             ) : null}
-            {/* 标签行 — 技术栈 + 标签 */}
+            {/* 标签行 — 技术栈 + 可下钻标签 */}
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                 {repo.language && (
                     <Tag color='processing' style={{ margin: 0, fontSize: 12, borderRadius: 10 }}>
                         {repo.language}
                     </Tag>
                 )}
-                {repo.tagNames &&
-                    repo.tagNames.length > 0 &&
-                    repo.tagNames.map((t) => (
-                        <Tag key={t} color='cyan' style={{ margin: 0, fontSize: 12, borderRadius: 10 }}>
-                            {t}
-                        </Tag>
-                    ))}
+                {repo.tags && repo.tags.length > 0
+                    ? repo.tags.map((t) => {
+                          const isSelected = selectedTagIds?.has(t.id)
+                          return (
+                              <Tooltip key={t.id} title={`${t.groupName} · 点击下钻`} mouseEnterDelay={0.5}>
+                                  <Tag
+                                      color={isSelected ? 'blue' : 'cyan'}
+                                      style={{
+                                          margin: 0,
+                                          fontSize: 12,
+                                          borderRadius: 10,
+                                          cursor: 'pointer',
+                                          opacity: isSelected ? 1 : 0.85,
+                                          fontWeight: isSelected ? 600 : 400,
+                                      }}
+                                      onClick={(e) => {
+                                          e.stopPropagation()
+                                          onTagClick?.(t.id)
+                                      }}
+                                  >
+                                      {t.name}
+                                  </Tag>
+                              </Tooltip>
+                          )
+                      })
+                    : repo.tagNames &&
+                      repo.tagNames.length > 0 &&
+                      repo.tagNames.map((t) => (
+                          <Tag key={t} color='cyan' style={{ margin: 0, fontSize: 12, borderRadius: 10 }}>
+                              {t}
+                          </Tag>
+                      ))}
                 {repo.readmeFetched && repo.readmeCn ? (
                     <Tag color='purple' style={{ margin: 0, fontSize: 12 }}>
                         <ReadOutlined style={{ fontSize: 11 }} /> 已翻译

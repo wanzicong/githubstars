@@ -1506,14 +1506,14 @@ export default function StarList() {
                     viewMode === 'list' ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                             {repos.map((repo) => (
-                                <RepoRow key={repo.id} repo={repo} />
+                                <RepoRow key={repo.id} repo={repo} onTagClick={onToggleTag} selectedTagIds={selectedTagIdSet} />
                             ))}
                         </div>
                     ) : (
                         <Row gutter={[16, 16]}>
                             {repos.map((repo) => (
                                 <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
-                                    <RepoCard repo={repo} />
+                                    <RepoCard repo={repo} onTagClick={onToggleTag} selectedTagIds={selectedTagIdSet} />
                                 </Col>
                             ))}
                         </Row>

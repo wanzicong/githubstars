@@ -316,27 +316,40 @@ export class GithubRepoService {
     }
 
     /**
-     * 为仓库列表批量填充标签名称（按维度分组）
+     * 为仓库列表批量填充标签信息（含 tagId、维度名，支持前端下钻交互）
      *
      * 通过 repo_tag 关联表查询每个仓库的标签信息（含维度名），
-     * 并将结果写入每个仓库对象的 tagNames 属性。
+     * 并将结果写入每个仓库对象的 tagNames 和 tags 属性。
      *
-     * @param repos 仓库对象数组（会被原地修改写入 tagNames）
+     * @param repos 仓库对象数组（会被原地修改写入 tagNames / tags）
      */
-    async fillTagNames(repos: Array<{ id: bigint; tagNames?: string[] }>) {
+    async fillTagNames(repos: Array<{ id: bigint; tagNames?: string[]; tags?: Array<{ id: number; name: string; groupName: string; groupId: number }> }>) {
         if (!repos.length) return;
         const ids = repos.map((r) => r.id);
         const mappings = await this.prisma.repoTag.findMany({
             where: { repoId: { in: ids } },
             include: { tag: { include: { group: true } } },
         });
-        const map = new Map<bigint, string[]>();
+        const nameMap = new Map<bigint, string[]>();
+        const structMap = new Map<bigint, Array<{ id: number; name: string; groupName: string; groupId: number }>>();
         for (const m of mappings) {
-            const list = map.get(m.repoId) || [];
-            list.push(m.tag.name);
-            map.set(m.repoId, list);
+            const names = nameMap.get(m.repoId) || [];
+            names.push(m.tag.name);
+            nameMap.set(m.repoId, names);
+
+            const structs = structMap.get(m.repoId) || [];
+            structs.push({
+                id: Number(m.tag.id),
+                name: m.tag.name,
+                groupName: m.tag.group.name,
+                groupId: Number(m.tag.groupId),
+            });
+            structMap.set(m.repoId, structs);
         }
-        for (const r of repos) r.tagNames = map.get(r.id) || [];
+        for (const r of repos) {
+            r.tagNames = nameMap.get(r.id) || [];
+            r.tags = structMap.get(r.id) || [];
+        }
     }
 
     /**
