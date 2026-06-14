@@ -90,12 +90,12 @@ export class TagService {
     }
 
     /** 创建标签 */
-    async create(name: string, groupId: number, description?: string, color?: string, icon?: string) {
+    async create(name: string, groupId: number, description?: string, color?: string, icon?: string, parentId?: number) {
         const trimmed = name.trim();
         const exist = await this.prisma.tag.findFirst({ where: { name: trimmed, groupId: BigInt(groupId) } });
         if (exist) throw new Error(`标签 "${trimmed}" 在此维度下已存在`);
         return this.prisma.tag.create({
-            data: { name: trimmed, groupId: BigInt(groupId), description: description || null, color: color || null, icon: icon || null },
+            data: { name: trimmed, groupId: BigInt(groupId), description: description || null, color: color || null, icon: icon || null, parentId: parentId ? BigInt(parentId) : null },
         });
     }
 
@@ -361,5 +361,195 @@ export class TagService {
             if (lower.includes(key)) return groupName;
         }
         return '🔧 用途';
+    }
+
+    /** 设置标签的父标签（建立层级关系） */
+    async setParent(tagId: number, parentId: number | null) {
+        if (parentId !== null) {
+            // 防止循环引用
+            let p: any = await this.prisma.tag.findUnique({ where: { id: BigInt(parentId) }, select: { parentId: true } });
+            while (p) {
+                if (Number(p.parentId) === tagId) throw new Error('不能将标签设为其子标签的父级，会造成循环引用');
+                if (!p.parentId) break;
+                p = await this.prisma.tag.findUnique({ where: { id: p.parentId }, select: { parentId: true } });
+            }
+        }
+        await this.prisma.tag.update({ where: { id: BigInt(tagId) }, data: { parentId: parentId !== null ? BigInt(parentId) : null } });
+    }
+
+    /** 获取完整的标签树（维度 → 父标签 → 子标签） */
+    async getTree() {
+        await this.ensureSystemGroups();
+        const groups = await this.prisma.tagGroup.findMany({ orderBy: { sortOrder: 'asc' } });
+        const tags = await this.prisma.tag.findMany({ orderBy: [{ repoCount: 'desc' }, { name: 'asc' }] });
+        const counts = await this.prisma.repoTag.groupBy({ by: ['tagId'], _count: { tagId: true } });
+        const countMap = new Map<string, number>();
+        for (const c of counts) countMap.set(String(c.tagId), c._count.tagId);
+
+        const tagMap = new Map<string, any>();
+        for (const tag of tags) {
+            const realCount = countMap.get(String(tag.id)) || 0;
+            const node = { ...tag, repoCount: realCount, children: [] as any[] };
+            tagMap.set(String(tag.id), node);
+        }
+
+        const roots: any[] = [];
+        for (const [, node] of tagMap) {
+            if (node.parentId) {
+                const parent = tagMap.get(String(node.parentId));
+                if (parent) parent.children.push(node);
+                else roots.push(node);
+            } else {
+                roots.push(node);
+            }
+        }
+
+        return groups.map(g => ({
+            ...g,
+            tags: roots.filter(t => Number(t.groupId) === Number(g.id)),
+        }));
+    }
+
+    /**
+     * 设置标签维度（TagGroup）的父维度，建立维度树形层级
+     *
+     * 用于建立维度间的钻取关系，例如：技术栈(父) → 领域(子) → 用途(孙)。
+     * 检测循环引用，防止把维度设为其子孙的子级。
+     *
+     * @param groupId 当前维度 ID
+     * @param parentGroupId 目标父维度 ID，传 null 解除父级
+     *
+     * @callers TagController.setGroupParent()
+     * @depends Prisma tagGroup 表
+     */
+    async setGroupParent(groupId: number, parentGroupId: number | null) {
+        if (parentGroupId !== null) {
+            if (parentGroupId === groupId) throw new Error('维度不能将自己设为父级');
+            // 沿父链向上查找，防止循环引用
+            let p: any = await this.prisma.tagGroup.findUnique({ where: { id: BigInt(parentGroupId) }, select: { parentId: true } });
+            const visited = new Set<number>([parentGroupId]);
+            while (p && p.parentId) {
+                const pid = Number(p.parentId);
+                if (pid === groupId) throw new Error('不能将维度设为其子孙维度的父级，会造成循环引用');
+                if (visited.has(pid)) break;
+                visited.add(pid);
+                p = await this.prisma.tagGroup.findUnique({ where: { id: p.parentId }, select: { parentId: true } });
+            }
+        }
+        await this.prisma.tagGroup.update({
+            where: { id: BigInt(groupId) },
+            data: { parentId: parentGroupId !== null ? BigInt(parentGroupId) : null },
+        });
+        this.logger.log(`维度 ${groupId} 的父维度设为: ${parentGroupId ?? '(无)'}`);
+    }
+
+    /**
+     * 获取维度树（按维度间的 parentId 组装）
+     *
+     * 返回顶级维度 + children 嵌套，每个维度内附 tags（已扁平排序）。
+     * 用于前端展示树形维度结构。
+     *
+     * @callers TagController.groupTree()
+     */
+    async getGroupTree() {
+        await this.ensureSystemGroups();
+        const groups = await this.prisma.tagGroup.findMany({ orderBy: { sortOrder: 'asc' } });
+        const tags = await this.prisma.tag.findMany({ orderBy: [{ repoCount: 'desc' }, { name: 'asc' }] });
+        const counts = await this.prisma.repoTag.groupBy({ by: ['tagId'], _count: { tagId: true } });
+        const countMap = new Map<string, number>();
+        for (const c of counts) countMap.set(String(c.tagId), c._count.tagId);
+
+        const groupMap = new Map<string, any>();
+        for (const g of groups) {
+            const groupTags = tags
+                .filter(t => Number(t.groupId) === Number(g.id))
+                .map(t => ({ ...t, repoCount: countMap.get(String(t.id)) || 0 }));
+            groupMap.set(String(g.id), { ...g, tags: groupTags, children: [] as any[] });
+        }
+
+        const roots: any[] = [];
+        for (const [, node] of groupMap) {
+            if (node.parentId) {
+                const parent = groupMap.get(String(node.parentId));
+                if (parent) parent.children.push(node);
+                else roots.push(node);
+            } else {
+                roots.push(node);
+            }
+        }
+        return roots;
+    }
+
+    /**
+     * 获取标签下钻分布：某个标签下的项目，在指定子维度下的标签分布统计
+     *
+     * 例如：选中"技术栈:Python"，目标子维度是"领域"，
+     * 返回这 214 个 Python 项目分布在"领域"维度的各个标签下的数量。
+     *
+     * @param tagId 父维度下选中的标签 ID
+     * @param targetGroupId 目标子维度 ID（可选，不传则返回所有其他维度的分布）
+     * @returns 按维度分组的标签分布统计
+     *
+     * @callers TagController.getDistribution()
+     */
+    async getTagDistribution(tagId: number, targetGroupId?: number) {
+        // 1. 找到该标签下的所有 repoId
+        const sourceRepoTags = await this.prisma.repoTag.findMany({
+            where: { tagId: BigInt(tagId) },
+            select: { repoId: true },
+        });
+        const repoIds = sourceRepoTags.map(rt => rt.repoId);
+        const totalRepos = repoIds.length;
+
+        if (!totalRepos) return { totalRepos: 0, distributions: [] };
+
+        // 2. 拉取这些 repo 的所有其他标签关联
+        const allRepoTags = await this.prisma.repoTag.findMany({
+            where: {
+                repoId: { in: repoIds },
+                tagId: { not: BigInt(tagId) },
+            },
+            include: { tag: { include: { group: true } } },
+        });
+
+        // 3. 按 (groupId, tagId) 聚合计数
+        const aggregator = new Map<string, { groupId: bigint; groupName: string; groupColor: string; groupIcon: string | null; tagId: bigint; tagName: string; tagColor: string | null; count: number }>();
+        for (const rt of allRepoTags) {
+            const gid = String(rt.tag.groupId);
+            if (targetGroupId !== undefined && targetGroupId !== null && gid !== String(targetGroupId)) continue;
+            const key = `${gid}::${String(rt.tag.id)}`;
+            if (!aggregator.has(key)) {
+                aggregator.set(key, {
+                    groupId: rt.tag.groupId, groupName: rt.tag.group.name, groupColor: rt.tag.group.color, groupIcon: rt.tag.group.icon,
+                    tagId: rt.tag.id, tagName: rt.tag.name, tagColor: rt.tag.color, count: 0,
+                });
+            }
+            aggregator.get(key)!.count++;
+        }
+
+        // 4. 按维度分组组装
+        const groupBuckets = new Map<string, { groupId: number; groupName: string; groupColor: string; groupIcon: string | null; tags: any[] }>();
+        for (const item of aggregator.values()) {
+            const gid = String(item.groupId);
+            if (!groupBuckets.has(gid)) {
+                groupBuckets.set(gid, {
+                    groupId: Number(item.groupId), groupName: item.groupName, groupColor: item.groupColor, groupIcon: item.groupIcon,
+                    tags: [],
+                });
+            }
+            groupBuckets.get(gid)!.tags.push({
+                tagId: Number(item.tagId), tagName: item.tagName, tagColor: item.tagColor,
+                count: item.count,
+                percentage: Math.round((item.count / totalRepos) * 100),
+            });
+        }
+
+        // 每个维度内按 count 降序
+        const distributions = Array.from(groupBuckets.values()).map(g => ({
+            ...g,
+            tags: g.tags.sort((a, b) => b.count - a.count),
+        }));
+
+        return { totalRepos, distributions };
     }
 }

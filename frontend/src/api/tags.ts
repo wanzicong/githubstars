@@ -17,13 +17,56 @@ export interface TagGroup {
     icon: string | null
     sortOrder: number
     isSystem: boolean
-    tags: { id: number; name: string; repoCount: number; color: string | null }[]
+    parentId?: number | null
+    children?: TagGroup[]
+    tags: { id: number; name: string; repoCount: number; color: string | null; parentId?: number; groupId?: number }[]
 }
 
 /** 获取所有标签维度和标签 */
 export async function fetchAllTags(): Promise<TagGroup[]> {
     const { data } = await api.get<TagGroup[]>('/api/tags')
     return data
+}
+
+/** 获取标签树（维度 → 父标签 → 子标签，含 children 层级） */
+export async function fetchTagTree() {
+    const { data } = await api.get('/api/tags/tree')
+    return data as TagGroup[]
+}
+
+/** 设置标签的父标签（parentId=null 取消层级） */
+export async function setTagParent(tagId: number, parentId: number | null) {
+    const { data } = await api.put(`/api/tags/${tagId}/parent`, { parentId })
+    return data
+}
+
+/** 获取维度树（TagGroup 间的父子层级） */
+export async function fetchGroupTree() {
+    const { data } = await api.get('/api/tags/groups/tree')
+    return data as TagGroup[]
+}
+
+/** 设置维度的父维度（parentId=null 解除） */
+export async function setGroupParent(groupId: number, parentId: number | null) {
+    const { data } = await api.put(`/api/tags/groups/${groupId}/parent`, { parentId })
+    return data
+}
+
+/** 标签下钻分布：该标签下项目在指定子维度（或所有其他维度）的标签分布 */
+export async function fetchTagDistribution(tagId: number, targetGroupId?: number) {
+    const params: any = {}
+    if (targetGroupId !== undefined) params.targetGroupId = targetGroupId
+    const { data } = await api.get(`/api/tags/${tagId}/distribution`, { params })
+    return data as {
+        totalRepos: number
+        distributions: Array<{
+            groupId: number
+            groupName: string
+            groupColor: string
+            groupIcon: string | null
+            tags: Array<{ tagId: number; tagName: string; tagColor: string | null; count: number; percentage: number }>
+        }>
+    }
 }
 
 /** 获取仓库的标签列表 */

@@ -14,6 +14,8 @@
  * - done:     流结束
  */
 
+import api from './request'
+
 export interface AgentStreamEvent {
     type: 'status' | 'thinking' | 'tool_call' | 'tool_result' | 'result' | 'error'
     message?: string
@@ -151,4 +153,45 @@ export function startAgentSearch(options: AgentSearchOptions): () => void {
     }
 
     return abort
+}
+
+// ── 相似缓存管理 API ──
+
+export interface SimilarCacheItem {
+    id: number
+    repoId: number
+    repoFullName: string
+    repoLanguage: string | null
+    repoStars: number
+    similarCount: number
+    content: string
+    createdAt: string
+    updatedAt: string
+}
+
+export interface PaginatedResponse<T> {
+    records: T[]
+    total: number
+    page: number
+    size: number
+}
+
+export async function fetchSimilarCacheList(page: number, size: number): Promise<PaginatedResponse<SimilarCacheItem>> {
+    const { data } = await api.get('/api/similar-cache', { params: { page, size } })
+    return data
+}
+
+export async function fetchSimilarCacheByRepo(repoId: number): Promise<SimilarCacheItem> {
+    const { data } = await api.get(`/api/similar-cache/${repoId}`)
+    return data
+}
+
+export async function deleteSimilarCache(id: number): Promise<{ success: boolean; message?: string }> {
+    const { data } = await api.delete(`/api/similar-cache/${id}`)
+    return data
+}
+
+export async function deleteAllSimilarCache(): Promise<{ success: boolean; message?: string }> {
+    const { data } = await api.delete('/api/similar-cache')
+    return data
 }

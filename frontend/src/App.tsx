@@ -19,6 +19,7 @@ const CloneTasks = lazy(() => import('./pages/CloneTasks'))
 const CloneTaskDetail = lazy(() => import('./pages/CloneTaskDetail'))
 const Logs = lazy(() => import('./pages/Logs'))
 const TagBrowse = lazy(() => import('./pages/TagBrowse'))
+const SimilarCacheList = lazy(() => import('./pages/SimilarCacheList'))
 
 /** 页面级 Suspense 回退 — 居中加载指示器 */
 function PageLoader() {
@@ -76,6 +77,7 @@ export default function App() {
                                 <Route path='/clone-tasks/:taskId' element={<LazyPage Page={CloneTaskDetail} />} />
                                 <Route path='/logs' element={<LazyPage Page={Logs} />} />
                                 <Route path='/tags' element={<LazyPage Page={TagBrowse} />} />
+                                <Route path='/similar-cache' element={<LazyPage Page={SimilarCacheList} />} />
                             </Route>
                         </Routes>
                     </ErrorBoundary>

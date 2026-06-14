@@ -2,6 +2,7 @@ import { Controller, Get, Param, Req, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AgentSimilarService, AgentStreamEvent } from '../services/agent-similar.service';
+import { SimilarCacheService } from '../../similar-cache/similar-cache.service';
 
 /**
  * Agent 相似项目搜索控制器
@@ -15,7 +16,10 @@ import { AgentSimilarService, AgentStreamEvent } from '../services/agent-similar
 @ApiTags('agent')
 @Controller('api/agent/similar')
 export class AgentSimilarController {
-    constructor(private readonly agentSimilar: AgentSimilarService) {}
+    constructor(
+        private readonly agentSimilar: AgentSimilarService,
+        private readonly similarCache: SimilarCacheService,
+    ) {}
 
     /**
      * SSE 流式端点: 启动 Agent 相似项目搜索
@@ -77,6 +81,7 @@ export class AgentSimilarController {
             res.write(`event: status\ndata: ${JSON.stringify(initEvent)}\n\n`);
 
             // 流式消费 Agent 执行事件
+            let resultContent: string | undefined;
             for await (const event of this.agentSimilar.streamSimilarSearch(numericId, abortController.signal)) {
                 if (abortController.signal.aborted) break;
 
@@ -84,8 +89,25 @@ export class AgentSimilarController {
                 const data = JSON.stringify(event);
                 res.write(`event: ${eventName}\ndata: ${data}\n\n`);
 
+                // 捕获最终结果内容，后续持久化
+                if (event.type === 'result' && event.content) {
+                    resultContent = event.content;
+                }
+
                 // 如果发生错误，停止流
                 if (event.type === 'error') break;
+            }
+
+            // Agent 正常完成后，自动保存结果到缓存
+            if (resultContent) {
+                try {
+                    await this.similarCache.save(numericId, resultContent);
+                } catch (saveErr) {
+                    // 保存失败不影响 SSE 流，仅记录日志
+                    const msg = saveErr instanceof Error ? saveErr.message : String(saveErr);
+                    const warnEvent: AgentStreamEvent = { type: 'status', message: `缓存保存失败: ${msg}` };
+                    res.write(`event: status\ndata: ${JSON.stringify(warnEvent)}\n\n`);
+                }
             }
         } catch (e) {
             const errMsg = e instanceof Error ? e.message : String(e);

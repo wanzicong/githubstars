@@ -17,6 +17,7 @@ import { ExportModule } from './export/export.module';
 import { AgentModule } from './agent/agent.module';
 import { TagModule } from './tag/tag.module';
 import { PromptModule } from './prompt/prompt.module';
+import { SimilarCacheModule } from './similar-cache/similar-cache.module';
 import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
 
 /**
@@ -45,6 +46,7 @@ import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
         AgentModule,
         TagModule,
         PromptModule,
+        SimilarCacheModule,
     ],
     providers: [
         {

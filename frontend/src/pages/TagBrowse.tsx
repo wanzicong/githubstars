@@ -3,15 +3,19 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
     Card, Tag, Typography, Button, Spin, Empty, Space, Modal,
     Input, Alert, message, Steps, Tooltip, Popconfirm, Divider,
+    Segmented, Select as AntSelect, Drawer, Progress,
 } from 'antd'
 import {
     TagsOutlined, ReloadOutlined,
     BulbOutlined, ThunderboltOutlined, SearchOutlined,
     LoadingOutlined, CheckCircleOutlined, ExclamationCircleOutlined,
     DeleteOutlined, ClearOutlined, PlayCircleOutlined,
+    ApartmentOutlined, UnorderedListOutlined, LinkOutlined,
+    BarChartOutlined, NodeIndexOutlined,
 } from '@ant-design/icons'
 import api from '../api/request'
 import * as tagsApi from '../api/tags'
+import { setTagParent, setGroupParent, fetchTagDistribution } from '../api/tags'
 import { fetchStarList } from '../api/stars'
 import type { TagGroup } from '../api/tags'
 
@@ -47,6 +51,34 @@ export default function TagBrowse() {
     // 操作 loading
     const [deletingEmpty, setDeletingEmpty] = useState(false)
     const [deletingAll, setDeletingAll] = useState(false)
+
+    // 树形/列表切换
+    const [viewMode, setViewMode] = useState<'flat' | 'tree'>('flat')
+
+    // 设置父标签 Modal
+    const [parentModalVisible, setParentModalVisible] = useState(false)
+    const [parentModalTag, setParentModalTag] = useState<any>(null)
+    const [parentModalGroup, setParentModalGroup] = useState<any>(null)
+    const [selectedParentId, setSelectedParentId] = useState<number | null | undefined>(undefined)
+    const [settingParent, setSettingParent] = useState(false)
+
+    // 设置维度父级 Modal
+    const [groupParentModalVisible, setGroupParentModalVisible] = useState(false)
+    const [groupParentModalGroup, setGroupParentModalGroup] = useState<any>(null)
+    const [selectedGroupParentId, setSelectedGroupParentId] = useState<number | null | undefined>(undefined)
+    const [settingGroupParent, setSettingGroupParent] = useState(false)
+
+    // 标签下钻抽屉
+    const [drillDrawerVisible, setDrillDrawerVisible] = useState(false)
+    const [drillTag, setDrillTag] = useState<any>(null)
+    const [drillLoading, setDrillLoading] = useState(false)
+    const [drillData, setDrillData] = useState<{
+        totalRepos: number
+        distributions: Array<{
+            groupId: number; groupName: string; groupColor: string; groupIcon: string | null;
+            tags: Array<{ tagId: number; tagName: string; tagColor: string | null; count: number; percentage: number }>
+        }>
+    } | null>(null)
 
     const load = useCallback(async () => {
         setLoading(true)
@@ -146,6 +178,49 @@ export default function TagBrowse() {
         }
         return count
     }, [groups])
+
+    // ── 标签树构建工具函数 ──
+    const buildTagTree = (tags: any[]) => {
+        const map = new Map<number, any>()
+        const roots: any[] = []
+        for (const t of tags) {
+            map.set(t.id, { ...t, children: [] })
+        }
+        for (const t of map.values()) {
+            if (t.parentId && map.has(t.parentId)) {
+                map.get(t.parentId)!.children.push(t)
+            } else {
+                roots.push(t)
+            }
+        }
+        // Sort children by repoCount desc
+        for (const t of map.values()) {
+            t.children.sort((a: any, b: any) => b.repoCount - a.repoCount)
+        }
+        return roots.sort((a: any, b: any) => b.repoCount - a.repoCount)
+    }
+
+    /** 将树结构扁平化，附带深度信息，用于渲染 */
+    const flattenTree = (nodes: any[], depth: number = 0): any[] => {
+        const result: any[] = []
+        for (const node of nodes) {
+            const { children, ...rest } = node
+            result.push({ ...rest, _depth: depth, _hasChildren: (children || []).length > 0 })
+            if (children && children.length > 0) {
+                result.push(...flattenTree(children, depth + 1))
+            }
+        }
+        return result
+    }
+
+    // 树形模式下的标签数据
+    const filteredTreeGroups = useMemo(() => {
+        if (viewMode !== 'tree') return null
+        return filteredGroups.map((g) => ({
+            ...g,
+            tags: flattenTree(buildTagTree(g.tags)),
+        }))
+    }, [filteredGroups, viewMode])
 
     // ======================== Agent: 打开配置弹窗（保留运行状态，清除错误态） ========================
     const handleOpenAgentModal = () => {
@@ -320,6 +395,86 @@ export default function TagBrowse() {
         }
     }
 
+    // ======================== 父标签设置 ========================
+
+    const openParentModal = (tag: any, group: any) => {
+        setParentModalTag(tag)
+        setParentModalGroup(group)
+        setSelectedParentId(tag.parentId || null)
+        setParentModalVisible(true)
+    }
+
+    const handleSetParent = async () => {
+        if (!parentModalTag || selectedParentId === undefined) return
+        // selectedParentId === null means "remove parent"
+        // selectedParentId === parentModalTag.parentId means no change
+        if (selectedParentId === (parentModalTag.parentId || null) && selectedParentId !== undefined) {
+            setParentModalVisible(false)
+            return
+        }
+        setSettingParent(true)
+        try {
+            const res = await setTagParent(parentModalTag.id, selectedParentId as number | null)
+            if (res.success) {
+                message.success(selectedParentId === null ? '已解除父级关联' : '父标签设置成功')
+                setParentModalVisible(false)
+                load()
+            } else {
+                message.error(res.message || '设置失败')
+            }
+        } catch {
+            message.error('设置失败')
+        } finally {
+            setSettingParent(false)
+        }
+    }
+
+    // ======================== 维度父级设置 ========================
+    const openGroupParentModal = (group: any) => {
+        setGroupParentModalGroup(group)
+        setSelectedGroupParentId(group.parentId || null)
+        setGroupParentModalVisible(true)
+    }
+
+    const handleSetGroupParent = async () => {
+        if (!groupParentModalGroup || selectedGroupParentId === undefined) return
+        if (selectedGroupParentId === (groupParentModalGroup.parentId || null)) {
+            setGroupParentModalVisible(false)
+            return
+        }
+        setSettingGroupParent(true)
+        try {
+            const res = await setGroupParent(groupParentModalGroup.id, selectedGroupParentId as number | null)
+            if (res.success) {
+                message.success(selectedGroupParentId === null ? '已解除维度父级' : '维度父级设置成功')
+                setGroupParentModalVisible(false)
+                load()
+            } else {
+                message.error(res.message || '设置失败')
+            }
+        } catch {
+            message.error('设置失败')
+        } finally {
+            setSettingGroupParent(false)
+        }
+    }
+
+    // ======================== 标签下钻 ========================
+    const openDrillDrawer = async (tag: any) => {
+        setDrillTag(tag)
+        setDrillDrawerVisible(true)
+        setDrillLoading(true)
+        setDrillData(null)
+        try {
+            const data = await fetchTagDistribution(tag.id)
+            setDrillData(data)
+        } catch {
+            message.error('加载下钻数据失败')
+        } finally {
+            setDrillLoading(false)
+        }
+    }
+
     // ======================== 渲染 ========================
 
     return (
@@ -358,6 +513,15 @@ export default function TagBrowse() {
                         onChange={(e) => setTagSearch(e.target.value)}
                         allowClear
                         style={{ width: 200 }}
+                    />
+                    {/* 树形/列表切换 */}
+                    <Segmented
+                        value={viewMode}
+                        onChange={(val) => setViewMode(val as 'flat' | 'tree')}
+                        options={[
+                            { value: 'flat', icon: <UnorderedListOutlined />, label: '列表' },
+                            { value: 'tree', icon: <ApartmentOutlined />, label: '树形' },
+                        ]}
                     />
                     {emptyTagCount > 0 && (
                         <Button
@@ -409,7 +573,7 @@ export default function TagBrowse() {
                     </Empty>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                        {filteredGroups.map((group) => (
+                        {(viewMode === 'tree' ? filteredTreeGroups! : filteredGroups).map((group: any) => (
                             <Card
                                 key={group.id}
                                 size='small'
@@ -423,52 +587,125 @@ export default function TagBrowse() {
                                         <Text type='secondary' style={{ fontSize: 12 }}>
                                             {group.tags.length} 个标签
                                         </Text>
+                                        {group.parentId && (
+                                            <Tooltip title={`父维度 ID: ${group.parentId}`}>
+                                                <Tag color='purple' icon={<NodeIndexOutlined />} style={{ fontSize: 11 }}>
+                                                    有父维度
+                                                </Tag>
+                                            </Tooltip>
+                                        )}
                                     </Space>
+                                }
+                                extra={
+                                    <Tooltip title='设置该维度的父维度（用于钻取分析）'>
+                                        <Button
+                                            type='text'
+                                            size='small'
+                                            icon={<ApartmentOutlined />}
+                                            onClick={() => openGroupParentModal(group)}
+                                        >
+                                            维度父级
+                                        </Button>
+                                    </Tooltip>
                                 }
                                 styles={{ body: { padding: '12px 16px' } }}
                             >
                                 {group.tags.length > 0 ? (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                                        {group.tags.map((tag) => (
-                                            <Tooltip
-                                                title={tag.repoCount > 0 ? `查看 ${tag.repoCount} 个仓库` : '暂无仓库使用此标签'}
-                                                key={tag.id}
-                                            >
-                                                <Tag
-                                                    color={tag.repoCount > 0 ? (tag.color || group.color) : '#d9d9d9'}
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: viewMode === 'tree' ? '6px 8px' : 8, alignItems: 'center' }}>
+                                        {group.tags.map((tag: any) => {
+                                            const depth = tag._depth ?? 0
+                                            const isChild = viewMode === 'tree' && depth > 0
+                                            return (
+                                                <span
+                                                    key={tag.id}
                                                     style={{
-                                                        fontSize: 13,
-                                                        padding: '2px 10px',
-                                                        cursor: tag.repoCount > 0 ? 'pointer' : 'default',
-                                                        borderRadius: 12,
-                                                        opacity: tag.repoCount > 0 ? 1 : 0.5,
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: 2,
+                                                        marginLeft: isChild ? depth * 24 : 0,
                                                     }}
-                                                    onClick={() => tag.repoCount > 0 && navigate(`/?tagIds=${tag.id}`)}
-                                                    closable
-                                                    onClose={(e) => {
-                                                        e.preventDefault()
-                                                        handleDeleteTag(tag.id, tag.name)
-                                                    }}
-                                                    closeIcon={
-                                                        <Popconfirm
-                                                            title={`删除标签「${tag.name}」？`}
-                                                            description={tag.repoCount > 0 ? `该标签下有 ${tag.repoCount} 个仓库，删除后仓库将失去此标签` : '此标签暂无仓库使用'}
-                                                            onConfirm={() => handleDeleteTag(tag.id, tag.name)}
-                                                            okText='删除'
-                                                            okType='danger'
-                                                            cancelText='取消'
-                                                        >
-                                                            <DeleteOutlined style={{ fontSize: 10 }} />
-                                                        </Popconfirm>
-                                                    }
                                                 >
-                                                    {tag.name}
-                                                    <span style={{ marginLeft: 4, opacity: 0.7, fontSize: 11 }}>
-                                                        {tag.repoCount}
-                                                    </span>
-                                                </Tag>
-                                            </Tooltip>
-                                        ))}
+                                                    {isChild && (
+                                                        <span style={{ color: '#bbb', fontSize: 12, marginRight: 2, userSelect: 'none' }}>└</span>
+                                                    )}
+                                                    <Tooltip
+                                                        title={tag.repoCount > 0 ? `查看 ${tag.repoCount} 个仓库` : '暂无仓库使用此标签'}
+                                                    >
+                                                        <Tag
+                                                            color={tag.repoCount > 0 ? (tag.color || group.color) : '#d9d9d9'}
+                                                            style={{
+                                                                fontSize: isChild ? 12 : 13,
+                                                                padding: '2px 10px',
+                                                                cursor: tag.repoCount > 0 ? 'pointer' : 'default',
+                                                                borderRadius: 12,
+                                                                opacity: tag.repoCount > 0 ? 1 : 0.5,
+                                                                margin: 0,
+                                                                lineHeight: isChild ? '18px' : undefined,
+                                                            }}
+                                                            onClick={() => tag.repoCount > 0 && navigate(`/?tagIds=${tag.id}`)}
+                                                            closable
+                                                            onClose={(e) => {
+                                                                e.preventDefault()
+                                                                handleDeleteTag(tag.id, tag.name)
+                                                            }}
+                                                            closeIcon={
+                                                                <Popconfirm
+                                                                    title={`删除标签「${tag.name}」？`}
+                                                                    description={tag.repoCount > 0 ? `该标签下有 ${tag.repoCount} 个仓库，删除后仓库将失去此标签` : '此标签暂无仓库使用'}
+                                                                    onConfirm={() => handleDeleteTag(tag.id, tag.name)}
+                                                                    okText='删除'
+                                                                    okType='danger'
+                                                                    cancelText='取消'
+                                                                >
+                                                                    <DeleteOutlined style={{ fontSize: 10 }} />
+                                                                </Popconfirm>
+                                                            }
+                                                        >
+                                                            {tag.name}
+                                                            <span style={{ marginLeft: 4, opacity: 0.7, fontSize: 11 }}>
+                                                                {tag.repoCount}
+                                                            </span>
+                                                        </Tag>
+                                                    </Tooltip>
+                                                    <Button
+                                                        type='text'
+                                                        size='small'
+                                                        icon={<LinkOutlined />}
+                                                        title='设置父标签'
+                                                        style={{
+                                                            fontSize: 10,
+                                                            padding: 0,
+                                                            minWidth: 18,
+                                                            height: 18,
+                                                            color: '#bbb',
+                                                        }}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            openParentModal(tag, group)
+                                                        }}
+                                                    />
+                                                    {tag.repoCount > 0 && (
+                                                        <Button
+                                                            type='text'
+                                                            size='small'
+                                                            icon={<BarChartOutlined />}
+                                                            title='下钻分析（查看子维度标签分布）'
+                                                            style={{
+                                                                fontSize: 10,
+                                                                padding: 0,
+                                                                minWidth: 18,
+                                                                height: 18,
+                                                                color: '#1677ff',
+                                                            }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                openDrillDrawer(tag)
+                                                            }}
+                                                        />
+                                                    )}
+                                                </span>
+                                            )
+                                        })}
                                     </div>
                                 ) : (
                                     <Text type='secondary' style={{ fontSize: 13 }}>暂无标签</Text>
@@ -656,6 +893,204 @@ export default function TagBrowse() {
                     </Card>
                 )}
             </Modal>
+
+            {/* ── 设置父标签 Modal ── */}
+            <Modal
+                title={
+                    <Space>
+                        <ApartmentOutlined style={{ color: '#1677ff' }} />
+                        设置父标签 — {parentModalTag?.name}
+                    </Space>
+                }
+                open={parentModalVisible}
+                onCancel={() => setParentModalVisible(false)}
+                onOk={handleSetParent}
+                confirmLoading={settingParent}
+                okText={selectedParentId === null ? '解除父级' : '保存'}
+                cancelText='取消'
+                destroyOnClose
+            >
+                <Alert
+                    type='info'
+                    showIcon
+                    message='将当前标签设为某个父标签的子标签，便于在标签管理页以树形结构展示'
+                    description='父级候选范围限定为同一维度下的其他标签。选择"无（设为顶级）"将解除父级关联。'
+                    style={{ marginBottom: 16 }}
+                />
+                <div style={{ marginBottom: 8 }}>
+                    <Text strong>父标签</Text>
+                </div>
+                <AntSelect
+                    style={{ width: '100%' }}
+                    placeholder='选择父标签'
+                    value={selectedParentId === null ? '__null__' : selectedParentId}
+                    onChange={(val) => setSelectedParentId(val === '__null__' ? null : (val as number))}
+                    showSearch
+                    filterOption={(input, option) =>
+                        ((option?.label as string) || '').toLowerCase().includes(input.toLowerCase())
+                    }
+                    options={[
+                        { value: '__null__', label: '— 无（设为顶级标签） —' },
+                        ...((parentModalGroup?.tags || [])
+                            .filter((t: any) => t.id !== parentModalTag?.id)
+                            .map((t: any) => ({
+                                value: t.id,
+                                label: `${t.name} (${t.repoCount} 个仓库)`,
+                            }))),
+                    ]}
+                />
+                {parentModalTag?.parentId && (
+                    <Text type='secondary' style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+                        当前父标签 ID: {parentModalTag.parentId}
+                    </Text>
+                )}
+            </Modal>
+
+            {/* ── 设置维度父级 Modal ── */}
+            <Modal
+                title={
+                    <Space>
+                        <ApartmentOutlined style={{ color: '#722ed1' }} />
+                        设置维度父级 — {groupParentModalGroup?.name}
+                    </Space>
+                }
+                open={groupParentModalVisible}
+                onCancel={() => setGroupParentModalVisible(false)}
+                onOk={handleSetGroupParent}
+                confirmLoading={settingGroupParent}
+                okText={selectedGroupParentId === null ? '解除父级' : '保存'}
+                cancelText='取消'
+                destroyOnClose
+            >
+                <Alert
+                    type='info'
+                    showIcon
+                    message='设置该维度的父维度，建立钻取分析路径'
+                    description='例如：将"领域"设为"技术栈"的子维度后，从"技术栈:Python"可以下钻查看 Python 项目在"领域"维度的标签分布。'
+                    style={{ marginBottom: 16 }}
+                />
+                <div style={{ marginBottom: 8 }}>
+                    <Text strong>父维度</Text>
+                </div>
+                <AntSelect
+                    style={{ width: '100%' }}
+                    placeholder='选择父维度'
+                    value={selectedGroupParentId === null ? '__null__' : selectedGroupParentId}
+                    onChange={(val) => setSelectedGroupParentId(val === '__null__' ? null : (val as number))}
+                    showSearch
+                    filterOption={(input, option) =>
+                        ((option?.label as string) || '').toLowerCase().includes(input.toLowerCase())
+                    }
+                    options={[
+                        { value: '__null__', label: '— 无（设为顶级维度） —' },
+                        ...((groups || [])
+                            .filter((g) => g.id !== groupParentModalGroup?.id)
+                            .map((g) => ({
+                                value: g.id,
+                                label: `${g.icon || '📌'} ${g.name} (${g.tags.length} 个标签)`,
+                            }))),
+                    ]}
+                />
+                {groupParentModalGroup?.parentId && (
+                    <Text type='secondary' style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+                        当前父维度 ID: {groupParentModalGroup.parentId}
+                    </Text>
+                )}
+            </Modal>
+
+            {/* ── 标签下钻分析 Drawer ── */}
+            <Drawer
+                title={
+                    <Space>
+                        <BarChartOutlined style={{ color: '#1677ff' }} />
+                        <span>下钻分析</span>
+                        {drillTag && (
+                            <Tag color='cyan'>{drillTag.name}</Tag>
+                        )}
+                        {drillData && (
+                            <Text type='secondary' style={{ fontSize: 13 }}>
+                                共 {drillData.totalRepos} 个项目
+                            </Text>
+                        )}
+                    </Space>
+                }
+                placement='right'
+                width={520}
+                open={drillDrawerVisible}
+                onClose={() => setDrillDrawerVisible(false)}
+                extra={
+                    drillTag && (
+                        <Button
+                            type='primary'
+                            size='small'
+                            onClick={() => navigate(`/?tagIds=${drillTag.id}`)}
+                        >
+                            查看项目列表
+                        </Button>
+                    )
+                }
+            >
+                <Spin spinning={drillLoading}>
+                    {!drillLoading && drillData && drillData.distributions.length === 0 && (
+                        <Empty description='这些项目暂无其他维度的标签数据' />
+                    )}
+                    {drillData && drillData.distributions.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                            <Alert
+                                type='info'
+                                showIcon
+                                message={`下钻显示「${drillTag?.name}」标签下 ${drillData.totalRepos} 个项目在其他维度的标签分布`}
+                            />
+                            {drillData.distributions
+                                .sort((a, b) => b.tags.reduce((s, t) => s + t.count, 0) - a.tags.reduce((s, t) => s + t.count, 0))
+                                .map((dist) => (
+                                    <Card
+                                        key={dist.groupId}
+                                        size='small'
+                                        title={
+                                            <Space>
+                                                <span>{dist.groupIcon ? '' : '📌'} {dist.groupName}</span>
+                                                <Text type='secondary' style={{ fontSize: 12 }}>
+                                                    {dist.tags.length} 个标签
+                                                </Text>
+                                            </Space>
+                                        }
+                                        styles={{ body: { padding: '12px 16px' } }}
+                                    >
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                            {dist.tags.slice(0, 10).map((t) => (
+                                                <div key={t.tagId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <div style={{ minWidth: 110, fontSize: 13 }}>
+                                                        <Tooltip title={`点击查看「${drillTag?.name}」+「${t.tagName}」交集项目`}>
+                                                            <a
+                                                                onClick={() => navigate(`/?tagIds=${drillTag.id},${t.tagId}`)}
+                                                                style={{ color: '#1677ff', cursor: 'pointer' }}
+                                                            >
+                                                                {t.tagName}
+                                                            </a>
+                                                        </Tooltip>
+                                                    </div>
+                                                    <Progress
+                                                        percent={t.percentage}
+                                                        size='small'
+                                                        format={() => `${t.count} (${t.percentage}%)`}
+                                                        strokeColor={dist.groupColor}
+                                                        style={{ flex: 1, marginBottom: 0 }}
+                                                    />
+                                                </div>
+                                            ))}
+                                            {dist.tags.length > 10 && (
+                                                <Text type='secondary' style={{ fontSize: 12, marginTop: 4 }}>
+                                                    还有 {dist.tags.length - 10} 个标签...
+                                                </Text>
+                                            )}
+                                        </div>
+                                    </Card>
+                                ))}
+                        </div>
+                    )}
+                </Spin>
+            </Drawer>
         </div>
     )
 }

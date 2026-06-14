@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, Logger, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TagService } from './tag.service';
 
@@ -21,6 +21,31 @@ export class TagController {
     @ApiOperation({ summary: '搜索标签', description: '按关键词模糊匹配标签名' })
     async search(@Query('q') q: string) {
         return this.service.search(q || '');
+    }
+
+    /** 获取标签树（维度 → 父标签 → 子标签） */
+    @Get('tree')
+    @ApiOperation({ summary: '获取标签树', description: '返回按维度分组的完整标签层级树' })
+    async tree() {
+        return this.service.getTree();
+    }
+
+    /** 获取维度树（TagGroup 间的父子层级） */
+    @Get('groups/tree')
+    @ApiOperation({ summary: '获取维度树', description: '返回按 TagGroup.parentId 组装的维度树形结构（含每个维度内的标签）' })
+    async groupTree() {
+        return this.service.getGroupTree();
+    }
+
+    /** 标签下钻分布统计 */
+    @Get(':id/distribution')
+    @ApiOperation({ summary: '标签下钻分布', description: '返回该标签下的项目在其他维度（或指定维度）的标签分布统计' })
+    async getDistribution(
+        @Param('id', ParseIntPipe) id: number,
+        @Query('targetGroupId') targetGroupId?: string,
+    ) {
+        const tgid = targetGroupId ? parseInt(targetGroupId) : undefined;
+        return this.service.getTagDistribution(id, tgid);
     }
 
     /** 获取仓库的标签列表（必须在 :id 参数路由之前注册） */
@@ -117,6 +142,26 @@ export class TagController {
         try {
             await this.service.delete(parseInt(id));
             return { success: true, message: '删除成功' };
+        } catch (e) {
+            return { success: false, message: e instanceof Error ? e.message : String(e) };
+        }
+    }
+
+    /** 设置标签的父标签 */
+    @Put(':id/parent')
+    @ApiOperation({ summary: '设置标签父级', description: '设置标签的父标签以建立层级关系，parentId=null 取消层级' })
+    async setParent(@Param('id', ParseIntPipe) id: number, @Body('parentId') parentId: number | null) {
+        await this.service.setParent(id, parentId);
+        return { success: true };
+    }
+
+    /** 设置维度的父维度 */
+    @Put('groups/:id/parent')
+    @ApiOperation({ summary: '设置维度父级', description: '建立 TagGroup 间的父子关系（钻取用），parentId=null 解除父级' })
+    async setGroupParent(@Param('id', ParseIntPipe) id: number, @Body('parentId') parentId: number | null) {
+        try {
+            await this.service.setGroupParent(id, parentId);
+            return { success: true };
         } catch (e) {
             return { success: false, message: e instanceof Error ? e.message : String(e) };
         }

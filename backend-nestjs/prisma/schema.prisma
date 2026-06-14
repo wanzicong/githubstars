@@ -40,6 +40,7 @@ model GithubRepo {
   repoCategories  RepoCategory[]
   repoTags        RepoTag[]
   translationItems TranslationTaskItem[]
+  similarRepoCache SimilarRepoCache?
 
   @@index([language])
   @@index([ownerName])
@@ -92,11 +93,15 @@ model TagGroup {
   icon      String?  @db.VarChar(20)
   sortOrder Int      @default(0) @map("sort_order")
   isSystem  Boolean  @default(false) @map("is_system")
+  parentId  BigInt?  @map("parent_id")
   createdAt DateTime @default(now()) @map("created_at") @db.DateTime
   updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime
 
-  tags Tag[]
+  parent   TagGroup?  @relation("TagGroupTree", fields: [parentId], references: [id])
+  children TagGroup[] @relation("TagGroupTree")
+  tags     Tag[]
 
+  @@index([parentId])
   @@map("tag_group")
 }
 
@@ -229,6 +234,18 @@ model AiAnalyzeTask {
   @@index([status])
   @@index([createdAt])
   @@map("ai_analyze_task")
+}
+
+model SimilarRepoCache {
+  id           BigInt    @id @default(autoincrement())
+  repoId       BigInt    @unique @map("repo_id")
+  repo         GithubRepo @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  content      String    @db.LongText
+  similarCount Int       @default(0) @map("similar_count")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("similar_repo_cache")
 }
 
 model TranslationTask {
