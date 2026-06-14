@@ -1067,16 +1067,18 @@ export default function StarList() {
                             <TreeSelect
                                 treeData={effectiveTagTree}
                                 value={selectedTagIds}
-                                onChange={(vals) => setUrlParam('tagIds', vals.length > 0 ? vals.join(',') : null)}
+                                onChange={(vals) => {
+                                    const tagIds = (vals as any[]).filter(v => typeof v === 'number')
+                                    setUrlParam('tagIds', tagIds.length > 0 ? tagIds.join(',') : null)
+                                }}
                                 placeholder='筛选标签'
                                 allowClear
                                 showSearch
                                 treeCheckable
                                 treeDefaultExpandAll
                                 maxTagCount='responsive'
-                                showCheckedStrategy='SHOW_CHILD'
                                 filterTreeNode={(input, node: any) =>
-                                    String(node.title || '').toLowerCase().includes(input.toLowerCase())
+                                    String(node?.title || '').toLowerCase().includes(input.toLowerCase())
                                 }
                                 onTreeExpand={(keys) => handleTagTreeExpand(keys as number[])}
                                 dropdownStyle={{ maxHeight: 500, overflow: 'auto' }}
