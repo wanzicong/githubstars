@@ -16,6 +16,7 @@ import { TrendingModule } from './trending/trending.module';
 import { ExportModule } from './export/export.module';
 import { AgentModule } from './agent/agent.module';
 import { TagModule } from './tag/tag.module';
+import { PromptModule } from './prompt/prompt.module';
 import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
 
 /**
@@ -43,6 +44,7 @@ import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
         ExportModule,
         AgentModule,
         TagModule,
+        PromptModule,
     ],
     providers: [
         {

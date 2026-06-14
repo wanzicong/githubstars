@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** 系统预置标签维度定义 */
+/** 系统预置标签维度定义（从数据库动态加载，此处仅定义默认项） */
 const SYSTEM_GROUPS = [
     { name: '📚 技术栈', color: '#1677ff', icon: 'code' },
     { name: '🏷️ 领域', color: '#52c41a', icon: 'appstore' },
@@ -9,8 +9,6 @@ const SYSTEM_GROUPS = [
     { name: '📊 状态', color: '#eb2f96', icon: 'flag' },
     { name: '👥 服务人群', color: '#722ed1', icon: 'team' },
     { name: '💡 解决什么问题', color: '#13c2c2', icon: 'bulb' },
-    { name: '🏢 生态', color: '#faad14', icon: 'bank' },
-    { name: '✨ 自定义', color: '#ff85c0', icon: 'star' },
 ];
 
 @Injectable()
@@ -19,7 +17,7 @@ export class TagService {
 
     constructor(private readonly prisma: PrismaService) {}
 
-    /** 确保系统预置标签维度存在（缺失则自动创建） */
+    /** 确保系统预置标签维度存在（缺失则自动创建，废弃维度自动迁移清理） */
     async ensureSystemGroups() {
         const existing = await this.prisma.tagGroup.findMany({ select: { name: true } });
         const existingNames = new Set(existing.map((g) => g.name));
@@ -31,6 +29,27 @@ export class TagService {
                 });
                 this.logger.log(`自动创建系统标签维度: ${g.name}`);
             }
+        }
+
+        // ── 清理废弃维度：生态（无标签直接删除）、自定义（迁移标签到"用途"后删除）──
+        const LEGACY_GROUPS = ['🏢 生态', '✨ 自定义'];
+        for (const legacyName of LEGACY_GROUPS) {
+            const legacy = await this.prisma.tagGroup.findFirst({ where: { name: legacyName } });
+            if (!legacy) continue;
+            const tags = await this.prisma.tag.findMany({ where: { groupId: legacy.id }, select: { id: true, name: true } });
+            if (tags.length > 0) {
+                // 迁移标签到 🔧 用途
+                const targetGroup = await this.prisma.tagGroup.findFirst({ where: { name: '🔧 用途' } });
+                if (targetGroup) {
+                    await this.prisma.tag.updateMany({
+                        where: { groupId: legacy.id },
+                        data: { groupId: targetGroup.id },
+                    });
+                    this.logger.log(`已将 "${legacyName}" 下 ${tags.length} 个标签迁移到 "🔧 用途": ${tags.map(t => t.name).join(', ')}`);
+                }
+            }
+            await this.prisma.tagGroup.delete({ where: { id: legacy.id } });
+            this.logger.log(`已删除废弃维度: ${legacyName}`);
         }
     }
 
@@ -56,12 +75,12 @@ export class TagService {
         }));
     }
 
-    /** 根据维度名称查找 groupId，找不到返回自定义维度 ID */
+    /** 根据维度名称查找 groupId，找不到回退到"用途"维度 */
     async resolveGroupId(groupName: string): Promise<bigint> {
         const group = await this.prisma.tagGroup.findFirst({ where: { name: groupName } });
         if (group) return group.id;
-        // 回退到"✨ 自定义"
-        const fallback = await this.prisma.tagGroup.findFirst({ where: { name: '✨ 自定义' } });
+        // 回退到"🔧 用途"
+        const fallback = await this.prisma.tagGroup.findFirst({ where: { name: '🔧 用途' } });
         return fallback?.id ?? BigInt(1);
     }
 
@@ -203,12 +222,12 @@ export class TagService {
      * A) 带维度前缀 — { "0": ["技术栈:Python","领域:AI/ML"], "1": ["用途:CLI Tool"] }
      *    → 解析 "维度名:标签名"，自动创建/匹配标签到对应维度
      * B) 无维度前缀 — { "0": ["Python","AI/ML"], "1": ["TypeScript"] }
-     *    → 所有标签归入"✨ 自定义"维度
+     *    → 所有标签归入"🔧 用途"维度
      * C) 旧分类格式 — { "Python": [0,1,2], "AI/ML": [0,3] }
      *    → key=标签名, value=仓库索引数组
      *
-     * 维度名将匹配系统预置维度（技术栈/领域/用途/状态/服务人群/解决什么问题/生态/自定义），
-     * 匹配不上的归入"✨ 自定义"。
+     * 维度名将匹配系统预置维度（技术栈/领域/用途/状态/服务人群/解决什么问题），
+     * 匹配不上的归入"🔧 用途"。
      */
     async saveAiTagResult(repoIds: number[], tagAssignments: Record<string, string[]>) {
         this.logger.log(`保存AI标签结果: repoCount=${repoIds.length}, entries=${Object.keys(tagAssignments).length}`);
@@ -247,8 +266,8 @@ export class TagService {
                         const matchedGroup = this.matchGroupName(groupPart);
                         addTag(matchedGroup, tagPart, repoId);
                     } else {
-                        // 无维度前缀 → 自定义
-                        addTag('✨ 自定义', raw, repoId);
+                        // 无维度前缀 → 用途
+                        addTag('🔧 用途', raw, repoId);
                     }
                 }
             }
@@ -262,7 +281,7 @@ export class TagService {
                 for (const idx of indices) {
                     const i = parseInt(String(idx), 10);
                     if (!isNaN(i) && i >= 0 && i < repoIds.length) {
-                        addTag('✨ 自定义', name, repoIds[i]);
+                        addTag('🔧 用途', name, repoIds[i]);
                     }
                 }
             }
@@ -285,14 +304,18 @@ export class TagService {
             // 查找或创建标签
             let tag = await this.prisma.tag.findFirst({ where: { name: tagName } });
             if (!tag) {
-                const group = await this.prisma.tagGroup.findFirst({ where: { name: groupName } });
-                const groupId = group?.id ?? BigInt(6);
+                let group = await this.prisma.tagGroup.findFirst({ where: { name: groupName } });
+                // 回退：找不到目标维度时使用"🔧 用途"
+                if (!group) {
+                    group = await this.prisma.tagGroup.findFirst({ where: { name: '🔧 用途' } });
+                }
+                const groupId = group?.id ?? BigInt(1);
                 tag = await this.prisma.tag.create({ data: { name: tagName, groupId, repoCount: 0 } });
                 this.logger.log(`创建标签: [${groupName}] ${tagName}`);
             } else {
-                // 已有标签但在"自定义"维度 → 修正到正确维度
+                // 已有标签但在"用途"维度 → 修正到正确维度
                 const currentGroup = await this.prisma.tagGroup.findFirst({ where: { id: tag.groupId } });
-                if (currentGroup?.name === '✨ 自定义' && groupName !== '✨ 自定义') {
+                if (currentGroup?.name === '🔧 用途' && groupName !== '🔧 用途') {
                     const correctGroup = await this.prisma.tagGroup.findFirst({ where: { name: groupName } });
                     if (correctGroup) {
                         await this.prisma.tag.update({ where: { id: tag.id }, data: { groupId: correctGroup.id } });
@@ -318,7 +341,7 @@ export class TagService {
         this.logger.log(`AI标签保存完成: ${tagMap.size} 个标签`);
     }
 
-    /** 模糊匹配维度名 → 返回系统预置维度名（匹配不上返回"✨ 自定义"） */
+    /** 模糊匹配维度名 → 返回系统预置维度名（匹配不上回退"🔧 用途"） */
     private matchGroupName(input: string): string {
         const lower = input.toLowerCase();
         for (const g of SYSTEM_GROUPS) {
@@ -333,11 +356,10 @@ export class TagService {
             'status': '📊 状态', '状态': '📊 状态', 'state': '📊 状态',
             'audience': '👥 服务人群', '人群': '👥 服务人群', '用户': '👥 服务人群', 'who': '👥 服务人群',
             'problem': '💡 解决什么问题', '问题': '💡 解决什么问题', '解决': '💡 解决什么问题', 'why': '💡 解决什么问题',
-            'eco': '🏢 生态', '生态': '🏢 生态', 'platform': '🏢 生态',
         };
         for (const [key, groupName] of Object.entries(aliasMap)) {
             if (lower.includes(key)) return groupName;
         }
-        return '✨ 自定义';
+        return '🔧 用途';
     }
 }
