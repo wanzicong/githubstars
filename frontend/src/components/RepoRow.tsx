@@ -102,12 +102,6 @@ const RepoRow = memo(function RepoRow({ repo, onTagClick, selectedTagIds }: Repo
                                     : repo.tagNames &&
                                       repo.tagNames.length > 0 &&
                                       repo.tagNames.slice(0, 2).map((t) => (
-                                              </Tooltip>
-                                          )
-                                      })
-                                    : repo.tagNames &&
-                                      repo.tagNames.length > 0 &&
-                                      repo.tagNames.slice(0, 2).map((t) => (
                                           <Tag key={t} color='cyan' style={{ margin: 0, fontSize: 12, borderRadius: 10 }}>
                                               {t}
                                           </Tag>
