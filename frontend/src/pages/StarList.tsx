@@ -4,7 +4,8 @@ import {
     Card,
     Input,
     Select,
-    TreeSelect,
+    Tree,
+    Popover,
     Button,
     Row,
     Col,
@@ -244,6 +245,8 @@ export default function StarList() {
     const [tagDistLoaded, setTagDistLoaded] = useState<Map<number, any[]>>(new Map())  // tagId → 子维度分布节点
     const [tagDistLoading, setTagDistLoading] = useState<Set<number>>(new Set())       // 正在加载的 tagId
     const [tagGroups, setTagGroups] = useState<any[]>([])           // 含parentId的维度列表
+    const [tagPopoverOpen, setTagPopoverOpen] = useState(false)      // 标签Popover开关
+    const [tagSearchKeyword, setTagSearchKeyword] = useState('')     // Popover内搜索关键词
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
     const [loading, setLoading] = useState(true)
@@ -253,7 +256,7 @@ export default function StarList() {
         const loadMeta = async () => {
             try {
                 const tagRes = await fetchAllTags().catch(() => [])
-                // 构建 TreeSelect 树形数据（维度 → 父标签 → 子标签）
+                // 构建树形数据（维度 → 父标签 → 子标签，用于 Popover Tree 面板）
                 const buildTagTree = (tags: any[]) => {
                     const map = new Map<number, any>()
                     const roots: any[] = []
@@ -274,7 +277,7 @@ export default function StarList() {
                     }
                     roots.sort((a, b) => b.repoCount - a.repoCount)
                     roots.forEach(sortNode)
-                    // 转为 TreeSelect 节点格式
+                    // 转为 Tree 节点格式
                     const toTreeNode = (t: any): any => ({
                         title: `${t.name} (${t.repoCount})`,
                         value: t.id,
@@ -402,6 +405,23 @@ export default function StarList() {
             }
         }
     }, [tagDistLoaded, tagDistLoading])
+
+    // 已选标签名称（用于按钮文案）
+    const selectedTagNames = useMemo(() => {
+        if (!selectedTagIds.length) return ''
+        const idSet = new Set(selectedTagIds)
+        const names: string[] = []
+        const walk = (nodes: any[]) => {
+            for (const n of nodes) {
+                if (typeof n.value === 'number' && idSet.has(n.value) && n.selectable !== false) {
+                    names.push(String(n.title || '').replace(/\s*\(\d+\)\s*$/, ''))
+                }
+                if (n.children) walk(n.children)
+            }
+        }
+        walk(tagOptions)
+        return names.slice(0, 3).join(', ') + (names.length > 3 ? ` 等${names.length}个` : '')
+    }, [selectedTagIds, tagOptions])
 
     const handleClearFilters = useCallback(() => {
         setUrlParams({
@@ -1041,24 +1061,71 @@ export default function StarList() {
                             />
                         </Col>
                         <Col xs={24} sm={12} md={6} lg={4}>
-                            <TreeSelect
-                                treeData={effectiveTagTree}
-                                value={selectedTagIds}
-                                onChange={(vals) => setUrlParam('tagIds', vals.length > 0 ? vals.join(',') : null)}
-                                placeholder='筛选标签（层级展开，可下钻）'
-                                allowClear
-                                showSearch
-                                treeCheckable
-                                maxTagCount={3}
-                                showCheckedStrategy='SHOW_CHILD'
-                                filterTreeNode={(input, node: any) =>
-                                    String(node.title || node.label || '').toLowerCase().includes(input.toLowerCase())
+                            <Popover
+                                open={tagPopoverOpen}
+                                onOpenChange={(v) => { setTagPopoverOpen(v); if (!v) setTagSearchKeyword('') }}
+                                trigger='click'
+                                placement='bottomLeft'
+                                overlayStyle={{ width: 420 }}
+                                content={
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 440 }}>
+                                        <Input.Search
+                                            placeholder='搜索标签...'
+                                            value={tagSearchKeyword}
+                                            onChange={(e) => setTagSearchKeyword(e.target.value)}
+                                            allowClear
+                                            size='small'
+                                        />
+                                        <div style={{ flex: 1, overflow: 'auto', maxHeight: 340, marginLeft: -8, marginRight: -8 }}>
+                                            <Tree
+                                                checkable
+                                                selectable={false}
+                                                checkedKeys={selectedTagIds}
+                                                onCheck={(checked) => {
+                                                    const keys = (Array.isArray(checked) ? checked : checked.checked) as number[]
+                                                    setUrlParam('tagIds', keys.length > 0 ? keys.join(',') : null)
+                                                }}
+                                                treeData={effectiveTagTree}
+                                                onExpand={(keys) => handleTagTreeExpand(keys as number[])}
+                                                filterTreeNode={(node) => {
+                                                    if (!tagSearchKeyword) return true
+                                                    return String(node.title || '').toLowerCase().includes(tagSearchKeyword.toLowerCase())
+                                                }}
+                                                showLine={{ showLeafIcon: false }}
+                                                blockNode
+                                                titleRender={(node: any) => {
+                                                    const isDistGroup = String(node.value).startsWith('dist_')
+                                                    return (
+                                                        <span style={{
+                                                            fontSize: 13,
+                                                            color: isDistGroup ? '#1677ff' : node.selectable === false ? '#333' : undefined,
+                                                            fontWeight: (isDistGroup || node.selectable === false) ? 600 : undefined,
+                                                        }}>
+                                                            {node.title}
+                                                        </span>
+                                                    )
+                                                }}
+                                            />
+                                        </div>
+                                        {selectedTagIds.length > 0 && (
+                                            <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 8, textAlign: 'right' }}>
+                                                <Button size='small' type='link' danger onClick={() => setUrlParam('tagIds', null)}>
+                                                    清除全部 ({selectedTagIds.length})
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
                                 }
-                                onTreeExpand={(keys) => handleTagTreeExpand(keys)}
-                                treeDefaultExpandAll={false}
-                                style={{ width: '100%' }}
-                                dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
-                            />
+                            >
+                                <Button
+                                    style={{ width: '100%' }}
+                                    icon={<span style={{ marginRight: 4 }}>🏷️</span>}
+                                >
+                                    {selectedTagIds.length > 0
+                                        ? `标签 (${selectedTagIds.length}个)`
+                                        : '标签筛选'}
+                                </Button>
+                            </Popover>
                         </Col>
                         <Col xs={12} sm={8} md={6} lg={4}>
                             <Select
