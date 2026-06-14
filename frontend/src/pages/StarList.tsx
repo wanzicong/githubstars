@@ -48,7 +48,7 @@ import * as starsApi from '../api/stars'
 import * as translateApi from '../api/translate'
 import * as analyzeApi from '../api/analyze'
 import * as cloneApi from '../api/clone'
-import { fetchAllTags, fetchTagDistribution } from '../api/tags'
+import { fetchAllTags } from '../api/tags'
 import { buildTargetPath, sanitizeSubdirectory } from '../utils/clonePath'
 import RepoCard from '../components/RepoCard'
 import RepoRow from '../components/RepoRow'
@@ -81,27 +81,50 @@ const DATE_FIELD_OPTIONS = [
 
 const PAGE_SIZE_OPTIONS = [36, 72, 144]
 
-/** 自定义标签复选树 — 原生checkbox + 标签下钻展开 */
-function TagCheckTree({ nodes, selected, onToggle, onLoadDist, depth = 0 }: {
-    nodes: any[]
-    selected: number[]
+/**
+ * 标签层级选择树 —— 三级结构：维度 → 一级标签（父标签）→ 二级标签（子标签）
+ *
+ * 特性：
+ * - 维度节点默认展开，标签节点默认折叠（有子标签时显示 ▶ 展开按钮）
+ * - 选中标签高亮显示，支持原生 checkbox 交互
+ * - 支持搜索过滤（通过父组件 DOM 操作，保持组件纯净）
+ * - 每个标签显示上下文感知的仓库数量（由后端动态计算）
+ *
+ * @param nodes    TreeNode[] — buildTagHierarchy() 构建的三级树节点
+ * @param selected 已选中的 tagId 集合
+ * @param onToggle 点击标签 checkbox 时的回调
+ */
+function TagCheckTree({ nodes, selected, onToggle }: {
+    nodes: TreeNode[]
+    selected: Set<number>
     onToggle: (tagId: number) => void
-    onLoadDist: (keys: any[]) => void
-    depth?: number
 }) {
-    // expanded: 维度节点 + 标签节点的展开状态
     const [expanded, setExpanded] = useState<Set<string>>(new Set())
-    // drillKeys: 已经触发过下钻加载的 tag id（避免重复请求）
-    const drillLoaded = useRef<Set<number>>(new Set())
+    const prevNodesRef = useRef<TreeNode[] | null>(null)
 
-    // 首次渲染默认展开所有维度（第一层 group 节点）
+    // 当 nodes 刷新时（筛选条件变化），保留已展开的节点，首次加载则展开所有维度
     useEffect(() => {
-        if (depth === 0 && nodes.length > 0) {
+        if (prevNodesRef.current === null) {
+            // 首次加载：展开所有维度节点
             const keys = new Set<string>()
-            nodes.forEach(n => { if (typeof n.value === 'string') keys.add(n.value) })
+            nodes.forEach(n => { if (n.type === 'group') keys.add(n.value) })
             setExpanded(keys)
+            prevNodesRef.current = nodes
+            return
         }
-    }, [])
+        // 后续刷新：收集新 nodes 中所有有效 key，保留其中已展开的
+        const validKeys = new Set<string>()
+        const walk = (ns: TreeNode[]) => {
+            for (const n of ns) { validKeys.add(n.value); if (n.children) walk(n.children) }
+        }
+        walk(nodes)
+        setExpanded(prev => {
+            const next = new Set<string>()
+            prev.forEach(k => { if (validKeys.has(k)) next.add(k) })
+            return next
+        })
+        prevNodesRef.current = nodes
+    }, [nodes])
 
     const toggleExpand = (key: string) => {
         setExpanded(prev => {
@@ -111,132 +134,173 @@ function TagCheckTree({ nodes, selected, onToggle, onLoadDist, depth = 0 }: {
         })
     }
 
-    // 点击标签的下钻按钮 → 加载子维度分布
-    const handleDrillDown = (tagId: number) => {
-        const key = String(tagId)
-        const isCurrentlyExpanded = expanded.has(key)
-        if (isCurrentlyExpanded) {
-            // 收起
-            setExpanded(prev => { const n = new Set(prev); n.delete(key); return n })
-            return
+    const renderNode = (node: TreeNode, depth: number) => {
+        const isExpanded = expanded.has(node.value)
+        const hasChildren = node.children && node.children.length > 0
+        const isChecked = node.tagId !== undefined && selected.has(node.tagId)
+        const isGroup = node.type === 'group'
+        const isParentTag = node.type === 'tag' && hasChildren
+        const isChildTag = node.type === 'subtag'
+
+        // 视觉样式按层级区分
+        const rowStyle: React.CSSProperties = {
+            display: 'flex', alignItems: 'center', gap: 4,
+            padding: isGroup ? '4px 6px' : isParentTag ? '3px 6px 3px 6px' : '2px 6px 2px 22px',
+            cursor: isGroup ? 'default' : 'pointer',
+            borderRadius: 4, marginBottom: 1,
+            background: isChecked ? '#e6f4ff' : undefined,
+            fontWeight: isGroup ? 600 : isParentTag ? 500 : 400,
+            fontSize: isGroup ? 13 : 12,
+            color: isGroup ? '#262626' : isChildTag ? '#8c8c8c' : '#434343',
         }
-        // 展开
-        setExpanded(prev => new Set(prev).add(key))
-        if (!drillLoaded.current.has(tagId)) {
-            drillLoaded.current.add(tagId)
-            onLoadDist([tagId])
-        }
+
+        return (
+            <div key={node.value}>
+                <div data-tag-row style={rowStyle}>
+                    {/* 展开/折叠箭头 */}
+                    {hasChildren ? (
+                        <span
+                            style={{ fontSize: 10, width: 14, flexShrink: 0, color: '#bbb', cursor: 'pointer' }}
+                            onClick={(e) => { e.stopPropagation(); toggleExpand(node.value) }}
+                        >
+                            {isExpanded ? '▼' : '▶'}
+                        </span>
+                    ) : (
+                        <span style={{ width: 14, flexShrink: 0 }} />
+                    )}
+
+                    {/* 维度图标 或 checkbox */}
+                    {isGroup ? (
+                        <span style={{ fontSize: 14, width: 20, flexShrink: 0, textAlign: 'center' }}>
+                            {node.icon || '📌'}
+                        </span>
+                    ) : (
+                        <input
+                            type='checkbox'
+                            checked={isChecked}
+                            style={{ margin: 0, flexShrink: 0, cursor: 'pointer', accentColor: '#1677ff' }}
+                            onChange={() => node.tagId !== undefined && onToggle(node.tagId)}
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    )}
+
+                    {/* 标签名 — 点击文字也可切换选中 */}
+                    <span
+                        style={{
+                            flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            cursor: isGroup ? 'default' : 'pointer',
+                        }}
+                        onClick={() => {
+                            if (!isGroup && node.tagId !== undefined) onToggle(node.tagId)
+                        }}
+                    >
+                        {node.label}
+                    </span>
+
+                    {/* 仓库数量（上下文感知） */}
+                    {node.count !== undefined && (
+                        <span style={{
+                            fontSize: 10, color: node.count > 0 ? '#8c8c8c' : '#d9d9d9',
+                            flexShrink: 0, minWidth: 28, textAlign: 'right',
+                        }}>
+                            {node.count}
+                        </span>
+                    )}
+
+                    {/* 选中标记 */}
+                    {isChecked && (
+                        <span style={{ color: '#1677ff', fontSize: 10, flexShrink: 0, fontWeight: 700 }}>✓</span>
+                    )}
+                </div>
+
+                {/* 递归渲染子节点（含缩进） */}
+                {hasChildren && isExpanded && (
+                    <div data-child-container='true' style={isGroup ? {} : { paddingLeft: 14 }}>
+                        {node.children!.map(child => renderNode(child, depth + 1))}
+                    </div>
+                )}
+            </div>
+        )
     }
 
-    // 判断是否为下钻分布标签（标题含 · 分隔符，如 "领域·AI/ML (78)"）
-    const isDistTag = (t: string) => t.includes('·')
-
     return (
-        <div style={{ paddingLeft: depth * 12 }}>
-            {/* 在下钻层加一条分隔提示 */}
-            {depth > 0 && nodes.length > 0 && isDistTag(String(nodes[0]?.title || '')) && (
-                <div style={{ fontSize: 10, color: '#999', padding: '2px 6px', fontStyle: 'italic' }}>
-                    ─ 该标签下的项目同时具有以下标签 ─
-                </div>
-            )}
-            {nodes.map((node: any) => {
-                const isGroup = typeof node.value === 'string' && node.selectable === false
-                const isTag = typeof node.value === 'number'
-                const nodeKey = String(node.value)
-                const isExpanded = expanded.has(nodeKey)
-                const hasStaticChildren = node.children && node.children.length > 0
-                const isChecked = isTag && selected.includes(node.value)
-                const isDist = isTag && isDistTag(String(node.title || ''))
-                // 标签节点：有子节点 或 repoCount>0 → 可展开下钻
-                const canDrill = isTag && (hasStaticChildren ||
-                    (typeof (node as any)._repoCount === 'number' ? (node as any)._repoCount > 0 : true))
-
-                return (
-                    <div key={nodeKey}>
-                        <div
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px',
-                                cursor: (isGroup || isTag || hasStaticChildren) ? 'pointer' : 'default',
-                                borderRadius: 4, marginBottom: 1,
-                                background: isChecked ? '#e6f4ff' : undefined,
-                                fontWeight: isGroup ? 600 : undefined,
-                                color: isDist ? '#1677ff' : undefined,
-                                fontSize: isGroup ? 13 : 12,
-                            }}
-                        >
-                            {/* 展开/收起箭头 */}
-                            {(hasStaticChildren || (isTag && canDrill)) ? (
-                                <span
-                                    style={{ fontSize: 10, width: 14, color: '#bbb', flexShrink: 0, cursor: 'pointer' }}
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        if (isTag && canDrill) handleDrillDown(node.value)
-                                        else toggleExpand(nodeKey)
-                                    }}
-                                >
-                                    {isExpanded ? '▼' : '▶'}
-                                </span>
-                            ) : (
-                                <span style={{ width: 14, flexShrink: 0 }} />
-                            )}
-
-                            {/* 原生checkbox（仅标签节点） */}
-                            {isTag ? (
-                                <input
-                                    type='checkbox'
-                                    checked={isChecked}
-                                    style={{ margin: 0, flexShrink: 0, cursor: 'pointer' }}
-                                    onChange={() => onToggle(node.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                />
-                            ) : (
-                                <span style={{ fontSize: 14, width: 18, flexShrink: 0, textAlign: 'center' }}>
-                                    {node.title?.includes('📚') ? '📚' : node.title?.includes('🏷️') ? '🏷️' : node.title?.includes('🔧') ? '🔧' : node.title?.includes('📊') ? '📊' : node.title?.includes('👥') ? '👥' : node.title?.includes('💡') ? '💡' : '📌'}
-                                </span>
-                            )}
-
-                            {/* 标签名 */}
-                            <span
-                                style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                onClick={(e) => {
-                                    if (isTag) { e.stopPropagation(); onToggle(node.value) }
-                                }}
-                            >
-                                {isGroup
-                                    ? String(node.title || '').replace(/^[^\s]+\s/, '').replace(/\s*\(\d+\)/, '')
-                                    : node.title}
-                            </span>
-                            {/* 下钻展开按钮（仅标签节点，非分布标签） */}
-                            {isTag && !isDist && canDrill && (
-                                <span
-                                    style={{
-                                        fontSize: 9, color: isExpanded ? '#1677ff' : '#ccc',
-                                        cursor: 'pointer', padding: '0 2px', flexShrink: 0,
-                                    }}
-                                    title='查看该标签下项目在其他维度的标签分布'
-                                    onClick={(e) => { e.stopPropagation(); handleDrillDown(node.value) }}
-                                >
-                                    {isExpanded ? '▲' : '▼'}
-                                </span>
-                            )}
-                            {isChecked && <span style={{ color: '#1677ff', fontSize: 10, flexShrink: 0 }}>✓</span>}
-                        </div>
-
-                        {/* 递归渲染子节点 */}
-                        {hasStaticChildren && isExpanded && (
-                            <TagCheckTree
-                                nodes={node.children}
-                                selected={selected}
-                                onToggle={onToggle}
-                                onLoadDist={onLoadDist}
-                                depth={depth + 1}
-                            />
-                        )}
-                    </div>
-                )
-            })}
+        <div>
+            {nodes.map(node => renderNode(node, 0))}
         </div>
     )
+}
+
+/** 树节点类型 */
+interface TreeNode {
+    type: 'group' | 'tag' | 'subtag'
+    value: string
+    tagId?: number
+    label: string
+    count?: number
+    icon?: string
+    children?: TreeNode[]
+}
+
+/** 从维度 emoji 提取图标字符 */
+function getGroupEmoji(name: string): string {
+    const m = name.match(/^([\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F600}-\u{1F64F}])/u)
+    return m ? m[1] : '📌'
+}
+
+/** 将从后端获取的 TagGroup[] 构建为三级树节点 */
+function buildTagHierarchy(groups: any[]): TreeNode[] {
+    return groups.map((group: any) => {
+        const tagMap = new Map<number, { node: TreeNode; parentId: number | null }>()
+
+        // 创建所有标签节点
+        for (const tag of (group.tags || [])) {
+            tagMap.set(tag.id, {
+                node: {
+                    type: 'tag',
+                    value: `tag_${tag.id}`,
+                    tagId: tag.id,
+                    label: tag.name,
+                    count: typeof tag.repoCount === 'number' ? tag.repoCount : 0,
+                    children: [],
+                },
+                parentId: tag.parentId ?? null,
+            })
+        }
+
+        // 构建父子关系
+        const rootTags: TreeNode[] = []
+        for (const [, entry] of tagMap) {
+            if (entry.parentId && tagMap.has(entry.parentId)) {
+                const parent = tagMap.get(entry.parentId)!
+                parent.node.children!.push(entry.node)
+                // 子标签标记为 subtag 类型
+                entry.node.type = 'subtag'
+            } else {
+                rootTags.push(entry.node)
+            }
+        }
+
+        // 递归排序：按 count 降序
+        const sortByCount = (nodes: TreeNode[]) => {
+            nodes.sort((a, b) => (b.count || 0) - (a.count || 0))
+            for (const n of nodes) {
+                if (n.children && n.children.length > 0) sortByCount(n.children)
+                // 清理空 children 数组
+                if (n.children && n.children.length === 0) delete n.children
+                // 有子标签的 tag 保持 type='tag'（一级标签）
+            }
+        }
+        sortByCount(rootTags)
+
+        return {
+            type: 'group' as const,
+            value: `group_${group.id}`,
+            label: group.name.replace(/^[^\s]+\s/, ''), // 去掉 emoji 前缀显示纯文字
+            icon: getGroupEmoji(group.name),
+            count: group.tags?.length || 0,
+            children: rootTags,
+        }
+    })
 }
 
 const TIME_PRESETS: { label: string; value: string; days: number }[] = [
@@ -396,61 +460,38 @@ export default function StarList() {
     const dateFilterExpanded = !!(dateField || startDateStr || endDateStr || timePreset)
 
     const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({ records: [], total: 0, size: 12, current: 1, pages: 0 })
-    const [tagOptions, setTagOptions] = useState<any[]>([])
-    const [tagBaseTree, setTagBaseTree] = useState<any[]>([])       // 不带下钻的基础树
-    const [tagDistLoaded, setTagDistLoaded] = useState<Map<number, any[]>>(new Map())  // tagId → 子维度分布节点
-    const [tagDistLoading, setTagDistLoading] = useState<Set<number>>(new Set())       // 正在加载的 tagId
-    const [tagGroups, setTagGroups] = useState<any[]>([])           // 含parentId的维度列表
+    const [tagTree, setTagTree] = useState<TreeNode[]>([])
     const [tagPopoverOpen, setTagPopoverOpen] = useState(false)
-    const [tagTreeKey, setTagTreeKey] = useState(0)                 // 强制Tree重新挂载
+    const [tagTreeKey, setTagTreeKey] = useState(0)                 // 强制TagCheckTree重新挂载
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
     const [loading, setLoading] = useState(true)
     const [initialLoading, setInitialLoading] = useState(true)
 
+    // ── 标签树随筛选条件动态加载（上下文感知计数）──
+    useEffect(() => {
+        let cancelled = false
+        const loadTags = async () => {
+            try {
+                const tagRes = await fetchAllTags({
+                    language: languageStr || undefined,
+                    keyword: keyword || undefined,
+                    contextTagIds: tagIdsStr || undefined,
+                }).catch(() => [])
+                if (cancelled) return
+                setTagTree(buildTagHierarchy(tagRes))
+            } catch {
+                if (!cancelled) setTagTree([])
+            }
+        }
+        loadTags()
+        return () => { cancelled = true }
+    }, [languageStr, keyword, tagIdsStr])
+
+    // ── 首次加载概览和语言统计（仅一次）──
     useEffect(() => {
         const loadMeta = async () => {
             try {
-                const tagRes = await fetchAllTags().catch(() => [])
-                // 构建树形数据（维度 → 父标签 → 子标签，用于 Popover Tree 面板）
-                const buildTagTree = (tags: any[]) => {
-                    const map = new Map<number, any>()
-                    const roots: any[] = []
-                    for (const t of tags) {
-                        map.set(t.id, { ...t, children: [] })
-                    }
-                    for (const [, node] of map) {
-                        if (node.parentId && map.has(node.parentId)) {
-                            map.get(node.parentId)!.children.push(node)
-                        } else {
-                            roots.push(node)
-                        }
-                    }
-                    // 递归排序
-                    const sortNode = (n: any) => {
-                        n.children.sort((a: any, b: any) => b.repoCount - a.repoCount)
-                        n.children.forEach(sortNode)
-                    }
-                    roots.sort((a, b) => b.repoCount - a.repoCount)
-                    roots.forEach(sortNode)
-                    // 转为 Tree 节点格式
-                    const toTreeNode = (t: any): any => ({
-                        title: `${t.name} (${t.repoCount})`,
-                        value: t.id,
-                        children: t.children.length > 0 ? t.children.map(toTreeNode) : undefined,
-                    })
-                    return roots.map(toTreeNode)
-                }
-                const treeData = tagRes.map((g: any) => ({
-                    title: `${g.name} (${g.tags.length})`,
-                    value: `group_${g.id}`,
-                    selectable: false,
-                    checkable: false,
-                    children: buildTagTree(g.tags),
-                }))
-                setTagBaseTree(treeData)
-                setTagOptions(treeData)
-                setTagGroups(tagRes)
                 const [overviewRes, langRes] = await Promise.allSettled([
                     statsApi.fetchOverviewStats(),
                     statsApi.fetchLanguageStats(),
@@ -510,79 +551,40 @@ export default function StarList() {
         location.pathname, // 从详情页返回列表时触发刷新
     ])
 
-    // 构建有效树（基础树 + 动态加载的子维度分布）
-    const effectiveTagTree = useMemo(() => {
-        if (tagDistLoaded.size === 0) return tagOptions
-        // 深拷贝基础树并注入已加载的分布数据
-        const injectDist = (nodes: any[]): any[] => nodes.map(n => {
-            if (n.selectable === false) {
-                // 维度节点：递归处理子标签
-                return { ...n, children: injectDist(n.children || []) }
-            }
-            // 标签节点：如果已加载分布，追加到 children
-            const distChildren = tagDistLoaded.get(n.value)
-            if (distChildren && distChildren.length > 0) {
-                const existing = n.children || []
-                return { ...n, children: [...existing, ...distChildren] }
-            }
-            return n
-        })
-        return injectDist(tagOptions)
-    }, [tagOptions, tagDistLoaded])
-
-    // 展开节点时懒加载子维度分布
-    const handleTagTreeExpand = useCallback(async (expandedKeys: any[]) => {
-        // 找到新展开的标签节点（非 group_ 前缀的节点）
-        const newExpanded = expandedKeys.filter(k => typeof k === 'number' && !tagDistLoaded.has(k) && !tagDistLoading.has(k))
-        if (newExpanded.length === 0) return
-        for (const tagId of newExpanded) {
-            setTagDistLoading(prev => new Set(prev).add(tagId))
-            try {
-                const dist = await fetchTagDistribution(tagId)
-                if (!dist || dist.totalRepos === 0) { setTagDistLoaded(prev => new Map(prev).set(tagId, [])); continue }
-                // 构建子维度标签节点（平铺，不用中间分组）
-                const flatTagNodes: any[] = []
-                for (const d of dist.distributions) {
-                    // 取维度纯名称（去掉emoji前缀）
-                    const dimName = d.groupName.replace(/^[^一-鿿]+/, '').trim()
-                    for (const t of d.tags) {
-                        flatTagNodes.push({
-                            title: `${dimName}·${t.tagName} (${t.count})`,
-                            value: t.tagId,
-                        })
-                    }
-                }
-                // 按 count 降序排列
-                flatTagNodes.sort((a, b) => {
-                    const ca = parseInt(String(a.title).match(/\((\d+)\)$/)?.[1] || '0')
-                    const cb = parseInt(String(b.title).match(/\((\d+)\)$/)?.[1] || '0')
-                    return cb - ca
-                })
-                setTagDistLoaded(prev => new Map(prev).set(tagId, flatTagNodes))
-            } catch {
-                setTagDistLoaded(prev => new Map(prev).set(tagId, []))
-            } finally {
-                setTagDistLoading(prev => { const s = new Set(prev); s.delete(tagId); return s })
-            }
-        }
-    }, [tagDistLoaded, tagDistLoading])
-
-    // 已选标签名称（用于按钮文案）
+    // 已选标签名称列表（用于按钮文案和面包屑展示）
     const selectedTagNames = useMemo(() => {
-        if (!selectedTagIds.length) return ''
+        if (!selectedTagIds.length) return []
         const idSet = new Set(selectedTagIds)
-        const names: string[] = []
-        const walk = (nodes: any[]) => {
+        const names: { tagId: number; label: string; groupLabel: string }[] = []
+        const walk = (nodes: TreeNode[]) => {
             for (const n of nodes) {
-                if (typeof n.value === 'number' && idSet.has(n.value) && n.selectable !== false) {
-                    names.push(String(n.title || '').replace(/\s*\(\d+\)\s*$/, ''))
+                if (n.type === 'group') {
+                    if (n.children) walk(n.children)
+                } else if (n.tagId !== undefined && idSet.has(n.tagId)) {
+                    names.push({ tagId: n.tagId, label: n.label, groupLabel: '' })
                 }
                 if (n.children) walk(n.children)
             }
         }
-        walk(tagOptions)
-        return names.slice(0, 3).join(', ') + (names.length > 3 ? ` 等${names.length}个` : '')
-    }, [selectedTagIds, tagOptions])
+        walk(tagTree)
+        // 去重（同一个tagId可能在树中出现多次）
+        const seen = new Set<number>()
+        return names.filter(n => { if (seen.has(n.tagId)) return false; seen.add(n.tagId); return true })
+    }, [selectedTagIds, tagTree])
+
+    const selectedTagSummary = selectedTagNames.slice(0, 3).map(n => n.label).join(', ')
+        + (selectedTagNames.length > 3 ? ` 等${selectedTagNames.length}个` : '')
+
+    // 已选标签 ID 集合（O(1) 查找）
+    const selectedTagIdSet = useMemo(() => new Set(selectedTagIds), [selectedTagIds])
+
+    // 切换标签选中状态
+    const onToggleTag = useCallback((tagId: number) => {
+        const next = selectedTagIds.includes(tagId)
+            ? selectedTagIds.filter(id => id !== tagId)
+            : [...selectedTagIds, tagId]
+        setUrlParam('tagIds', next.length > 0 ? next.join(',') : null)
+    }, [selectedTagIds, setUrlParam])
 
     const handleClearFilters = useCallback(() => {
         setUrlParams({
@@ -1231,47 +1233,79 @@ export default function StarList() {
                             {tagPopoverOpen && (
                                 <div style={{
                                     position: 'absolute', top: '100%', left: 0, zIndex: 1050,
-                                    width: 420, maxHeight: 500, marginTop: 4,
+                                    width: 440, maxHeight: 520, marginTop: 4,
                                     background: '#fff', borderRadius: 8,
                                     boxShadow: '0 6px 16px 0 rgba(0,0,0,0.08), 0 3px 6px -4px rgba(0,0,0,0.12)',
-                                    padding: 12, display: 'flex', flexDirection: 'column', gap: 8,
+                                    display: 'flex', flexDirection: 'column',
                                 }}>
-                                    <Input.Search
-                                        placeholder='搜索标签...'
-                                        allowClear
-                                        size='small'
-                                        onChange={(e) => {
-                                            const kw = (e.target.value || '').toLowerCase()
-                                            const el = document.getElementById('tag-tree-panel')
-                                            if (!el) return
-                                            const nodes = el.querySelectorAll('.ant-tree-treenode')
-                                            nodes.forEach((n: any) => {
-                                                const text = (n.textContent || '').toLowerCase()
-                                                n.style.display = kw ? (text.includes(kw) ? '' : 'none') : ''
-                                            })
-                                        }}
-                                    />
-                                    <div id='tag-tree-panel' style={{ flex: 1, overflow: 'auto', minHeight: 100, maxHeight: 380 }}>
-                                        <TagCheckTree
-                                            key={tagTreeKey}
-                                            nodes={effectiveTagTree}
-                                            selected={selectedTagIds}
-                                            onToggle={(tagId: number) => {
-                                                const next = selectedTagIds.includes(tagId)
-                                                    ? selectedTagIds.filter(id => id !== tagId)
-                                                    : [...selectedTagIds, tagId]
-                                                setUrlParam('tagIds', next.length > 0 ? next.join(',') : null)
+                                    {/* 搜索框 */}
+                                    <div style={{ padding: '10px 12px 6px' }}>
+                                        <Input.Search
+                                            placeholder='搜索标签...'
+                                            allowClear
+                                            size='small'
+                                            onChange={(e) => {
+                                                const kw = (e.target.value || '').toLowerCase()
+                                                const el = document.getElementById('tag-tree-panel')
+                                                if (!el) return
+                                                // 简单的 DOM 筛选：隐藏不匹配的行
+                                                const rows = el.querySelectorAll('[data-tag-row]')
+                                                rows.forEach((row: any) => {
+                                                    const text = (row.textContent || '').toLowerCase()
+                                                    const match = !kw || text.includes(kw)
+                                                    row.style.display = match ? '' : 'none'
+                                                    // 同时控制其子节点容器
+                                                    const childContainer = row.nextElementSibling
+                                                    if (childContainer && childContainer.getAttribute('data-child-container') === 'true') {
+                                                        childContainer.style.display = match ? '' : 'none'
+                                                    }
+                                                })
                                             }}
-                                            onLoadDist={handleTagTreeExpand}
                                         />
                                     </div>
-                                    {selectedTagIds.length > 0 && (
-                                        <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 8, textAlign: 'right' }}>
-                                            <Button size='small' type='link' danger onClick={() => setUrlParam('tagIds', null)}>
-                                                清除全部 ({selectedTagIds.length})
-                                            </Button>
+
+                                    {/* 已选标签面包屑 */}
+                                    {selectedTagNames.length > 0 && (
+                                        <div style={{
+                                            padding: '4px 12px 6px', borderBottom: '1px solid #f0f0f0',
+                                            display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center',
+                                        }}>
+                                            <span style={{ fontSize: 11, color: '#999', flexShrink: 0 }}>已选：</span>
+                                            {selectedTagNames.map(tn => (
+                                                <Tag
+                                                    key={tn.tagId}
+                                                    closable
+                                                    color='blue'
+                                                    style={{ margin: 0, fontSize: 11 }}
+                                                    onClose={(e) => {
+                                                        e.preventDefault()
+                                                        onToggleTag(tn.tagId)
+                                                    }}
+                                                >
+                                                    {tn.label}
+                                                </Tag>
+                                            ))}
+                                            {selectedTagNames.length > 1 && (
+                                                <Button
+                                                    size='small' type='link' danger
+                                                    style={{ fontSize: 11, padding: 0, height: 20 }}
+                                                    onClick={() => setUrlParam('tagIds', null)}
+                                                >
+                                                    清除全部
+                                                </Button>
+                                            )}
                                         </div>
                                     )}
+
+                                    {/* 标签树 */}
+                                    <div id='tag-tree-panel' style={{ flex: 1, overflow: 'auto', minHeight: 100, maxHeight: 380, padding: '4px 12px 8px' }}>
+                                        <TagCheckTree
+                                            key={tagTreeKey}
+                                            nodes={tagTree}
+                                            selected={selectedTagIdSet}
+                                            onToggle={onToggleTag}
+                                        />
+                                    </div>
                                 </div>
                             )}
                             {/* 点击外部关闭 */}

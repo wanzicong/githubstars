@@ -53,22 +53,102 @@ export class TagService {
         }
     }
 
-    /** 获取所有标签维度及其标签（树形结构） */
-    async listAll() {
+    /**
+     * 获取所有标签维度及其标签（树形结构）
+     *
+     * 支持传入筛选上下文（language / keyword / contextTagIds），
+     * 此时每个标签的 repoCount 将动态计算为"在当前筛选条件下同时拥有该标签的仓库数"，
+     * 而非全局数量。未传筛选参数时复用已有的 repoCount 字段（性能优化）。
+     *
+     * @param filters.language      逗号分隔的编程语言筛选
+     * @param filters.keyword       仓库名/描述全文搜索关键词
+     * @param filters.contextTagIds 已选中的标签 ID 数组（作为 AND 条件叠加）
+     *
+     * @callers TagController.all()
+     * @depends Prisma github_repo / repo_tag / tag_group / tag 表
+     */
+    async listAll(filters?: { language?: string; keyword?: string; contextTagIds?: number[] }) {
         await this.ensureSystemGroups();
         const groups = await this.prisma.tagGroup.findMany({ orderBy: { sortOrder: 'asc' } });
         const tags = await this.prisma.tag.findMany({ orderBy: [{ repoCount: 'desc' }, { name: 'asc' }] });
-        const counts = await this.prisma.repoTag.groupBy({ by: ['tagId'], _count: { tagId: true } });
-        const countMap = new Map<string, number>();
-        for (const c of counts) countMap.set(String(c.tagId), c._count.tagId);
-        // 同步 repo_count
-        for (const tag of tags) {
-            const realCount = countMap.get(String(tag.id)) || 0;
-            if (Number(tag.repoCount) !== realCount) {
-                await this.prisma.tag.update({ where: { id: tag.id }, data: { repoCount: realCount } }).catch(() => {});
+
+        const hasFilters = !!(filters?.language || filters?.keyword || filters?.contextTagIds?.length);
+
+        if (!hasFilters) {
+            // ── 无筛选：全局计数（已有逻辑，同步 repoCount 字段）──
+            const counts = await this.prisma.repoTag.groupBy({ by: ['tagId'], _count: { tagId: true } });
+            const countMap = new Map<string, number>();
+            for (const c of counts) countMap.set(String(c.tagId), c._count.tagId);
+            for (const tag of tags) {
+                const realCount = countMap.get(String(tag.id)) || 0;
+                if (Number(tag.repoCount) !== realCount) {
+                    await this.prisma.tag.update({ where: { id: tag.id }, data: { repoCount: realCount } }).catch(() => {});
+                }
+                (tag as any).repoCount = realCount;
             }
-            (tag as any).repoCount = realCount;
+        } else {
+            // ── 有筛选：构建仓库级 WHERE 条件，聚合计算标签动态计数 ──
+            const repoAND: any[] = [];
+
+            // 编程语言筛选
+            if (filters!.language) {
+                const languages = filters!.language.split(',').map(s => s.trim()).filter(Boolean);
+                if (languages.length > 0) {
+                    repoAND.push({ language: { in: languages } });
+                }
+            }
+
+            // 关键词搜索
+            if (filters!.keyword) {
+                const kw = filters!.keyword.trim();
+                if (kw) {
+                    repoAND.push({
+                        OR: [
+                            { repoName: { contains: kw } },
+                            { description: { contains: kw } },
+                            { ownerName: { contains: kw } },
+                            { fullName: { contains: kw } },
+                        ],
+                    });
+                }
+            }
+
+            // 已选标签上下文（AND 叠加：仓库必须拥有所有 contextTagIds）
+            if (filters!.contextTagIds?.length) {
+                for (const tagId of filters!.contextTagIds) {
+                    repoAND.push({ repoTags: { some: { tagId: BigInt(tagId) } } });
+                }
+            }
+
+            const repoWhere = repoAND.length > 0 ? { AND: repoAND } : {};
+
+            // 查询匹配仓库 ID 列表
+            const matchingRepos = await this.prisma.githubRepo.findMany({
+                where: repoWhere,
+                select: { id: true },
+            });
+            const repoIds = matchingRepos.map(r => r.id);
+
+            if (repoIds.length === 0) {
+                // 无匹配仓库 → 所有标签计数为 0
+                for (const tag of tags) {
+                    (tag as any).repoCount = 0;
+                }
+            } else {
+                // 在匹配仓库范围内按标签聚合计数
+                const counts = await this.prisma.repoTag.groupBy({
+                    by: ['tagId'],
+                    where: { repoId: { in: repoIds } },
+                    _count: { tagId: true },
+                });
+                const countMap = new Map<string, number>();
+                for (const c of counts) countMap.set(String(c.tagId), c._count.tagId);
+                for (const tag of tags) {
+                    (tag as any).repoCount = countMap.get(String(tag.id)) || 0;
+                }
+            }
         }
+
         return groups.map((g) => ({
             ...g,
             tags: tags.filter((t) => Number(t.groupId) === Number(g.id)),

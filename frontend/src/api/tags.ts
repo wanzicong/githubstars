@@ -22,9 +22,17 @@ export interface TagGroup {
     tags: { id: number; name: string; repoCount: number; color: string | null; parentId?: number; groupId?: number }[]
 }
 
-/** 获取所有标签维度和标签 */
-export async function fetchAllTags(): Promise<TagGroup[]> {
-    const { data } = await api.get<TagGroup[]>('/api/tags')
+/** 获取所有标签维度和标签（支持筛选上下文动态计数） */
+export async function fetchAllTags(filters?: {
+    language?: string
+    keyword?: string
+    contextTagIds?: string
+}): Promise<TagGroup[]> {
+    const params: any = {}
+    if (filters?.language) params.language = filters.language
+    if (filters?.keyword) params.keyword = filters.keyword
+    if (filters?.contextTagIds) params.contextTagIds = filters.contextTagIds
+    const { data } = await api.get<TagGroup[]>('/api/tags', { params })
     return data
 }
 

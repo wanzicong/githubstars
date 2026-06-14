@@ -9,11 +9,31 @@ export class TagController {
 
     constructor(private readonly service: TagService) {}
 
-    /** 获取所有标签维度和标签 */
+    /**
+     * 获取所有标签维度和标签
+     *
+     * 支持传入筛选上下文参数实现动态计数：
+     * - language: 编程语言筛选（逗号分隔）
+     * - keyword: 仓库名/描述关键词搜索
+     * - contextTagIds: 已选标签 ID（逗号分隔），作为 AND 条件缩小计数范围
+     *
+     * 不传参数时返回全局标签计数（与原有行为一致）。
+     */
     @Get()
-    @ApiOperation({ summary: '获取全部标签', description: '返回按维度分组的标签树结构' })
-    async all() {
-        return this.service.listAll();
+    @ApiOperation({ summary: '获取全部标签', description: '返回按维度分组的标签树结构，支持筛选上下文动态计数' })
+    async all(
+        @Query('language') language?: string,
+        @Query('keyword') keyword?: string,
+        @Query('contextTagIds') contextTagIds?: string,
+    ) {
+        const ctxIds = contextTagIds
+            ? contextTagIds.split(',').map(Number).filter((n) => !isNaN(n))
+            : undefined;
+        return this.service.listAll({
+            language: language || undefined,
+            keyword: keyword || undefined,
+            contextTagIds: ctxIds?.length ? ctxIds : undefined,
+        });
     }
 
     /** 搜索标签（必须在 :id 参数路由之前注册） */
