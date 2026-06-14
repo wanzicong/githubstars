@@ -4,6 +4,7 @@ import {
     Card,
     Input,
     Select,
+    TreeSelect,
     Tree,
     Popover,
     Button,
@@ -289,6 +290,7 @@ export default function StarList() {
                     title: `${g.name} (${g.tags.length})`,
                     value: `group_${g.id}`,
                     selectable: false,
+                    checkable: false,
                     children: buildTagTree(g.tags),
                 }))
                 setTagBaseTree(treeData)
@@ -393,6 +395,7 @@ export default function StarList() {
                         title: `→ ${d.groupName}`,
                         value: `dist_${tagId}_${d.groupId}`,
                         selectable: false,
+                        checkable: false,
                         style: { color: '#1677ff', fontWeight: 500 },
                         children: tagNodes,
                     }
@@ -1061,71 +1064,24 @@ export default function StarList() {
                             />
                         </Col>
                         <Col xs={24} sm={12} md={6} lg={4}>
-                            <Popover
-                                open={tagPopoverOpen}
-                                onOpenChange={(v) => { setTagPopoverOpen(v); if (!v) setTagSearchKeyword('') }}
-                                trigger='click'
-                                placement='bottomLeft'
-                                overlayStyle={{ width: 420 }}
-                                content={
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 440 }}>
-                                        <Input.Search
-                                            placeholder='搜索标签...'
-                                            value={tagSearchKeyword}
-                                            onChange={(e) => setTagSearchKeyword(e.target.value)}
-                                            allowClear
-                                            size='small'
-                                        />
-                                        <div style={{ flex: 1, overflow: 'auto', maxHeight: 340, marginLeft: -8, marginRight: -8 }}>
-                                            <Tree
-                                                checkable
-                                                selectable={false}
-                                                checkedKeys={selectedTagIds}
-                                                onCheck={(checked) => {
-                                                    const keys = (Array.isArray(checked) ? checked : checked.checked) as number[]
-                                                    setUrlParam('tagIds', keys.length > 0 ? keys.join(',') : null)
-                                                }}
-                                                treeData={effectiveTagTree}
-                                                onExpand={(keys) => handleTagTreeExpand(keys as number[])}
-                                                filterTreeNode={(node) => {
-                                                    if (!tagSearchKeyword) return true
-                                                    return String(node.title || '').toLowerCase().includes(tagSearchKeyword.toLowerCase())
-                                                }}
-                                                showLine={{ showLeafIcon: false }}
-                                                blockNode
-                                                titleRender={(node: any) => {
-                                                    const isDistGroup = String(node.value).startsWith('dist_')
-                                                    return (
-                                                        <span style={{
-                                                            fontSize: 13,
-                                                            color: isDistGroup ? '#1677ff' : node.selectable === false ? '#333' : undefined,
-                                                            fontWeight: (isDistGroup || node.selectable === false) ? 600 : undefined,
-                                                        }}>
-                                                            {node.title}
-                                                        </span>
-                                                    )
-                                                }}
-                                            />
-                                        </div>
-                                        {selectedTagIds.length > 0 && (
-                                            <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 8, textAlign: 'right' }}>
-                                                <Button size='small' type='link' danger onClick={() => setUrlParam('tagIds', null)}>
-                                                    清除全部 ({selectedTagIds.length})
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
+                            <TreeSelect
+                                treeData={effectiveTagTree}
+                                value={selectedTagIds}
+                                onChange={(vals) => setUrlParam('tagIds', vals.length > 0 ? vals.join(',') : null)}
+                                placeholder='筛选标签'
+                                allowClear
+                                showSearch
+                                treeCheckable
+                                treeDefaultExpandAll
+                                maxTagCount='responsive'
+                                showCheckedStrategy='SHOW_CHILD'
+                                filterTreeNode={(input, node: any) =>
+                                    String(node.title || '').toLowerCase().includes(input.toLowerCase())
                                 }
-                            >
-                                <Button
-                                    style={{ width: '100%' }}
-                                    icon={<span style={{ marginRight: 4 }}>🏷️</span>}
-                                >
-                                    {selectedTagIds.length > 0
-                                        ? `标签 (${selectedTagIds.length}个)`
-                                        : '标签筛选'}
-                                </Button>
-                            </Popover>
+                                onTreeExpand={(keys) => handleTagTreeExpand(keys as number[])}
+                                dropdownStyle={{ maxHeight: 500, overflow: 'auto' }}
+                                style={{ width: '100%' }}
+                            />
                         </Col>
                         <Col xs={12} sm={8} md={6} lg={4}>
                             <Select
