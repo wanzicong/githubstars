@@ -149,7 +149,7 @@ export class GithubRepoService {
         const languages = params.language ? params.language.split(',').filter(Boolean) : [];
         const catIds = await this.expandCategoryIds(params.categoryIds || '');
         const tagIds = params.tagIds ? params.tagIds.split(',').map(Number).filter((n) => !isNaN(n)) : [];
-        const sortField = SORT_MAP[params.sortBy || 'starred_at'] || 'starredAt';
+        const sortField = SORT_MAP[params.sortBy || 'stars_count'] || 'starredAt';
         const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
         const where = this.buildWhere({
             keyword: params.keyword,
@@ -216,7 +216,7 @@ export class GithubRepoService {
     }) {
         const languages = params.language ? params.language.split(',').filter(Boolean) : [];
         const catIds = await this.expandCategoryIds(params.categoryIds || '');
-        const sortField = SORT_MAP[params.sortBy || 'starred_at'] || 'starredAt';
+        const sortField = SORT_MAP[params.sortBy || 'stars_count'] || 'starredAt';
         const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
         const where = this.buildWhere({
             keyword: params.keyword,
@@ -245,7 +245,7 @@ export class GithubRepoService {
      */
     async findAll(params: { keyword?: string; language?: string; sortBy?: string; sortOrder?: string }) {
         const languages = params.language ? params.language.split(',').filter(Boolean) : [];
-        const sortField = SORT_MAP[params.sortBy || 'starred_at'] || 'starredAt';
+        const sortField = SORT_MAP[params.sortBy || 'stars_count'] || 'starredAt';
         const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
         const where = this.buildWhere({ keyword: params.keyword, languages: languages.length > 0 ? languages : undefined });
         return this.prisma.githubRepo.findMany({ where, orderBy: { [sortField]: sortDir } });

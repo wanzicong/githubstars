@@ -69,7 +69,7 @@ export class AiAnalyzeService implements OnModuleInit {
             if (langs.length) AND.push({ language: { in: langs } });
         }
         const where: any = AND.length ? { AND } : {};
-        const sortField = params.sortBy === 'stars_count' ? 'starsCount' : params.sortBy === 'forks_count' ? 'forksCount' : 'starredAt';
+        const sortField = params.sortBy === 'forks_count' ? 'forksCount' : params.sortBy === 'starred_at' ? 'starredAt' : 'starsCount';
         const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
         return this.prisma.githubRepo.findMany({ where, orderBy: { [sortField]: sortDir }, take: MAX_REPOS });
     }

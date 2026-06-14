@@ -35,8 +35,8 @@ import dayjs from 'dayjs'
 const { Title, Paragraph, Text } = Typography
 
 const SORT_BY_OPTIONS = [
-    { label: 'Star 时间', value: 'starred_at' },
     { label: 'Star 数量', value: 'stars_count' },
+    { label: 'Star 时间', value: 'starred_at' },
     { label: 'Fork 数量', value: 'forks_count' },
     { label: '最近更新', value: 'repo_updated_at' },
     { label: '创建时间', value: 'repo_created_at' },
@@ -64,7 +64,7 @@ export default function CategoryDetail() {
     // 从 URL 参数读取筛选条件
     const keyword = searchParams.get('keyword') || ''
     const selectedLanguages = searchParams.get('languages') ? searchParams.get('languages')!.split(',') : []
-    const sortBy = searchParams.get('sortBy') || 'starred_at'
+    const sortBy = searchParams.get('sortBy') || 'stars_count'
     const sortOrder = searchParams.get('sortOrder') || 'desc'
     const currentPage = parseInt(searchParams.get('page') || '1', 10)
     const pageSize = parseInt(searchParams.get('size') || '12', 10)
@@ -157,7 +157,7 @@ export default function CategoryDetail() {
 
     const handleClearFilters = () => {
         const next = new URLSearchParams()
-        next.set('sortBy', 'starred_at')
+        next.set('sortBy', 'stars_count')
         next.set('sortOrder', 'desc')
         setSearchParams(next)
     }

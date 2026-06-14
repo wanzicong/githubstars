@@ -29,7 +29,7 @@ export class AiAnalyzeController {
             q.keyword || '',
             q.language || '',
             q.categoryIds || '',
-            q.sortBy || 'starred_at',
+            q.sortBy || 'stars_count',
             q.sortOrder || 'desc',
         );
         return { success: true, taskId, message: 'AI分析任务已启动' };

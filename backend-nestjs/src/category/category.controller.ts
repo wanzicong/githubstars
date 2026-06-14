@@ -154,7 +154,7 @@ export class CategoryController {
                 size: parseInt(q.size) || 12,
                 keyword: q.keyword || '',
                 language: q.language || '',
-                sortBy: q.sortBy || 'starred_at',
+                sortBy: q.sortBy || 'stars_count',
                 sortOrder: q.sortOrder || 'desc',
             });
         }

@@ -72,7 +72,7 @@ export class CloneController {
             dateField: q.dateField || '',
             startDate: q.startDate || '',
             endDate: q.endDate || '',
-            sortBy: q.sortBy || 'starred_at',
+            sortBy: q.sortBy || 'stars_count',
             sortOrder: q.sortOrder || 'desc',
             concurrency: parseInt(q.concurrency) || 5,
             cloneDepth: parseInt(q.cloneDepth) || 1,
@@ -278,7 +278,7 @@ export class CloneController {
             dateField: q.dateField || '',
             startDate: q.startDate || '',
             endDate: q.endDate || '',
-            sortBy: q.sortBy || 'starred_at',
+            sortBy: q.sortBy || 'stars_count',
             sortOrder: q.sortOrder || 'desc',
         });
         const ext = q.osType === 'linux' ? 'sh' : 'ps1';

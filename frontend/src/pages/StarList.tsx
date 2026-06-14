@@ -59,8 +59,8 @@ import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from 
 const { Title, Text } = Typography
 
 const SORT_BY_OPTIONS = [
-    { label: 'Star 时间', value: 'starred_at' },
     { label: 'Star 数量', value: 'stars_count' },
+    { label: 'Star 时间', value: 'starred_at' },
     { label: 'Fork 数量', value: 'forks_count' },
     { label: '最近更新', value: 'repo_updated_at' },
     { label: '创建时间', value: 'repo_created_at' },
@@ -101,7 +101,7 @@ export default function StarList() {
     const selectedLanguages = languageStr ? languageStr.split(',') : []
     const tagIdsStr = searchParams.get('tagIds') || ''
     const selectedTagIds = tagIdsStr ? tagIdsStr.split(',').map(Number) : []
-    const sortBy = searchParams.get('sortBy') || 'starred_at'
+    const sortBy = searchParams.get('sortBy') || 'stars_count'
     const sortOrder = searchParams.get('sortOrder') || 'desc'
     const dateField = searchParams.get('dateField') || undefined
     const currentPage = parseInt(searchParams.get('page') || '1', 10)
@@ -315,7 +315,7 @@ export default function StarList() {
             languages: null,
             tagIds: null,
             timePreset: null,
-            sortBy: 'starred_at',
+            sortBy: 'stars_count',
             sortOrder: 'desc',
             dateField: null,
             startDate: null,

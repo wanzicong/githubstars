@@ -40,7 +40,7 @@ export class ExportController {
             keyword: q.keyword || '',
             language: q.language || '',
             categoryIds: q.categoryIds || '',
-            sortBy: q.sortBy || 'starred_at',
+            sortBy: q.sortBy || 'stars_count',
             sortOrder: q.sortOrder || 'desc',
             dateField: q.dateField || '',
             startDate: q.startDate || '',

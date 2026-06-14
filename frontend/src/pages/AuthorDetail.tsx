@@ -27,8 +27,8 @@ function formatNumber(n: number): string {
 }
 
 const SORT_BY_OPTIONS = [
-    { label: 'Star 时间', value: 'starred_at' },
     { label: 'Star 数量', value: 'stars_count' },
+    { label: 'Star 时间', value: 'starred_at' },
     { label: 'Fork 数量', value: 'forks_count' },
     { label: '最近更新', value: 'repo_updated_at' },
     { label: '创建时间', value: 'repo_created_at' },
@@ -46,7 +46,7 @@ export default function AuthorDetail() {
     const { ownerName } = useParams<{ ownerName: string }>()
     const navigate = useNavigate()
 
-    const [sortBy, setSortBy] = useState('starred_at')
+    const [sortBy, setSortBy] = useState('stars_count')
     const [sortOrder, setSortOrder] = useState('desc')
     const [currentPage, setCurrentPage] = useState(1)
 

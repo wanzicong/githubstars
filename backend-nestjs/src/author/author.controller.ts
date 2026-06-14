@@ -53,7 +53,7 @@ export class AuthorController {
             owner,
             parseInt(q.page) || 1,
             parseInt(q.size) || 12,
-            q.sortBy || 'starred_at',
+            q.sortBy || 'stars_count',
             q.sortOrder || 'desc',
         );
     }
@@ -74,7 +74,7 @@ export class AuthorController {
     @ApiQuery({ name: 'sortBy', required: false, description: '排序字段，默认 starred_at' })
     @ApiQuery({ name: 'sortOrder', required: false, description: '排序方向（asc/desc），默认 desc' })
     async export(@Param('ownerName') owner: string, @Query() q: any, @Res() res: Response) {
-        const urls = await this.service.getAuthorAllRepoUrls(owner, q.sortBy || 'starred_at', q.sortOrder || 'desc');
+        const urls = await this.service.getAuthorAllRepoUrls(owner, q.sortBy || 'stars_count', q.sortOrder || 'desc');
         res.set({
             'Content-Type': 'text/plain; charset=utf-8',
             'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(owner + '-stars.txt')}`,
