@@ -476,40 +476,104 @@ export default function TagBrowse() {
         }
     }
 
-    // ======================== 标签下钻展开（懒加载子维度标签分布） ========================
-    const [drillExpandedTags, setDrillExpandedTags] = useState<Set<number>>(new Set())
-    const [drillTagData, setDrillTagData] = useState<Map<number, any>>(new Map())
-    const [drillTagLoading, setDrillTagLoading] = useState<Set<number>>(new Set())
+    // ======================== 递归标签下钻展开 ========================
+    // drillPath: "tagId" 或 "parentTagId/childTagId/grandchildTagId" 路径
+    const [drillPath, setDrillPath] = useState<Set<string>>(new Set())
+    const [drillDataMap, setDrillDataMap] = useState<Map<string, any>>(new Map())
+    const [drillLoadingMap, setDrillLoadingMap] = useState<Set<string>>(new Set())
 
-    const toggleDrillExpand = async (tag: any, group: any) => {
-        const tid = tag.id
-        if (drillExpandedTags.has(tid)) {
-            // 收起
-            setDrillExpandedTags(prev => { const s = new Set(prev); s.delete(tid); return s })
+    const toggleDrillExpand = async (tagId: number, groupId: number, parentPath: string) => {
+        const path = parentPath ? `${parentPath}/${tagId}` : String(tagId)
+        if (drillPath.has(path)) {
+            setDrillPath(prev => { const s = new Set(prev); s.delete(path); return s })
             return
         }
-        // 展开（如果已有数据则直接展开）
-        if (drillTagData.has(tid)) {
-            setDrillExpandedTags(prev => new Set(prev).add(tid))
+        if (drillDataMap.has(path)) {
+            setDrillPath(prev => new Set(prev).add(path))
             return
         }
         // 懒加载
-        setDrillTagLoading(prev => new Set(prev).add(tid))
-        setDrillExpandedTags(prev => new Set(prev).add(tid))
+        setDrillLoadingMap(prev => new Set(prev).add(path))
+        setDrillPath(prev => new Set(prev).add(path))
         try {
-            const dist = await fetchTagDistribution(tid)
+            const dist = await fetchTagDistribution(tagId)
             if (dist && dist.distributions) {
-                // 过滤掉当前维度自身
-                const filtered = dist.distributions.filter((d: any) => d.groupId !== group.id)
-                setDrillTagData(prev => new Map(prev).set(tid, filtered))
+                const filtered = dist.distributions.filter((d: any) => d.groupId !== groupId)
+                setDrillDataMap(prev => new Map(prev).set(path, filtered))
             } else {
-                setDrillTagData(prev => new Map(prev).set(tid, []))
+                setDrillDataMap(prev => new Map(prev).set(path, []))
             }
         } catch {
-            setDrillTagData(prev => new Map(prev).set(tid, []))
+            setDrillDataMap(prev => new Map(prev).set(path, []))
         } finally {
-            setDrillTagLoading(prev => { const s = new Set(prev); s.delete(tid); return s })
+            setDrillLoadingMap(prev => { const s = new Set(prev); s.delete(path); return s })
         }
+    }
+
+    /** 递归渲染下钻层级 */
+    const renderDrillDown = (tagId: number, groupId: number, parentPath: string, depth: number) => {
+        const path = parentPath ? `${parentPath}/${tagId}` : String(tagId)
+        if (!drillPath.has(path)) return null
+        const dists = drillDataMap.get(path) || []
+        if (!dists.length) return null
+        return (
+            <div style={{
+                marginTop: 6, paddingLeft: 16, borderLeft: `2px solid ${depth === 0 ? '#d9d9d9' : '#1677ff30'}`,
+            }}>
+                {dists.map((dist: any) => (
+                    <div key={dist.groupId} style={{ marginBottom: 4 }}>
+                        <Text type='secondary' style={{ fontSize: 11, fontWeight: 500 }}>
+                            {dist.groupName}：
+                        </Text>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 1, alignItems: 'center' }}>
+                            {dist.tags.slice(0, 10).map((dt: any) => {
+                                const subPath = `${path}/${dt.tagId}`
+                                const isSubExpanded = drillPath.has(subPath)
+                                const isSubLoading = drillLoadingMap.has(subPath)
+                                return (
+                                    <span key={dt.tagId} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                        <Tag
+                                            color={dt.tagColor || dist.groupColor}
+                                            style={{
+                                                fontSize: 11, padding: '0 6px', cursor: 'pointer',
+                                                borderRadius: 8, margin: 0,
+                                            }}
+                                            onClick={() => navigate(`/?tagIds=${tagId},${dt.tagId}`)}
+                                        >
+                                            {dt.tagName}
+                                            <span style={{ marginLeft: 2, opacity: 0.6, fontSize: 10 }}>{dt.count}</span>
+                                        </Tag>
+                                        {dt.count > 0 && (
+                                            isSubLoading
+                                                ? <LoadingOutlined spin style={{ fontSize: 10, minWidth: 14 }} />
+                                                : <Button
+                                                    type='text'
+                                                    size='small'
+                                                    icon={isSubExpanded ? <CaretDownOutlined style={{ fontSize: 10 }} /> : <CaretRightOutlined style={{ fontSize: 10 }} />}
+                                                    title='继续下钻'
+                                                    style={{
+                                                        padding: 0, minWidth: 14, height: 14,
+                                                        color: isSubExpanded ? '#1677ff' : '#ccc',
+                                                    }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        toggleDrillExpand(dt.tagId, dist.groupId, path)
+                                                    }}
+                                                />
+                                        )}
+                                        {/* 递归：渲染子标签的下钻 */}
+                                        {isSubExpanded && renderDrillDown(dt.tagId, dist.groupId, path, depth + 1)}
+                                    </span>
+                                )
+                            })}
+                            {dist.tags.length > 10 && (
+                                <Text type='secondary' style={{ fontSize: 10 }}>+{dist.tags.length - 10} 更多</Text>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        )
     }
 
     // ======================== 渲染 ========================
@@ -708,13 +772,13 @@ export default function TagBrowse() {
                                                         <Button
                                                             type='text'
                                                             size='small'
-                                                            icon={drillExpandedTags.has(tag.id) ? <CaretDownOutlined /> : <CaretRightOutlined />}
+                                                            icon={drillPath.has(String(tag.id)) ? <CaretDownOutlined /> : <CaretRightOutlined />}
                                                             title='展开查看子维度标签分布'
                                                             style={{
                                                                 fontSize: 10, padding: 0, minWidth: 18, height: 18,
-                                                                color: drillExpandedTags.has(tag.id) ? '#1677ff' : '#ccc',
+                                                                color: drillPath.has(String(tag.id)) ? '#1677ff' : '#ccc',
                                                             }}
-                                                            onClick={(e) => { e.stopPropagation(); toggleDrillExpand(tag, group) }}
+                                                            onClick={(e) => { e.stopPropagation(); toggleDrillExpand(tag.id, group.id, '') }}
                                                         />
                                                     )}
                                                     <Button
@@ -760,48 +824,14 @@ export default function TagBrowse() {
                                 ) : (
                                     <Text type='secondary' style={{ fontSize: 13 }}>暂无标签</Text>
                                 )}
-                                {/* 展开标签的下钻分布（内联展示子维度标签） */}
-                                {group.tags.filter((t: any) => drillExpandedTags.has(t.id) && drillTagData.has(t.id)).map((tag: any) => {
-                                    const dists = drillTagData.get(tag.id) || []
-                                    if (!dists.length) return null
+                                {/* 递归下钻：展开标签后显示关联维度标签，每个关联标签也可继续展开 */}
+                                {group.tags.filter((t: any) => drillPath.has(String(t.id))).map((tag: any) => {
                                     return (
-                                        <div key={`drill-${tag.id}`} style={{
-                                            marginTop: 12, paddingLeft: 28, paddingTop: 8,
-                                            borderTop: '1px dashed #e8e8e8',
-                                        }}>
-                                            <Text type='secondary' style={{ fontSize: 11, marginBottom: 6, display: 'block' }}>
-                                                ↳ 「{tag.name}」标签下 {tag.repoCount} 个项目在其他维度的分布：
+                                        <div key={`drill-root-${tag.id}`} style={{ marginTop: 8 }}>
+                                            <Text type='secondary' style={{ fontSize: 11, marginBottom: 4, display: 'block', paddingLeft: 12 }}>
+                                                ↳ 「{tag.name}」的分层下钻：
                                             </Text>
-                                            {dists.map((dist: any) => (
-                                                <div key={dist.groupId} style={{ marginBottom: 6 }}>
-                                                    <Text type='secondary' style={{ fontSize: 11, fontWeight: 600 }}>
-                                                        {dist.groupName}：
-                                                    </Text>
-                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
-                                                        {dist.tags.slice(0, 8).map((dt: any) => (
-                                                            <Tag
-                                                                key={dt.tagId}
-                                                                color={dt.tagColor || dist.groupColor}
-                                                                style={{
-                                                                    fontSize: 11, padding: '0 6px', cursor: 'pointer',
-                                                                    borderRadius: 8, margin: 0,
-                                                                }}
-                                                                onClick={() => navigate(`/?tagIds=${tag.id},${dt.tagId}`)}
-                                                            >
-                                                                {dt.tagName}
-                                                                <span style={{ marginLeft: 2, opacity: 0.6, fontSize: 10 }}>
-                                                                    {dt.count}
-                                                                </span>
-                                                            </Tag>
-                                                        ))}
-                                                        {dist.tags.length > 8 && (
-                                                            <Text type='secondary' style={{ fontSize: 10 }}>
-                                                                +{dist.tags.length - 8} 更多
-                                                            </Text>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ))}
+                                            {renderDrillDown(tag.id, group.id, '', 0)}
                                         </div>
                                     )
                                 })}
