@@ -5,8 +5,6 @@ import {
     Input,
     Select,
     TreeSelect,
-    Tree,
-    Popover,
     Button,
     Row,
     Col,
@@ -246,8 +244,6 @@ export default function StarList() {
     const [tagDistLoaded, setTagDistLoaded] = useState<Map<number, any[]>>(new Map())  // tagId → 子维度分布节点
     const [tagDistLoading, setTagDistLoading] = useState<Set<number>>(new Set())       // 正在加载的 tagId
     const [tagGroups, setTagGroups] = useState<any[]>([])           // 含parentId的维度列表
-    const [tagPopoverOpen, setTagPopoverOpen] = useState(false)      // 标签Popover开关
-    const [tagSearchKeyword, setTagSearchKeyword] = useState('')     // Popover内搜索关键词
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
     const [loading, setLoading] = useState(true)
