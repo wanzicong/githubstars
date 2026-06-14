@@ -249,78 +249,66 @@ function getGroupEmoji(name: string): string {
     return m ? m[1] : '📌'
 }
 
-/** 将从后端获取的 TagGroup[] 构建为递归树节点（组嵌套组 + 标签嵌套标签） */
+/** 将从后端获取的 TagGroup[] 构建为树节点：组扁平，组内标签按父子层级嵌套，过滤 count=0 */
 function buildTagHierarchy(groups: any[]): TreeNode[] {
-    // ── 1. 构建标签树（单组内 tag → child-tag）──
-    function buildTagTree(tags: any[]): TreeNode[] {
-        const tagMap = new Map<number, { node: TreeNode; parentId: number | null }>()
-        for (const tag of tags) {
-            tagMap.set(tag.id, {
-                node: {
-                    type: 'tag',
-                    value: `tag_${tag.id}`,
-                    tagId: tag.id,
-                    label: tag.name,
-                    count: typeof tag.repoCount === 'number' ? tag.repoCount : 0,
-                    children: [],
-                },
-                parentId: tag.parentId ?? null,
-            })
-        }
-        const roots: TreeNode[] = []
-        for (const [, entry] of tagMap) {
-            if (entry.parentId && tagMap.has(entry.parentId)) {
-                tagMap.get(entry.parentId)!.node.children!.push(entry.node)
-                entry.node.type = 'subtag'
-            } else {
-                roots.push(entry.node)
+    return groups
+        .filter((g: any) => {
+            // 过滤：没有任何非零标签的组不显示
+            const hasTags = (g.tags || []).some((t: any) => (typeof t.repoCount === 'number' ? t.repoCount : 0) > 0)
+            return hasTags
+        })
+        .map((group: any) => {
+            // 过滤掉 count=0 的标签
+            const activeTags = (group.tags || []).filter(
+                (t: any) => (typeof t.repoCount === 'number' ? t.repoCount : 0) > 0,
+            )
+
+            const tagMap = new Map<number, { node: TreeNode; parentId: number | null }>()
+            for (const tag of activeTags) {
+                tagMap.set(tag.id, {
+                    node: {
+                        type: 'tag',
+                        value: `tag_${tag.id}`,
+                        tagId: tag.id,
+                        label: tag.name,
+                        count: typeof tag.repoCount === 'number' ? tag.repoCount : 0,
+                        children: [],
+                    },
+                    parentId: tag.parentId ?? null,
+                })
             }
-        }
-        const sortByCount = (nodes: TreeNode[]) => {
-            nodes.sort((a, b) => (b.count || 0) - (a.count || 0))
-            for (const n of nodes) {
-                if (n.children?.length) sortByCount(n.children)
-                else delete n.children
+
+            // 构建父子关系：子标签挂在父标签下面
+            const rootTags: TreeNode[] = []
+            for (const [, entry] of tagMap) {
+                if (entry.parentId && tagMap.has(entry.parentId)) {
+                    const parent = tagMap.get(entry.parentId)!
+                    parent.node.children!.push(entry.node)
+                    entry.node.type = 'subtag'
+                } else {
+                    rootTags.push(entry.node)
+                }
             }
-        }
-        sortByCount(roots)
-        return roots
-    }
 
-    // ── 2. 构建组树（group → child-group 递归）──
-    const groupMap = new Map<number, { group: any; children: any[] }>()
-    for (const g of groups) {
-        groupMap.set(g.id, { group: g, children: [] })
-    }
-    const rootGroups: any[] = []
-    for (const g of groups) {
-        if (g.parentId && groupMap.has(g.parentId)) {
-            groupMap.get(g.parentId)!.children.push(g)
-        } else {
-            rootGroups.push(g)
-        }
-    }
+            // 递归排序：按 count 降序
+            const sortByCount = (nodes: TreeNode[]) => {
+                nodes.sort((a, b) => (b.count || 0) - (a.count || 0))
+                for (const n of nodes) {
+                    if (n.children?.length) sortByCount(n.children)
+                    else delete n.children
+                }
+            }
+            sortByCount(rootTags)
 
-    // ── 3. 递归渲染组节点 ──
-    function buildGroupNode(group: any, depth: number): TreeNode {
-        const tagNodes = buildTagTree(group.tags || [])
-        const childGroupNodes = (groupMap.get(group.id)?.children || [])
-            .map((child: any) => buildGroupNode(child, depth + 1))
-
-        // 合并标签节点 + 子组节点
-        const allChildren = [...tagNodes, ...childGroupNodes]
-
-        return {
-            type: depth > 0 ? ('childgroup' as any) : ('group' as const),
-            value: `group_${group.id}`,
-            label: group.name.replace(/^[^\s]+\s/, ''),
-            icon: getGroupEmoji(group.name),
-            count: group.tags?.length || 0,
-            children: allChildren.length > 0 ? allChildren : undefined,
-        }
-    }
-
-    return rootGroups.map((g) => buildGroupNode(g, 0))
+            return {
+                type: 'group' as const,
+                value: `group_${group.id}`,
+                label: group.name.replace(/^[^\s]+\s/, ''),
+                icon: getGroupEmoji(group.name),
+                count: activeTags.length,
+                children: rootTags.length > 0 ? rootTags : undefined,
+            }
+        })
 }
 
 const TIME_PRESETS: { label: string; value: string; days: number }[] = [
