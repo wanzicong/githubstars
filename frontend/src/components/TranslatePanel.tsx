@@ -41,6 +41,7 @@ interface Props {
     filters: {
         keyword?: string
         language?: string
+        tagIds?: string
         categoryIds?: string
         sortBy?: string
         sortOrder?: string

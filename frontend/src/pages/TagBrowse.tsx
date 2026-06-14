@@ -30,6 +30,7 @@ export default function TagBrowse() {
     const [agentModalVisible, setAgentModalVisible] = useState(false)
     const [agentKeyword, setAgentKeyword] = useState(searchParams.get('keyword') || '')
     const [agentLanguage, setAgentLanguage] = useState(searchParams.get('language') || '')
+    const [agentTagIds, setAgentTagIds] = useState(searchParams.get('tagIds') || '')
 
     // Agent 执行状态
     const [agentRunning, setAgentRunning] = useState(false)
@@ -67,12 +68,12 @@ export default function TagBrowse() {
             const state = {
                 agentRunning, agentStatus, agentThinking, agentToolCalls,
                 agentResult, agentStep, agentBatchProgress,
-                agentKeyword, agentLanguage,
+                agentKeyword, agentLanguage, agentTagIds,
                 savedAt: Date.now(),
             }
             sessionStorage.setItem('agent_tag_state', JSON.stringify(state))
         }
-    }, [agentRunning, agentStatus, agentThinking, agentToolCalls, agentResult, agentStep, agentBatchProgress, agentKeyword, agentLanguage])
+    }, [agentRunning, agentStatus, agentThinking, agentToolCalls, agentResult, agentStep, agentBatchProgress, agentKeyword, agentLanguage, agentTagIds])
 
     // ── 页面加载时恢复状态 + 检查后台任务 ──
     useEffect(() => {
@@ -92,6 +93,7 @@ export default function TagBrowse() {
                     setAgentBatchProgress(s.agentBatchProgress || '')
                     if (s.agentKeyword) setAgentKeyword(s.agentKeyword)
                     if (s.agentLanguage) setAgentLanguage(s.agentLanguage)
+                    if (s.agentTagIds) setAgentTagIds(s.agentTagIds)
                 }
             } catch { sessionStorage.removeItem('agent_tag_state') }
         }
@@ -118,15 +120,19 @@ export default function TagBrowse() {
             .catch(() => {})
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // 搜索过滤后的标签组
+    // 搜索过滤 + 按 repoCount 降序排序后的标签组
     const filteredGroups = useMemo(() => {
-        if (!tagSearch.trim()) return groups
+        const sortTags = (tags: typeof groups[0]['tags']) =>
+            [...tags].sort((a, b) => b.repoCount - a.repoCount)
+        if (!tagSearch.trim()) {
+            return groups.map((g) => ({ ...g, tags: sortTags(g.tags) }))
+        }
         const kw = tagSearch.toLowerCase()
         return groups
-            .map((g) => ({
-                ...g,
-                tags: g.tags.filter((t) => t.name.toLowerCase().includes(kw)),
-            }))
+            .map((g) => {
+                const filtered = g.tags.filter((t) => t.name.toLowerCase().includes(kw))
+                return { ...g, tags: sortTags(filtered) }
+            })
             .filter((g) => g.tags.length > 0)
     }, [groups, tagSearch])
 
@@ -169,7 +175,7 @@ export default function TagBrowse() {
         setAgentBatchProgress('')
 
         // 收集仓库：无筛选条件 → 全部仓库；有筛选条件 → 按条件过滤（不分页，取全部匹配）
-        const hasFilter = !!(agentKeyword || agentLanguage)
+        const hasFilter = !!(agentKeyword || agentLanguage || agentTagIds)
         let repoIds: number[] = []
         try {
             if (hasFilter) {
@@ -179,6 +185,7 @@ export default function TagBrowse() {
                     size: 2000,
                     keyword: agentKeyword || undefined,
                     language: agentLanguage || undefined,
+                    tagIds: agentTagIds || undefined,
                 })
                 repoIds = result.records.map((r) => Number(r.id))
             } else {
@@ -213,7 +220,8 @@ export default function TagBrowse() {
                 setAgentStatus(msg)
                 // 更新步骤指示器
                 if (msg.includes('已加载')) setAgentStep(1)
-                else if (msg.includes('第 ') && msg.includes(' 批')) setAgentStep(2)
+                else if (msg.includes('启动并发分析') || msg.includes('并发处理')) setAgentStep(2)
+                else if (msg.includes('第 ') && msg.includes(' 批')) setAgentStep(3)
                 else if (msg.includes('全部完成')) setAgentStep(4)
                 // 批次进度
                 if (msg.startsWith('━━━') || msg.startsWith('✅ 第') || msg.startsWith('⚠️ 第')) {
@@ -529,11 +537,22 @@ export default function TagBrowse() {
                             allowClear
                         />
                     </div>
+                    <div style={{ flex: 1 }}>
+                        <Text strong>标签ID（可选，逗号分隔）</Text>
+                        <Input
+                            placeholder='如 1,5,12'
+                            value={agentTagIds}
+                            onChange={(e) => setAgentTagIds(e.target.value)}
+                            disabled={agentRunning}
+                            style={{ marginTop: 4 }}
+                            allowClear
+                        />
+                    </div>
                 </div>
 
                 {!agentRunning && !agentResult && !agentError && (
                     <>
-                        {agentKeyword || agentLanguage ? (
+                        {agentKeyword || agentLanguage || agentTagIds ? (
                             <Alert type='info' showIcon message='将仅分析符合筛选条件的全部仓库' style={{ marginBottom: 12 }} />
                         ) : (
                             <Alert type='info' showIcon message='未设筛选条件，将分析全部仓库（按 Star 数降序分批处理）' style={{ marginBottom: 12 }} />
@@ -561,9 +580,9 @@ export default function TagBrowse() {
                         style={{ marginBottom: 16 }}
                         items={[
                             { title: '获取仓库列表' },
-                            { title: 'Agent 分析中' },
-                            { title: '搜索匹配标签' },
-                            { title: '保存标签结果' },
+                            { title: '加载标签体系' },
+                            { title: 'Agent 分析打标' },
+                            { title: '保存结果' },
                         ]}
                     />
                 )}

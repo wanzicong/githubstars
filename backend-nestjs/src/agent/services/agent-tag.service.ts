@@ -80,8 +80,8 @@ export class AgentTagService {
         const totalTags = tagGroups.reduce((s: number, g: any) => s + g.tags.length, 0);
         yield { type: 'status', message: `已加载 ${allRepos.length} 个仓库 + ${totalTags} 个标签` };
 
-        // ── 第二步：分批处理（每批 100 个，3 批并发）──
-        const BATCH_SIZE = 100;
+        // ── 第二步：分批处理（每批 50 个，3 批并发）──
+        const BATCH_SIZE = 50;
         const CONCURRENCY = 3;
         const batches: Array<typeof allRepos> = [];
         for (let i = 0; i < allRepos.length; i += BATCH_SIZE) {
@@ -249,40 +249,44 @@ export class AgentTagService {
             .map((r, i) => `${i}. ${r.fullName} (${r.language || '?'}, ⭐${r.starsCount}) [ID:${r.id}]`)
             .join('\n');
 
-        const prompt = `你是 GitHub 项目分类专家。为以下 ${repoIndex.length} 个项目打标签（2-6个/项目）。
+        const prompt = `你是 GitHub 项目分类专家。为以下 ${repoIndex.length} 个项目打标签（每个项目 2-6 个标签）。
 
 ⚠️ 你只有 2 个工具可用，不要尝试 Read/Write/Grep/WebSearch/ToolSearch 等其他工具。
 
 ## 工具
-- get_repo_details(ids): 批量获取项目描述/README/Topics/语言（一次性传入所有 ID）
-- search_tags(keyword): 搜索现有标签
+- get_repo_details(repoIds): 批量获取项目描述/README/Topics/语言，一次传入所有ID
+- search_tags(keyword): 搜索现有标签，匹配后优先复用
 
-## 现有标签体系
+## 现有标签体系（供 search_tags 查询）
 ${tagSystem}
 
-## 标签维度说明（每个标签必须归属到一个维度）
-- 📚 技术栈: 编程语言、框架、运行时（如 Python, React, Docker）
-- 🏷️ 领域: 应用领域、行业方向（如 AI/ML, Security, Finance）
-- 🔧 用途: 项目类型/形态（如 CLI Tool, Library, Web App, Scraper）
-- 📊 状态: 关注程度/使用状态（如 活跃关注, 仅供参考, 已归档）
-- 👥 服务人群: 目标用户群体（如 开发者, 企业, 个人, 学生）
-- 💡 解决什么问题: 项目解决的核心痛点（如 自动化, 数据分析, 效率提升）
-- 🏢 生态: 所属平台/生态系统（如 GitHub, 开源社区）
-- ✨ 自定义: 以上维度都不匹配时的兜底
+## 标签维度（每个标签格式: "维度简称:标签名"，维度简称用下表左列）
+| 维度简称 | 含义 | 标签示例 |
+|---------|------|---------|
+| 技术栈 | 编程语言、框架、运行时、数据库 | Python, React, Docker, PostgreSQL |
+| 领域 | 应用领域、行业方向 | AI/ML, 安全, 金融, DevOps, 游戏 |
+| 用途 | 项目类型/形态 | CLI工具, 库/SDK, Web应用, 桌面应用, 爬虫 |
+| 状态 | 关注程度/使用状态 | 活跃关注, 学习参考, 已归档, 待评估 |
+| 服务人群 | 目标用户群体 | 开发者, 企业, 个人用户, 学生 |
+| 解决问题 | 项目解决的核心痛点 | 自动化, 数据分析, 效率提升, 可视化 |
+| 生态 | 所属平台/生态系统 | GitHub生态, 微信生态, 云原生 |
+| 自定义 | 以上都不匹配时兜底 | 任意 2-6 字中文标签 |
 
-## 项目列表
+## 项目列表（索引从 0 起）
 ${repoIndexText}
 
 ## 规则
-1. 用 get_repo_details 一次获取全部项目详情
-2. 优先匹配现有标签，无匹配时创建新标签（中文命名，2-6字）
-3. 每个标签必须标注所属维度，格式: "维度简称:标签名"
-   维度简称: 技术栈/领域/用途/状态/服务人群/解决问题/生态/自定义
-   示例: "技术栈:Python", "领域:AI/ML", "用途:CLI Tool", "服务人群:开发者"
-4. 每个项目覆盖≥3个维度（技术栈、领域、用途必有，状态/服务人群/解决问题至少一个）
-5. 只输出 JSON: {"0":["技术栈:Python","领域:AI/ML"],"1":["用途:Library","技术栈:Rust"]}
-6. 禁止使用 Read/Write/Grep/WebSearch 等工具，你只有 get_repo_details 和 search_tags
-7. 不输出任何其他文字`;
+1. **先查后判**：用 get_repo_details 一次性获取全部项目详情
+2. **优先复用**：用 search_tags 按关键词搜索已有标签，匹配则复用，避免创建语义重复标签
+3. **维度必标**：每个标签格式为 "维度简称:标签名"，如 "技术栈:Python"、"领域:AI/ML"
+4. **覆盖≥3个维度**：每个项目至少覆盖 技术栈 + 领域 + 用途，其余维度按实际情况选填
+5. **信息不足时**：描述/README 为空的项目，仅根据语言、Topics、项目名判断，标签宁少勿滥
+6. **同维度上限**：同一项目的同一维度下标签 ≤ 2 个，避免标签堆砌
+7. **只输出 JSON**，其他文字一律不要：
+\`\`\`
+{"0":["技术栈:Python","领域:AI/ML","用途:库/SDK"],"1":["技术栈:Rust","领域:系统工具","用途:CLI工具"]}
+\`\`\`
+8. **自查清单**（输出前逐项确认）：每个项目≥3个维度？格式是"简称:名称"？维度简称在8个之中？无多余文字？`;
 
         yield { type: 'status', message: 'Agent 开始通过 MCP 本地数据库分析项目...' };
 

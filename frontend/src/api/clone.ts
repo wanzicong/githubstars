@@ -26,6 +26,7 @@ export async function fetchCloneConfig(): Promise<CloneConfig> {
 export async function startClone(params: {
     keyword?: string
     language?: string
+    tagIds?: string
     categoryIds?: string
     maxCount?: number
     subDirectory?: string
@@ -43,6 +44,7 @@ export async function startClone(params: {
     if (params.maxCount != null) searchParams.set('maxCount', String(params.maxCount))
     if (params.keyword) searchParams.set('keyword', params.keyword)
     if (params.language) searchParams.set('language', params.language)
+    if (params.tagIds) searchParams.set('tagIds', params.tagIds)
     if (params.categoryIds) searchParams.set('categoryIds', params.categoryIds)
     if (params.subDirectory) searchParams.set('subDirectory', params.subDirectory)
     if (params.dateField) searchParams.set('dateField', params.dateField)

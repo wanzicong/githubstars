@@ -299,7 +299,7 @@ export default function StarList() {
         pageSize,
         keyword,
         languageStr,
-        
+        tagIdsStr,
         sortBy,
         sortOrder,
         dateField,
@@ -394,7 +394,7 @@ export default function StarList() {
                 } catch {}
             }, 2000)
         },
-        [currentPage, pageSize, keyword, languageStr,  sortBy, sortOrder, dateField, startDateStr, endDateStr],
+        [currentPage, pageSize, keyword, languageStr, tagIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly],
     )
 
     const handleAiAnalyze = useCallback(async () => {
@@ -433,7 +433,7 @@ export default function StarList() {
         } finally {
             setAnalyzing(false)
         }
-    }, [keyword, languageStr,  sortBy, sortOrder])
+    }, [keyword, languageStr, tagIdsStr, sortBy, sortOrder])
 
     const handleCloseAnalyzeModal = useCallback(() => {
         if (analyzePollingRef.current) clearInterval(analyzePollingRef.current)
@@ -590,13 +590,14 @@ export default function StarList() {
         } catch {
             console.error('导出失败')
         }
-    }, [keyword, languageStr,  sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly])
+    }, [keyword, languageStr, tagIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly])
 
     const handleExportMd = useCallback(async () => {
         try {
             const params = new URLSearchParams()
             if (keyword) params.set('keyword', keyword)
             if (languageStr) params.set('language', languageStr)
+            if (tagIdsStr) params.set('tagIds', tagIdsStr)
             if (sortBy) params.set('sortBy', sortBy)
             if (sortOrder) params.set('sortOrder', sortOrder)
             if (dateField) params.set('dateField', dateField)
@@ -627,7 +628,7 @@ export default function StarList() {
         } catch {
             message.error('导出MD失败')
         }
-    }, [keyword, languageStr,  sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, pageResult?.total])
+    }, [keyword, languageStr, tagIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, pageResult?.total])
 
     const [cloneModalVisible, setCloneModalVisible] = useState(false)
     const [cloneDirModalVisible, setCloneDirModalVisible] = useState(false)
@@ -711,7 +712,7 @@ export default function StarList() {
             const data = await cloneApi.startClone({
                 keyword: keyword || undefined,
                 language: languageStr || undefined,
-                
+                tagIds: tagIdsStr || undefined,
                 maxCount: totalCount,
                 subDirectory: cloneSubDir.trim() || undefined,
                 dateField: dateField || undefined,
@@ -765,7 +766,7 @@ export default function StarList() {
     }, [
         keyword,
         languageStr,
-        
+        tagIdsStr,
         cloneSubDir,
         dateField,
         startDateStr,
@@ -978,7 +979,45 @@ export default function StarList() {
                             />
                         </Col>
                     </Row>
-                    <Row gutter={[8, 8]} style={{ marginTop: 8 }}>
+                    {/* 激活的筛选条件摘要 */}
+                    {hasActiveFilters && (
+                        <Row style={{ marginTop: 4 }}>
+                            <Col span={24}>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <Text type='secondary' style={{ fontSize: 12 }}>当前筛选：</Text>
+                                    {keyword && (
+                                        <Tag closable onClose={() => setUrlParam('keyword', null)} color='blue'>
+                                            关键词: {keyword}
+                                        </Tag>
+                                    )}
+                                    {languageStr && (
+                                        <Tag closable onClose={() => setUrlParam('languages', null)} color='green'>
+                                            语言: {languageStr}
+                                        </Tag>
+                                    )}
+                                    {tagIdsStr && (
+                                        <Tag closable onClose={() => setUrlParam('tagIds', null)} color='cyan'>
+                                            标签({selectedTagIds.length}个)
+                                        </Tag>
+                                    )}
+                                    {timeFilterSummary && (
+                                        <Tag closable onClose={() => setUrlParams({ dateField: null, startDate: null, endDate: null, timePreset: null })} color='purple'>
+                                            时间: {timeFilterSummary}
+                                        </Tag>
+                                    )}
+                                    {untranslatedOnly && (
+                                        <Tag closable onClose={() => setUrlParam('untranslatedOnly', null)} color='orange'>
+                                            仅未翻译
+                                        </Tag>
+                                    )}
+                                    <Button size='small' icon={<ClearOutlined />} onClick={handleClearFilters} type='link' style={{ padding: '0 4px' }}>
+                                        清除全部
+                                    </Button>
+                                </div>
+                            </Col>
+                        </Row>
+                    )}
+                    <Row gutter={[8, 8]} style={{ marginTop: hasActiveFilters ? 4 : 8 }}>
                         <Col span={24}>
                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                                 {hasActiveFilters && (
@@ -993,7 +1032,8 @@ export default function StarList() {
                                     // 收集当前筛选条件，拼接到 URL 参数
                                     const params = new URLSearchParams()
                                     if (keyword) params.set('keyword', keyword)
-                                    if (language) params.set('language', language)
+                                    if (languageStr) params.set('language', languageStr)
+                                    if (tagIdsStr) params.set('tagIds', tagIdsStr)
                                     const qs = params.toString()
                                     const url = qs ? `/tags?${qs}` : '/tags'
                                     window.open(url, '_blank')
@@ -1400,7 +1440,7 @@ export default function StarList() {
                 filters={{
                     keyword: keyword || undefined,
                     language: languageStr || undefined,
-                    
+                    tagIds: tagIdsStr || undefined,
                     sortBy: sortBy || undefined,
                     sortOrder: sortOrder || undefined,
                     dateField: dateField || undefined,
