@@ -128,16 +128,25 @@ function TagCheckTree({ nodes, selected, onToggle, onLoadDist, depth = 0 }: {
         }
     }
 
+    // 判断是否为下钻分布标签（标题含 · 分隔符，如 "领域·AI/ML (78)"）
+    const isDistTag = (t: string) => t.includes('·')
+
     return (
         <div style={{ paddingLeft: depth * 12 }}>
+            {/* 在下钻层加一条分隔提示 */}
+            {depth > 0 && nodes.length > 0 && isDistTag(String(nodes[0]?.title || '')) && (
+                <div style={{ fontSize: 10, color: '#999', padding: '2px 6px', fontStyle: 'italic' }}>
+                    ─ 该标签下的项目同时具有以下标签 ─
+                </div>
+            )}
             {nodes.map((node: any) => {
                 const isGroup = typeof node.value === 'string' && node.selectable === false
-                const isDistGroup = String(node.value).startsWith('dist_')
                 const isTag = typeof node.value === 'number'
                 const nodeKey = String(node.value)
                 const isExpanded = expanded.has(nodeKey)
                 const hasStaticChildren = node.children && node.children.length > 0
                 const isChecked = isTag && selected.includes(node.value)
+                const isDist = isTag && isDistTag(String(node.title || ''))
                 // 标签节点：有子节点 或 repoCount>0 → 可展开下钻
                 const canDrill = isTag && (hasStaticChildren ||
                     (typeof (node as any)._repoCount === 'number' ? (node as any)._repoCount > 0 : true))
@@ -149,10 +158,10 @@ function TagCheckTree({ nodes, selected, onToggle, onLoadDist, depth = 0 }: {
                                 display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px',
                                 cursor: (isGroup || isTag || hasStaticChildren) ? 'pointer' : 'default',
                                 borderRadius: 4, marginBottom: 1,
-                                background: isChecked ? '#e6f4ff' : isDistGroup ? '#f0f5ff' : undefined,
-                                fontWeight: isGroup ? 600 : isDistGroup ? 500 : undefined,
-                                color: isDistGroup ? '#1677ff' : undefined,
-                                fontSize: isGroup ? 13 : isDistGroup ? 12 : 12,
+                                background: isChecked ? '#e6f4ff' : undefined,
+                                fontWeight: isGroup ? 600 : undefined,
+                                color: isDist ? '#1677ff' : undefined,
+                                fontSize: isGroup ? 13 : 12,
                             }}
                         >
                             {/* 展开/收起箭头 */}
@@ -182,7 +191,7 @@ function TagCheckTree({ nodes, selected, onToggle, onLoadDist, depth = 0 }: {
                                 />
                             ) : (
                                 <span style={{ fontSize: 14, width: 18, flexShrink: 0, textAlign: 'center' }}>
-                                    {isDistGroup ? '→' : node.title?.includes('📚') ? '📚' : node.title?.includes('🏷️') ? '🏷️' : node.title?.includes('🔧') ? '🔧' : node.title?.includes('📊') ? '📊' : node.title?.includes('👥') ? '👥' : node.title?.includes('💡') ? '💡' : '📌'}
+                                    {node.title?.includes('📚') ? '📚' : node.title?.includes('🏷️') ? '🏷️' : node.title?.includes('🔧') ? '🔧' : node.title?.includes('📊') ? '📊' : node.title?.includes('👥') ? '👥' : node.title?.includes('💡') ? '💡' : '📌'}
                                 </span>
                             )}
 
@@ -190,18 +199,15 @@ function TagCheckTree({ nodes, selected, onToggle, onLoadDist, depth = 0 }: {
                             <span
                                 style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                                 onClick={(e) => {
-                                    // 点击标签名 → 勾选/取消
                                     if (isTag) { e.stopPropagation(); onToggle(node.value) }
                                 }}
                             >
                                 {isGroup
                                     ? String(node.title || '').replace(/^[^\s]+\s/, '').replace(/\s*\(\d+\)/, '')
-                                    : isDistGroup
-                                        ? String(node.title || '').replace(/^→\s*/, '')
-                                        : node.title}
+                                    : node.title}
                             </span>
-                            {/* 下钻展开按钮（仅标签节点） */}
-                            {isTag && (
+                            {/* 下钻展开按钮（仅标签节点，非分布标签） */}
+                            {isTag && !isDist && canDrill && (
                                 <span
                                     style={{
                                         fontSize: 9, color: isExpanded ? '#1677ff' : '#ccc',
@@ -534,22 +540,25 @@ export default function StarList() {
             try {
                 const dist = await fetchTagDistribution(tagId)
                 if (!dist || dist.totalRepos === 0) { setTagDistLoaded(prev => new Map(prev).set(tagId, [])); continue }
-                // 构建子维度分组节点
-                const groupNodes = dist.distributions.map(d => {
-                    const tagNodes = d.tags.map(t => ({
-                        title: `${t.tagName} (${t.count})`,
-                        value: t.tagId,
-                    }))
-                    return {
-                        title: `→ ${d.groupName}`,
-                        value: `dist_${tagId}_${d.groupId}`,
-                        selectable: false,
-                        checkable: false,
-                        style: { color: '#1677ff', fontWeight: 500 },
-                        children: tagNodes,
+                // 构建子维度标签节点（平铺，不用中间分组）
+                const flatTagNodes: any[] = []
+                for (const d of dist.distributions) {
+                    // 取维度纯名称（去掉emoji前缀）
+                    const dimName = d.groupName.replace(/^[^一-鿿]+/, '').trim()
+                    for (const t of d.tags) {
+                        flatTagNodes.push({
+                            title: `${dimName}·${t.tagName} (${t.count})`,
+                            value: t.tagId,
+                        })
                     }
+                }
+                // 按 count 降序排列
+                flatTagNodes.sort((a, b) => {
+                    const ca = parseInt(String(a.title).match(/\((\d+)\)$/)?.[1] || '0')
+                    const cb = parseInt(String(b.title).match(/\((\d+)\)$/)?.[1] || '0')
+                    return cb - ca
                 })
-                setTagDistLoaded(prev => new Map(prev).set(tagId, groupNodes))
+                setTagDistLoaded(prev => new Map(prev).set(tagId, flatTagNodes))
             } catch {
                 setTagDistLoaded(prev => new Map(prev).set(tagId, []))
             } finally {
