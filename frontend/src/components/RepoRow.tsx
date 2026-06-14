@@ -57,47 +57,47 @@ const RepoRow = memo(function RepoRow({ repo, onTagClick, selectedTagIds }: Repo
                                 )}
                                 {repo.tags && repo.tags.length > 0
                                     ? (() => {
-                                          // 按维度分组，每组内按层级排序
-                                          const groupMap = new Map<number, { groupName: string; groupColor: string; groupIcon: string | null; tags: typeof repo.tags }>()
+                                          // 按维度分组 + 建树（父标签 → 子标签）
+                                          const groupMap = new Map<number, { gn: string; gc: string; gi: string | null; parents: Array<{ p: typeof repo.tags[0]; children: typeof repo.tags[0][] }> }>()
                                           for (const t of repo.tags) {
                                               if (!groupMap.has(t.groupId)) {
-                                                  groupMap.set(t.groupId, { groupName: t.groupName, groupColor: t.groupColor, groupIcon: t.groupIcon, tags: [] })
+                                                  groupMap.set(t.groupId, { gn: t.groupName, gc: t.groupColor, gi: t.groupIcon, parents: [] })
                                               }
-                                              groupMap.get(t.groupId)!.tags.push(t)
                                           }
-                                          const groups = Array.from(groupMap.values())
-                                          for (const g of groups) {
-                                              g.tags.sort((a, b) => (a.parentId ? 1 : 0) - (b.parentId ? 1 : 0))
+                                          for (const g of groupMap.values()) {
+                                              const dimTags = repo.tags!.filter(t => t.groupId === repo.tags!.find(rt => rt.groupName === g.gn)!.groupId)
+                                              const parents = dimTags.filter(t => !t.parentId || !dimTags.some(rt => rt.id === t.parentId))
+                                              const childMap = new Map<number, typeof repo.tags[0][]>()
+                                              for (const t of dimTags.filter(t => t.parentId && dimTags.some(rt => rt.id === t.parentId))) {
+                                                  if (!childMap.has(t.parentId!)) childMap.set(t.parentId!, [])
+                                                  childMap.get(t.parentId!)!.push(t)
+                                              }
+                                              g.parents = parents.map(p => ({ p, children: childMap.get(p.id) || [] }))
                                           }
-                                          // 最多显示 2 个维度组，每组最多 4 个标签
-                                          return groups.slice(0, 2).flatMap((g) =>
-                                              g.tags.slice(0, 4).map((t) => {
-                                                  const isSelected = selectedTagIds?.has(t.id)
-                                                  const isChild = t.parentId != null
-                                                  return (
-                                                      <Tooltip key={t.id} title={`${g.groupName}${isChild ? ' · 子标签' : ''} — 点击下钻`} mouseEnterDelay={0.5}>
-                                                          <Tag
-                                                              color={isSelected ? 'blue' : 'cyan'}
-                                                              style={{
-                                                                  margin: 0,
-                                                                  fontSize: 11,
-                                                                  borderRadius: 10,
-                                                                  cursor: 'pointer',
-                                                                  padding: isChild ? '0 5px' : '0 7px',
-                                                                  fontWeight: isSelected ? 600 : isChild ? 400 : 500,
-                                                              }}
-                                                              onClick={(e) => {
-                                                                  e.stopPropagation()
-                                                                  onTagClick?.(t.id)
-                                                              }}
-                                                          >
-                                                              <span style={{ fontSize: 10, marginRight: 1, opacity: 0.7 }}>{g.groupIcon || '📌'}</span>
-                                                              {isChild ? '↳' : ''}{t.name}
-                                                          </Tag>
-                                                      </Tooltip>
-                                                  )
-                                              }),
-                                          )
+                                          return Array.from(groupMap.values()).slice(0, 2).map((g) => (
+                                              <span key={g.gn} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11 }}>
+                                                  <span style={{ fontSize: 10, opacity: 0.55, marginRight: 1 }} title={g.gn}>{g.gi || '📌'}</span>
+                                                  {g.parents.flatMap(({ p, children }) => {
+                                                      const pSel = selectedTagIds?.has(p.id)
+                                                      const tags = [
+                                                          <Tooltip key={p.id} title={`${g.gn} — 点击下钻`} mouseEnterDelay={0.5}>
+                                                              <Tag color={pSel ? 'blue' : 'cyan'} style={{ margin: 0, fontSize: 11, borderRadius: 10, cursor: 'pointer', padding: '0 6px', fontWeight: pSel ? 600 : 500, lineHeight: '18px' }}
+                                                                  onClick={(e) => { e.stopPropagation(); onTagClick?.(p.id) }}>{p.name}</Tag>
+                                                          </Tooltip>,
+                                                          ...children.slice(0, 3).map((c) => {
+                                                              const cSel = selectedTagIds?.has(c.id)
+                                                              return (
+                                                                  <Tooltip key={c.id} title={`${g.gn} · ${p.name} 的子标签`} mouseEnterDelay={0.5}>
+                                                                      <Tag color={cSel ? 'blue' : 'default'} style={{ margin: 0, fontSize: 10, borderRadius: 8, cursor: 'pointer', padding: '0 5px', fontWeight: cSel ? 600 : 400, opacity: 0.8, lineHeight: '16px' }}
+                                                                          onClick={(e) => { e.stopPropagation(); onTagClick?.(c.id) }}>{c.name}</Tag>
+                                                                  </Tooltip>
+                                                              )
+                                                          }),
+                                                      ]
+                                                      return tags
+                                                  })}
+                                              </span>
+                                          ))
                                       })()
                                     : repo.tagNames &&
                                       repo.tagNames.length > 0 &&

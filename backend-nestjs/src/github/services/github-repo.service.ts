@@ -80,8 +80,11 @@ export class GithubRepoService {
         if (params.categoryIds?.length) {
             AND.push({ repoCategories: { some: { categoryId: { in: params.categoryIds.map(BigInt) } } } });
         }
+        // 每个 tagId 独立 AND 条件：仓库必须同时拥有所有选中标签（交集语义）
         if (params.tagIds?.length) {
-            AND.push({ repoTags: { some: { tagId: { in: params.tagIds.map(BigInt) } } } });
+            for (const tagId of params.tagIds) {
+                AND.push({ repoTags: { some: { tagId: BigInt(tagId) } } });
+            }
         }
         if (params.keyword?.trim()) {
             const kw = params.keyword.trim();

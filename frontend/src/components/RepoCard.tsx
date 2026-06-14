@@ -68,7 +68,7 @@ const RepoCard = memo(function RepoCard({ repo, onTagClick, selectedTagIds }: Re
                     {repo.description}
                 </Paragraph>
             ) : null}
-            {/* 标签行 — 技术栈 + 层级化可下钻标签 */}
+            {/* 标签行 — 语言 + 树形层级化可下钻标签 */}
             <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                 {repo.language && (
                     <Tag color='processing' style={{ margin: 0, fontSize: 12, borderRadius: 10 }}>
@@ -77,57 +77,86 @@ const RepoCard = memo(function RepoCard({ repo, onTagClick, selectedTagIds }: Re
                 )}
                 {repo.tags && repo.tags.length > 0
                     ? (() => {
-                          // 按维度分组，每组内按层级排序（父标签在前，子标签在后）
-                          const groupMap = new Map<number, { groupName: string; groupColor: string; groupIcon: string | null; tags: typeof repo.tags }>()
+                          // 按维度分组
+                          const groupMap = new Map<number, { groupName: string; groupColor: string; groupIcon: string | null; parents: Map<number | null, { tag: typeof repo.tags[0]; children: typeof repo.tags[0][] }> }>()
                           for (const t of repo.tags) {
                               if (!groupMap.has(t.groupId)) {
-                                  groupMap.set(t.groupId, { groupName: t.groupName, groupColor: t.groupColor, groupIcon: t.groupIcon, tags: [] })
+                                  groupMap.set(t.groupId, { groupName: t.groupName, groupColor: t.groupColor, groupIcon: t.groupIcon, parents: new Map() })
                               }
-                              groupMap.get(t.groupId)!.tags.push(t)
+                              const g = groupMap.get(t.groupId)!
+                              // 按 parentId 建树：没有父标签或父标签不在当前仓库的标签中 → 作为根节点
+                              const effectiveParent = t.parentId && repo.tags!.some(rt => rt.id === t.parentId) ? t.parentId : null
+                              if (!g.parents.has(effectiveParent)) {
+                                  // 虚拟根节点
+                                  g.parents.set(effectiveParent, { tag: t.parentId ? t : t, children: [] })
+                              }
                           }
-                          const groups = Array.from(groupMap.values())
-                          // 每组内：无 parentId 的排前面（一级标签），有 parentId 的排后面（子标签）
-                          for (const g of groups) {
-                              g.tags.sort((a, b) => (a.parentId ? 1 : 0) - (b.parentId ? 1 : 0))
+                          // 重新构建：将每个标签归类到其父节点下
+                          for (const g of groupMap.values()) {
+                              g.parents.clear()
+                              const parentTags = repo.tags!.filter(t => !t.parentId || !repo.tags!.some(rt => rt.id === t.parentId))
+                              const childMap = new Map<number, typeof repo.tags[0][]>()
+                              for (const t of repo.tags!.filter(t => t.parentId && repo.tags!.some(rt => rt.id === t.parentId))) {
+                                  if (!childMap.has(t.parentId!)) childMap.set(t.parentId!, [])
+                                  childMap.get(t.parentId!)!.push(t)
+                              }
+                              for (const p of parentTags) {
+                                  g.parents.set(p.id, { tag: p, children: childMap.get(p.id) || [] })
+                              }
                           }
-                          return groups.map((g) => (
+                          return Array.from(groupMap.values()).map((g) => (
                               <div
                                   key={g.groupName}
                                   style={{
-                                      display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 3,
-                                      padding: '2px 6px', borderRadius: 6,
-                                      border: `1px solid ${g.groupColor}20`,
-                                      background: `${g.groupColor}08`,
+                                      padding: '3px 7px', borderRadius: 6, fontSize: 11,
+                                      border: `1px solid ${g.groupColor}30`,
+                                      background: `${g.groupColor}06`,
+                                      lineHeight: '22px',
                                   }}
                               >
-                                  {/* 维度图标 */}
-                                  <span style={{ fontSize: 11, opacity: 0.7, marginRight: 1 }} title={g.groupName}>
+                                  {/* 维度图标 + 名称 */}
+                                  <span style={{ fontSize: 10, opacity: 0.55, marginRight: 4 }} title={g.groupName}>
                                       {g.groupIcon || '📌'}
                                   </span>
-                                  {g.tags.map((t) => {
-                                      const isSelected = selectedTagIds?.has(t.id)
-                                      const isChild = t.parentId != null
+                                  {/* 树形标签：每个父标签一行，子标签缩进同行 */}
+                                  {Array.from(g.parents.values()).map(({ tag: p, children }) => {
+                                      const pSelected = selectedTagIds?.has(p.id)
                                       return (
-                                          <Tooltip key={t.id} title={`${g.groupName}${isChild ? ' · 子标签' : ''} — 点击下钻`} mouseEnterDelay={0.5}>
-                                              <Tag
-                                                  color={isSelected ? 'blue' : 'cyan'}
-                                                  style={{
-                                                      margin: 0,
-                                                      fontSize: 11,
-                                                      borderRadius: 10,
-                                                      cursor: 'pointer',
-                                                      padding: isChild ? '0 6px' : '0 8px',
-                                                      opacity: isSelected ? 1 : isChild ? 0.75 : 0.9,
-                                                      fontWeight: isSelected ? 600 : isChild ? 400 : 500,
-                                                  }}
-                                                  onClick={(e) => {
-                                                      e.stopPropagation()
-                                                      onTagClick?.(t.id)
-                                                  }}
-                                              >
-                                                  {isChild ? '↳ ' : ''}{t.name}
-                                              </Tag>
-                                          </Tooltip>
+                                          <span key={p.id} style={{ display: 'inline' }}>
+                                              <Tooltip title={`${g.groupName}${p.parentId ? ' · 父标签' : ''} — 点击下钻`} mouseEnterDelay={0.5}>
+                                                  <Tag
+                                                      color={pSelected ? 'blue' : 'cyan'}
+                                                      style={{
+                                                          margin: '0 2px 2px 0', fontSize: 11, borderRadius: 10, cursor: 'pointer',
+                                                          fontWeight: pSelected ? 600 : 500, lineHeight: '18px',
+                                                      }}
+                                                      onClick={(e) => { e.stopPropagation(); onTagClick?.(p.id) }}
+                                                  >
+                                                      {p.name}
+                                                  </Tag>
+                                              </Tooltip>
+                                              {children.length > 0 && (
+                                                  <span style={{ paddingLeft: 6, borderLeft: `1px solid ${g.groupColor}30`, marginRight: 2 }}>
+                                                      {children.map((c) => {
+                                                          const cSelected = selectedTagIds?.has(c.id)
+                                                          return (
+                                                              <Tooltip key={c.id} title={`${g.groupName} · ${p.name} 的子标签 — 点击下钻`} mouseEnterDelay={0.5}>
+                                                                  <Tag
+                                                                      color={cSelected ? 'blue' : 'default'}
+                                                                      style={{
+                                                                          margin: '0 2px 2px 0', fontSize: 10, borderRadius: 8, cursor: 'pointer',
+                                                                          fontWeight: cSelected ? 600 : 400, lineHeight: '16px', opacity: 0.8,
+                                                                      }}
+                                                                      onClick={(e) => { e.stopPropagation(); onTagClick?.(c.id) }}
+                                                                  >
+                                                                      {c.name}
+                                                                  </Tag>
+                                                              </Tooltip>
+                                                          )
+                                                      })}
+                                                  </span>
+                                              )}
+                                          </span>
                                       )
                                   })}
                               </div>
