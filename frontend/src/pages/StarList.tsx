@@ -48,7 +48,7 @@ import * as starsApi from '../api/stars'
 import * as translateApi from '../api/translate'
 import * as analyzeApi from '../api/analyze'
 import * as cloneApi from '../api/clone'
-import { fetchAllTags, fetchTagDistribution } from '../api/tags'
+import { fetchAllTags } from '../api/tags'
 import { buildTargetPath, sanitizeSubdirectory } from '../utils/clonePath'
 import RepoCard from '../components/RepoCard'
 import RepoRow from '../components/RepoRow'
@@ -94,15 +94,10 @@ const PAGE_SIZE_OPTIONS = [36, 72, 144]
  * @param selected 已选中的 tagId 集合
  * @param onToggle 点击标签 checkbox 时的回调
  */
-function TagCheckTree({ nodes, selected, onToggle, drillPath, drillDataMap, drillLoadingMap, onDrillToggle, renderDrillFn }: {
+function TagCheckTree({ nodes, selected, onToggle }: {
     nodes: TreeNode[]
     selected: Set<number>
     onToggle: (tagId: number) => void
-    drillPath: Set<string>
-    drillDataMap: Map<string, any>
-    drillLoadingMap: Set<string>
-    onDrillToggle: (tagId: number, groupId: number, parentPath: string) => void
-    renderDrillFn: (tagId: number, groupId: number, parentPath: string, depth: number) => React.ReactNode
 }) {
     const [expanded, setExpanded] = useState<Set<string>>(new Set())
     const prevNodesRef = useRef<TreeNode[] | null>(null)
@@ -144,21 +139,19 @@ function TagCheckTree({ nodes, selected, onToggle, drillPath, drillDataMap, dril
         const hasChildren = node.children && node.children.length > 0
         const isChecked = node.tagId !== undefined && selected.has(node.tagId)
         const isGroup = node.type === 'group'
-        const isChildGroup = node.type === 'childgroup'
-        const isGroupLike = isGroup || isChildGroup
         const isParentTag = node.type === 'tag' && hasChildren
         const isChildTag = node.type === 'subtag'
 
         // 视觉样式按层级区分
         const rowStyle: React.CSSProperties = {
             display: 'flex', alignItems: 'center', gap: 4,
-            padding: isGroup ? '4px 6px' : isChildGroup ? '3px 6px 3px 14px' : isParentTag ? '3px 6px 3px 6px' : '2px 6px 2px 22px',
-            cursor: isGroupLike ? 'default' : 'pointer',
+            padding: isGroup ? '4px 6px' : isParentTag ? '3px 6px 3px 6px' : '2px 6px 2px 22px',
+            cursor: isGroup ? 'default' : 'pointer',
             borderRadius: 4, marginBottom: 1,
-            background: isChecked ? '#e6f4ff' : isChildGroup ? '#fafafa' : undefined,
-            fontWeight: isGroup ? 600 : isChildGroup ? 500 : isParentTag ? 500 : 400,
+            background: isChecked ? '#e6f4ff' : undefined,
+            fontWeight: isGroup ? 600 : isParentTag ? 500 : 400,
             fontSize: isGroup ? 13 : 12,
-            color: isGroup ? '#262626' : isChildGroup ? '#595959' : isChildTag ? '#8c8c8c' : '#434343',
+            color: isGroup ? '#262626' : isChildTag ? '#8c8c8c' : '#434343',
         }
 
         return (
@@ -177,8 +170,8 @@ function TagCheckTree({ nodes, selected, onToggle, drillPath, drillDataMap, dril
                     )}
 
                     {/* 维度图标 或 checkbox */}
-                    {isGroupLike ? (
-                        <span style={{ fontSize: isGroup ? 14 : 12, width: 20, flexShrink: 0, textAlign: 'center', opacity: isChildGroup ? 0.75 : 1 }}>
+                    {isGroup ? (
+                        <span style={{ fontSize: 14, width: 20, flexShrink: 0, textAlign: 'center' }}>
                             {node.icon || '📌'}
                         </span>
                     ) : (
@@ -195,10 +188,10 @@ function TagCheckTree({ nodes, selected, onToggle, drillPath, drillDataMap, dril
                     <span
                         style={{
                             flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            cursor: isGroupLike ? 'default' : 'pointer',
+                            cursor: isGroup ? 'default' : 'pointer',
                         }}
                         onClick={() => {
-                            if (!isGroupLike && node.tagId !== undefined) onToggle(node.tagId)
+                            if (!isGroup && node.tagId !== undefined) onToggle(node.tagId)
                         }}
                     >
                         {node.label}
@@ -208,28 +201,10 @@ function TagCheckTree({ nodes, selected, onToggle, drillPath, drillDataMap, dril
                     {node.count !== undefined && (
                         <span style={{
                             fontSize: 10, color: node.count > 0 ? '#8c8c8c' : '#d9d9d9',
-                            flexShrink: 0, minWidth: 22, textAlign: 'right',
+                            flexShrink: 0, minWidth: 28, textAlign: 'right',
                         }}>
                             {node.count}
                         </span>
-                    )}
-
-                    {/* 下钻展开按钮（有标签ID + count > 0） */}
-                    {!isGroupLike && node.tagId !== undefined && node.groupId !== undefined && (node.count || 0) > 0 && (
-                        (() => {
-                            const dp = String(node.tagId)
-                            const isDrillExpanded = drillPath.has(dp)
-                            const isDrillLoading = drillLoadingMap.has(dp)
-                            return (
-                                <span
-                                    style={{ fontSize: 10, cursor: 'pointer', color: isDrillExpanded ? '#1677ff' : '#ccc', width: 14, flexShrink: 0, textAlign: 'center' }}
-                                    onClick={(e) => { e.stopPropagation(); onDrillToggle(node.tagId!, node.groupId!, '') }}
-                                    title='展开关联标签'
-                                >
-                                    {isDrillLoading ? '⏳' : isDrillExpanded ? '▼' : '▶'}
-                                </span>
-                            )
-                        })()
                     )}
 
                     {/* 选中标记 */}
@@ -244,11 +219,6 @@ function TagCheckTree({ nodes, selected, onToggle, drillPath, drillDataMap, dril
                         {node.children!.map(child => renderNode(child, depth + 1))}
                     </div>
                 )}
-
-                {/* 递归下钻渲染 */}
-                {!isGroupLike && node.tagId !== undefined && node.groupId !== undefined && (
-                    renderDrillFn(node.tagId, node.groupId, '', 0)
-                )}
             </div>
         )
     }
@@ -262,10 +232,9 @@ function TagCheckTree({ nodes, selected, onToggle, drillPath, drillDataMap, dril
 
 /** 树节点类型 */
 interface TreeNode {
-    type: 'group' | 'childgroup' | 'tag' | 'subtag'
+    type: 'group' | 'tag' | 'subtag'
     value: string
     tagId?: number
-    groupId?: number
     label: string
     count?: number
     icon?: string
@@ -299,7 +268,6 @@ function buildTagHierarchy(groups: any[]): TreeNode[] {
                         type: 'tag',
                         value: `tag_${tag.id}`,
                         tagId: tag.id,
-                        groupId: group.id,
                         label: tag.name,
                         count: typeof tag.repoCount === 'number' ? tag.repoCount : 0,
                         children: [],
@@ -506,11 +474,6 @@ export default function StarList() {
     const [loading, setLoading] = useState(true)
     const [initialLoading, setInitialLoading] = useState(true)
 
-    // ── 递归标签下钻状态 ──
-    const [drillPath, setDrillPath] = useState<Set<string>>(new Set())
-    const [drillDataMap, setDrillDataMap] = useState<Map<string, any>>(new Map())
-    const [drillLoadingMap, setDrillLoadingMap] = useState<Set<string>>(new Set())
-
     // ── 标签树随筛选条件动态加载（上下文感知计数）──
     useEffect(() => {
         let cancelled = false
@@ -628,84 +591,6 @@ export default function StarList() {
             : [...selectedTagIds, tagId]
         setUrlParam('tagIds', next.length > 0 ? next.join(',') : null)
     }, [selectedTagIds, setUrlParam])
-
-    // ── 递归标签下钻（在标签树中内联展开关联维度标签分布）──
-    const onToggleTagRef = useRef(onToggleTag)
-    onToggleTagRef.current = onToggleTag
-
-    const toggleDrillExpand = useCallback(async (tagId: number, groupId: number, parentPath: string) => {
-        const path = parentPath ? `${parentPath}/${tagId}` : String(tagId)
-        setDrillPath(prev => {
-            if (prev.has(path)) { const s = new Set(prev); s.delete(path); return s }
-            return new Set(prev).add(path)
-        })
-        if (drillDataMap.has(path)) return
-        setDrillLoadingMap(prev => new Set(prev).add(path))
-        try {
-            const dist = await fetchTagDistribution(tagId)
-            const filtered = dist?.distributions?.filter((d: any) => d.groupId !== groupId) || []
-            setDrillDataMap(prev => new Map(prev).set(path, filtered))
-        } catch {
-            setDrillDataMap(prev => new Map(prev).set(path, []))
-        } finally {
-            setDrillLoadingMap(prev => { const s = new Set(prev); s.delete(path); return s })
-        }
-    }, [drillDataMap])
-
-    const renderDrillDown = useCallback(function renderDrillDown(tagId: number, groupId: number, parentPath: string, depth: number): React.ReactNode {
-        const path = parentPath ? `${parentPath}/${tagId}` : String(tagId)
-        if (!drillPath.has(path)) return null
-        const dists = drillDataMap.get(path) || []
-        if (!dists.length || depth >= 5) return null
-        const _selected = selectedTagIds
-        return (
-            <div style={{ paddingLeft: 12 + depth * 6, borderLeft: `2px solid ${depth === 0 ? '#d9d9d9' : '#1677ff20'}` }}>
-                {dists.map((dist: any) => (
-                    <div key={dist.groupId} style={{ margin: '2px 0' }}>
-                        <span style={{ fontSize: 10, color: '#8c8c8c', fontWeight: 500 }}>{dist.groupName}：</span>
-                        <span style={{ display: 'flex', flexWrap: 'wrap', gap: 2, marginTop: 1 }}>
-                            {dist.tags.slice(0, 8).map((dt: any) => {
-                                const subPath = `${path}/${dt.tagId}`
-                                const isSubExpanded = drillPath.has(subPath)
-                                const isSubLoading = drillLoadingMap.has(subPath)
-                                const isTagSelected = _selected.includes(dt.tagId)
-                                return (
-                                    <span key={dt.tagId} style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-                                        <span
-                                            style={{
-                                                fontSize: 10, padding: '0 5px', borderRadius: 8, cursor: 'pointer',
-                                                background: isTagSelected ? '#e6f4ff' : '#f5f5f5',
-                                                color: isTagSelected ? '#1677ff' : '#595959',
-                                                fontWeight: isTagSelected ? 600 : 400,
-                                                border: isTagSelected ? '1px solid #1677ff40' : '1px solid transparent',
-                                                lineHeight: '18px',
-                                            }}
-                                            onClick={(e) => { e.stopPropagation(); onToggleTagRef.current(dt.tagId) }}
-                                        >
-                                            {dt.tagName}
-                                            <span style={{ marginLeft: 2, opacity: 0.5, fontSize: 9 }}>{dt.count}</span>
-                                        </span>
-                                        {dt.count > 0 && (
-                                            <span
-                                                style={{ fontSize: 9, cursor: 'pointer', color: isSubExpanded ? '#1677ff' : '#ccc', width: 12, textAlign: 'center' }}
-                                                onClick={(e) => { e.stopPropagation(); toggleDrillExpand(dt.tagId, dist.groupId, path) }}
-                                            >
-                                                {isSubLoading ? '⏳' : isSubExpanded ? '▼' : '▶'}
-                                            </span>
-                                        )}
-                                        {isSubExpanded && renderDrillDown(dt.tagId, dist.groupId, path, depth + 1)}
-                                    </span>
-                                )
-                            })}
-                            {dist.tags.length > 8 && (
-                                <span style={{ fontSize: 9, color: '#bbb' }}>+{dist.tags.length - 8}</span>
-                            )}
-                        </span>
-                    </div>
-                ))}
-            </div>
-        )
-    }, [drillPath, drillDataMap, drillLoadingMap, selectedTagIds, toggleDrillExpand])
 
     const handleClearFilters = useCallback(() => {
         setUrlParams({
@@ -1425,11 +1310,6 @@ export default function StarList() {
                                             nodes={tagTree}
                                             selected={selectedTagIdSet}
                                             onToggle={onToggleTag}
-                                            drillPath={drillPath}
-                                            drillDataMap={drillDataMap}
-                                            drillLoadingMap={drillLoadingMap}
-                                            onDrillToggle={toggleDrillExpand}
-                                            renderDrillFn={renderDrillDown}
                                         />
                                     </div>
                                 </div>
