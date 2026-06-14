@@ -49,7 +49,7 @@ import * as starsApi from '../api/stars'
 import * as translateApi from '../api/translate'
 import * as analyzeApi from '../api/analyze'
 import * as cloneApi from '../api/clone'
-import { fetchAllTags } from '../api/tags'
+import { fetchAllTags, fetchTagDistribution } from '../api/tags'
 import { buildTargetPath, sanitizeSubdirectory } from '../utils/clonePath'
 import RepoCard from '../components/RepoCard'
 import RepoRow from '../components/RepoRow'
@@ -240,6 +240,10 @@ export default function StarList() {
 
     const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({ records: [], total: 0, size: 12, current: 1, pages: 0 })
     const [tagOptions, setTagOptions] = useState<any[]>([])
+    const [tagBaseTree, setTagBaseTree] = useState<any[]>([])       // 不带下钻的基础树
+    const [tagDistLoaded, setTagDistLoaded] = useState<Map<number, any[]>>(new Map())  // tagId → 子维度分布节点
+    const [tagDistLoading, setTagDistLoading] = useState<Set<number>>(new Set())       // 正在加载的 tagId
+    const [tagGroups, setTagGroups] = useState<any[]>([])           // 含parentId的维度列表
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
     const [loading, setLoading] = useState(true)
@@ -284,7 +288,9 @@ export default function StarList() {
                     selectable: false,
                     children: buildTagTree(g.tags),
                 }))
+                setTagBaseTree(treeData)
                 setTagOptions(treeData)
+                setTagGroups(tagRes)
                 const [overviewRes, langRes] = await Promise.allSettled([
                     statsApi.fetchOverviewStats(),
                     statsApi.fetchLanguageStats(),
@@ -343,6 +349,59 @@ export default function StarList() {
         untranslatedOnly,
         location.pathname, // 从详情页返回列表时触发刷新
     ])
+
+    // 构建有效树（基础树 + 动态加载的子维度分布）
+    const effectiveTagTree = useMemo(() => {
+        if (tagDistLoaded.size === 0) return tagOptions
+        // 深拷贝基础树并注入已加载的分布数据
+        const injectDist = (nodes: any[]): any[] => nodes.map(n => {
+            if (n.selectable === false) {
+                // 维度节点：递归处理子标签
+                return { ...n, children: injectDist(n.children || []) }
+            }
+            // 标签节点：如果已加载分布，追加到 children
+            const distChildren = tagDistLoaded.get(n.value)
+            if (distChildren && distChildren.length > 0) {
+                const existing = n.children || []
+                return { ...n, children: [...existing, ...distChildren] }
+            }
+            return n
+        })
+        return injectDist(tagOptions)
+    }, [tagOptions, tagDistLoaded])
+
+    // 展开节点时懒加载子维度分布
+    const handleTagTreeExpand = useCallback(async (expandedKeys: any[]) => {
+        // 找到新展开的标签节点（非 group_ 前缀的节点）
+        const newExpanded = expandedKeys.filter(k => typeof k === 'number' && !tagDistLoaded.has(k) && !tagDistLoading.has(k))
+        if (newExpanded.length === 0) return
+        for (const tagId of newExpanded) {
+            setTagDistLoading(prev => new Set(prev).add(tagId))
+            try {
+                const dist = await fetchTagDistribution(tagId)
+                if (!dist || dist.totalRepos === 0) { setTagDistLoaded(prev => new Map(prev).set(tagId, [])); continue }
+                // 构建子维度分组节点
+                const groupNodes = dist.distributions.map(d => {
+                    const tagNodes = d.tags.map(t => ({
+                        title: `${t.tagName} (${t.count})`,
+                        value: t.tagId,
+                    }))
+                    return {
+                        title: `→ ${d.groupName}`,
+                        value: `dist_${tagId}_${d.groupId}`,
+                        selectable: false,
+                        style: { color: '#1677ff', fontWeight: 500 },
+                        children: tagNodes,
+                    }
+                })
+                setTagDistLoaded(prev => new Map(prev).set(tagId, groupNodes))
+            } catch {
+                setTagDistLoaded(prev => new Map(prev).set(tagId, []))
+            } finally {
+                setTagDistLoading(prev => { const s = new Set(prev); s.delete(tagId); return s })
+            }
+        }
+    }, [tagDistLoaded, tagDistLoading])
 
     const handleClearFilters = useCallback(() => {
         setUrlParams({
@@ -983,10 +1042,10 @@ export default function StarList() {
                         </Col>
                         <Col xs={24} sm={12} md={6} lg={4}>
                             <TreeSelect
-                                treeData={tagOptions}
+                                treeData={effectiveTagTree}
                                 value={selectedTagIds}
                                 onChange={(vals) => setUrlParam('tagIds', vals.length > 0 ? vals.join(',') : null)}
-                                placeholder='筛选标签（层级展开）'
+                                placeholder='筛选标签（层级展开，可下钻）'
                                 allowClear
                                 showSearch
                                 treeCheckable
@@ -995,6 +1054,8 @@ export default function StarList() {
                                 filterTreeNode={(input, node: any) =>
                                     String(node.title || node.label || '').toLowerCase().includes(input.toLowerCase())
                                 }
+                                onTreeExpand={(keys) => handleTagTreeExpand(keys)}
+                                treeDefaultExpandAll={false}
                                 style={{ width: '100%' }}
                                 dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
                             />
