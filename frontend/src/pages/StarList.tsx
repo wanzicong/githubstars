@@ -139,19 +139,21 @@ function TagCheckTree({ nodes, selected, onToggle }: {
         const hasChildren = node.children && node.children.length > 0
         const isChecked = node.tagId !== undefined && selected.has(node.tagId)
         const isGroup = node.type === 'group'
+        const isChildGroup = node.type === 'childgroup'
+        const isGroupLike = isGroup || isChildGroup
         const isParentTag = node.type === 'tag' && hasChildren
         const isChildTag = node.type === 'subtag'
 
         // 视觉样式按层级区分
         const rowStyle: React.CSSProperties = {
             display: 'flex', alignItems: 'center', gap: 4,
-            padding: isGroup ? '4px 6px' : isParentTag ? '3px 6px 3px 6px' : '2px 6px 2px 22px',
-            cursor: isGroup ? 'default' : 'pointer',
+            padding: isGroup ? '4px 6px' : isChildGroup ? '3px 6px 3px 14px' : isParentTag ? '3px 6px 3px 6px' : '2px 6px 2px 22px',
+            cursor: isGroupLike ? 'default' : 'pointer',
             borderRadius: 4, marginBottom: 1,
-            background: isChecked ? '#e6f4ff' : undefined,
-            fontWeight: isGroup ? 600 : isParentTag ? 500 : 400,
+            background: isChecked ? '#e6f4ff' : isChildGroup ? '#fafafa' : undefined,
+            fontWeight: isGroup ? 600 : isChildGroup ? 500 : isParentTag ? 500 : 400,
             fontSize: isGroup ? 13 : 12,
-            color: isGroup ? '#262626' : isChildTag ? '#8c8c8c' : '#434343',
+            color: isGroup ? '#262626' : isChildGroup ? '#595959' : isChildTag ? '#8c8c8c' : '#434343',
         }
 
         return (
@@ -170,8 +172,8 @@ function TagCheckTree({ nodes, selected, onToggle }: {
                     )}
 
                     {/* 维度图标 或 checkbox */}
-                    {isGroup ? (
-                        <span style={{ fontSize: 14, width: 20, flexShrink: 0, textAlign: 'center' }}>
+                    {isGroupLike ? (
+                        <span style={{ fontSize: isGroup ? 14 : 12, width: 20, flexShrink: 0, textAlign: 'center', opacity: isChildGroup ? 0.75 : 1 }}>
                             {node.icon || '📌'}
                         </span>
                     ) : (
@@ -188,10 +190,10 @@ function TagCheckTree({ nodes, selected, onToggle }: {
                     <span
                         style={{
                             flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            cursor: isGroup ? 'default' : 'pointer',
+                            cursor: isGroupLike ? 'default' : 'pointer',
                         }}
                         onClick={() => {
-                            if (!isGroup && node.tagId !== undefined) onToggle(node.tagId)
+                            if (!isGroupLike && node.tagId !== undefined) onToggle(node.tagId)
                         }}
                     >
                         {node.label}
@@ -213,7 +215,7 @@ function TagCheckTree({ nodes, selected, onToggle }: {
                     )}
                 </div>
 
-                {/* 递归渲染子节点（含缩进） */}
+                {/* 递归渲染子节点（子组/子标签均缩进 14px） */}
                 {hasChildren && isExpanded && (
                     <div data-child-container='true' style={isGroup ? {} : { paddingLeft: 14 }}>
                         {node.children!.map(child => renderNode(child, depth + 1))}
@@ -232,7 +234,7 @@ function TagCheckTree({ nodes, selected, onToggle }: {
 
 /** 树节点类型 */
 interface TreeNode {
-    type: 'group' | 'tag' | 'subtag'
+    type: 'group' | 'childgroup' | 'tag' | 'subtag'
     value: string
     tagId?: number
     label: string
@@ -247,13 +249,12 @@ function getGroupEmoji(name: string): string {
     return m ? m[1] : '📌'
 }
 
-/** 将从后端获取的 TagGroup[] 构建为三级树节点 */
+/** 将从后端获取的 TagGroup[] 构建为递归树节点（组嵌套组 + 标签嵌套标签） */
 function buildTagHierarchy(groups: any[]): TreeNode[] {
-    return groups.map((group: any) => {
+    // ── 1. 构建标签树（单组内 tag → child-tag）──
+    function buildTagTree(tags: any[]): TreeNode[] {
         const tagMap = new Map<number, { node: TreeNode; parentId: number | null }>()
-
-        // 创建所有标签节点
-        for (const tag of (group.tags || [])) {
+        for (const tag of tags) {
             tagMap.set(tag.id, {
                 node: {
                     type: 'tag',
@@ -266,41 +267,60 @@ function buildTagHierarchy(groups: any[]): TreeNode[] {
                 parentId: tag.parentId ?? null,
             })
         }
-
-        // 构建父子关系
-        const rootTags: TreeNode[] = []
+        const roots: TreeNode[] = []
         for (const [, entry] of tagMap) {
             if (entry.parentId && tagMap.has(entry.parentId)) {
-                const parent = tagMap.get(entry.parentId)!
-                parent.node.children!.push(entry.node)
-                // 子标签标记为 subtag 类型
+                tagMap.get(entry.parentId)!.node.children!.push(entry.node)
                 entry.node.type = 'subtag'
             } else {
-                rootTags.push(entry.node)
+                roots.push(entry.node)
             }
         }
-
-        // 递归排序：按 count 降序
         const sortByCount = (nodes: TreeNode[]) => {
             nodes.sort((a, b) => (b.count || 0) - (a.count || 0))
             for (const n of nodes) {
-                if (n.children && n.children.length > 0) sortByCount(n.children)
-                // 清理空 children 数组
-                if (n.children && n.children.length === 0) delete n.children
-                // 有子标签的 tag 保持 type='tag'（一级标签）
+                if (n.children?.length) sortByCount(n.children)
+                else delete n.children
             }
         }
-        sortByCount(rootTags)
+        sortByCount(roots)
+        return roots
+    }
+
+    // ── 2. 构建组树（group → child-group 递归）──
+    const groupMap = new Map<number, { group: any; children: any[] }>()
+    for (const g of groups) {
+        groupMap.set(g.id, { group: g, children: [] })
+    }
+    const rootGroups: any[] = []
+    for (const g of groups) {
+        if (g.parentId && groupMap.has(g.parentId)) {
+            groupMap.get(g.parentId)!.children.push(g)
+        } else {
+            rootGroups.push(g)
+        }
+    }
+
+    // ── 3. 递归渲染组节点 ──
+    function buildGroupNode(group: any, depth: number): TreeNode {
+        const tagNodes = buildTagTree(group.tags || [])
+        const childGroupNodes = (groupMap.get(group.id)?.children || [])
+            .map((child: any) => buildGroupNode(child, depth + 1))
+
+        // 合并标签节点 + 子组节点
+        const allChildren = [...tagNodes, ...childGroupNodes]
 
         return {
-            type: 'group' as const,
+            type: depth > 0 ? ('childgroup' as any) : ('group' as const),
             value: `group_${group.id}`,
-            label: group.name.replace(/^[^\s]+\s/, ''), // 去掉 emoji 前缀显示纯文字
+            label: group.name.replace(/^[^\s]+\s/, ''),
             icon: getGroupEmoji(group.name),
             count: group.tags?.length || 0,
-            children: rootTags,
+            children: allChildren.length > 0 ? allChildren : undefined,
         }
-    })
+    }
+
+    return rootGroups.map((g) => buildGroupNode(g, 0))
 }
 
 const TIME_PRESETS: { label: string; value: string; days: number }[] = [
