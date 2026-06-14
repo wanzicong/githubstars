@@ -152,20 +152,28 @@ export default function TagBrowse() {
             .catch(() => {})
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // 搜索过滤 + 按 repoCount 降序排序后的标签组
+    // 搜索过滤 + 按 repoCount 降序排序后的标签组（含维度层级嵌套）
     const filteredGroups = useMemo(() => {
         const sortTags = (tags: typeof groups[0]['tags']) =>
             [...tags].sort((a, b) => b.repoCount - a.repoCount)
-        if (!tagSearch.trim()) {
-            return groups.map((g) => ({ ...g, tags: sortTags(g.tags) }))
+        const kw = tagSearch.trim().toLowerCase()
+
+        // 构建单组的 tags（含过滤+排序）
+        const processGroup = (g: any): any => {
+            let tags = sortTags(g.tags || [])
+            if (kw) tags = tags.filter(t => t.name.toLowerCase().includes(kw))
+            // 递归处理子维度
+            const childGroups = groups
+                .filter((cg: any) => cg.parentId === g.id)
+                .map(processGroup)
+                .filter((cg: any) => !kw || cg.tags.length > 0)
+            return { ...g, tags, children: childGroups }
         }
-        const kw = tagSearch.toLowerCase()
+        // 返回顶级维度
         return groups
-            .map((g) => {
-                const filtered = g.tags.filter((t) => t.name.toLowerCase().includes(kw))
-                return { ...g, tags: sortTags(filtered) }
-            })
-            .filter((g) => g.tags.length > 0)
+            .filter(g => !g.parentId)
+            .map(processGroup)
+            .filter(g => !kw || g.tags.length > 0 || (g.children && g.children.length > 0))
     }, [groups, tagSearch])
 
     // 空标签数量
@@ -475,6 +483,46 @@ export default function TagBrowse() {
         }
     }
 
+    // ======================== 渲染辅助：递归渲染子维度 ========================
+    const renderChildGroup = (childGroup: any, depth: number): any => {
+        const indent = depth * 20
+        return (
+            <div key={childGroup.id} style={{ marginBottom: 10, paddingLeft: indent }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 4 }}>
+                    ↳ {childGroup.icon || '📌'} {childGroup.name}
+                    <Tag color={childGroup.isSystem ? 'blue' : 'default'} style={{ fontSize: 10, marginLeft: 6 }}>
+                        {childGroup.isSystem ? '系统' : '自定义'}
+                    </Tag>
+                    <Text type='secondary' style={{ fontSize: 11, marginLeft: 4 }}>
+                        {childGroup.tags.length} 个标签
+                    </Text>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingLeft: indent > 0 ? 0 : 16 }}>
+                    {childGroup.tags.length > 0 ? childGroup.tags.map((ctag: any) => (
+                        <Tooltip key={ctag.id} title={ctag.repoCount > 0 ? `查看 ${ctag.repoCount} 个仓库` : '暂无仓库'}>
+                            <Tag
+                                color={ctag.repoCount > 0 ? (ctag.color || childGroup.color) : '#d9d9d9'}
+                                style={{
+                                    fontSize: 12, padding: '1px 8px', cursor: ctag.repoCount > 0 ? 'pointer' : 'default',
+                                    borderRadius: 10, opacity: ctag.repoCount > 0 ? 1 : 0.5, margin: 0,
+                                }}
+                                onClick={() => ctag.repoCount > 0 && navigate(`/?tagIds=${ctag.id}`)}
+                            >
+                                {ctag.name}
+                                <span style={{ marginLeft: 3, opacity: 0.7, fontSize: 10 }}>{ctag.repoCount}</span>
+                            </Tag>
+                        </Tooltip>
+                    )) : <Text type='secondary' style={{ fontSize: 12 }}>暂无标签</Text>}
+                </div>
+                {childGroup.children && childGroup.children.length > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                        {childGroup.children.map((gc: any) => renderChildGroup(gc, depth + 1))}
+                    </div>
+                )}
+            </div>
+        )
+    }
+
     // ======================== 渲染 ========================
 
     return (
@@ -709,6 +757,12 @@ export default function TagBrowse() {
                                     </div>
                                 ) : (
                                     <Text type='secondary' style={{ fontSize: 13 }}>暂无标签</Text>
+                                )}
+                                {/* 子维度（递归渲染嵌套层级） */}
+                                {group.children && group.children.length > 0 && (
+                                    <div style={{ marginTop: 16, borderTop: '1px dashed #e8e8e8', paddingTop: 12 }}>
+                                        {group.children.map((childGroup: any) => renderChildGroup(childGroup, 1))}
+                                    </div>
                                 )}
                             </Card>
                         ))}
