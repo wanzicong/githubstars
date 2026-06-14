@@ -56,26 +56,52 @@ const RepoRow = memo(function RepoRow({ repo, onTagClick, selectedTagIds }: Repo
                                     </Tag>
                                 )}
                                 {repo.tags && repo.tags.length > 0
-                                    ? repo.tags.slice(0, 3).map((t) => {
-                                          const isSelected = selectedTagIds?.has(t.id)
-                                          return (
-                                              <Tooltip key={t.id} title={`${t.groupName} · 点击下钻`} mouseEnterDelay={0.5}>
-                                                  <Tag
-                                                      color={isSelected ? 'blue' : 'cyan'}
-                                                      style={{
-                                                          margin: 0,
-                                                          fontSize: 12,
-                                                          borderRadius: 10,
-                                                          cursor: 'pointer',
-                                                          fontWeight: isSelected ? 600 : 400,
-                                                      }}
-                                                      onClick={(e) => {
-                                                          e.stopPropagation()
-                                                          onTagClick?.(t.id)
-                                                      }}
-                                                  >
-                                                      {t.name}
-                                                  </Tag>
+                                    ? (() => {
+                                          // 按维度分组，每组内按层级排序
+                                          const groupMap = new Map<number, { groupName: string; groupColor: string; groupIcon: string | null; tags: typeof repo.tags }>()
+                                          for (const t of repo.tags) {
+                                              if (!groupMap.has(t.groupId)) {
+                                                  groupMap.set(t.groupId, { groupName: t.groupName, groupColor: t.groupColor, groupIcon: t.groupIcon, tags: [] })
+                                              }
+                                              groupMap.get(t.groupId)!.tags.push(t)
+                                          }
+                                          const groups = Array.from(groupMap.values())
+                                          for (const g of groups) {
+                                              g.tags.sort((a, b) => (a.parentId ? 1 : 0) - (b.parentId ? 1 : 0))
+                                          }
+                                          // 最多显示 2 个维度组，每组最多 4 个标签
+                                          return groups.slice(0, 2).flatMap((g) =>
+                                              g.tags.slice(0, 4).map((t) => {
+                                                  const isSelected = selectedTagIds?.has(t.id)
+                                                  const isChild = t.parentId != null
+                                                  return (
+                                                      <Tooltip key={t.id} title={`${g.groupName}${isChild ? ' · 子标签' : ''} — 点击下钻`} mouseEnterDelay={0.5}>
+                                                          <Tag
+                                                              color={isSelected ? 'blue' : 'cyan'}
+                                                              style={{
+                                                                  margin: 0,
+                                                                  fontSize: 11,
+                                                                  borderRadius: 10,
+                                                                  cursor: 'pointer',
+                                                                  padding: isChild ? '0 5px' : '0 7px',
+                                                                  fontWeight: isSelected ? 600 : isChild ? 400 : 500,
+                                                              }}
+                                                              onClick={(e) => {
+                                                                  e.stopPropagation()
+                                                                  onTagClick?.(t.id)
+                                                              }}
+                                                          >
+                                                              <span style={{ fontSize: 10, marginRight: 1, opacity: 0.7 }}>{g.groupIcon || '📌'}</span>
+                                                              {isChild ? '↳' : ''}{t.name}
+                                                          </Tag>
+                                                      </Tooltip>
+                                                  )
+                                              }),
+                                          )
+                                      })()
+                                    : repo.tagNames &&
+                                      repo.tagNames.length > 0 &&
+                                      repo.tagNames.slice(0, 2).map((t) => (
                                               </Tooltip>
                                           )
                                       })

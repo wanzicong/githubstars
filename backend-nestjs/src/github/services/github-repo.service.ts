@@ -323,7 +323,7 @@ export class GithubRepoService {
      *
      * @param repos 仓库对象数组（会被原地修改写入 tagNames / tags）
      */
-    async fillTagNames(repos: Array<{ id: bigint; tagNames?: string[]; tags?: Array<{ id: number; name: string; groupName: string; groupId: number }> }>) {
+    async fillTagNames(repos: Array<{ id: bigint; tagNames?: string[]; tags?: Array<{ id: number; name: string; groupName: string; groupId: number; groupColor: string; groupIcon: string | null; parentId: number | null }> }>) {
         if (!repos.length) return;
         const ids = repos.map((r) => r.id);
         const mappings = await this.prisma.repoTag.findMany({
@@ -331,7 +331,7 @@ export class GithubRepoService {
             include: { tag: { include: { group: true } } },
         });
         const nameMap = new Map<bigint, string[]>();
-        const structMap = new Map<bigint, Array<{ id: number; name: string; groupName: string; groupId: number }>>();
+        const structMap = new Map<bigint, Array<{ id: number; name: string; groupName: string; groupId: number; groupColor: string; groupIcon: string | null; parentId: number | null }>>();
         for (const m of mappings) {
             const names = nameMap.get(m.repoId) || [];
             names.push(m.tag.name);
@@ -343,6 +343,9 @@ export class GithubRepoService {
                 name: m.tag.name,
                 groupName: m.tag.group.name,
                 groupId: Number(m.tag.groupId),
+                groupColor: m.tag.group.color,
+                groupIcon: m.tag.group.icon,
+                parentId: m.tag.parentId ? Number(m.tag.parentId) : null,
             });
             structMap.set(m.repoId, structs);
         }

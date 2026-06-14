@@ -26,8 +26,8 @@ export interface GithubRepo {
     categoryNames: string[]
     /** 新标签系统 — 仓库的多维标签名列表 */
     tagNames?: string[]
-    /** 新标签系统 — 结构化标签（含 ID，支持下钻） */
-    tags?: Array<{ id: number; name: string; groupName: string; groupId: number }>
+    /** 新标签系统 — 结构化标签（含 ID、维度、层级，支持下钻和层级展示） */
+    tags?: Array<{ id: number; name: string; groupName: string; groupId: number; groupColor: string; groupIcon: string | null; parentId: number | null }>
     /** 翻译状态 (NestJS 增强字段) */
     translationStatus?: {
         description: 'completed' | 'pending' | 'none'
