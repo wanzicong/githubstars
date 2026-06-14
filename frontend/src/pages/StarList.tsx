@@ -81,7 +81,7 @@ const DATE_FIELD_OPTIONS = [
 
 const PAGE_SIZE_OPTIONS = [36, 72, 144]
 
-/** 自定义标签复选树 — 原生checkbox确保在任意容器内都可交互 */
+/** 自定义标签复选树 — 原生checkbox + 标签下钻展开 */
 function TagCheckTree({ nodes, selected, onToggle, onLoadDist, depth = 0 }: {
     nodes: any[]
     selected: number[]
@@ -89,23 +89,17 @@ function TagCheckTree({ nodes, selected, onToggle, onLoadDist, depth = 0 }: {
     onLoadDist: (keys: any[]) => void
     depth?: number
 }) {
+    // expanded: 维度节点 + 标签节点的展开状态
     const [expanded, setExpanded] = useState<Set<string>>(new Set())
-    const [expandedTags, setExpandedTags] = useState<Set<number>>(new Set())
+    // drillKeys: 已经触发过下钻加载的 tag id（避免重复请求）
+    const drillLoaded = useRef<Set<number>>(new Set())
 
-    // 首次渲染默认全展开
+    // 首次渲染默认展开所有维度（第一层 group 节点）
     useEffect(() => {
         if (depth === 0 && nodes.length > 0) {
-            const allGroupKeys = new Set<string>()
-            const walk = (ns: any[]) => {
-                ns.forEach(n => {
-                    if (typeof n.value === 'string') {
-                        allGroupKeys.add(n.value)
-                        if (n.children) walk(n.children)
-                    }
-                })
-            }
-            walk(nodes)
-            setExpanded(allGroupKeys)
+            const keys = new Set<string>()
+            nodes.forEach(n => { if (typeof n.value === 'string') keys.add(n.value) })
+            setExpanded(keys)
         }
     }, [])
 
@@ -117,60 +111,68 @@ function TagCheckTree({ nodes, selected, onToggle, onLoadDist, depth = 0 }: {
         })
     }
 
-    const toggleTagExpand = (tagId: number) => {
-        setExpandedTags(prev => {
-            const next = new Set(prev)
-            if (next.has(tagId)) { next.delete(tagId) }
-            else {
-                next.add(tagId)
-                onLoadDist([tagId])
-            }
-            return next
-        })
+    // 点击标签的下钻按钮 → 加载子维度分布
+    const handleDrillDown = (tagId: number) => {
+        const key = String(tagId)
+        const isCurrentlyExpanded = expanded.has(key)
+        if (isCurrentlyExpanded) {
+            // 收起
+            setExpanded(prev => { const n = new Set(prev); n.delete(key); return n })
+            return
+        }
+        // 展开
+        setExpanded(prev => new Set(prev).add(key))
+        if (!drillLoaded.current.has(tagId)) {
+            drillLoaded.current.add(tagId)
+            onLoadDist([tagId])
+        }
     }
 
     return (
         <div style={{ paddingLeft: depth * 12 }}>
             {nodes.map((node: any) => {
                 const isGroup = typeof node.value === 'string' && node.selectable === false
+                const isDistGroup = String(node.value).startsWith('dist_')
                 const isTag = typeof node.value === 'number'
                 const nodeKey = String(node.value)
                 const isExpanded = expanded.has(nodeKey)
-                const hasChildren = node.children && node.children.length > 0
+                const hasStaticChildren = node.children && node.children.length > 0
                 const isChecked = isTag && selected.includes(node.value)
+                // 标签节点：有子节点 或 repoCount>0 → 可展开下钻
+                const canDrill = isTag && (hasStaticChildren ||
+                    (typeof (node as any)._repoCount === 'number' ? (node as any)._repoCount > 0 : true))
 
                 return (
                     <div key={nodeKey}>
                         <div
                             style={{
-                                display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px',
-                                cursor: isGroup || hasChildren ? 'pointer' : 'default',
+                                display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px',
+                                cursor: (isGroup || isTag || hasStaticChildren) ? 'pointer' : 'default',
                                 borderRadius: 4, marginBottom: 1,
-                                background: isChecked ? '#e6f4ff' : undefined,
-                                fontWeight: isGroup ? 600 : undefined,
-                                color: String(nodeKey).startsWith('dist_') ? '#1677ff' : undefined,
-                                fontSize: isGroup ? 13 : 12,
-                            }}
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                if (isTag) {
-                                    onToggle(node.value)
-                                    // tag也可展开看下钻
-                                    if (hasChildren && !expandedTags.has(node.value)) {
-                                        toggleTagExpand(node.value)
-                                    }
-                                } else if (hasChildren) {
-                                    toggleExpand(nodeKey)
-                                }
+                                background: isChecked ? '#e6f4ff' : isDistGroup ? '#f0f5ff' : undefined,
+                                fontWeight: isGroup ? 600 : isDistGroup ? 500 : undefined,
+                                color: isDistGroup ? '#1677ff' : undefined,
+                                fontSize: isGroup ? 13 : isDistGroup ? 12 : 12,
                             }}
                         >
-                            {hasChildren && (
-                                <span style={{ fontSize: 10, width: 14, color: '#999', flexShrink: 0 }}>
+                            {/* 展开/收起箭头 */}
+                            {(hasStaticChildren || (isTag && canDrill)) ? (
+                                <span
+                                    style={{ fontSize: 10, width: 14, color: '#bbb', flexShrink: 0, cursor: 'pointer' }}
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (isTag && canDrill) handleDrillDown(node.value)
+                                        else toggleExpand(nodeKey)
+                                    }}
+                                >
                                     {isExpanded ? '▼' : '▶'}
                                 </span>
+                            ) : (
+                                <span style={{ width: 14, flexShrink: 0 }} />
                             )}
-                            {!hasChildren && <span style={{ width: 14, flexShrink: 0 }} />}
-                            {isTag && (
+
+                            {/* 原生checkbox（仅标签节点） */}
+                            {isTag ? (
                                 <input
                                     type='checkbox'
                                     checked={isChecked}
@@ -178,16 +180,44 @@ function TagCheckTree({ nodes, selected, onToggle, onLoadDist, depth = 0 }: {
                                     onChange={() => onToggle(node.value)}
                                     onClick={(e) => e.stopPropagation()}
                                 />
+                            ) : (
+                                <span style={{ fontSize: 14, width: 18, flexShrink: 0, textAlign: 'center' }}>
+                                    {isDistGroup ? '→' : node.title?.includes('📚') ? '📚' : node.title?.includes('🏷️') ? '🏷️' : node.title?.includes('🔧') ? '🔧' : node.title?.includes('📊') ? '📊' : node.title?.includes('👥') ? '👥' : node.title?.includes('💡') ? '💡' : '📌'}
+                                </span>
                             )}
-                            {!isTag && <span style={{ fontSize: 14, flexShrink: 0 }}>{node.title?.includes('📚') ? '📚' : node.title?.includes('🏷️') ? '🏷️' : node.title?.includes('🔧') ? '🔧' : node.title?.includes('📊') ? '📊' : node.title?.includes('👥') ? '👥' : node.title?.includes('💡') ? '💡' : node.title?.includes('→') ? '→' : '📌'}</span>}
-                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+
+                            {/* 标签名 */}
+                            <span
+                                style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                onClick={(e) => {
+                                    // 点击标签名 → 勾选/取消
+                                    if (isTag) { e.stopPropagation(); onToggle(node.value) }
+                                }}
+                            >
                                 {isGroup
                                     ? String(node.title || '').replace(/^[^\s]+\s/, '').replace(/\s*\(\d+\)/, '')
-                                    : node.title}
+                                    : isDistGroup
+                                        ? String(node.title || '').replace(/^→\s*/, '')
+                                        : node.title}
                             </span>
-                            {isChecked && <span style={{ color: '#1677ff', fontSize: 10 }}>✓</span>}
+                            {/* 下钻展开按钮（仅标签节点） */}
+                            {isTag && (
+                                <span
+                                    style={{
+                                        fontSize: 9, color: isExpanded ? '#1677ff' : '#ccc',
+                                        cursor: 'pointer', padding: '0 2px', flexShrink: 0,
+                                    }}
+                                    title='查看该标签下项目在其他维度的标签分布'
+                                    onClick={(e) => { e.stopPropagation(); handleDrillDown(node.value) }}
+                                >
+                                    {isExpanded ? '▲' : '▼'}
+                                </span>
+                            )}
+                            {isChecked && <span style={{ color: '#1677ff', fontSize: 10, flexShrink: 0 }}>✓</span>}
                         </div>
-                        {hasChildren && isExpanded && (
+
+                        {/* 递归渲染子节点 */}
+                        {hasStaticChildren && isExpanded && (
                             <TagCheckTree
                                 nodes={node.children}
                                 selected={selected}
