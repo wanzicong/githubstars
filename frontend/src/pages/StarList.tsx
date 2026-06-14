@@ -285,25 +285,12 @@ export default function StarList() {
                     })
                     return roots.map(toTreeNode)
                 }
-                // 构建维度层级关系
-                const groupMap = new Map<number, any>()
-                for (const g of tagRes) groupMap.set(g.id, { ...g })
-                // 递归构建维度树节点
-                const buildGroupNode = (g: any): any => {
-                    const tagChildren = buildTagTree(g.tags || [])
-                    // 找到子维度
-                    const childGroups = tagRes.filter((cg: any) => cg.parentId === g.id)
-                    const childGroupNodes = childGroups.map((cg: any) => buildGroupNode(cg))
-                    return {
-                        title: `${g.name} (${g.tags?.length || 0})`,
-                        value: `group_${g.id}`,
-                        selectable: false,
-                        children: [...tagChildren, ...childGroupNodes],
-                    }
-                }
-                // 只取顶级维度(parentId为null的)作为根节点
-                const rootGroups = tagRes.filter((g: any) => !g.parentId)
-                const treeData = rootGroups.map((g: any) => buildGroupNode(g))
+                const treeData = tagRes.map((g: any) => ({
+                    title: `${g.name} (${g.tags.length})`,
+                    value: `group_${g.id}`,
+                    selectable: false,
+                    children: buildTagTree(g.tags),
+                }))
                 setTagBaseTree(treeData)
                 setTagOptions(treeData)
                 setTagGroups(tagRes)

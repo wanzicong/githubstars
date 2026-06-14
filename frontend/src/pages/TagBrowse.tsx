@@ -11,6 +11,7 @@ import {
     LoadingOutlined, CheckCircleOutlined, ExclamationCircleOutlined,
     DeleteOutlined, ClearOutlined, PlayCircleOutlined,
     ApartmentOutlined, UnorderedListOutlined, LinkOutlined,
+    CaretRightOutlined, CaretDownOutlined,
     BarChartOutlined, NodeIndexOutlined,
 } from '@ant-design/icons'
 import api from '../api/request'
@@ -152,28 +153,20 @@ export default function TagBrowse() {
             .catch(() => {})
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // 搜索过滤 + 按 repoCount 降序排序后的标签组（含维度层级嵌套）
+    // 搜索过滤 + 按 repoCount 降序排序后的标签组
     const filteredGroups = useMemo(() => {
         const sortTags = (tags: typeof groups[0]['tags']) =>
             [...tags].sort((a, b) => b.repoCount - a.repoCount)
-        const kw = tagSearch.trim().toLowerCase()
-
-        // 构建单组的 tags（含过滤+排序）
-        const processGroup = (g: any): any => {
-            let tags = sortTags(g.tags || [])
-            if (kw) tags = tags.filter(t => t.name.toLowerCase().includes(kw))
-            // 递归处理子维度
-            const childGroups = groups
-                .filter((cg: any) => cg.parentId === g.id)
-                .map(processGroup)
-                .filter((cg: any) => !kw || cg.tags.length > 0)
-            return { ...g, tags, children: childGroups }
+        if (!tagSearch.trim()) {
+            return groups.map((g) => ({ ...g, tags: sortTags(g.tags) }))
         }
-        // 返回顶级维度
+        const kw = tagSearch.toLowerCase()
         return groups
-            .filter(g => !g.parentId)
-            .map(processGroup)
-            .filter(g => !kw || g.tags.length > 0 || (g.children && g.children.length > 0))
+            .map((g) => {
+                const filtered = g.tags.filter((t) => t.name.toLowerCase().includes(kw))
+                return { ...g, tags: sortTags(filtered) }
+            })
+            .filter((g) => g.tags.length > 0)
     }, [groups, tagSearch])
 
     // 空标签数量
@@ -483,44 +476,40 @@ export default function TagBrowse() {
         }
     }
 
-    // ======================== 渲染辅助：递归渲染子维度 ========================
-    const renderChildGroup = (childGroup: any, depth: number): any => {
-        const indent = depth * 20
-        return (
-            <div key={childGroup.id} style={{ marginBottom: 10, paddingLeft: indent }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 4 }}>
-                    ↳ {childGroup.icon || '📌'} {childGroup.name}
-                    <Tag color={childGroup.isSystem ? 'blue' : 'default'} style={{ fontSize: 10, marginLeft: 6 }}>
-                        {childGroup.isSystem ? '系统' : '自定义'}
-                    </Tag>
-                    <Text type='secondary' style={{ fontSize: 11, marginLeft: 4 }}>
-                        {childGroup.tags.length} 个标签
-                    </Text>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingLeft: indent > 0 ? 0 : 16 }}>
-                    {childGroup.tags.length > 0 ? childGroup.tags.map((ctag: any) => (
-                        <Tooltip key={ctag.id} title={ctag.repoCount > 0 ? `查看 ${ctag.repoCount} 个仓库` : '暂无仓库'}>
-                            <Tag
-                                color={ctag.repoCount > 0 ? (ctag.color || childGroup.color) : '#d9d9d9'}
-                                style={{
-                                    fontSize: 12, padding: '1px 8px', cursor: ctag.repoCount > 0 ? 'pointer' : 'default',
-                                    borderRadius: 10, opacity: ctag.repoCount > 0 ? 1 : 0.5, margin: 0,
-                                }}
-                                onClick={() => ctag.repoCount > 0 && navigate(`/?tagIds=${ctag.id}`)}
-                            >
-                                {ctag.name}
-                                <span style={{ marginLeft: 3, opacity: 0.7, fontSize: 10 }}>{ctag.repoCount}</span>
-                            </Tag>
-                        </Tooltip>
-                    )) : <Text type='secondary' style={{ fontSize: 12 }}>暂无标签</Text>}
-                </div>
-                {childGroup.children && childGroup.children.length > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                        {childGroup.children.map((gc: any) => renderChildGroup(gc, depth + 1))}
-                    </div>
-                )}
-            </div>
-        )
+    // ======================== 标签下钻展开（懒加载子维度标签分布） ========================
+    const [drillExpandedTags, setDrillExpandedTags] = useState<Set<number>>(new Set())
+    const [drillTagData, setDrillTagData] = useState<Map<number, any>>(new Map())
+    const [drillTagLoading, setDrillTagLoading] = useState<Set<number>>(new Set())
+
+    const toggleDrillExpand = async (tag: any, group: any) => {
+        const tid = tag.id
+        if (drillExpandedTags.has(tid)) {
+            // 收起
+            setDrillExpandedTags(prev => { const s = new Set(prev); s.delete(tid); return s })
+            return
+        }
+        // 展开（如果已有数据则直接展开）
+        if (drillTagData.has(tid)) {
+            setDrillExpandedTags(prev => new Set(prev).add(tid))
+            return
+        }
+        // 懒加载
+        setDrillTagLoading(prev => new Set(prev).add(tid))
+        setDrillExpandedTags(prev => new Set(prev).add(tid))
+        try {
+            const dist = await fetchTagDistribution(tid)
+            if (dist && dist.distributions) {
+                // 过滤掉当前维度自身
+                const filtered = dist.distributions.filter((d: any) => d.groupId !== group.id)
+                setDrillTagData(prev => new Map(prev).set(tid, filtered))
+            } else {
+                setDrillTagData(prev => new Map(prev).set(tid, []))
+            }
+        } catch {
+            setDrillTagData(prev => new Map(prev).set(tid, []))
+        } finally {
+            setDrillTagLoading(prev => { const s = new Set(prev); s.delete(tid); return s })
+        }
     }
 
     // ======================== 渲染 ========================
@@ -715,6 +704,19 @@ export default function TagBrowse() {
                                                             </span>
                                                         </Tag>
                                                     </Tooltip>
+                                                    {tag.repoCount > 0 && (
+                                                        <Button
+                                                            type='text'
+                                                            size='small'
+                                                            icon={drillExpandedTags.has(tag.id) ? <CaretDownOutlined /> : <CaretRightOutlined />}
+                                                            title='展开查看子维度标签分布'
+                                                            style={{
+                                                                fontSize: 10, padding: 0, minWidth: 18, height: 18,
+                                                                color: drillExpandedTags.has(tag.id) ? '#1677ff' : '#ccc',
+                                                            }}
+                                                            onClick={(e) => { e.stopPropagation(); toggleDrillExpand(tag, group) }}
+                                                        />
+                                                    )}
                                                     <Button
                                                         type='text'
                                                         size='small'
@@ -758,12 +760,51 @@ export default function TagBrowse() {
                                 ) : (
                                     <Text type='secondary' style={{ fontSize: 13 }}>暂无标签</Text>
                                 )}
-                                {/* 子维度（递归渲染嵌套层级） */}
-                                {group.children && group.children.length > 0 && (
-                                    <div style={{ marginTop: 16, borderTop: '1px dashed #e8e8e8', paddingTop: 12 }}>
-                                        {group.children.map((childGroup: any) => renderChildGroup(childGroup, 1))}
-                                    </div>
-                                )}
+                                {/* 展开标签的下钻分布（内联展示子维度标签） */}
+                                {group.tags.filter((t: any) => drillExpandedTags.has(t.id) && drillTagData.has(t.id)).map((tag: any) => {
+                                    const dists = drillTagData.get(tag.id) || []
+                                    if (!dists.length) return null
+                                    return (
+                                        <div key={`drill-${tag.id}`} style={{
+                                            marginTop: 12, paddingLeft: 28, paddingTop: 8,
+                                            borderTop: '1px dashed #e8e8e8',
+                                        }}>
+                                            <Text type='secondary' style={{ fontSize: 11, marginBottom: 6, display: 'block' }}>
+                                                ↳ 「{tag.name}」标签下 {tag.repoCount} 个项目在其他维度的分布：
+                                            </Text>
+                                            {dists.map((dist: any) => (
+                                                <div key={dist.groupId} style={{ marginBottom: 6 }}>
+                                                    <Text type='secondary' style={{ fontSize: 11, fontWeight: 600 }}>
+                                                        {dist.groupName}：
+                                                    </Text>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                                                        {dist.tags.slice(0, 8).map((dt: any) => (
+                                                            <Tag
+                                                                key={dt.tagId}
+                                                                color={dt.tagColor || dist.groupColor}
+                                                                style={{
+                                                                    fontSize: 11, padding: '0 6px', cursor: 'pointer',
+                                                                    borderRadius: 8, margin: 0,
+                                                                }}
+                                                                onClick={() => navigate(`/?tagIds=${tag.id},${dt.tagId}`)}
+                                                            >
+                                                                {dt.tagName}
+                                                                <span style={{ marginLeft: 2, opacity: 0.6, fontSize: 10 }}>
+                                                                    {dt.count}
+                                                                </span>
+                                                            </Tag>
+                                                        ))}
+                                                        {dist.tags.length > 8 && (
+                                                            <Text type='secondary' style={{ fontSize: 10 }}>
+                                                                +{dist.tags.length - 8} 更多
+                                                            </Text>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )
+                                })}
                             </Card>
                         ))}
                     </div>
