@@ -4,6 +4,7 @@ import {
     Card,
     Input,
     Select,
+    TreeSelect,
     Button,
     Row,
     Col,
@@ -238,7 +239,7 @@ export default function StarList() {
     const dateFilterExpanded = !!(dateField || startDateStr || endDateStr || timePreset)
 
     const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({ records: [], total: 0, size: 12, current: 1, pages: 0 })
-    const [tagOptions, setTagOptions] = useState<{label:string,value:number}[]>([])
+    const [tagOptions, setTagOptions] = useState<any[]>([])
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
     const [loading, setLoading] = useState(true)
@@ -248,8 +249,42 @@ export default function StarList() {
         const loadMeta = async () => {
             try {
                 const tagRes = await fetchAllTags().catch(() => [])
-                const tagFlat = tagRes.flatMap((g: any) => g.tags.map((t: any) => ({ label: t.name, value: t.id })))
-                setTagOptions(tagFlat)
+                // 构建 TreeSelect 树形数据（维度 → 父标签 → 子标签）
+                const buildTagTree = (tags: any[]) => {
+                    const map = new Map<number, any>()
+                    const roots: any[] = []
+                    for (const t of tags) {
+                        map.set(t.id, { ...t, children: [] })
+                    }
+                    for (const [, node] of map) {
+                        if (node.parentId && map.has(node.parentId)) {
+                            map.get(node.parentId)!.children.push(node)
+                        } else {
+                            roots.push(node)
+                        }
+                    }
+                    // 递归排序
+                    const sortNode = (n: any) => {
+                        n.children.sort((a: any, b: any) => b.repoCount - a.repoCount)
+                        n.children.forEach(sortNode)
+                    }
+                    roots.sort((a, b) => b.repoCount - a.repoCount)
+                    roots.forEach(sortNode)
+                    // 转为 TreeSelect 节点格式
+                    const toTreeNode = (t: any): any => ({
+                        title: `${t.name} (${t.repoCount})`,
+                        value: t.id,
+                        children: t.children.length > 0 ? t.children.map(toTreeNode) : undefined,
+                    })
+                    return roots.map(toTreeNode)
+                }
+                const treeData = tagRes.map((g: any) => ({
+                    title: `${g.name} (${g.tags.length})`,
+                    value: `group_${g.id}`,
+                    selectable: false,
+                    children: buildTagTree(g.tags),
+                }))
+                setTagOptions(treeData)
                 const [overviewRes, langRes] = await Promise.allSettled([
                     statsApi.fetchOverviewStats(),
                     statsApi.fetchLanguageStats(),
@@ -947,17 +982,21 @@ export default function StarList() {
                             />
                         </Col>
                         <Col xs={24} sm={12} md={6} lg={4}>
-                            <Select
-                                mode='multiple'
-                                placeholder='筛选标签'
+                            <TreeSelect
+                                treeData={tagOptions}
                                 value={selectedTagIds}
                                 onChange={(vals) => setUrlParam('tagIds', vals.length > 0 ? vals.join(',') : null)}
-                                options={tagOptions}
+                                placeholder='筛选标签（层级展开）'
                                 allowClear
                                 showSearch
+                                treeCheckable
                                 maxTagCount={3}
-                                filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
+                                showCheckedStrategy='SHOW_CHILD'
+                                filterTreeNode={(input, node: any) =>
+                                    String(node.title || node.label || '').toLowerCase().includes(input.toLowerCase())
+                                }
                                 style={{ width: '100%' }}
+                                dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
                             />
                         </Col>
                         <Col xs={12} sm={8} md={6} lg={4}>
