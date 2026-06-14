@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, Table, Tag, Button, Space, Popconfirm, message, Spin, Typography } from 'antd'
 import {
@@ -9,6 +9,7 @@ import {
     ThunderboltOutlined,
     PushpinOutlined,
     PushpinFilled,
+    StopOutlined,
 } from '@ant-design/icons'
 import * as cloneApi from '../api/clone'
 import type { CloneTaskRecord } from '../types'
@@ -84,12 +85,26 @@ export default function CloneTasks() {
         fetchData(currentPage, pageSize).finally(() => setLoading(false))
     }, [currentPage, pageSize, fetchData])
 
-    // 有运行中任务时每3秒自动刷新
+    // 有运行中任务时自动刷新（带退避策略）
     const hasRunning = data.some((r) => r.status === 'RUNNING')
+    const pollErrorCountRef = useRef(0)
     useEffect(() => {
         if (!hasRunning) return
-        const timer = setInterval(() => fetchData(currentPage, pageSize), 3000)
-        return () => clearInterval(timer)
+        let timer: ReturnType<typeof setTimeout>
+        const getInterval = () => (pollErrorCountRef.current >= 3 ? 10000 : 3000)
+
+        const poll = async () => {
+            try {
+                await fetchData(currentPage, pageSize)
+                pollErrorCountRef.current = 0
+            } catch {
+                pollErrorCountRef.current++
+            }
+            timer = setTimeout(poll, getInterval())
+        }
+
+        timer = setTimeout(poll, getInterval())
+        return () => clearTimeout(timer)
     }, [hasRunning, currentPage, pageSize, fetchData])
 
     const handlePin = useCallback(
@@ -102,6 +117,23 @@ export default function CloneTasks() {
                 }
             } catch {
                 message.error('操作失败')
+            }
+        },
+        [fetchData, currentPage, pageSize],
+    )
+
+    const handleCancelTask = useCallback(
+        async (taskId: string) => {
+            try {
+                const res = await cloneApi.cancelCloneTask(taskId)
+                if (res.success) {
+                    message.success('任务已取消')
+                    fetchData(currentPage, pageSize)
+                } else {
+                    message.error(res.message || '取消失败')
+                }
+            } catch {
+                message.error('取消请求失败')
             }
         },
         [fetchData, currentPage, pageSize],
@@ -252,6 +284,19 @@ export default function CloneTasks() {
                             onClick={() => handlePin(record.taskId, record.pinned === 1)}
                             title={record.pinned === 1 ? '取消置顶' : '置顶'}
                         />
+                        {record.status === 'RUNNING' && (
+                            <Popconfirm
+                                title='确认取消'
+                                description='取消后正在进行的克隆会中断，确定吗？'
+                                onConfirm={() => handleCancelTask(record.taskId)}
+                                okText='确认'
+                                cancelText='返回'
+                            >
+                                <Button type='link' danger size='small' icon={<StopOutlined />}>
+                                    取消
+                                </Button>
+                            </Popconfirm>
+                        )}
                         {(record.status === 'COMPLETED' || record.status === 'FAILED') && record.totalRepos > record.completedRepos && (
                             <Button type='link' size='small' icon={<RedoOutlined />} onClick={() => handleRetry(record.taskId)}>
                                 重试

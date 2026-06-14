@@ -37,25 +37,42 @@ export class CloneTaskService {
             }),
         ]);
 
-        // 重新统计已完成任务的计数
-        for (const task of records) {
-            if (task.status !== 'RUNNING' && task.status !== 'PENDING') {
-                const [completed, failed, skipped] = await Promise.all([
-                    this.prisma.cloneTaskItem.count({ where: { taskId: task.taskId, status: 'CLONED' } }),
-                    this.prisma.cloneTaskItem.count({ where: { taskId: task.taskId, status: 'FAILED' } }),
-                    this.prisma.cloneTaskItem.count({ where: { taskId: task.taskId, status: 'SKIPPED' } }),
-                ]);
-                if (task.completedRepos !== completed || task.failedRepos !== failed || task.skippedRepos !== skipped) {
+        // 批量统计非活跃任务计数（替代 N+1 逐条查询）
+        const nonActiveTaskIds = records
+            .filter((t) => t.status !== 'RUNNING' && t.status !== 'PENDING')
+            .map((t) => t.taskId);
+
+        if (nonActiveTaskIds.length > 0) {
+            const counts = await this.prisma.$queryRawUnsafe<Array<{ task_id: string; status: string; cnt: bigint }>>(
+                `SELECT task_id, status, COUNT(*) as cnt FROM clone_task_item WHERE task_id IN (${nonActiveTaskIds.map((id) => `'${id}'`).join(',')}) GROUP BY task_id, status`,
+            );
+
+            const countMap = new Map<string, { completed: number; failed: number; skipped: number }>();
+            for (const row of counts) {
+                if (!countMap.has(row.task_id)) {
+                    countMap.set(row.task_id, { completed: 0, failed: 0, skipped: 0 });
+                }
+                const entry = countMap.get(row.task_id)!;
+                if (row.status === 'CLONED') entry.completed = Number(row.cnt);
+                else if (row.status === 'FAILED') entry.failed = Number(row.cnt);
+                else if (row.status === 'SKIPPED') entry.skipped = Number(row.cnt);
+            }
+
+            for (const task of records) {
+                const actual = countMap.get(task.taskId);
+                if (!actual) continue;
+                if (task.completedRepos !== actual.completed || task.failedRepos !== actual.failed || task.skippedRepos !== actual.skipped) {
                     await this.prisma.cloneTask.update({
                         where: { taskId: task.taskId },
-                        data: { completedRepos: completed, failedRepos: failed, skippedRepos: skipped },
+                        data: { completedRepos: actual.completed, failedRepos: actual.failed, skippedRepos: actual.skipped },
                     });
-                    (task as any).completedRepos = completed;
-                    (task as any).failedRepos = failed;
-                    (task as any).skippedRepos = skipped;
+                    (task as any).completedRepos = actual.completed;
+                    (task as any).failedRepos = actual.failed;
+                    (task as any).skippedRepos = actual.skipped;
                 }
             }
         }
+
         return { records, total, size, current: page, pages: Math.ceil(total / size) };
     }
 

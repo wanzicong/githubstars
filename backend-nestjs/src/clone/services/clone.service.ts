@@ -1,18 +1,8 @@
 /**
  * CloneService — 批量克隆服务
- *
- * Bug 修复清单:
- *   P0-1: executeBatchClone 使用过滤参数（keyword/language/categoryIds等）
- *   P0-2: checkDiskSpace 返回值被正确检查
- *   P0-3: maxRepoSizeMb 过滤逻辑
- *   P0-4: retryFailedClones 只重试 FAILED 项(不含 SKIPPED)
- *   P0-5: retryFailedClones 使用 buildCloneUrl(支持代理URL)
- *   P0-6: generateCloneScript 使用过滤参数
- *   P0-7: 同步锁/信号量并发控制
  */
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigService } from '../../config/config.service';
@@ -20,7 +10,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CloneTaskService } from './clone-task.service';
 import { GithubRepoService } from '../../github/services/github-repo.service';
 
-const execAsync = promisify(exec);
 const MAX_RETRIES = 3;
 const RETRY_BACKOFF = [5, 15, 45];
 const CLONE_TIMEOUT_S = 600;
@@ -123,7 +112,7 @@ export class CloneService implements OnModuleInit {
      * @param repoCount 预计克隆的仓库数量
      * @returns 磁盘空间检查结果，包含可用空间、估算所需空间、是否充足等信息
      */
-    async checkDiskSpace(subDirectory: string, repoCount: number) {
+    async checkDiskSpace(subDirectory: string, repoCount: number, cloneDepth = 1, maxRepoSizeMb = 500) {
         try {
             const dir = subDirectory
                 ? path.join(await this.getBaseDir(), this.sanitizeSubdirectory(subDirectory))
@@ -132,20 +121,24 @@ export class CloneService implements OnModuleInit {
 
             let freeMB = 0;
             try {
-                const drive = dir.substring(0, 1) + ':';
-                const { stdout } = await execAsync(`wmic logicaldisk where "DeviceID='${drive}'" get FreeSpace /value`, { timeout: 5000 });
-                const match = stdout.match(/FreeSpace=(\d+)/);
-                freeMB = match ? Math.floor(parseInt(match[1]) / (1024 * 1024)) : 102400;
+                // 优先使用 statfsSync（Node 18.15+ 支持 Windows）
+                const stats = (fs as any).statfsSync(dir);
+                freeMB = Math.floor((stats.bfree * stats.bsize) / (1024 * 1024));
             } catch {
+                // 兜底：Windows 下使用 PowerShell 获取磁盘空间
                 try {
-                    const stats = (fs as any).statfsSync(dir);
-                    freeMB = Math.floor((stats.bfree * stats.bsize) / (1024 * 1024));
+                    const drive = dir.substring(0, 2); // e.g. "D:"
+                    const result = await this.spawnCommand('powershell', ['-Command', `(Get-PSDrive ${drive[0]}).Free`], 5000);
+                    const bytes = parseInt(result.trim());
+                    freeMB = isNaN(bytes) ? 102400 : Math.floor(bytes / (1024 * 1024));
                 } catch {
                     freeMB = 102400;
                 }
             }
 
-            const estimatedMB = repoCount * 50 * 2;
+            // 智能估算：浅克隆 ~10MB/仓库，完整克隆使用 maxRepoSizeMb，1.5x 安全系数
+            const perRepoMB = cloneDepth === 1 ? 10 : Math.min(maxRepoSizeMb, 50);
+            const estimatedMB = repoCount * perRepoMB * 1.5;
             return {
                 success: true,
                 freeSpaceMB: freeMB,
@@ -162,7 +155,7 @@ export class CloneService implements OnModuleInit {
             return {
                 success: false,
                 freeSpaceMB: 0,
-                estimatedSizeMB: repoCount * 50 * 2,
+                estimatedSizeMB: repoCount * 10 * 1.5,
                 requiredSizeMB: 0,
                 sufficient: false,
                 message: '磁盘检查失败: ' + (e instanceof Error ? e.message : String(e)),
@@ -186,22 +179,59 @@ export class CloneService implements OnModuleInit {
     }
 
     /**
-     * 使用信号量模式控制并发执行，限制同时运行的任务数量
-     *
-     * @param items 待处理的数据项列表
-     * @param concurrency 最大并发数
-     * @param fn 对每个数据项执行的处理函数
+     * 使用信号量模式控制并发执行，限制同时运行的任务数量。
+     * 单个项目执行失败不会中断其他 worker。
      */
     private async executeWithSemaphore<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
-        const sem = new Array(concurrency).fill(0) as number[];
         let idx = 0;
         const worker = async () => {
             while (idx < items.length) {
                 const i = idx++;
-                await fn(items[i]);
+                try {
+                    await fn(items[i]);
+                } catch (e) {
+                    this.logger.error('executeWithSemaphore 项目执行异常: ' + (e instanceof Error ? e.message : String(e)));
+                }
             }
         };
-        await Promise.all(sem.map(() => worker()));
+        await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+    }
+
+    /**
+     * 封装 spawn 执行命令，返回 Promise<string>
+     */
+    private spawnCommand(cmd: string, args: string[], timeoutMs = CLONE_TIMEOUT_S * 1000): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], shell: false });
+            let stdout = '';
+            let stderr = '';
+            const timer = setTimeout(() => {
+                child.kill('SIGTERM');
+                reject(new Error(`命令超时 (${timeoutMs}ms)`));
+            }, timeoutMs);
+            child.stdout?.on('data', (d) => (stdout += d.toString()));
+            child.stderr?.on('data', (d) => (stderr += d.toString()));
+            child.on('close', (code) => {
+                clearTimeout(timer);
+                if (code === 0) resolve(stdout || stderr);
+                else reject(new Error(stderr || stdout || `退出码 ${code}`));
+            });
+            child.on('error', (e) => {
+                clearTimeout(timer);
+                reject(e);
+            });
+        });
+    }
+
+    /**
+     * 使用 spawn 执行 git clone（避免命令注入）
+     */
+    private async spawnGitClone(url: string, dir: string, cloneDepth: number): Promise<{ stderr: string }> {
+        const args = ['clone'];
+        if (cloneDepth > 0) args.push('--depth', String(cloneDepth));
+        args.push(url, dir);
+        const output = await this.spawnCommand('git', args);
+        return { stderr: output };
     }
 
     /**
@@ -234,14 +264,10 @@ export class CloneService implements OnModuleInit {
         }
         fs.mkdirSync(path.dirname(dir), { recursive: true });
         const url = await this.buildCloneUrl(htmlUrl);
-        const depthArg = cloneDepth > 0 ? `--depth ${cloneDepth}` : '';
         try {
-            const { stderr } = await execAsync(`git clone ${depthArg} "${url}" "${dir}"`, {
-                timeout: CLONE_TIMEOUT_S * 1000,
-                cwd: path.dirname(dir),
-            });
+            await this.spawnGitClone(url, dir, cloneDepth);
             return fs.existsSync(dir) && fs.readdirSync(dir).length > 0
-                ? { status: 'CLONED', message: stderr || 'OK' }
+                ? { status: 'CLONED', message: 'OK' }
                 : { status: 'FAILED', message: '克隆后目录为空' };
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -335,8 +361,12 @@ export class CloneService implements OnModuleInit {
         const maxRepoSizeMb = params.maxRepoSizeMb || 500;
 
         try {
-            // P0 FIX: 检查磁盘空间结果
-            const diskCheck = await this.checkDiskSpace(params.subDirectory || '', maxCount);
+            // 全局并发限制：同一时间只允许一个克隆任务运行
+            if (await this.cloneTaskService.hasActiveTask()) {
+                return { success: false, message: '已有克隆任务正在运行，请等待完成或取消后再试' };
+            }
+
+            const diskCheck = await this.checkDiskSpace(params.subDirectory || '', maxCount, cloneDepth, maxRepoSizeMb);
             if (!diskCheck.success || !diskCheck.sufficient) {
                 return { success: false, message: diskCheck.message };
             }
@@ -429,7 +459,6 @@ export class CloneService implements OnModuleInit {
         const targetDir = subDir ? path.join(await this.getBaseDir(), subDir).replace(/\\/g, '/') : await this.getBaseDir();
 
         try {
-            // P0 FIX: 使用过滤参数查询仓库
             const reposResult = await this.githubRepoService.findPage({
                 page: 1,
                 size: maxCount,
@@ -443,7 +472,7 @@ export class CloneService implements OnModuleInit {
                 endDate: filterParams.endDate,
                 untranslatedOnly: filterParams.untranslatedOnly,
             });
-            const repos = (reposResult.records as any[]).filter((r: any) => r.fullName && r.htmlUrl);
+            const allRepos = (reposResult.records as any[]).filter((r: any) => r.fullName && r.htmlUrl);
 
             if (this.cancelledTasks.has(taskId)) {
                 await this.prisma.cloneTask.update({
@@ -453,13 +482,40 @@ export class CloneService implements OnModuleInit {
                 return;
             }
 
-            await this.prisma.cloneTask.update({ where: { taskId }, data: { totalRepos: repos.length } });
+            // maxRepoSizeMb 过滤：跳过超大仓库
+            const repos: any[] = [];
+            const oversizedRepos: any[] = [];
+            for (const repo of allRepos) {
+                const sizeKb = repo.sizeKb || repo.size || 0;
+                if (maxRepoSizeMb > 0 && sizeKb > maxRepoSizeMb * 1024) {
+                    oversizedRepos.push(repo);
+                } else {
+                    repos.push(repo);
+                }
+            }
 
-            // 信号量控制并发
+            await this.prisma.cloneTask.update({ where: { taskId }, data: { totalRepos: allRepos.length } });
+
+            // 记录超大仓库为 SKIPPED
+            for (const repo of oversizedRepos) {
+                await this.prisma.cloneTaskItem.create({
+                    data: {
+                        taskId,
+                        fullName: repo.fullName || '',
+                        status: 'SKIPPED',
+                        message: `仓库体积超过限制 (${Math.round((repo.sizeKb || repo.size || 0) / 1024)}MB > ${maxRepoSizeMb}MB)`,
+                        createdAt: new Date(),
+                    },
+                });
+                await this.prisma.cloneTask.update({ where: { taskId }, data: { skippedRepos: { increment: 1 } } });
+            }
+
+            // 信号量控制并发，使用 increment 避免竞态
             let completed = 0,
                 failed = 0,
-                skipped = 0;
+                skipped = oversizedRepos.length;
             await this.executeWithSemaphore(repos, concurrency, async (repo) => {
+                if (this.cancelledTasks.has(taskId)) return;
                 const repoName = repo.repoName || repo.fullName?.split('/').pop() || '';
                 const repoDir = path.join(targetDir, repoName);
                 const result = await this.cloneWithRetry(repo.fullName || '', repoName, repoDir, repo.htmlUrl || '', cloneDepth, taskId);
@@ -468,6 +524,12 @@ export class CloneService implements OnModuleInit {
                     data: { taskId, fullName: repo.fullName || '', status: result.status, message: result.message, createdAt: new Date() },
                 });
 
+                // 使用 increment 操作避免并发写覆盖
+                const incrementField =
+                    result.status === 'CLONED' ? 'completedRepos' : result.status === 'FAILED' ? 'failedRepos' : 'skippedRepos';
+                await this.prisma.cloneTask.update({ where: { taskId }, data: { [incrementField]: { increment: 1 } } });
+
+                // 本地计数器仅用于内存缓存
                 if (result.status === 'CLONED') completed++;
                 else if (result.status === 'FAILED') failed++;
                 else skipped++;
@@ -478,19 +540,13 @@ export class CloneService implements OnModuleInit {
                     cached.failedRepos = failed;
                     cached.skippedRepos = skipped;
                 }
-                await this.prisma.cloneTask.update({
-                    where: { taskId },
-                    data: { completedRepos: completed, failedRepos: failed, skippedRepos: skipped },
-                });
             });
 
-            const finalStatus = failed > 0 ? 'FAILED' : completed === 0 && skipped > 0 ? 'COMPLETED' : 'COMPLETED';
+            const finalStatus = 'COMPLETED';
             await this.prisma.cloneTask.update({ where: { taskId }, data: { status: finalStatus, finishedAt: new Date() } });
             this.logger.log(
                 '批量克隆完成: taskId=' +
                     taskId +
-                    ', 状态=' +
-                    finalStatus +
                     ', 完成=' +
                     completed +
                     ', 失败=' +
@@ -507,6 +563,9 @@ export class CloneService implements OnModuleInit {
                 data: { status: 'FAILED', errorMessage: errMsg, finishedAt: new Date() },
             });
         } finally {
+            this.cancelledTasks.delete(taskId);
+            const cached = this.runningTasks.get(taskId);
+            if (cached) cached.status = 'COMPLETED';
             setTimeout(() => this.runningTasks.delete(taskId), 5000);
         }
     }
@@ -555,7 +614,6 @@ export class CloneService implements OnModuleInit {
         const task = await this.prisma.cloneTask.findUnique({ where: { taskId } });
         if (!task || task.status === 'PENDING') return { success: false, message: '任务无法重试' };
 
-        // P0 FIX: 只重试 FAILED 项，不包含 SKIPPED
         const failedItems = await this.prisma.cloneTaskItem.findMany({ where: { taskId, status: 'FAILED' } });
         if (failedItems.length === 0) return { success: false, message: '没有需要重试的失败项' };
 
@@ -564,12 +622,14 @@ export class CloneService implements OnModuleInit {
         await this.prisma.cloneTask.update({ where: { taskId }, data: { status: 'RUNNING', cancelled: 0 } });
         const targetDir = task.targetDir || (await this.getBaseDir());
 
+        // 加入 runningTasks 缓存以支持前端实时进度轮询
+        this.runningTasks.set(taskId, { ...task, status: 'RUNNING', completedRepos: task.completedRepos, failedRepos: task.failedRepos, skippedRepos: task.skippedRepos });
+
         let completed = 0,
             failed = 0;
         await this.executeWithSemaphore(failedItems, task.concurrency, async (item) => {
             if (this.cancelledTasks.has(taskId)) return;
             const repoName = item.fullName.split('/').pop() || '';
-            // P0 FIX: 使用 buildCloneUrl 而不是直接拼接 URL（支持代理）
             const htmlUrl = `https://github.com/${item.fullName}`;
             const cloneUrl = await this.buildCloneUrl(htmlUrl);
             const repoDir = path.join(targetDir, repoName);
@@ -579,17 +639,13 @@ export class CloneService implements OnModuleInit {
                 fs.rmSync(repoDir, { recursive: true, force: true });
             }
             fs.mkdirSync(path.dirname(repoDir), { recursive: true });
-            const depthArg = task.cloneDepth > 0 ? `--depth ${task.cloneDepth}` : '';
 
             let result: { status: string; message: string };
             try {
-                const { stderr } = await execAsync(`git clone ${depthArg} "${cloneUrl}" "${repoDir}"`, {
-                    timeout: CLONE_TIMEOUT_S * 1000,
-                    cwd: path.dirname(repoDir),
-                });
+                await this.spawnGitClone(cloneUrl, repoDir, task.cloneDepth);
                 result =
                     fs.existsSync(repoDir) && fs.readdirSync(repoDir).length > 0
-                        ? { status: 'CLONED', message: stderr || 'OK' }
+                        ? { status: 'CLONED', message: 'OK' }
                         : { status: 'FAILED', message: '克隆后目录为空' };
             } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
@@ -603,14 +659,29 @@ export class CloneService implements OnModuleInit {
             await this.prisma.cloneTaskItem.update({ where: { id: item.id }, data: { status: result.status, message: result.message } });
             if (result.status === 'CLONED') completed++;
             else failed++;
+
+            // 更新内存缓存
+            const cached = this.runningTasks.get(taskId);
+            if (cached) {
+                cached.completedRepos = (task.completedRepos || 0) + completed;
+                cached.failedRepos = (task.failedRepos || 0) + failed - failedItems.length;
+            }
         });
 
-        // P0 FIX: 使用 increment 累加到已有计数，而非覆盖
-        const finalStatus = failed === 0 ? 'COMPLETED' : 'FAILED';
+        const finalStatus = failed === 0 ? 'COMPLETED' : 'COMPLETED';
         const updateData: any = { status: finalStatus, finishedAt: new Date() };
         if (completed > 0) updateData.completedRepos = { increment: completed };
-        if (failed > 0) updateData.failedRepos = { increment: failed };
+        // failedRepos: 原失败数减去本次重试的（因为重试成功的不再是失败），再加上仍然失败的
+        // 直接设置增量：成功的从 failed 转到 completed，所以 failedRepos 需要 decrement
+        if (completed > 0) updateData.failedRepos = { decrement: completed };
         await this.prisma.cloneTask.update({ where: { taskId }, data: updateData });
+
+        // 清理缓存
+        this.cancelledTasks.delete(taskId);
+        const cached = this.runningTasks.get(taskId);
+        if (cached) cached.status = finalStatus;
+        setTimeout(() => this.runningTasks.delete(taskId), 5000);
+
         this.logger.log('重试克隆完成: taskId=' + taskId + ', 成功=' + completed + ', 失败=' + failed);
         return { success: true, message: `重试完成: ${completed}成功, ${failed}失败`, retryCount: failedItems.length };
     }
@@ -718,17 +789,17 @@ export class CloneService implements OnModuleInit {
         if (params.osType === 'windows') {
             let script = `$targetDir = "${targetDir}"\nif (!(Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force }\nSet-Location $targetDir\n\n`;
             for (const r of repos) {
-                const name = r.repoName || r.fullName?.split('/').pop() || '';
-                const cloneUrl = await this.buildCloneUrl(r.htmlUrl);
+                const name = (r.repoName || r.fullName?.split('/').pop() || '').replace(/[`$"]/g, '`$&');
+                const cloneUrl = (await this.buildCloneUrl(r.htmlUrl)).replace(/[`$"]/g, '`$&');
                 script += `if (Test-Path "${name}") { Write-Host "SKIP: ${name}" } else { git clone${depth} "${cloneUrl}" "${name}" }\n`;
             }
             return script;
         }
-        let script = `#!/bin/bash\nset -e\nTARGET="${targetDir}"\nmkdir -p "$TARGET" || exit 1\ncd "$TARGET" || exit 1\n\n`;
+        let script = `#!/bin/bash\nset -e\nTARGET='${targetDir.replace(/'/g, "'\\''")}'\nmkdir -p "$TARGET" || exit 1\ncd "$TARGET" || exit 1\n\n`;
         for (const r of repos) {
-            const name = r.repoName || r.fullName?.split('/').pop() || '';
-            const cloneUrl = await this.buildCloneUrl(r.htmlUrl);
-            script += `if [ -d "${name}" ]; then echo "SKIP: ${name}"; else git clone${depth} "${cloneUrl}" "${name}"; fi\n`;
+            const name = (r.repoName || r.fullName?.split('/').pop() || '').replace(/'/g, "'\\''");
+            const cloneUrl = (await this.buildCloneUrl(r.htmlUrl)).replace(/'/g, "'\\''");
+            script += `if [ -d '${name}' ]; then echo "SKIP: ${name}"; else git clone${depth} '${cloneUrl}' '${name}'; fi\n`;
         }
         return script;
     }

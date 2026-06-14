@@ -16,14 +16,27 @@ import {
     Divider,
     Segmented,
     Progress,
+    Popconfirm,
     message,
 } from 'antd'
-import { ArrowLeftOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, DownloadOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, DownloadOutlined, StopOutlined } from '@ant-design/icons'
 import * as cloneApi from '../api/clone'
-import type { CloneTaskItem } from '../types'
+import type { CloneTaskItem, CloneTaskRecord } from '../types'
 import dayjs from '../setupDayjs'
 
 const { Title, Text } = Typography
+
+interface CloneProgress {
+    success: boolean
+    taskId: string
+    status: string
+    totalRepos: number
+    completedRepos: number
+    failedRepos: number
+    skippedRepos: number
+    cancelled: number
+    results?: Array<{ fullName: string; status: string; message: string }>
+}
 
 const STATUS_COLOR_MAP: Record<string, string> = {
     RUNNING: 'processing',
@@ -59,8 +72,8 @@ export default function CloneTaskDetail() {
     const { taskId } = useParams<{ taskId: string }>()
     const navigate = useNavigate()
 
-    const [task, setTask] = useState<any>(null)
-    const [progress, setProgress] = useState<any>(null)
+    const [task, setTask] = useState<CloneTaskRecord | null>(null)
+    const [progress, setProgress] = useState<CloneProgress | null>(null)
     const [loading, setLoading] = useState(true)
     const [items, setItems] = useState<CloneTaskItem[]>([])
     const [itemsTotal, setItemsTotal] = useState(0)
@@ -74,6 +87,7 @@ export default function CloneTaskDetail() {
     statusFilterRef.current = statusFilter
     const pageSizeRef = useRef(pageSize)
     pageSizeRef.current = pageSize
+    const pollErrorCountRef = useRef(0)
 
     const fetchTask = useCallback(async () => {
         if (!taskId) return
@@ -114,21 +128,45 @@ export default function CloneTaskDetail() {
         [taskId],
     )
 
-    // 运行中时每2秒轮询进度
+    const handleCancel = useCallback(async () => {
+        if (!taskId) return
+        try {
+            const res = await cloneApi.cancelCloneTask(taskId)
+            if (res.success) {
+                message.success('任务已取消')
+                fetchTask()
+            } else {
+                message.error(res.message || '取消失败')
+            }
+        } catch {
+            message.error('取消请求失败')
+        }
+    }, [taskId, fetchTask])
+
+    // 运行中时轮询进度（带退避策略）
     useEffect(() => {
         if (!taskId || task?.status !== 'RUNNING') return
-        const timer = setInterval(async () => {
+        let timer: ReturnType<typeof setTimeout>
+        const getInterval = () => (pollErrorCountRef.current >= 3 ? 10000 : 2000)
+
+        const poll = async () => {
             try {
                 const live = await cloneApi.fetchCloneTask(taskId)
+                pollErrorCountRef.current = 0
                 setProgress(live)
                 if (live.status === 'COMPLETED' || live.status === 'FAILED') {
-                    // 重新加载完整数据（使用 ref 避免闭包过时）
                     fetchTask()
                     fetchItems(1, pageSizeRef.current, statusFilterRef.current)
+                    return
                 }
-            } catch {}
-        }, 2000)
-        return () => clearInterval(timer)
+            } catch {
+                pollErrorCountRef.current++
+            }
+            timer = setTimeout(poll, getInterval())
+        }
+
+        timer = setTimeout(poll, getInterval())
+        return () => clearTimeout(timer)
     }, [taskId, task?.status, fetchTask, fetchItems])
 
     useEffect(() => {
@@ -236,6 +274,19 @@ export default function CloneTaskDetail() {
                     <Tag color={STATUS_COLOR_MAP[task.status] || 'default'} style={{ fontSize: 14, padding: '2px 12px' }}>
                         {STATUS_LABEL_MAP[task.status] || task.status}
                     </Tag>
+                    {task.status === 'RUNNING' && (
+                        <Popconfirm
+                            title='确认取消'
+                            description='取消后正在进行的克隆会中断，确定要取消吗？'
+                            onConfirm={handleCancel}
+                            okText='确认取消'
+                            cancelText='返回'
+                        >
+                            <Button danger icon={<StopOutlined />} size='small'>
+                                取消任务
+                            </Button>
+                        </Popconfirm>
+                    )}
                 </Space>
             </div>
 

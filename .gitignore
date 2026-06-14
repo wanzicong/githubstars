@@ -25,6 +25,7 @@ frontend/dist/
 
 # Claude Code
 .code-index/
+.claude/worktrees/
 
 # Database exports
 githubstars_backup.sql

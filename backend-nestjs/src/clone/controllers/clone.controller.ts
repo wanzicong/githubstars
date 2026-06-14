@@ -165,9 +165,14 @@ export class CloneController {
      * @returns 删除结果
      */
     @Delete('api/clone/tasks/:taskId')
-    @ApiOperation({ summary: '删除克隆任务', description: '删除克隆任务及其所有关联的任务项' })
+    @ApiOperation({ summary: '删除克隆任务', description: '删除克隆任务及其所有关联的任务项（运行中任务需先取消）' })
     @ApiParam({ name: 'taskId', description: '任务 ID（UUID 格式）' })
     async deleteTask(@Param('taskId') taskId: string) {
+        const task = await this.taskService.getTaskByTaskId(taskId);
+        if (!task) return { success: false, message: '任务不存在' };
+        if (task.status === 'RUNNING' || task.status === 'PENDING') {
+            return { success: false, message: '任务正在运行中，请先取消任务后再删除' };
+        }
         this.logger.log('删除克隆任务: taskId=' + taskId);
         await this.taskService.deleteTaskByTaskId(taskId);
         return { success: true, message: '任务已删除' };
@@ -199,18 +204,19 @@ export class CloneController {
      * @returns 重试结果汇总
      */
     @Post('api/clone/tasks/retry-all')
-    @ApiOperation({ summary: '批量重试失败克隆', description: '重试所有包含失败项的任务' })
+    @ApiOperation({ summary: '批量重试失败克隆', description: '异步重试所有包含失败项的任务' })
     async retryAll() {
         try {
             const ids = await this.taskService.getTaskIdsWithFailedItems();
             if (!ids.length) return { success: false, message: '没有需要重试的任务' };
             this.logger.log('批量重试克隆失败项: 任务数=' + ids.length);
-            let totalRetried = 0;
+            // 异步执行，不阻塞 HTTP 请求
             for (const id of ids) {
-                const r = await this.cloneService.retryFailedClones(id);
-                if (r.success) totalRetried += (r as any).retryCount || 0;
+                this.cloneService.retryFailedClones(id).catch((e) =>
+                    this.logger.error('重试任务异常: taskId=' + id + ', ' + (e instanceof Error ? e.message : String(e))),
+                );
             }
-            return { success: true, message: `处理了 ${ids.length} 个任务，共重试 ${totalRetried} 个失败项` };
+            return { success: true, message: `已启动 ${ids.length} 个任务的失败项重试` };
         } catch (e) {
             this.logger.error('批量重试克隆失败项异常: ' + (e instanceof Error ? e.message : String(e)));
             return { success: false, message: e instanceof Error ? e.message : String(e) };
