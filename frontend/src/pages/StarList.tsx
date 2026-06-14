@@ -4,7 +4,6 @@ import {
     Card,
     Input,
     Select,
-    TreeSelect,
     Button,
     Row,
     Col,
@@ -81,6 +80,128 @@ const DATE_FIELD_OPTIONS = [
 ]
 
 const PAGE_SIZE_OPTIONS = [36, 72, 144]
+
+/** 自定义标签复选树 — 原生checkbox确保在任意容器内都可交互 */
+function TagCheckTree({ nodes, selected, onToggle, onLoadDist, depth = 0 }: {
+    nodes: any[]
+    selected: number[]
+    onToggle: (tagId: number) => void
+    onLoadDist: (keys: any[]) => void
+    depth?: number
+}) {
+    const [expanded, setExpanded] = useState<Set<string>>(new Set())
+    const [expandedTags, setExpandedTags] = useState<Set<number>>(new Set())
+
+    // 首次渲染默认全展开
+    useEffect(() => {
+        if (depth === 0 && nodes.length > 0) {
+            const allGroupKeys = new Set<string>()
+            const walk = (ns: any[]) => {
+                ns.forEach(n => {
+                    if (typeof n.value === 'string') {
+                        allGroupKeys.add(n.value)
+                        if (n.children) walk(n.children)
+                    }
+                })
+            }
+            walk(nodes)
+            setExpanded(allGroupKeys)
+        }
+    }, [])
+
+    const toggleExpand = (key: string) => {
+        setExpanded(prev => {
+            const next = new Set(prev)
+            next.has(key) ? next.delete(key) : next.add(key)
+            return next
+        })
+    }
+
+    const toggleTagExpand = (tagId: number) => {
+        setExpandedTags(prev => {
+            const next = new Set(prev)
+            if (next.has(tagId)) { next.delete(tagId) }
+            else {
+                next.add(tagId)
+                onLoadDist([tagId])
+            }
+            return next
+        })
+    }
+
+    return (
+        <div style={{ paddingLeft: depth * 12 }}>
+            {nodes.map((node: any) => {
+                const isGroup = typeof node.value === 'string' && node.selectable === false
+                const isTag = typeof node.value === 'number'
+                const nodeKey = String(node.value)
+                const isExpanded = expanded.has(nodeKey)
+                const hasChildren = node.children && node.children.length > 0
+                const isChecked = isTag && selected.includes(node.value)
+
+                return (
+                    <div key={nodeKey}>
+                        <div
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px',
+                                cursor: isGroup || hasChildren ? 'pointer' : 'default',
+                                borderRadius: 4, marginBottom: 1,
+                                background: isChecked ? '#e6f4ff' : undefined,
+                                fontWeight: isGroup ? 600 : undefined,
+                                color: String(nodeKey).startsWith('dist_') ? '#1677ff' : undefined,
+                                fontSize: isGroup ? 13 : 12,
+                            }}
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                if (isTag) {
+                                    onToggle(node.value)
+                                    // tag也可展开看下钻
+                                    if (hasChildren && !expandedTags.has(node.value)) {
+                                        toggleTagExpand(node.value)
+                                    }
+                                } else if (hasChildren) {
+                                    toggleExpand(nodeKey)
+                                }
+                            }}
+                        >
+                            {hasChildren && (
+                                <span style={{ fontSize: 10, width: 14, color: '#999', flexShrink: 0 }}>
+                                    {isExpanded ? '▼' : '▶'}
+                                </span>
+                            )}
+                            {!hasChildren && <span style={{ width: 14, flexShrink: 0 }} />}
+                            {isTag && (
+                                <input
+                                    type='checkbox'
+                                    checked={isChecked}
+                                    style={{ margin: 0, flexShrink: 0, cursor: 'pointer' }}
+                                    onChange={() => onToggle(node.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                            )}
+                            {!isTag && <span style={{ fontSize: 14, flexShrink: 0 }}>{node.title?.includes('📚') ? '📚' : node.title?.includes('🏷️') ? '🏷️' : node.title?.includes('🔧') ? '🔧' : node.title?.includes('📊') ? '📊' : node.title?.includes('👥') ? '👥' : node.title?.includes('💡') ? '💡' : node.title?.includes('→') ? '→' : '📌'}</span>}
+                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {isGroup
+                                    ? String(node.title || '').replace(/^[^\s]+\s/, '').replace(/\s*\(\d+\)/, '')
+                                    : node.title}
+                            </span>
+                            {isChecked && <span style={{ color: '#1677ff', fontSize: 10 }}>✓</span>}
+                        </div>
+                        {hasChildren && isExpanded && (
+                            <TagCheckTree
+                                nodes={node.children}
+                                selected={selected}
+                                onToggle={onToggle}
+                                onLoadDist={onLoadDist}
+                                depth={depth + 1}
+                            />
+                        )}
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
 
 const TIME_PRESETS: { label: string; value: string; days: number }[] = [
     { label: '不限', value: '', days: 0 },
@@ -244,6 +365,8 @@ export default function StarList() {
     const [tagDistLoaded, setTagDistLoaded] = useState<Map<number, any[]>>(new Map())  // tagId → 子维度分布节点
     const [tagDistLoading, setTagDistLoading] = useState<Set<number>>(new Set())       // 正在加载的 tagId
     const [tagGroups, setTagGroups] = useState<any[]>([])           // 含parentId的维度列表
+    const [tagPopoverOpen, setTagPopoverOpen] = useState(false)
+    const [tagTreeKey, setTagTreeKey] = useState(0)                 // 强制Tree重新挂载
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
     const [loading, setLoading] = useState(true)
@@ -1059,27 +1182,66 @@ export default function StarList() {
                                 style={{ width: '100%' }}
                             />
                         </Col>
-                        <Col xs={24} sm={12} md={6} lg={4}>
-                            <TreeSelect
-                                treeData={effectiveTagTree}
-                                value={selectedTagIds}
-                                onChange={(vals) => {
-                                    const tagIds = (vals as any[]).filter(v => typeof v === 'number')
-                                    setUrlParam('tagIds', tagIds.length > 0 ? tagIds.join(',') : null)
-                                }}
-                                placeholder='筛选标签'
-                                allowClear
-                                showSearch
-                                treeCheckable
-                                treeDefaultExpandAll
-                                maxTagCount='responsive'
-                                filterTreeNode={(input, node: any) =>
-                                    String(node?.title || '').toLowerCase().includes(input.toLowerCase())
-                                }
-                                onTreeExpand={(keys) => handleTagTreeExpand(keys as number[])}
-                                dropdownStyle={{ maxHeight: 500, overflow: 'auto' }}
+                        <Col xs={24} sm={12} md={6} lg={4} style={{ position: 'relative' }}>
+                            <Button
                                 style={{ width: '100%' }}
-                            />
+                                onClick={() => { setTagPopoverOpen(!tagPopoverOpen); if (!tagPopoverOpen) setTagTreeKey(k => k + 1) }}
+                            >
+                                🏷️ {selectedTagIds.length > 0 ? `标签 (${selectedTagIds.length})` : '标签筛选'}
+                            </Button>
+                            {tagPopoverOpen && (
+                                <div style={{
+                                    position: 'absolute', top: '100%', left: 0, zIndex: 1050,
+                                    width: 420, maxHeight: 500, marginTop: 4,
+                                    background: '#fff', borderRadius: 8,
+                                    boxShadow: '0 6px 16px 0 rgba(0,0,0,0.08), 0 3px 6px -4px rgba(0,0,0,0.12)',
+                                    padding: 12, display: 'flex', flexDirection: 'column', gap: 8,
+                                }}>
+                                    <Input.Search
+                                        placeholder='搜索标签...'
+                                        allowClear
+                                        size='small'
+                                        onChange={(e) => {
+                                            const kw = (e.target.value || '').toLowerCase()
+                                            const el = document.getElementById('tag-tree-panel')
+                                            if (!el) return
+                                            const nodes = el.querySelectorAll('.ant-tree-treenode')
+                                            nodes.forEach((n: any) => {
+                                                const text = (n.textContent || '').toLowerCase()
+                                                n.style.display = kw ? (text.includes(kw) ? '' : 'none') : ''
+                                            })
+                                        }}
+                                    />
+                                    <div id='tag-tree-panel' style={{ flex: 1, overflow: 'auto', minHeight: 100, maxHeight: 380 }}>
+                                        <TagCheckTree
+                                            key={tagTreeKey}
+                                            nodes={effectiveTagTree}
+                                            selected={selectedTagIds}
+                                            onToggle={(tagId: number) => {
+                                                const next = selectedTagIds.includes(tagId)
+                                                    ? selectedTagIds.filter(id => id !== tagId)
+                                                    : [...selectedTagIds, tagId]
+                                                setUrlParam('tagIds', next.length > 0 ? next.join(',') : null)
+                                            }}
+                                            onLoadDist={handleTagTreeExpand}
+                                        />
+                                    </div>
+                                    {selectedTagIds.length > 0 && (
+                                        <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 8, textAlign: 'right' }}>
+                                            <Button size='small' type='link' danger onClick={() => setUrlParam('tagIds', null)}>
+                                                清除全部 ({selectedTagIds.length})
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {/* 点击外部关闭 */}
+                            {tagPopoverOpen && (
+                                <div
+                                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1049 }}
+                                    onClick={() => setTagPopoverOpen(false)}
+                                />
+                            )}
                         </Col>
                         <Col xs={12} sm={8} md={6} lg={4}>
                             <Select
