@@ -1,0 +1,13 @@
+{
+  "name": "@githubstars/cli",
+  "version": "0.0.1",
+  "private": true,
+  "description": "GitHub Stars CLI — 一键启动管理工具",
+  "type": "module",
+  "bin": {
+    "githubstars": "./bin/githubstars.js"
+  },
+  "dependencies": {
+    "concurrently": "^10.0.3"
+  }
+}
