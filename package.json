@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "githubstars",
+  "description": "GitHub Stars 管理系统 — 星标仓库管理、分类、翻译、统计、AI 分析和批量克隆",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:backend": "npm run dev --workspace=@githubstars/backend",
+    "dev:frontend": "npm run dev --workspace=@githubstars/frontend",
+    "build": "turbo run build",
+    "build:backend": "npm run build --workspace=@githubstars/backend",
+    "build:frontend": "npm run build --workspace=@githubstars/frontend",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:unit": "npm run test:unit --workspace=@githubstars/backend",
+    "test:e2e": "npm run test:e2e --workspace=@githubstars/backend",
+    "clean": "turbo run clean",
+    "prisma": "npm run prisma --workspace=@githubstars/backend",
+    "prisma:generate": "npm run prisma:generate --workspace=@githubstars/backend",
+    "prisma:studio": "npm run prisma:studio --workspace=@githubstars/backend",
+    "postinstall": "npm run prisma:generate"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.7.3"
+  },
+  "packageManager": "npm@10.9.2",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wanzicong/githubstars"
+  },
+  "license": "MIT"
+}

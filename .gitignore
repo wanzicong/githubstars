@@ -18,10 +18,26 @@ Thumbs.db
 # Logs
 *.log
 
+# Monorepo node_modules
+node_modules/
+packages/*/node_modules/
+
 # Frontend build caches
-frontend/.vite/
-frontend/node_modules/
-frontend/dist/
+packages/frontend/.vite/
+packages/frontend/dist/
+
+# Backend build output
+packages/backend/dist/
+
+# Shared build output
+packages/shared/dist/
+
+# Turbo
+.turbo/
+
+# Legacy directories (migrated to packages/)
+backend-nestjs/
+frontend/
 
 # Claude Code
 .code-index/

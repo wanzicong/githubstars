@@ -1,0 +1,20 @@
+{
+  "name": "@githubstars/shared",
+  "version": "0.0.1",
+  "private": true,
+  "description": "GitHub Stars 前后端共享类型与工具",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
