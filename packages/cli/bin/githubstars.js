@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * GitHub Stars CLI — 一键启动前后端服务。
+ * GitHub Stars CLI — 一键启动/停止前后端服务。
  *
  * 用法：
  *   githubstars             启动前端 + 后端（默认）
+ *   githubstars stop         停止所有服务
+ *   githubstars status       查看服务运行状态
  *   githubstars backend      仅启动后端
  *   githubstars frontend     仅启动前端
  *   githubstars build        构建所有子包
@@ -18,10 +20,11 @@
  *   - packages/frontend — Vite 前端
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -61,6 +64,8 @@ GitHub Stars — GitHub 星标仓库管理系统
 
 用法:
   githubstars              一键启动前端 (:5173) + 后端 (:3000)
+  githubstars stop          停止所有服务
+  githubstars status        查看服务运行状态
   githubstars backend       仅启动后端
   githubstars frontend      仅启动前端
   githubstars build         构建所有子包
@@ -82,6 +87,73 @@ function showVersion() {
   } else {
     console.log('githubstars v0.0.1');
   }
+}
+
+const PORTS = [
+  { name: '前端 (Vite)', port: 5173 },
+  { name: '后端 (NestJS)', port: 3000 },
+];
+
+/** 查找占用指定端口的 PID */
+function findPid(port) {
+  try {
+    if (os.platform() === 'win32') {
+      const out = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8' });
+      const match = out.match(/:${port}\s+.*LISTENING\s+(\d+)/);
+      return match ? parseInt(match[1]) : null;
+    } else {
+      const out = execSync(`lsof -ti:${port} 2>/dev/null || fuser ${port}/tcp 2>/dev/null`, { encoding: 'utf-8' });
+      return out.trim() ? parseInt(out.trim().split('\n')[0]) : null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+/** 停止服务 */
+function stop() {
+  console.log('🛑 正在停止 GitHub Stars...\n');
+  let stopped = 0;
+
+  for (const { name, port } of PORTS) {
+    const pid = findPid(port);
+    if (pid) {
+      try {
+        if (os.platform() === 'win32') {
+          execSync(`taskkill //PID ${pid} //F`, { stdio: 'pipe' });
+        } else {
+          process.kill(pid, 'SIGTERM');
+        }
+        console.log(`  ✅ ${name} — 已停止 (port ${port}, PID ${pid})`);
+        stopped++;
+      } catch {
+        console.log(`  ❌ ${name} — 停止失败 (port ${port}, PID ${pid})`);
+      }
+    } else {
+      console.log(`  ⚪ ${name} — 未运行 (port ${port})`);
+    }
+  }
+
+  console.log(stopped > 0 ? `\n✅ 已停止 ${stopped} 个服务` : '\n💤 没有运行中的服务');
+}
+
+/** 查看状态 */
+function status() {
+  console.log('📊 GitHub Stars 运行状态:\n');
+
+  for (const { name, port } of PORTS) {
+    const pid = findPid(port);
+    if (pid) {
+      console.log(`  🟢 ${name} — 运行中 (port ${port}, PID ${pid})`);
+    } else {
+      console.log(`  🔴 ${name} — 未运行 (port ${port})`);
+    }
+  }
+
+  console.log('\n快速链接:');
+  console.log('  前端:  http://localhost:5173');
+  console.log('  后端:  http://localhost:3000');
+  console.log('  Swagger: http://localhost:3000/api/docs');
 }
 
 function run(command) {
@@ -110,6 +182,16 @@ async function main() {
 
   if (arg === '--version' || arg === '-v') {
     showVersion();
+    return;
+  }
+
+  if (arg === 'stop') {
+    stop();
+    return;
+  }
+
+  if (arg === 'status') {
+    status();
     return;
   }
 
