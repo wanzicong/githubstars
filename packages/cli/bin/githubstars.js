@@ -99,7 +99,8 @@ function findPid(port) {
   try {
     if (os.platform() === 'win32') {
       const out = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8' });
-      const match = out.match(/:${port}\s+.*LISTENING\s+(\d+)/);
+      const re = new RegExp(`:${port}\\s+.*LISTENING\\s+(\\d+)`);
+      const match = out.match(re);
       return match ? parseInt(match[1]) : null;
     } else {
       const out = execSync(`lsof -ti:${port} 2>/dev/null || fuser ${port}/tcp 2>/dev/null`, { encoding: 'utf-8' });
@@ -110,23 +111,47 @@ function findPid(port) {
   }
 }
 
+/** 杀死指定 PID 的进程 */
+function killPid(pid) {
+  return new Promise((resolve) => {
+    if (os.platform() === 'win32') {
+      const child = spawn('taskkill', ['/PID', String(pid), '/F'], {
+        stdio: 'pipe',
+      });
+      child.on('close', (code) => resolve(code === 0));
+      child.on('error', () => resolve(false));
+    } else {
+      try {
+        process.kill(pid, 'SIGTERM');
+        // 给进程一点时间退出，然后检查
+        setTimeout(() => {
+          try {
+            process.kill(pid, 0); // 检查进程是否存在
+            resolve(false);       // 还在 → 失败
+          } catch {
+            resolve(true);        // 已退出 → 成功
+          }
+        }, 500);
+      } catch {
+        resolve(false);
+      }
+    }
+  });
+}
+
 /** 停止服务 */
-function stop() {
+async function stop() {
   console.log('🛑 正在停止 GitHub Stars...\n');
   let stopped = 0;
 
   for (const { name, port } of PORTS) {
     const pid = findPid(port);
     if (pid) {
-      try {
-        if (os.platform() === 'win32') {
-          execSync(`taskkill //PID ${pid} //F`, { stdio: 'pipe' });
-        } else {
-          process.kill(pid, 'SIGTERM');
-        }
+      const ok = await killPid(pid);
+      if (ok) {
         console.log(`  ✅ ${name} — 已停止 (port ${port}, PID ${pid})`);
         stopped++;
-      } catch {
+      } else {
         console.log(`  ❌ ${name} — 停止失败 (port ${port}, PID ${pid})`);
       }
     } else {
