@@ -4,7 +4,7 @@
   "description": "GitHub Stars 管理系统 — 星标仓库管理、分类、翻译、统计、AI 分析和批量克隆",
   "private": true,
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w @githubstars/backend\" \"npm run dev -w @githubstars/frontend\"",
     "dev:backend": "npm run dev --workspace=@githubstars/backend",
     "dev:frontend": "npm run dev --workspace=@githubstars/frontend",
     "build": "turbo run build",
@@ -25,6 +25,7 @@
     "packages/*"
   ],
   "devDependencies": {
+    "concurrently": "^10.0.3",
     "turbo": "^2.5.0",
     "typescript": "^5.7.3"
   },
