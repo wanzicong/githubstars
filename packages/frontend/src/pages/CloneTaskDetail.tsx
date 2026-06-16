@@ -40,6 +40,7 @@ interface CloneProgress {
 
 const STATUS_COLOR_MAP: Record<string, string> = {
     RUNNING: 'processing',
+    CLONING: 'processing',
     CLONED: 'success',
     COMPLETED: 'success',
     FAILED: 'error',
@@ -49,6 +50,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
 
 const STATUS_LABEL_MAP: Record<string, string> = {
     RUNNING: '运行中',
+    CLONING: '克隆中',
     CLONED: '已克隆',
     COMPLETED: '已完成',
     FAILED: '失败',
@@ -365,7 +367,13 @@ export default function CloneTaskDetail() {
                         <Space direction='vertical' style={{ width: '100%' }} size='middle'>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <Spin size='small' />
-                                <Text>{task.status === 'RUNNING' ? '正在克隆中...' : '正在处理中...'}</Text>
+                                <Text>
+                                    {(() => {
+                                        const done = progress.completedRepos + progress.failedRepos + progress.skippedRepos
+                                        if (done >= progress.totalRepos && progress.totalRepos > 0) return '正在完成...'
+                                        return task.status === 'RUNNING' ? '正在克隆中...' : '正在处理中...'
+                                    })()}
+                                </Text>
                             </div>
                             <Progress
                                 percent={
@@ -377,7 +385,10 @@ export default function CloneTaskDetail() {
                                           )
                                         : 0
                                 }
-                                status='active'
+                                status={(() => {
+                                    const done = progress.completedRepos + progress.failedRepos + progress.skippedRepos
+                                    return done >= progress.totalRepos && progress.totalRepos > 0 ? 'success' : 'active'
+                                })()}
                                 format={() =>
                                     `${progress.completedRepos + progress.failedRepos + progress.skippedRepos}/${progress.totalRepos}`
                                 }
@@ -397,7 +408,7 @@ export default function CloneTaskDetail() {
                                                     textOverflow: 'ellipsis',
                                                 }}
                                             >
-                                                {r.status === 'CLONED' ? '✅' : r.status === 'FAILED' ? '❌' : '⏭'} {r.fullName}
+                                                {r.status === 'CLONED' ? '✅' : r.status === 'FAILED' ? '❌' : r.status === 'CLONING' ? '🔄' : '⏭'} {r.fullName}
                                             </div>
                                         ))}
                                 </div>

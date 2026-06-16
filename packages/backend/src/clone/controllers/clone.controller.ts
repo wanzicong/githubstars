@@ -250,11 +250,13 @@ export class CloneController {
      * @returns 重试结果
      */
     @Post('api/clone/tasks/:taskId/retry')
-    @ApiOperation({ summary: '重试单个任务失败项', description: '重试指定克隆任务中所有失败的子任务' })
+    @ApiOperation({ summary: '重试单个任务失败项', description: '重试指定克隆任务中所有失败的子任务，可选覆盖并发数' })
     @ApiParam({ name: 'taskId', description: '任务 ID（UUID 格式）' })
-    async retryTask(@Param('taskId') taskId: string) {
-        this.logger.log('重试任务失败项: taskId=' + taskId);
-        return this.cloneService.retryFailedClones(taskId);
+    @ApiQuery({ name: 'concurrency', required: false, description: '重试并发数，不传则使用原任务配置' })
+    async retryTask(@Param('taskId') taskId: string, @Query() q: any) {
+        const concurrency = parseInt(q.concurrency) || undefined;
+        this.logger.log('重试任务失败项: taskId=' + taskId + (concurrency ? ', 并发=' + concurrency : ''));
+        return this.cloneService.retryFailedClones(taskId, concurrency);
     }
 
     /**

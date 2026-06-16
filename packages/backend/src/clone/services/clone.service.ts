@@ -245,6 +245,27 @@ export class CloneService implements OnModuleInit {
     }
 
     /**
+     * 在已有 git 仓库目录中执行 git pull（避免命令注入）
+     */
+    private async spawnGitPull(dir: string): Promise<{ stderr: string }> {
+        const output = await this.spawnCommand('git', ['-C', dir, 'pull'], 300000);
+        return { stderr: output };
+    }
+
+    /**
+     * 检查目录是否为有效的 git 仓库（存在 .git 目录）并目录非空
+     */
+    private isValidGitRepo(dir: string): boolean {
+        if (!fs.existsSync(dir)) return false;
+        try {
+            if (fs.readdirSync(dir).length === 0) return false;
+        } catch {
+            return false;
+        }
+        return fs.existsSync(path.join(dir, '.git'));
+    }
+
+    /**
      * 执行单次 git clone 操作，包含目录存在性检查、强制重试目录清理
      *
      * @param fullName 仓库完整名称（如 user/repo）
@@ -383,11 +404,6 @@ export class CloneService implements OnModuleInit {
                     data: { status: 'FAILED', errorMessage: '任务超时未启动，已被新任务覆盖', finishedAt: new Date() },
                 });
                 this.logger.warn('清理僵尸 PENDING 任务: taskId=' + z.taskId);
-            }
-
-            // 全局并发限制：同一时间只允许一个克隆任务运行
-            if (await this.cloneTaskService.hasActiveTask()) {
-                return { success: false, message: '已有克隆任务正在运行，请等待完成或取消后再试' };
             }
 
             const diskCheck = await this.checkDiskSpace(params.subDirectory || '', maxCount, cloneDepth, maxRepoSizeMb);
@@ -559,18 +575,33 @@ export class CloneService implements OnModuleInit {
                 }
                 const repoName = repo.repoName || repo.fullName?.split('/').pop() || '';
                 const repoDir = path.join(targetDir, repoName);
+
+                // 创建 CLONING 状态记录，前端可实时看到正在克隆的仓库
+                let itemId: bigint;
+                try {
+                    const item = await this.prisma.cloneTaskItem.create({
+                        data: { taskId, fullName: repo.fullName || '', status: 'CLONING', message: '正在克隆...', createdAt: new Date() },
+                    });
+                    itemId = item.id;
+                } catch (createErr) {
+                    this.logger.error('创建 CLONING 记录失败: repo=' + repo.fullName);
+                    // 即使记录创建失败，仍尝试克隆（尽力而为）
+                }
+
                 const result = await this.cloneWithRetry(repo.fullName || '', repoName, repoDir, repo.htmlUrl || '', cloneDepth, taskId);
 
                 try {
-                    await this.prisma.cloneTaskItem.create({
-                        data: {
-                            taskId,
-                            fullName: repo.fullName || '',
-                            status: result.status,
-                            message: result.message,
-                            createdAt: new Date(),
-                        },
-                    });
+                    if (itemId!) {
+                        await this.prisma.cloneTaskItem.update({
+                            where: { id: itemId },
+                            data: { status: result.status, message: result.message },
+                        });
+                    } else {
+                        // 回退：创建新记录
+                        await this.prisma.cloneTaskItem.create({
+                            data: { taskId, fullName: repo.fullName || '', status: result.status, message: result.message, createdAt: new Date() },
+                        });
+                    }
 
                     const incrementField =
                         result.status === 'CLONED' ? 'completedRepos' : result.status === 'FAILED' ? 'failedRepos' : 'skippedRepos';
@@ -584,15 +615,20 @@ export class CloneService implements OnModuleInit {
                         '批量克隆 DB 写入异常: repo=' + repo.fullName + ', err=' + (dbErr instanceof Error ? dbErr.message : String(dbErr)),
                     );
                     try {
-                        await this.prisma.cloneTaskItem.create({
-                            data: {
-                                taskId,
-                                fullName: repo.fullName || '',
-                                status: 'FAILED',
-                                message: 'DB写入异常: ' + (dbErr instanceof Error ? dbErr.message : String(dbErr)).substring(0, 300),
-                                createdAt: new Date(),
-                            },
-                        });
+                        if (itemId!) {
+                            await this.prisma.cloneTaskItem.update({
+                                where: { id: itemId },
+                                data: { status: 'FAILED', message: 'DB写入异常: ' + (dbErr instanceof Error ? dbErr.message : String(dbErr)).substring(0, 300) },
+                            });
+                        } else {
+                            await this.prisma.cloneTaskItem.create({
+                                data: {
+                                    taskId, fullName: repo.fullName || '', status: 'FAILED',
+                                    message: 'DB写入异常: ' + (dbErr instanceof Error ? dbErr.message : String(dbErr)).substring(0, 300),
+                                    createdAt: new Date(),
+                                },
+                            });
+                        }
                         await this.prisma.cloneTask.update({ where: { taskId }, data: { failedRepos: { increment: 1 } } });
                     } catch (retryErr) {
                         this.logger.error('批量克隆 DB 补救写入也失败: repo=' + repo.fullName);
@@ -745,13 +781,11 @@ export class CloneService implements OnModuleInit {
      *   - cleanupEmptyDirs() — 清理空目录
      *   - spawnGitClone()    — 执行 git clone
      */
-    async retryFailedClones(taskId: string) {
+    async retryFailedClones(taskId: string, concurrencyOverride?: number) {
         const task = await this.prisma.cloneTask.findUnique({ where: { taskId } });
-        // 运行中的任务不允许重试（避免并发冲突）
         if (!task) return { success: false, message: '任务不存在' };
         if (task.status === 'RUNNING') return { success: false, message: '任务正在运行中，无法重试' };
 
-        // 重试所有未成功的项（FAILED + SKIPPED），已成功克隆的 CLONED 仓库自动过滤掉
         const retryItems = await this.prisma.cloneTaskItem.findMany({
             where: { taskId, status: { in: ['FAILED', 'SKIPPED'] } },
         });
@@ -766,12 +800,12 @@ export class CloneService implements OnModuleInit {
             return { success: false, message: '没有需要重试的未成功项' };
         }
 
-        // 成功数量已等于总仓库数量 → 无需重试
         if (task.completedRepos >= task.totalRepos) {
             return { success: false, message: '所有仓库已克隆成功，无需重试' };
         }
 
-        // 分别统计原状态，用于后续计数器修正
+        const concurrency = concurrencyOverride && concurrencyOverride > 0 ? Math.min(concurrencyOverride, 50) : task.concurrency;
+
         const wasFailedCount = retryItems.filter((i) => i.status === 'FAILED').length;
         const wasSkippedCount = retryItems.filter((i) => i.status === 'SKIPPED').length;
 
@@ -779,13 +813,13 @@ export class CloneService implements OnModuleInit {
 
         const targetDir = task.targetDir || (await this.getBaseDir());
 
-        // 重试前清理：删除空目录和失败的残留目录
+        // 重试前清理空目录，但保留有效 git 仓库（后续会 git pull 更新）
         this.cleanupEmptyDirs(targetDir);
+        // 删除无 .git 的残留目录（上次克隆失败的残留）
         for (const item of retryItems) {
             const repoName = item.fullName.split('/').pop() || '';
             const repoDir = path.join(targetDir, repoName);
-            // 删除失败的克隆残留目录（可能为空或包含不完整的 .git 数据）
-            if (fs.existsSync(repoDir)) {
+            if (fs.existsSync(repoDir) && !this.isValidGitRepo(repoDir)) {
                 try {
                     fs.rmSync(repoDir, { recursive: true, force: true });
                     this.logger.log('重试前清理残留目录: ' + repoDir);
@@ -814,31 +848,68 @@ export class CloneService implements OnModuleInit {
 
         let completed = 0,
             failed = 0;
-        await this.executeWithSemaphore(retryItems, task.concurrency, async (item) => {
+        await this.executeWithSemaphore(retryItems, concurrency, async (item) => {
             if (this.cancelledTasks.has(taskId)) return;
             const repoName = item.fullName.split('/').pop() || '';
             const htmlUrl = `https://github.com/${item.fullName}`;
             const cloneUrl = await this.buildCloneUrl(htmlUrl);
             const repoDir = path.join(targetDir, repoName);
 
-            fs.mkdirSync(path.dirname(repoDir), { recursive: true });
+            // 标记为 CLONING，前端可实时看到正在重试的仓库
+            await this.prisma.cloneTaskItem.update({
+                where: { id: item.id },
+                data: { status: 'CLONING', message: '正在重试...' },
+            });
 
             let result: { status: string; message: string };
-            try {
-                await this.spawnGitClone(cloneUrl, repoDir, task.cloneDepth);
-                result =
-                    fs.existsSync(repoDir) && fs.readdirSync(repoDir).length > 0
-                        ? { status: 'CLONED', message: 'OK' }
-                        : { status: 'FAILED', message: '克隆后目录为空' };
-            } catch (e) {
-                const msg = e instanceof Error ? e.message : String(e);
-                this.logger.error('重试克隆失败: 仓库=' + item.fullName + ', 错误=' + msg.substring(0, 200));
+
+            // 基于磁盘实际情况判断：已有有效 git 仓库 → git pull；否则 → 全新 clone
+            if (this.isValidGitRepo(repoDir)) {
                 try {
-                    if (fs.existsSync(repoDir)) {
+                    await this.spawnGitPull(repoDir);
+                    result = { status: 'CLONED', message: 'git pull 更新成功' };
+                    this.logger.log('重试 git pull 成功: ' + item.fullName);
+                } catch (e) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    this.logger.warn('git pull 失败，尝试重新 clone: repo=' + item.fullName + ', err=' + msg.substring(0, 200));
+                    try {
                         fs.rmSync(repoDir, { recursive: true, force: true });
+                    } catch {}
+                    // 降级为全新 clone
+                    try {
+                        fs.mkdirSync(path.dirname(repoDir), { recursive: true });
+                        await this.spawnGitClone(cloneUrl, repoDir, task.cloneDepth);
+                        result =
+                            fs.existsSync(repoDir) && fs.readdirSync(repoDir).length > 0
+                                ? { status: 'CLONED', message: 'OK' }
+                                : { status: 'FAILED', message: '克隆后目录为空' };
+                    } catch (cloneErr) {
+                        const cloneMsg = cloneErr instanceof Error ? cloneErr.message : String(cloneErr);
+                        this.logger.error('重试 clone 也失败: 仓库=' + item.fullName + ', 错误=' + cloneMsg.substring(0, 200));
+                        try {
+                            if (fs.existsSync(repoDir)) fs.rmSync(repoDir, { recursive: true, force: true });
+                        } catch {}
+                        result = { status: 'FAILED', message: cloneMsg.substring(0, 500) };
                     }
-                } catch {}
-                result = { status: 'FAILED', message: msg.substring(0, 500) };
+                }
+            } else {
+                fs.mkdirSync(path.dirname(repoDir), { recursive: true });
+                try {
+                    await this.spawnGitClone(cloneUrl, repoDir, task.cloneDepth);
+                    result =
+                        fs.existsSync(repoDir) && fs.readdirSync(repoDir).length > 0
+                            ? { status: 'CLONED', message: 'OK' }
+                            : { status: 'FAILED', message: '克隆后目录为空' };
+                } catch (e) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    this.logger.error('重试克隆失败: 仓库=' + item.fullName + ', 错误=' + msg.substring(0, 200));
+                    try {
+                        if (fs.existsSync(repoDir)) {
+                            fs.rmSync(repoDir, { recursive: true, force: true });
+                        }
+                    } catch {}
+                    result = { status: 'FAILED', message: msg.substring(0, 500) };
+                }
             }
 
             await this.prisma.cloneTaskItem.update({
