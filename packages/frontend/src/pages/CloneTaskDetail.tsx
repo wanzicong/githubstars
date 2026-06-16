@@ -147,7 +147,7 @@ export default function CloneTaskDetail() {
     useEffect(() => {
         if (!taskId || task?.status !== 'RUNNING') return
         let timer: ReturnType<typeof setTimeout>
-        const getInterval = () => (pollErrorCountRef.current >= 3 ? 10000 : 2000)
+        const getInterval = () => (pollErrorCountRef.current >= 3 ? 10000 : 1000)
 
         const poll = async () => {
             try {
