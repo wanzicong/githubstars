@@ -178,7 +178,12 @@ export default function CloneTasks() {
 
     const [retryingAll, setRetryingAll] = useState(false)
     // 存在非运行中且未全部完成的任务时显示"一键重试全部"按钮
-    const hasIncompleteItems = data.some((r) => r.status !== 'RUNNING' && r.status !== 'PENDING' && (r.failedRepos > 0 || r.skippedRepos > 0))
+    const hasIncompleteItems = data.some(
+        (r) =>
+            r.status !== 'RUNNING' &&
+            r.status !== 'PENDING' &&
+            (r.failedRepos > 0 || r.skippedRepos > 0 || r.totalRepos > r.completedRepos + r.failedRepos + r.skippedRepos),
+    )
 
     const handleRefresh = useCallback(() => {
         fetchData(currentPage, pageSize)
@@ -298,7 +303,11 @@ export default function CloneTasks() {
                                 </Button>
                             </Popconfirm>
                         )}
-                        {record.status !== 'RUNNING' && record.status !== 'PENDING' && (record.failedRepos > 0 || record.skippedRepos > 0) && (
+                        {record.status !== 'RUNNING' &&
+                            record.status !== 'PENDING' &&
+                            (record.failedRepos > 0 ||
+                                record.skippedRepos > 0 ||
+                                record.totalRepos > record.completedRepos + record.failedRepos + record.skippedRepos) && (
                             <Button type='link' size='small' icon={<RedoOutlined />} onClick={() => handleRetry(record.taskId)}>
                                 重试
                             </Button>
