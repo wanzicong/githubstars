@@ -289,8 +289,19 @@ export class CloneService implements OnModuleInit {
             if (forceRetry) {
                 fs.rmSync(dir, { recursive: true, force: true });
                 if (fs.existsSync(dir)) return { status: 'FAILED', message: '无法清理目录' };
+            } else if (this.isValidGitRepo(dir)) {
+                // 已有有效 git 仓库 → git pull 更新
+                try {
+                    await this.spawnGitPull(dir);
+                    return { status: 'CLONED', message: 'git pull 更新成功' };
+                } catch (e) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    this.logger.warn('git pull 失败，降级为重新 clone: ' + fullName);
+                    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+                }
             } else {
-                return { status: 'SKIPPED', message: '目录已存在' };
+                // 目录存在但不是有效 git 仓库 → 清理后重新克隆
+                try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
             }
         }
         fs.mkdirSync(path.dirname(dir), { recursive: true });
@@ -334,8 +345,8 @@ export class CloneService implements OnModuleInit {
             if (this.cancelledTasks.has(taskId)) return { fullName, status: 'FAILED', message: '用户取消' };
             const result = await this.doClone(fullName, repoName, dir, htmlUrl, attempt > 0, cloneDepth);
             lastResult = result;
-            if (result.status === 'CLONED' || result.status === 'SKIPPED')
-                return { fullName, status: result.status, message: result.message };
+            if (result.status === 'CLONED')
+                return { fullName, status: 'CLONED', message: result.message };
             if (NON_RETRYABLE.some((e) => result.message.toLowerCase().includes(e)))
                 return { fullName, status: 'FAILED', message: result.message };
             if (attempt < MAX_RETRIES - 1) await new Promise((r) => setTimeout(r, RETRY_BACKOFF[attempt] * 1000));
@@ -534,105 +545,104 @@ export class CloneService implements OnModuleInit {
                 }
             }
 
-            await this.prisma.cloneTask.update({ where: { taskId }, data: { totalRepos: allRepos.length } });
+            await this.prisma.cloneTask.update({
+                where: { taskId },
+                data: { totalRepos: allRepos.length, completedRepos: 0, failedRepos: 0, skippedRepos: oversizedRepos.length },
+            });
 
-            // 记录超大仓库为 SKIPPED
-            for (const repo of oversizedRepos) {
-                await this.prisma.cloneTaskItem.create({
-                    data: {
+            // 批量创建所有仓库的记录：PENDING（待克隆），超大仓库直接 SKIPPED
+            if (repos.length > 0) {
+                await this.prisma.cloneTaskItem.createMany({
+                    data: repos.map((r) => ({
                         taskId,
-                        fullName: repo.fullName || '',
-                        status: 'SKIPPED',
-                        message: `仓库体积超过限制 (${Math.round((repo.sizeKb || repo.size || 0) / 1024)}MB > ${maxRepoSizeMb}MB)`,
+                        fullName: r.fullName || '',
+                        status: 'PENDING',
+                        message: '',
                         createdAt: new Date(),
-                    },
+                    })),
                 });
-                await this.prisma.cloneTask.update({ where: { taskId }, data: { skippedRepos: { increment: 1 } } });
+            }
+            if (oversizedRepos.length > 0) {
+                await this.prisma.cloneTaskItem.createMany({
+                    data: oversizedRepos.map((r) => ({
+                        taskId,
+                        fullName: r.fullName || '',
+                        status: 'SKIPPED',
+                        message: `仓库体积超过限制 (${Math.round((r.sizeKb || r.size || 0) / 1024)}MB > ${maxRepoSizeMb}MB)`,
+                        createdAt: new Date(),
+                    })),
+                });
             }
 
-            // 信号量控制并发，使用 increment 避免竞态
+            // 查询刚创建的 PENDING 记录，建立 fullName → id 映射
+            const pendingItems = await this.prisma.cloneTaskItem.findMany({
+                where: { taskId, status: 'PENDING' },
+                select: { id: true, fullName: true },
+            });
+            const itemIdByFullName = new Map(pendingItems.map((i) => [i.fullName, i.id]));
+
             let completed = 0,
                 failed = 0,
                 skipped = oversizedRepos.length;
             await this.executeWithSemaphore(repos, concurrency, async (repo) => {
+                const repoName = repo.repoName || repo.fullName?.split('/').pop() || '';
+                const repoDir = path.join(targetDir, repoName);
+                const itemId = itemIdByFullName.get(repo.fullName || '');
+
                 if (this.cancelledTasks.has(taskId)) {
-                    try {
-                        await this.prisma.cloneTaskItem.create({
-                            data: {
-                                taskId,
-                                fullName: repo.fullName || '',
-                                status: 'FAILED',
-                                message: '任务已取消',
-                                createdAt: new Date(),
-                            },
-                        });
-                        await this.prisma.cloneTask.update({ where: { taskId }, data: { failedRepos: { increment: 1 } } });
-                    } catch (dbErr) {
-                        this.logger.error('取消写入 FAILED 记录失败: repo=' + repo.fullName);
+                    if (itemId) {
+                        try {
+                            await this.prisma.cloneTaskItem.update({
+                                where: { id: itemId },
+                                data: { status: 'FAILED', message: '任务已取消' },
+                            });
+                            await this.prisma.cloneTask.update({ where: { taskId }, data: { failedRepos: { increment: 1 } } });
+                        } catch {}
                     }
                     failed++;
                     return;
                 }
-                const repoName = repo.repoName || repo.fullName?.split('/').pop() || '';
-                const repoDir = path.join(targetDir, repoName);
 
-                // 创建 CLONING 状态记录，前端可实时看到正在克隆的仓库
-                let itemId: bigint;
-                try {
-                    const item = await this.prisma.cloneTaskItem.create({
-                        data: { taskId, fullName: repo.fullName || '', status: 'CLONING', message: '正在克隆...', createdAt: new Date() },
+                // 标记为 CLONING
+                if (itemId) {
+                    await this.prisma.cloneTaskItem.update({
+                        where: { id: itemId },
+                        data: { status: 'CLONING', message: '正在克隆...' },
                     });
-                    itemId = item.id;
-                } catch (createErr) {
-                    this.logger.error('创建 CLONING 记录失败: repo=' + repo.fullName);
-                    // 即使记录创建失败，仍尝试克隆（尽力而为）
                 }
 
                 const result = await this.cloneWithRetry(repo.fullName || '', repoName, repoDir, repo.htmlUrl || '', cloneDepth, taskId);
 
                 try {
-                    if (itemId!) {
+                    if (itemId) {
                         await this.prisma.cloneTaskItem.update({
                             where: { id: itemId },
                             data: { status: result.status, message: result.message },
                         });
                     } else {
-                        // 回退：创建新记录
                         await this.prisma.cloneTaskItem.create({
                             data: { taskId, fullName: repo.fullName || '', status: result.status, message: result.message, createdAt: new Date() },
                         });
                     }
 
-                    const incrementField =
-                        result.status === 'CLONED' ? 'completedRepos' : result.status === 'FAILED' ? 'failedRepos' : 'skippedRepos';
+                    const incrementField = result.status === 'CLONED' ? 'completedRepos' : 'failedRepos';
                     await this.prisma.cloneTask.update({ where: { taskId }, data: { [incrementField]: { increment: 1 } } });
 
                     if (result.status === 'CLONED') completed++;
-                    else if (result.status === 'FAILED') failed++;
-                    else skipped++;
+                    else failed++;
                 } catch (dbErr) {
                     this.logger.error(
                         '批量克隆 DB 写入异常: repo=' + repo.fullName + ', err=' + (dbErr instanceof Error ? dbErr.message : String(dbErr)),
                     );
                     try {
-                        if (itemId!) {
+                        if (itemId) {
                             await this.prisma.cloneTaskItem.update({
                                 where: { id: itemId },
                                 data: { status: 'FAILED', message: 'DB写入异常: ' + (dbErr instanceof Error ? dbErr.message : String(dbErr)).substring(0, 300) },
                             });
-                        } else {
-                            await this.prisma.cloneTaskItem.create({
-                                data: {
-                                    taskId, fullName: repo.fullName || '', status: 'FAILED',
-                                    message: 'DB写入异常: ' + (dbErr instanceof Error ? dbErr.message : String(dbErr)).substring(0, 300),
-                                    createdAt: new Date(),
-                                },
-                            });
                         }
                         await this.prisma.cloneTask.update({ where: { taskId }, data: { failedRepos: { increment: 1 } } });
-                    } catch (retryErr) {
-                        this.logger.error('批量克隆 DB 补救写入也失败: repo=' + repo.fullName);
-                    }
+                    } catch {}
                     failed++;
                 }
 
@@ -804,7 +814,7 @@ export class CloneService implements OnModuleInit {
             return { success: false, message: '所有仓库已克隆成功，无需重试' };
         }
 
-        const concurrency = concurrencyOverride && concurrencyOverride > 0 ? Math.min(concurrencyOverride, 50) : task.concurrency;
+        const concurrency = concurrencyOverride && concurrencyOverride > 0 ? Math.min(concurrencyOverride, 200) : Math.min(task.concurrency, 200);
 
         const wasFailedCount = retryItems.filter((i) => i.status === 'FAILED').length;
         const wasSkippedCount = retryItems.filter((i) => i.status === 'SKIPPED').length;
