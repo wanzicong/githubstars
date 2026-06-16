@@ -44,7 +44,6 @@ const STATUS_COLOR_MAP: Record<string, string> = {
     CLONED: 'success',
     COMPLETED: 'success',
     FAILED: 'error',
-    SKIPPED: 'warning',
     PENDING: 'default',
 }
 
@@ -54,7 +53,6 @@ const STATUS_LABEL_MAP: Record<string, string> = {
     CLONED: '已克隆',
     COMPLETED: '已完成',
     FAILED: '失败',
-    SKIPPED: '跳过',
     PENDING: '等待中',
 }
 
@@ -260,7 +258,6 @@ export default function CloneTaskDetail() {
         { title: '总仓库数', key: 'totalRepos', color: '#1677ff', icon: <DownloadOutlined /> },
         { title: '成功', key: 'completedRepos', color: '#52c41a', icon: <CheckCircleOutlined /> },
         { title: '失败', key: 'failedRepos', color: '#ff4d4f', icon: <CloseCircleOutlined /> },
-        { title: '跳过', key: 'skippedRepos', color: '#faad14', icon: <WarningOutlined /> },
     ]
 
     return (
@@ -439,7 +436,8 @@ export default function CloneTaskDetail() {
                                 { label: '全部', value: '全部' },
                                 { label: `成功 (${task.completedRepos ?? 0})`, value: 'CLONED' },
                                 { label: `失败 (${task.failedRepos ?? 0})`, value: 'FAILED' },
-                                { label: `跳过 (${task.skippedRepos ?? 0})`, value: 'SKIPPED' },
+                                { label: '等待中', value: 'PENDING' },
+                                { label: '克隆中', value: 'CLONING' },
                             ]}
                             size='small'
                         />

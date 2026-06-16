@@ -547,10 +547,10 @@ export class CloneService implements OnModuleInit {
 
             await this.prisma.cloneTask.update({
                 where: { taskId },
-                data: { totalRepos: allRepos.length, completedRepos: 0, failedRepos: 0, skippedRepos: oversizedRepos.length },
+                data: { totalRepos: allRepos.length, completedRepos: 0, failedRepos: oversizedRepos.length, skippedRepos: 0 },
             });
 
-            // 批量创建所有仓库的记录：PENDING（待克隆），超大仓库直接 SKIPPED
+            // 批量创建所有仓库的记录：PENDING（待克隆），超大仓库直接 FAILED
             if (repos.length > 0) {
                 await this.prisma.cloneTaskItem.createMany({
                     data: repos.map((r) => ({
@@ -567,7 +567,7 @@ export class CloneService implements OnModuleInit {
                     data: oversizedRepos.map((r) => ({
                         taskId,
                         fullName: r.fullName || '',
-                        status: 'SKIPPED',
+                        status: 'FAILED',
                         message: `仓库体积超过限制 (${Math.round((r.sizeKb || r.size || 0) / 1024)}MB > ${maxRepoSizeMb}MB)`,
                         createdAt: new Date(),
                     })),
@@ -582,8 +582,8 @@ export class CloneService implements OnModuleInit {
             const itemIdByFullName = new Map(pendingItems.map((i) => [i.fullName, i.id]));
 
             let completed = 0,
-                failed = 0,
-                skipped = oversizedRepos.length;
+                failed = oversizedRepos.length,
+                skipped = 0;
             await this.executeWithSemaphore(repos, concurrency, async (repo) => {
                 const repoName = repo.repoName || repo.fullName?.split('/').pop() || '';
                 const repoDir = path.join(targetDir, repoName);
@@ -797,16 +797,9 @@ export class CloneService implements OnModuleInit {
         if (task.status === 'RUNNING') return { success: false, message: '任务正在运行中，无法重试' };
 
         const retryItems = await this.prisma.cloneTaskItem.findMany({
-            where: { taskId, status: { in: ['FAILED', 'SKIPPED'] } },
+            where: { taskId, status: { in: ['FAILED', 'PENDING'] } },
         });
         if (retryItems.length === 0) {
-            const actualItemCount = await this.prisma.cloneTaskItem.count({ where: { taskId } });
-            if (task.totalRepos > actualItemCount) {
-                return {
-                    success: false,
-                    message: `数据异常：总仓库数(${task.totalRepos})与实际记录数(${actualItemCount})不一致，请删除此任务后重新创建克隆任务`,
-                };
-            }
             return { success: false, message: '没有需要重试的未成功项' };
         }
 
@@ -817,7 +810,6 @@ export class CloneService implements OnModuleInit {
         const concurrency = concurrencyOverride && concurrencyOverride > 0 ? Math.min(concurrencyOverride, 200) : Math.min(task.concurrency, 200);
 
         const wasFailedCount = retryItems.filter((i) => i.status === 'FAILED').length;
-        const wasSkippedCount = retryItems.filter((i) => i.status === 'SKIPPED').length;
 
         this.cancelledTasks.delete(taskId);
 
@@ -840,7 +832,7 @@ export class CloneService implements OnModuleInit {
         }
 
         this.logger.log(
-            '重试克隆未成功项: taskId=' + taskId + ', 失败=' + wasFailedCount + ', 跳过=' + wasSkippedCount + ', 目标目录=' + targetDir,
+            '重试克隆未成功项: taskId=' + taskId + ', 需重试=' + retryItems.length + ', 目标目录=' + targetDir,
         );
         await this.prisma.cloneTask.update({
             where: { taskId },
@@ -933,7 +925,7 @@ export class CloneService implements OnModuleInit {
             if (cached) {
                 cached.completedRepos = (task.completedRepos || 0) + completed;
                 cached.failedRepos = (task.failedRepos || 0) + failed - wasFailedCount;
-                cached.skippedRepos = Math.max(0, (task.skippedRepos || 0) - wasSkippedCount);
+                cached.skippedRepos = 0;
             }
         });
 
@@ -946,12 +938,10 @@ export class CloneService implements OnModuleInit {
         });
         let actualCompleted = 0,
             actualFailed = 0,
-            actualSkipped = 0,
             actualCloning = 0;
         for (const row of actualCounts) {
             if (row.status === 'CLONED') actualCompleted = row._count;
             else if (row.status === 'FAILED') actualFailed = row._count;
-            else if (row.status === 'SKIPPED') actualSkipped = row._count;
             else if (row.status === 'CLONING') actualCloning = row._count;
         }
 
@@ -973,8 +963,7 @@ export class CloneService implements OnModuleInit {
                 errorMessage: cancelled ? '用户取消' : null,
                 completedRepos: actualCompleted,
                 failedRepos: actualFailed,
-                skippedRepos: actualSkipped,
-                totalRepos: actualCompleted + actualFailed + actualSkipped + actualCloning,
+                skippedRepos: 0,
             },
         });
 
@@ -993,10 +982,8 @@ export class CloneService implements OnModuleInit {
                 completed +
                 ', 失败=' +
                 failed +
-                ', 原失败=' +
-                wasFailedCount +
-                ', 原跳过=' +
-                wasSkippedCount +
+                ', 需重试=' +
+                retryItems.length +
                 ', 状态=' +
                 finalStatus,
         );

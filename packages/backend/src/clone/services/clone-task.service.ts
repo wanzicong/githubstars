@@ -45,41 +45,37 @@ export class CloneTaskService {
                 `SELECT task_id, status, COUNT(*) as cnt FROM clone_task_item WHERE task_id IN (${nonActiveTaskIds.map((id) => `'${id}'`).join(',')}) GROUP BY task_id, status`,
             );
 
-            const countMap = new Map<string, { completed: number; failed: number; skipped: number; cloning: number }>();
+            const countMap = new Map<string, { completed: number; failed: number; cloning: number; pending: number }>();
             for (const row of counts) {
                 if (!countMap.has(row.task_id)) {
-                    countMap.set(row.task_id, { completed: 0, failed: 0, skipped: 0, cloning: 0 });
+                    countMap.set(row.task_id, { completed: 0, failed: 0, cloning: 0, pending: 0 });
                 }
                 const entry = countMap.get(row.task_id)!;
                 if (row.status === 'CLONED') entry.completed = Number(row.cnt);
                 else if (row.status === 'FAILED') entry.failed = Number(row.cnt);
-                else if (row.status === 'SKIPPED') entry.skipped = Number(row.cnt);
                 else if (row.status === 'CLONING') entry.cloning = Number(row.cnt);
+                else if (row.status === 'PENDING') entry.pending = Number(row.cnt);
             }
 
             for (const task of records) {
                 const actual = countMap.get(task.taskId);
                 if (!actual) continue;
-                const actualTotal = actual.completed + actual.failed + actual.skipped + actual.cloning;
-                const needsRepair =
+                if (
                     task.completedRepos !== actual.completed ||
                     task.failedRepos !== actual.failed ||
-                    task.skippedRepos !== actual.skipped ||
-                    task.totalRepos !== actualTotal;
-                if (needsRepair) {
+                    task.skippedRepos !== 0
+                ) {
                     await this.prisma.cloneTask.update({
                         where: { taskId: task.taskId },
                         data: {
                             completedRepos: actual.completed,
                             failedRepos: actual.failed,
-                            skippedRepos: actual.skipped,
-                            totalRepos: actualTotal,
+                            skippedRepos: 0,
                         },
                     });
                     (task as any).completedRepos = actual.completed;
                     (task as any).failedRepos = actual.failed;
-                    (task as any).skippedRepos = actual.skipped;
-                    (task as any).totalRepos = actualTotal;
+                    (task as any).skippedRepos = 0;
                 }
             }
         }
@@ -169,7 +165,7 @@ export class CloneTaskService {
      */
     async getTaskIdsWithFailedItems(): Promise<string[]> {
         const rows = await this.prisma.cloneTaskItem.findMany({
-            where: { status: { in: ['FAILED', 'SKIPPED'] } },
+            where: { status: { in: ['FAILED', 'PENDING'] } },
             select: { taskId: true },
             distinct: ['taskId'],
         });

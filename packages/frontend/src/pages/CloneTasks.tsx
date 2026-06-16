@@ -248,14 +248,6 @@ export default function CloneTasks() {
             render: (v: number) => (v > 0 ? <span style={{ color: '#ff4d4f' }}>{v}</span> : v),
         },
         {
-            title: '跳过',
-            dataIndex: 'skippedRepos',
-            key: 'skippedRepos',
-            width: 80,
-            align: 'right' as const,
-            render: (v: number) => (v > 0 ? <span style={{ color: '#faad14' }}>{v}</span> : v),
-        },
-        {
             title: '并发数',
             dataIndex: 'concurrency',
             key: 'concurrency',
