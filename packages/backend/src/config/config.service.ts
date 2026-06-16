@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
  * 系统配置服务
  *
  * 负责管理 system_config 表的读写操作，在模块初始化时自动写入默认配置项。
- * 配置项以键值对形式存储，包含 GitHub、DeepSeek、Clone 等模块的配置。
+ * 配置项以键值对形式存储，包含 GitHub、DeepSeek 等模块的配置。
  * 敏感字段（token/api_key）在列表查询时自动脱敏显示。
  */
 @Injectable()
@@ -17,10 +17,6 @@ export class ConfigService implements OnModuleInit {
         { key: 'deepseek.api_key', value: '', description: 'DeepSeek API Key' },
         { key: 'deepseek.api_url', value: 'https://api.deepseek.com/v1/chat/completions', description: 'DeepSeek API 地址' },
         { key: 'deepseek.model', value: 'deepseek-chat', description: 'DeepSeek 模型名称' },
-        { key: 'clone.directory', value: 'D:/github-stars', description: 'Clone 目标目录' },
-        { key: 'clone.proxy.url', value: '', description: 'Clone 代理 URL 前缀' },
-        { key: 'clone.subdirectory.history', value: '[]', description: '子目录历史' },
-        { key: 'clone.subdirectory.last', value: '', description: '上次使用的子目录' },
     ];
 
     constructor(private readonly prisma: PrismaService) {}

@@ -11,7 +11,6 @@ import { StatsModule } from './stats/stats.module';
 import { AuthorModule } from './author/author.module';
 import { TranslateModule } from './translate/translate.module';
 import { AiModule } from './ai/ai.module';
-import { CloneModule } from './clone/clone.module';
 import { TrendingModule } from './trending/trending.module';
 import { ExportModule } from './export/export.module';
 import { AgentModule } from './agent/agent.module';
@@ -23,7 +22,7 @@ import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
 /**
  * 应用根模块
  *
- * 注册所有业务子模块（GitHub、同步、分类、翻译、AI、克隆、统计、导出等），
+ * 注册所有业务子模块（GitHub、同步、分类、翻译、AI、统计、导出等），
  * 导入定时任务调度器、Prisma ORM、配置管理、日志服务等基础设施，
  * 并在全局范围注册 BigInt 拦截器，将 BigInt 类型的 ID 序列化为 Number。
  */
@@ -40,7 +39,6 @@ import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
         AuthorModule,
         TranslateModule,
         AiModule,
-        CloneModule,
         TrendingModule,
         ExportModule,
         AgentModule,

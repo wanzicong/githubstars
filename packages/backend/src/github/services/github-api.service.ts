@@ -452,21 +452,6 @@ export class GithubApiService {
         }
     }
 
-    /**
-     * 构建 clone URL
-     *
-     * 如果配置了 clone.proxy.url，则拼接代理前缀；
-     * 否则直接返回 htmlUrl + ".git"。
-     */
-    async buildCloneUrl(htmlUrl: string): Promise<string> {
-        const proxyUrl = await this.config.getValueDefault('clone.proxy.url', '');
-        if (proxyUrl) {
-            const sep = proxyUrl.endsWith('/') ? '' : '/';
-            return `${proxyUrl}${sep}${htmlUrl}`;
-        }
-        return htmlUrl + '.git';
-    }
-
     // ============================================================
     // 内部工具方法
     // ============================================================

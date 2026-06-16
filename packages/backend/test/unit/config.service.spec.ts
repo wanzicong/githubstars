@@ -66,7 +66,7 @@ describe('ConfigService', () => {
 
     describe('update', () => {
         it('不存在的 key 应调用 create 创建新记录并写入缓存', async () => {
-            // 重置 create 计数（ensureDefaults 已在 beforeEach 中调用过 9 次 create）
+            // 重置 create 计数（ensureDefaults 已在 beforeEach 中调用过 5 次 create）
             mockPrisma.systemConfig.create.mockClear();
 
             await service.update('new.config', 'newValue');
@@ -181,20 +181,19 @@ describe('ConfigService', () => {
         });
 
         it('应在启动时创建所有缺失的默认配置', () => {
-            // 全部 findUnique 返回 null，所以 create 被调用 9 次（每个默认配置）
-            expect(ensureMockPrisma.systemConfig.create).toHaveBeenCalledTimes(9);
+            // 全部 findUnique 返回 null，所以 create 被调用 5 次（每个默认配置）
+            expect(ensureMockPrisma.systemConfig.create).toHaveBeenCalledTimes(5);
 
             // 验证 findUnique 被查询了所有默认 key
             const findUniqueCalls = ensureMockPrisma.systemConfig.findUnique.mock.calls;
             const queriedKeys = findUniqueCalls.map((call: any) => call[0]?.where?.configKey).filter(Boolean);
             // 至少包含核心默认 key（具体 key 名依赖 defaults 数组实现，不逐个断言）
-            expect(queriedKeys.length).toBeGreaterThanOrEqual(9);
+            expect(queriedKeys.length).toBeGreaterThanOrEqual(5);
 
             // 核心默认 key 验证
             const keySet = new Set(queriedKeys);
             expect(keySet.has('github.token')).toBe(true);
             expect(keySet.has('deepseek.api_key')).toBe(true);
-            expect(keySet.has('clone.directory')).toBe(true);
         });
     });
 });

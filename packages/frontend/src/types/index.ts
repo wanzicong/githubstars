@@ -146,40 +146,4 @@ export interface ApiResponse<T = unknown> {
     [key: string]: unknown
 }
 
-export interface CloneTaskRecord {
-    id: number
-    taskId: string
-    status: string
-    totalRepos: number
-    completedRepos: number
-    failedRepos: number
-    skippedRepos: number
-    errorMessage?: string
-    keyword?: string
-    language?: string
-    categoryIds?: string
-    dateField?: string
-    startDate?: string
-    endDate?: string
-    subDirectory?: string
-    targetDir?: string
-    sortBy?: string
-    sortOrder?: string
-    concurrency: number
-    cloneDepth?: number
-    maxRepoSizeMb?: number
-    cancelled?: number
-    pinned?: number
-    startedAt?: string
-    finishedAt?: string
-    createdAt?: string
-}
 
-export interface CloneTaskItem {
-    id: number
-    taskId: string
-    fullName: string
-    status: string
-    message?: string
-    createdAt?: string
-}

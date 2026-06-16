@@ -15,8 +15,6 @@ const AuthorDetail = lazy(() => import('./pages/AuthorDetail'))
 const Settings = lazy(() => import('./pages/Settings'))
 const GithubSearch = lazy(() => import('./pages/GithubSearch'))
 const Trending = lazy(() => import('./pages/Trending'))
-const CloneTasks = lazy(() => import('./pages/CloneTasks'))
-const CloneTaskDetail = lazy(() => import('./pages/CloneTaskDetail'))
 const Logs = lazy(() => import('./pages/Logs'))
 const TagBrowse = lazy(() => import('./pages/TagBrowse'))
 const SimilarCacheList = lazy(() => import('./pages/SimilarCacheList'))
@@ -73,8 +71,6 @@ export default function App() {
                                 <Route path='/settings' element={<LazyPage Page={Settings} />} />
                                 <Route path='/search' element={<LazyPage Page={GithubSearch} />} />
                                 <Route path='/trending' element={<LazyPage Page={Trending} />} />
-                                <Route path='/clone-tasks' element={<LazyPage Page={CloneTasks} />} />
-                                <Route path='/clone-tasks/:taskId' element={<LazyPage Page={CloneTaskDetail} />} />
                                 <Route path='/logs' element={<LazyPage Page={Logs} />} />
                                 <Route path='/tags' element={<LazyPage Page={TagBrowse} />} />
                                 <Route path='/similar-cache' element={<LazyPage Page={SimilarCacheList} />} />

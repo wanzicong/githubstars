@@ -25,7 +25,7 @@ async function bootstrap() {
     // Swagger API 文档配置
     const swaggerConfig = new DocumentBuilder()
         .setTitle('GitHub Stars 管理系统')
-        .setDescription('对自己 Star 过的 GitHub 仓库进行管理、分类、翻译、统计、AI 分析和批量克隆的后端 API 文档')
+        .setDescription('对自己 Star 过的 GitHub 仓库进行管理、分类、翻译、统计、AI 分析的后端 API 文档')
         .setVersion('1.0.0')
         .addTag('stars', '星标仓库列表与详情')
         .addTag('sync', 'Star 数据同步')
@@ -36,7 +36,6 @@ async function bootstrap() {
         .addTag('authors', '作者中心')
         .addTag('trending', 'GitHub Trending')
         .addTag('github', 'GitHub 搜索与 Star 操作')
-        .addTag('clone', '批量克隆')
         .addTag('export', 'Markdown 导出')
         .addTag('analyze', 'AI 分析')
         .addTag('classify', 'AI 分类')
