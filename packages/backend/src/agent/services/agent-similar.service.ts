@@ -193,7 +193,7 @@ export class AgentSimilarService {
                                 if (block.type === 'text' && 'text' in block) {
                                     yield {
                                         type: 'thinking',
-                                        content: block.text as string,
+                                        content: block.text,
                                     };
                                 } else if (block.type === 'tool_use') {
                                     yield {

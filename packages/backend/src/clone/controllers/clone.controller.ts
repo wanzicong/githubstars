@@ -174,6 +174,7 @@ export class CloneController {
             return { success: false, message: '任务正在运行中，请先取消任务后再删除' };
         }
         this.logger.log('删除克隆任务: taskId=' + taskId);
+        this.cloneService.removeTaskFromCache(taskId);
         await this.taskService.deleteTaskByTaskId(taskId);
         return { success: true, message: '任务已删除' };
     }
@@ -199,24 +200,43 @@ export class CloneController {
     }
 
     /**
-     * 重试所有存在失败项的任务
+     * 重试所有存在失败项的任务（自动跳过运行中的任务和已全部成功的任务）
      *
      * @returns 重试结果汇总
      */
     @Post('api/clone/tasks/retry-all')
-    @ApiOperation({ summary: '批量重试失败克隆', description: '异步重试所有包含失败项的任务' })
+    @ApiOperation({ summary: '批量重试失败克隆', description: '异步重试所有包含失败项且非运行中的任务，自动跳过运行中任务' })
     async retryAll() {
         try {
             const ids = await this.taskService.getTaskIdsWithFailedItems();
             if (!ids.length) return { success: false, message: '没有需要重试的任务' };
-            this.logger.log('批量重试克隆失败项: 任务数=' + ids.length);
-            // 异步执行，不阻塞 HTTP 请求
+
+            // 过滤掉正在运行的任务，避免并发冲突
+            const eligibleIds: string[] = [];
+            let skippedRunning = 0;
             for (const id of ids) {
-                this.cloneService.retryFailedClones(id).catch((e) =>
-                    this.logger.error('重试任务异常: taskId=' + id + ', ' + (e instanceof Error ? e.message : String(e))),
-                );
+                const task = await this.taskService.getTaskByTaskId(id);
+                if (task && task.status === 'RUNNING') {
+                    skippedRunning++;
+                } else {
+                    eligibleIds.push(id);
+                }
             }
-            return { success: true, message: `已启动 ${ids.length} 个任务的失败项重试` };
+
+            if (!eligibleIds.length) {
+                return { success: false, message: `没有可重试的任务（${skippedRunning} 个正在运行中）` };
+            }
+
+            const skipNote = skippedRunning > 0 ? `，跳过 ${skippedRunning} 个运行中任务` : '';
+            this.logger.log('批量重试克隆失败项: 任务数=' + eligibleIds.length + skipNote);
+
+            // 异步执行，不阻塞 HTTP 请求
+            for (const id of eligibleIds) {
+                this.cloneService
+                    .retryFailedClones(id)
+                    .catch((e) => this.logger.error('重试任务异常: taskId=' + id + ', ' + (e instanceof Error ? e.message : String(e))));
+            }
+            return { success: true, message: `已启动 ${eligibleIds.length} 个任务的失败项重试${skipNote}` };
         } catch (e) {
             this.logger.error('批量重试克隆失败项异常: ' + (e instanceof Error ? e.message : String(e)));
             return { success: false, message: e instanceof Error ? e.message : String(e) };

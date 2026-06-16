@@ -52,6 +52,16 @@ export class CloneService implements OnModuleInit {
     }
 
     /**
+     * 清理指定任务的内存缓存（cancelledTasks Set + runningTasks Map）
+     *
+     * @param taskId 任务 ID
+     */
+    removeTaskFromCache(taskId: string): void {
+        this.cancelledTasks.delete(taskId);
+        this.runningTasks.delete(taskId);
+    }
+
+    /**
      * 获取克隆根目录路径，优先使用系统配置中的 clone.directory
      *
      * @returns 克隆根目录路径
@@ -361,6 +371,20 @@ export class CloneService implements OnModuleInit {
         const maxRepoSizeMb = params.maxRepoSizeMb || 500;
 
         try {
+            // 清理超时未启动的僵死 PENDING 任务（>30 秒未转为 RUNNING）
+            const staleThreshold = new Date(Date.now() - 30000);
+            const stalePendings = await this.prisma.cloneTask.findMany({
+                where: { status: 'PENDING', createdAt: { lt: staleThreshold } },
+                select: { taskId: true },
+            });
+            for (const z of stalePendings) {
+                await this.prisma.cloneTask.update({
+                    where: { taskId: z.taskId },
+                    data: { status: 'FAILED', errorMessage: '任务超时未启动，已被新任务覆盖', finishedAt: new Date() },
+                });
+                this.logger.warn('清理僵尸 PENDING 任务: taskId=' + z.taskId);
+            }
+
             // 全局并发限制：同一时间只允许一个克隆任务运行
             if (await this.cloneTaskService.hasActiveTask()) {
                 return { success: false, message: '已有克隆任务正在运行，请等待完成或取消后再试' };
@@ -515,24 +539,66 @@ export class CloneService implements OnModuleInit {
                 failed = 0,
                 skipped = oversizedRepos.length;
             await this.executeWithSemaphore(repos, concurrency, async (repo) => {
-                if (this.cancelledTasks.has(taskId)) return;
+                if (this.cancelledTasks.has(taskId)) {
+                    try {
+                        await this.prisma.cloneTaskItem.create({
+                            data: {
+                                taskId,
+                                fullName: repo.fullName || '',
+                                status: 'FAILED',
+                                message: '任务已取消',
+                                createdAt: new Date(),
+                            },
+                        });
+                        await this.prisma.cloneTask.update({ where: { taskId }, data: { failedRepos: { increment: 1 } } });
+                    } catch (dbErr) {
+                        this.logger.error('取消写入 FAILED 记录失败: repo=' + repo.fullName);
+                    }
+                    failed++;
+                    return;
+                }
                 const repoName = repo.repoName || repo.fullName?.split('/').pop() || '';
                 const repoDir = path.join(targetDir, repoName);
                 const result = await this.cloneWithRetry(repo.fullName || '', repoName, repoDir, repo.htmlUrl || '', cloneDepth, taskId);
 
-                await this.prisma.cloneTaskItem.create({
-                    data: { taskId, fullName: repo.fullName || '', status: result.status, message: result.message, createdAt: new Date() },
-                });
+                try {
+                    await this.prisma.cloneTaskItem.create({
+                        data: {
+                            taskId,
+                            fullName: repo.fullName || '',
+                            status: result.status,
+                            message: result.message,
+                            createdAt: new Date(),
+                        },
+                    });
 
-                // 使用 increment 操作避免并发写覆盖
-                const incrementField =
-                    result.status === 'CLONED' ? 'completedRepos' : result.status === 'FAILED' ? 'failedRepos' : 'skippedRepos';
-                await this.prisma.cloneTask.update({ where: { taskId }, data: { [incrementField]: { increment: 1 } } });
+                    const incrementField =
+                        result.status === 'CLONED' ? 'completedRepos' : result.status === 'FAILED' ? 'failedRepos' : 'skippedRepos';
+                    await this.prisma.cloneTask.update({ where: { taskId }, data: { [incrementField]: { increment: 1 } } });
 
-                // 本地计数器仅用于内存缓存
-                if (result.status === 'CLONED') completed++;
-                else if (result.status === 'FAILED') failed++;
-                else skipped++;
+                    if (result.status === 'CLONED') completed++;
+                    else if (result.status === 'FAILED') failed++;
+                    else skipped++;
+                } catch (dbErr) {
+                    this.logger.error(
+                        '批量克隆 DB 写入异常: repo=' + repo.fullName + ', err=' + (dbErr instanceof Error ? dbErr.message : String(dbErr)),
+                    );
+                    try {
+                        await this.prisma.cloneTaskItem.create({
+                            data: {
+                                taskId,
+                                fullName: repo.fullName || '',
+                                status: 'FAILED',
+                                message: 'DB写入异常: ' + (dbErr instanceof Error ? dbErr.message : String(dbErr)).substring(0, 300),
+                                createdAt: new Date(),
+                            },
+                        });
+                        await this.prisma.cloneTask.update({ where: { taskId }, data: { failedRepos: { increment: 1 } } });
+                    } catch (retryErr) {
+                        this.logger.error('批量克隆 DB 补救写入也失败: repo=' + repo.fullName);
+                    }
+                    failed++;
+                }
 
                 const cached = this.runningTasks.get(taskId);
                 if (cached) {
@@ -542,7 +608,15 @@ export class CloneService implements OnModuleInit {
                 }
             });
 
-            const finalStatus = 'COMPLETED';
+            const cancelled = this.cancelledTasks.has(taskId);
+            let finalStatus: string;
+            if (cancelled) {
+                finalStatus = 'FAILED';
+            } else if (completed === 0 && failed > 0) {
+                finalStatus = 'FAILED';
+            } else {
+                finalStatus = 'COMPLETED';
+            }
             await this.prisma.cloneTask.update({ where: { taskId }, data: { status: finalStatus, finishedAt: new Date() } });
             this.logger.log(
                 '批量克隆完成: taskId=' +
@@ -552,7 +626,9 @@ export class CloneService implements OnModuleInit {
                     ', 失败=' +
                     failed +
                     ', 跳过=' +
-                    skipped,
+                    skipped +
+                    ', 状态=' +
+                    finalStatus,
             );
             await this.saveHistory(subDir);
         } catch (e) {
@@ -565,8 +641,11 @@ export class CloneService implements OnModuleInit {
         } finally {
             this.cancelledTasks.delete(taskId);
             const cached = this.runningTasks.get(taskId);
-            if (cached) cached.status = 'COMPLETED';
-            setTimeout(() => this.runningTasks.delete(taskId), 5000);
+            if (cached) {
+                const updated = await this.prisma.cloneTask.findUnique({ where: { taskId }, select: { status: true } });
+                if (updated) cached.status = updated.status;
+            }
+            setTimeout(() => this.runningTasks.delete(taskId), 2000);
         }
     }
 
@@ -578,11 +657,23 @@ export class CloneService implements OnModuleInit {
      */
     async getTask(taskId: string) {
         const cached = this.runningTasks.get(taskId);
-        if (cached)
+        if (cached) {
+            const [items, dbTask] = await Promise.all([
+                this.prisma.cloneTaskItem.findMany({ where: { taskId }, take: 100, orderBy: { createdAt: 'asc' } }),
+                this.prisma.cloneTask.findUnique({
+                    where: { taskId },
+                    select: { completedRepos: true, failedRepos: true, skippedRepos: true, totalRepos: true },
+                }),
+            ]);
             return {
                 ...cached,
-                items: await this.prisma.cloneTaskItem.findMany({ where: { taskId }, take: 100, orderBy: { createdAt: 'asc' } }),
+                completedRepos: dbTask?.completedRepos ?? cached.completedRepos,
+                failedRepos: dbTask?.failedRepos ?? cached.failedRepos,
+                skippedRepos: dbTask?.skippedRepos ?? cached.skippedRepos,
+                totalRepos: dbTask?.totalRepos ?? cached.totalRepos,
+                items,
             };
+        }
         return this.prisma.cloneTask.findUnique({ where: { taskId }, include: { items: { take: 100, orderBy: { createdAt: 'asc' } } } });
     }
 
@@ -595,49 +686,141 @@ export class CloneService implements OnModuleInit {
     async cancelTask(taskId: string) {
         const task = await this.prisma.cloneTask.findUnique({ where: { taskId } });
         if (!task || (task.status !== 'RUNNING' && task.status !== 'PENDING')) return false;
-        this.cancelledTasks.add(taskId);
         this.logger.log('取消克隆任务: taskId=' + taskId);
         await this.prisma.cloneTask.update({
             where: { taskId },
             data: { status: 'FAILED', errorMessage: '用户取消', finishedAt: new Date(), cancelled: 1 },
         });
+        this.cancelledTasks.add(taskId);
         return true;
     }
 
     /**
-     * 重试克隆失败项，只重试状态为 FAILED 的项（不含 SKIPPED），使用 buildCloneUrl 支持代理
+     * 递归清理目标目录下的空文件夹。
+     * 失败的克隆操作可能留下空目录，重试前需清理以避免 "目录已存在" 的误判。
+     *
+     * @param dir 要清理的目录路径
+     */
+    private cleanupEmptyDirs(dir: string): void {
+        if (!fs.existsSync(dir)) return;
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                const fullPath = path.join(dir, entry.name);
+                this.cleanupEmptyDirs(fullPath);
+                // 递归清理子目录后，检查当前目录是否为空
+                try {
+                    const remaining = fs.readdirSync(fullPath);
+                    if (remaining.length === 0) {
+                        fs.rmdirSync(fullPath);
+                        this.logger.log('清理空目录: ' + fullPath);
+                    }
+                } catch {
+                    // 忽略权限等错误
+                }
+            }
+        }
+    }
+
+    /**
+     * 重试克隆未成功项（含 FAILED 和 SKIPPED），自动过滤已成功克隆（CLONED）的仓库。
+     * 只要成功数量 ≠ 总仓库数量，就可以重试——不限于 FAILED，SKIPPED（如"目录已存在"）也一并重试。
+     * 重试前自动清理空目录和残留目录，确保干净的克隆环境。
      *
      * @param taskId 任务 ID
      * @returns 重试结果，包含成功/失败计数
+     *
+     * @callers
+     *   - CloneController.retryTask()  — 单个任务重试
+     *   - CloneController.retryAll()   — 批量重试全部未成功项
+     *
+     * @depends
+     *   - CloneTaskItem 表（查询 FAILED + SKIPPED 项、更新状态）
+     *   - CloneTask 表（更新状态和计数器）
+     *   - cleanupEmptyDirs() — 清理空目录
+     *   - spawnGitClone()    — 执行 git clone
      */
     async retryFailedClones(taskId: string) {
         const task = await this.prisma.cloneTask.findUnique({ where: { taskId } });
-        if (!task || task.status === 'PENDING') return { success: false, message: '任务无法重试' };
+        // 运行中的任务不允许重试（避免并发冲突）
+        if (!task) return { success: false, message: '任务不存在' };
+        if (task.status === 'RUNNING') return { success: false, message: '任务正在运行中，无法重试' };
 
-        const failedItems = await this.prisma.cloneTaskItem.findMany({ where: { taskId, status: 'FAILED' } });
-        if (failedItems.length === 0) return { success: false, message: '没有需要重试的失败项' };
+        // 重试所有未成功的项（FAILED + SKIPPED），已成功克隆的 CLONED 仓库自动过滤掉
+        const retryItems = await this.prisma.cloneTaskItem.findMany({
+            where: { taskId, status: { in: ['FAILED', 'SKIPPED'] } },
+        });
+        if (retryItems.length === 0) {
+            const actualItemCount = await this.prisma.cloneTaskItem.count({ where: { taskId } });
+            if (task.totalRepos > actualItemCount) {
+                return {
+                    success: false,
+                    message: `数据异常：总仓库数(${task.totalRepos})与实际记录数(${actualItemCount})不一致，请删除此任务后重新创建克隆任务`,
+                };
+            }
+            return { success: false, message: '没有需要重试的未成功项' };
+        }
+
+        // 成功数量已等于总仓库数量 → 无需重试
+        if (task.completedRepos >= task.totalRepos) {
+            return { success: false, message: '所有仓库已克隆成功，无需重试' };
+        }
+
+        // 分别统计原状态，用于后续计数器修正
+        const wasFailedCount = retryItems.filter((i) => i.status === 'FAILED').length;
+        const wasSkippedCount = retryItems.filter((i) => i.status === 'SKIPPED').length;
 
         this.cancelledTasks.delete(taskId);
-        this.logger.log('重试克隆失败项: taskId=' + taskId + ', 失败项数=' + failedItems.length);
-        await this.prisma.cloneTask.update({ where: { taskId }, data: { status: 'RUNNING', cancelled: 0 } });
+
         const targetDir = task.targetDir || (await this.getBaseDir());
 
+        // 重试前清理：删除空目录和失败的残留目录
+        this.cleanupEmptyDirs(targetDir);
+        for (const item of retryItems) {
+            const repoName = item.fullName.split('/').pop() || '';
+            const repoDir = path.join(targetDir, repoName);
+            // 删除失败的克隆残留目录（可能为空或包含不完整的 .git 数据）
+            if (fs.existsSync(repoDir)) {
+                try {
+                    fs.rmSync(repoDir, { recursive: true, force: true });
+                    this.logger.log('重试前清理残留目录: ' + repoDir);
+                } catch (e) {
+                    this.logger.warn('清理残留目录异常: ' + repoDir + ', ' + (e instanceof Error ? e.message : String(e)));
+                }
+            }
+        }
+
+        this.logger.log(
+            '重试克隆未成功项: taskId=' + taskId + ', 失败=' + wasFailedCount + ', 跳过=' + wasSkippedCount + ', 目标目录=' + targetDir,
+        );
+        await this.prisma.cloneTask.update({
+            where: { taskId },
+            data: { status: 'RUNNING', cancelled: 0, errorMessage: null },
+        });
+
         // 加入 runningTasks 缓存以支持前端实时进度轮询
-        this.runningTasks.set(taskId, { ...task, status: 'RUNNING', completedRepos: task.completedRepos, failedRepos: task.failedRepos, skippedRepos: task.skippedRepos });
+        this.runningTasks.set(taskId, {
+            ...task,
+            status: 'RUNNING',
+            completedRepos: task.completedRepos,
+            failedRepos: task.failedRepos,
+            skippedRepos: task.skippedRepos,
+        });
 
         let completed = 0,
             failed = 0;
-        await this.executeWithSemaphore(failedItems, task.concurrency, async (item) => {
+        await this.executeWithSemaphore(retryItems, task.concurrency, async (item) => {
             if (this.cancelledTasks.has(taskId)) return;
             const repoName = item.fullName.split('/').pop() || '';
             const htmlUrl = `https://github.com/${item.fullName}`;
             const cloneUrl = await this.buildCloneUrl(htmlUrl);
             const repoDir = path.join(targetDir, repoName);
 
-            // 重试时强制覆盖
-            if (fs.existsSync(repoDir)) {
-                fs.rmSync(repoDir, { recursive: true, force: true });
-            }
             fs.mkdirSync(path.dirname(repoDir), { recursive: true });
 
             let result: { status: string; message: string };
@@ -651,39 +834,94 @@ export class CloneService implements OnModuleInit {
                 const msg = e instanceof Error ? e.message : String(e);
                 this.logger.error('重试克隆失败: 仓库=' + item.fullName + ', 错误=' + msg.substring(0, 200));
                 try {
-                    fs.rmSync(repoDir, { recursive: true, force: true });
+                    if (fs.existsSync(repoDir)) {
+                        fs.rmSync(repoDir, { recursive: true, force: true });
+                    }
                 } catch {}
                 result = { status: 'FAILED', message: msg.substring(0, 500) };
             }
 
-            await this.prisma.cloneTaskItem.update({ where: { id: item.id }, data: { status: result.status, message: result.message } });
+            await this.prisma.cloneTaskItem.update({
+                where: { id: item.id },
+                data: { status: result.status, message: result.message },
+            });
             if (result.status === 'CLONED') completed++;
             else failed++;
 
-            // 更新内存缓存
             const cached = this.runningTasks.get(taskId);
             if (cached) {
                 cached.completedRepos = (task.completedRepos || 0) + completed;
-                cached.failedRepos = (task.failedRepos || 0) + failed - failedItems.length;
+                cached.failedRepos = (task.failedRepos || 0) + failed - wasFailedCount;
+                cached.skippedRepos = Math.max(0, (task.skippedRepos || 0) - wasSkippedCount);
             }
         });
 
-        const finalStatus = failed === 0 ? 'COMPLETED' : 'COMPLETED';
-        const updateData: any = { status: finalStatus, finishedAt: new Date() };
-        if (completed > 0) updateData.completedRepos = { increment: completed };
-        // failedRepos: 原失败数减去本次重试的（因为重试成功的不再是失败），再加上仍然失败的
-        // 直接设置增量：成功的从 failed 转到 completed，所以 failedRepos 需要 decrement
-        if (completed > 0) updateData.failedRepos = { decrement: completed };
-        await this.prisma.cloneTask.update({ where: { taskId }, data: updateData });
+        this.cleanupEmptyDirs(targetDir);
 
-        // 清理缓存
+        const actualCounts = await this.prisma.cloneTaskItem.groupBy({
+            by: ['status'],
+            where: { taskId },
+            _count: true,
+        });
+        let actualCompleted = 0,
+            actualFailed = 0,
+            actualSkipped = 0;
+        for (const row of actualCounts) {
+            if (row.status === 'CLONED') actualCompleted = row._count;
+            else if (row.status === 'FAILED') actualFailed = row._count;
+            else if (row.status === 'SKIPPED') actualSkipped = row._count;
+        }
+
+        const cancelled = this.cancelledTasks.has(taskId);
+        let finalStatus: string;
+        if (cancelled) {
+            finalStatus = 'FAILED';
+        } else if (actualCompleted === 0 && actualFailed > 0) {
+            finalStatus = 'FAILED';
+        } else {
+            finalStatus = 'COMPLETED';
+        }
+
+        await this.prisma.cloneTask.update({
+            where: { taskId },
+            data: {
+                status: finalStatus,
+                finishedAt: new Date(),
+                errorMessage: cancelled ? '用户取消' : null,
+                completedRepos: actualCompleted,
+                failedRepos: actualFailed,
+                skippedRepos: actualSkipped,
+                totalRepos: actualCompleted + actualFailed + actualSkipped,
+            },
+        });
+
         this.cancelledTasks.delete(taskId);
         const cached = this.runningTasks.get(taskId);
-        if (cached) cached.status = finalStatus;
-        setTimeout(() => this.runningTasks.delete(taskId), 5000);
+        if (cached) {
+            const updated = await this.prisma.cloneTask.findUnique({ where: { taskId }, select: { status: true } });
+            if (updated) cached.status = updated.status;
+        }
+        setTimeout(() => this.runningTasks.delete(taskId), 2000);
 
-        this.logger.log('重试克隆完成: taskId=' + taskId + ', 成功=' + completed + ', 失败=' + failed);
-        return { success: true, message: `重试完成: ${completed}成功, ${failed}失败`, retryCount: failedItems.length };
+        this.logger.log(
+            '重试克隆完成: taskId=' +
+                taskId +
+                ', 成功=' +
+                completed +
+                ', 失败=' +
+                failed +
+                ', 原失败=' +
+                wasFailedCount +
+                ', 原跳过=' +
+                wasSkippedCount +
+                ', 状态=' +
+                finalStatus,
+        );
+        return {
+            success: true,
+            message: `重试完成: ${completed}成功, ${failed}失败`,
+            retryCount: retryItems.length,
+        };
     }
 
     /**

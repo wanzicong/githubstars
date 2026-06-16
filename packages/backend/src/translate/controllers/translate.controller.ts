@@ -57,8 +57,23 @@ export class TranslateController {
      * @returns { success, taskId?, translatedCount?, message }
      */
     @Post()
-    @ApiOperation({ summary: '创建翻译任务', description: '支持三种 scope: selected（指定仓库）、all（全量）、filtered（筛选条件）；三种 type: description / readme / both' })
-    @ApiBody({ description: '翻译任务参数', schema: { type: 'object', properties: { type: { type: 'string', enum: ['description', 'readme', 'both'], description: '翻译类型' }, scope: { type: 'string', enum: ['selected', 'all', 'filtered'], description: '范围类型' }, repoIds: { type: 'array', items: { type: 'number' }, description: '仓库 ID 列表（scope=selected 时使用）' }, filters: { type: 'object', description: '筛选条件（scope=filtered 时使用）' } }, required: ['type', 'scope'] } })
+    @ApiOperation({
+        summary: '创建翻译任务',
+        description: '支持三种 scope: selected（指定仓库）、all（全量）、filtered（筛选条件）；三种 type: description / readme / both',
+    })
+    @ApiBody({
+        description: '翻译任务参数',
+        schema: {
+            type: 'object',
+            properties: {
+                type: { type: 'string', enum: ['description', 'readme', 'both'], description: '翻译类型' },
+                scope: { type: 'string', enum: ['selected', 'all', 'filtered'], description: '范围类型' },
+                repoIds: { type: 'array', items: { type: 'number' }, description: '仓库 ID 列表（scope=selected 时使用）' },
+                filters: { type: 'object', description: '筛选条件（scope=filtered 时使用）' },
+            },
+            required: ['type', 'scope'],
+        },
+    })
     async createTask(
         @Body()
         body: {

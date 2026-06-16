@@ -33,7 +33,7 @@ export class SimilarCacheService {
             this.prisma.similarRepoCache.count(),
         ]);
         return {
-            records: records.map(r => ({
+            records: records.map((r) => ({
                 id: Number(r.id),
                 repoId: Number(r.repoId),
                 repoFullName: r.repo.fullName,

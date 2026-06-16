@@ -489,7 +489,7 @@ describe('CloneService', () => {
     });
 
     // ================================================================
-    // retryFailedClones — 重试失败项（状态校验）
+    // retryFailedClones — 重试未成功项（FAILED + SKIPPED 均重试）
     // ================================================================
 
     describe('retryFailedClones', () => {
@@ -499,26 +499,52 @@ describe('CloneService', () => {
             expect(r.success).toBe(false);
         });
 
-        it('任务 PENDING → 不可重试', async () => {
-            mockPrisma.cloneTask.findUnique.mockResolvedValue({ taskId: 'p1', status: 'PENDING' });
+        it('任务 PENDING → 允许重试，但无未成功项时提示无可重试项', async () => {
+            mockPrisma.cloneTask.findUnique.mockResolvedValue({ taskId: 'p1', status: 'PENDING', completedRepos: 0, totalRepos: 0 });
+            mockPrisma.cloneTaskItem.findMany.mockResolvedValue([]);
             const r = await service.retryFailedClones('p1');
             expect(r.success).toBe(false);
-            expect(r.message).toContain('无法重试');
+            expect(r.message).toContain('没有需要重试的未成功项');
         });
 
-        it('有任务但无 FAILED 子项 → 返回失败并提示', async () => {
+        it('任务 RUNNING → 不可重试，提示正在运行中', async () => {
+            mockPrisma.cloneTask.findUnique.mockResolvedValue({ taskId: 'r1', status: 'RUNNING' });
+            const r = await service.retryFailedClones('r1');
+            expect(r.success).toBe(false);
+            expect(r.message).toContain('运行中');
+        });
+
+        it('有任务但无 FAILED/SKIPPED 子项 → 返回失败并提示', async () => {
             mockPrisma.cloneTask.findUnique.mockResolvedValue({
                 taskId: 'c1',
                 status: 'FAILED',
                 targetDir: '/target',
                 concurrency: 3,
                 cloneDepth: 1,
+                completedRepos: 50,
+                totalRepos: 100,
             });
             mockPrisma.cloneTask.update.mockResolvedValue({});
             mockPrisma.cloneTaskItem.findMany.mockResolvedValue([]);
             const r = await service.retryFailedClones('c1');
             expect(r.success).toBe(false);
-            expect(r.message).toContain('没有需要重试的失败项');
+            expect(r.message).toContain('没有需要重试的未成功项');
+        });
+
+        it('所有仓库已克隆成功（completedRepos >= totalRepos）→ 拒绝重试', async () => {
+            mockPrisma.cloneTask.findUnique.mockResolvedValue({
+                taskId: 'c2',
+                status: 'COMPLETED',
+                targetDir: '/target',
+                concurrency: 3,
+                cloneDepth: 1,
+                completedRepos: 100,
+                totalRepos: 100,
+            });
+            mockPrisma.cloneTaskItem.findMany.mockResolvedValue([{ id: 1, fullName: 'a/b', status: 'SKIPPED' }]);
+            const r = await service.retryFailedClones('c2');
+            expect(r.success).toBe(false);
+            expect(r.message).toContain('所有仓库已克隆成功');
         });
     });
 });

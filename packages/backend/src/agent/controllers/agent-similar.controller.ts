@@ -45,8 +45,7 @@ export class AgentSimilarController {
     @Get(':repoId/stream')
     @ApiOperation({
         summary: 'Agent 相似项目搜索（SSE 流式）',
-        description:
-            '使用 Claude Agent SDK 通过 WebSearch/WebFetch 搜索相似项目，' + '以 SSE 流式推送执行过程。每个事件为 JSON 格式。',
+        description: '使用 Claude Agent SDK 通过 WebSearch/WebFetch 搜索相似项目，' + '以 SSE 流式推送执行过程。每个事件为 JSON 格式。',
     })
     @ApiParam({ name: 'repoId', description: '源仓库 ID' })
     async streamSearch(@Param('repoId') repoId: string, @Req() req: Request, @Res() res: Response): Promise<void> {

@@ -32,7 +32,18 @@ export class CategoryController {
      */
     @Post('categories')
     @ApiOperation({ summary: '创建分类', description: '创建一个新的仓库分类，可指定父分类' })
-    @ApiBody({ description: '分类信息', schema: { type: 'object', properties: { name: { type: 'string', description: '分类名称（必填）' }, description: { type: 'string', description: '分类描述' }, parentId: { type: 'number', description: '父分类 ID' } }, required: ['name'] } })
+    @ApiBody({
+        description: '分类信息',
+        schema: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: '分类名称（必填）' },
+                description: { type: 'string', description: '分类描述' },
+                parentId: { type: 'number', description: '父分类 ID' },
+            },
+            required: ['name'],
+        },
+    })
     async create(@Body() b: any) {
         try {
             if (!b.name?.trim()) return { success: false, message: '分类名称不能为空' };
@@ -55,7 +66,17 @@ export class CategoryController {
     @Put('categories/:id')
     @ApiOperation({ summary: '更新分类', description: '修改分类名称和描述' })
     @ApiParam({ name: 'id', description: '分类 ID' })
-    @ApiBody({ description: '分类更新信息', schema: { type: 'object', properties: { name: { type: 'string', description: '分类名称（必填）' }, description: { type: 'string', description: '分类描述' } }, required: ['name'] } })
+    @ApiBody({
+        description: '分类更新信息',
+        schema: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: '分类名称（必填）' },
+                description: { type: 'string', description: '分类描述' },
+            },
+            required: ['name'],
+        },
+    })
     async update(@Param('id') id: string, @Body() b: any) {
         try {
             if (!b.name?.trim()) return { success: false, message: '分类名称不能为空' };
@@ -96,7 +117,14 @@ export class CategoryController {
      */
     @Delete('categories/batch')
     @ApiOperation({ summary: '批量删除分类', description: '一次性删除多个分类' })
-    @ApiBody({ description: '分类 ID 列表', schema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'number' }, description: '分类 ID 数组' } }, required: ['ids'] } })
+    @ApiBody({
+        description: '分类 ID 列表',
+        schema: {
+            type: 'object',
+            properties: { ids: { type: 'array', items: { type: 'number' }, description: '分类 ID 数组' } },
+            required: ['ids'],
+        },
+    })
     async batchDelete(@Body() b: any) {
         try {
             if (!b.ids?.length) return { success: false, message: '请提供分类ID列表' };
@@ -118,7 +146,10 @@ export class CategoryController {
     @Post('categories/:id/move')
     @ApiOperation({ summary: '移动分类', description: '将分类移动到新的父分类下' })
     @ApiParam({ name: 'id', description: '被移动的分类 ID' })
-    @ApiBody({ description: '目标位置', schema: { type: 'object', properties: { parentId: { type: 'number', description: '目标父分类 ID' } } } })
+    @ApiBody({
+        description: '目标位置',
+        schema: { type: 'object', properties: { parentId: { type: 'number', description: '目标父分类 ID' } } },
+    })
     async move(@Param('id') id: string, @Body() b: any) {
         try {
             await this.service.moveToParent(parseInt(id), b.parentId);
@@ -171,7 +202,14 @@ export class CategoryController {
     @Post('categories/:id/repos')
     @ApiOperation({ summary: '添加仓库到分类', description: '批量将仓库添加到指定分类中' })
     @ApiParam({ name: 'id', description: '分类 ID' })
-    @ApiBody({ description: '仓库 ID 列表', schema: { type: 'object', properties: { repoIds: { type: 'array', items: { type: 'number' }, description: '仓库 ID 数组' } }, required: ['repoIds'] } })
+    @ApiBody({
+        description: '仓库 ID 列表',
+        schema: {
+            type: 'object',
+            properties: { repoIds: { type: 'array', items: { type: 'number' }, description: '仓库 ID 数组' } },
+            required: ['repoIds'],
+        },
+    })
     async addRepos(@Param('id') id: string, @Body() b: any) {
         try {
             await this.service.batchAddRepos(b.repoIds, parseInt(id));
@@ -215,7 +253,17 @@ export class CategoryController {
     @Post('categories/:id/repos/transfer')
     @ApiOperation({ summary: '转移仓库到其他分类', description: '将仓库从当前分类批量转移到另一个分类' })
     @ApiParam({ name: 'id', description: '源分类 ID' })
-    @ApiBody({ description: '转移参数', schema: { type: 'object', properties: { repoIds: { type: 'array', items: { type: 'number' }, description: '仓库 ID 数组' }, toCategoryId: { type: 'number', description: '目标分类 ID' } }, required: ['repoIds', 'toCategoryId'] } })
+    @ApiBody({
+        description: '转移参数',
+        schema: {
+            type: 'object',
+            properties: {
+                repoIds: { type: 'array', items: { type: 'number' }, description: '仓库 ID 数组' },
+                toCategoryId: { type: 'number', description: '目标分类 ID' },
+            },
+            required: ['repoIds', 'toCategoryId'],
+        },
+    })
     async transfer(@Param('id') id: string, @Body() b: any) {
         try {
             await this.service.batchTransferRepos(b.repoIds, parseInt(id), b.toCategoryId);
@@ -247,7 +295,10 @@ export class CategoryController {
     @Post('categories/:id/reclassify')
     @ApiOperation({ summary: 'AI 重新分类', description: '对指定分类下的仓库使用 AI 重新分类' })
     @ApiParam({ name: 'id', description: '分类 ID' })
-    @ApiBody({ description: '分类参数', schema: { type: 'object', properties: { topN: { type: 'number', description: '返回的推荐分类数，默认 8' } } } })
+    @ApiBody({
+        description: '分类参数',
+        schema: { type: 'object', properties: { topN: { type: 'number', description: '返回的推荐分类数，默认 8' } } },
+    })
     async reclassify(@Param('id') id: string, @Body() b: any) {
         try {
             const repos = await this.service.getReposByCategoryId(parseInt(id));

@@ -45,7 +45,7 @@ export class TagService {
                         where: { groupId: legacy.id },
                         data: { groupId: targetGroup.id },
                     });
-                    this.logger.log(`已将 "${legacyName}" 下 ${tags.length} 个标签迁移到 "🔧 用途": ${tags.map(t => t.name).join(', ')}`);
+                    this.logger.log(`已将 "${legacyName}" 下 ${tags.length} 个标签迁移到 "🔧 用途": ${tags.map((t) => t.name).join(', ')}`);
                 }
             }
             await this.prisma.tagGroup.delete({ where: { id: legacy.id } });
@@ -91,16 +91,19 @@ export class TagService {
             const repoAND: any[] = [];
 
             // 编程语言筛选
-            if (filters!.language) {
-                const languages = filters!.language.split(',').map(s => s.trim()).filter(Boolean);
+            if (filters.language) {
+                const languages = filters.language
+                    .split(',')
+                    .map((s) => s.trim())
+                    .filter(Boolean);
                 if (languages.length > 0) {
                     repoAND.push({ language: { in: languages } });
                 }
             }
 
             // 关键词搜索
-            if (filters!.keyword) {
-                const kw = filters!.keyword.trim();
+            if (filters.keyword) {
+                const kw = filters.keyword.trim();
                 if (kw) {
                     repoAND.push({
                         OR: [
@@ -114,8 +117,8 @@ export class TagService {
             }
 
             // 已选标签上下文（AND 叠加：仓库必须拥有所有 contextTagIds）
-            if (filters!.contextTagIds?.length) {
-                for (const tagId of filters!.contextTagIds) {
+            if (filters.contextTagIds?.length) {
+                for (const tagId of filters.contextTagIds) {
                     repoAND.push({ repoTags: { some: { tagId: BigInt(tagId) } } });
                 }
             }
@@ -127,7 +130,7 @@ export class TagService {
                 where: repoWhere,
                 select: { id: true },
             });
-            const repoIds = matchingRepos.map(r => r.id);
+            const repoIds = matchingRepos.map((r) => r.id);
 
             if (repoIds.length === 0) {
                 // 无匹配仓库 → 所有标签计数为 0
@@ -175,7 +178,14 @@ export class TagService {
         const exist = await this.prisma.tag.findFirst({ where: { name: trimmed, groupId: BigInt(groupId) } });
         if (exist) throw new Error(`标签 "${trimmed}" 在此维度下已存在`);
         return this.prisma.tag.create({
-            data: { name: trimmed, groupId: BigInt(groupId), description: description || null, color: color || null, icon: icon || null, parentId: parentId ? BigInt(parentId) : null },
+            data: {
+                name: trimmed,
+                groupId: BigInt(groupId),
+                description: description || null,
+                color: color || null,
+                icon: icon || null,
+                parentId: parentId ? BigInt(parentId) : null,
+            },
         });
     }
 
@@ -184,7 +194,9 @@ export class TagService {
         const exist = await this.prisma.tagGroup.findUnique({ where: { name } });
         if (exist) throw new Error(`维度 "${name}" 已存在`);
         const maxSort = await this.prisma.tagGroup.findFirst({ orderBy: { sortOrder: 'desc' }, select: { sortOrder: true } });
-        return this.prisma.tagGroup.create({ data: { name, color: color || '#1677ff', icon: icon || null, sortOrder: (maxSort?.sortOrder || 0) + 1 } });
+        return this.prisma.tagGroup.create({
+            data: { name, color: color || '#1677ff', icon: icon || null, sortOrder: (maxSort?.sortOrder || 0) + 1 },
+        });
     }
 
     /** 更新标签 */
@@ -407,11 +419,13 @@ export class TagService {
             // 批量写入 repo_tag 关联
             const tagId = tag.id;
             for (const repoId of ids) {
-                await this.prisma.repoTag.upsert({
-                    where: { repoId_tagId: { repoId: BigInt(repoId), tagId } },
-                    create: { repoId: BigInt(repoId), tagId, source: 'ai' },
-                    update: {}, // 已存在则跳过
-                }).catch(() => {});
+                await this.prisma.repoTag
+                    .upsert({
+                        where: { repoId_tagId: { repoId: BigInt(repoId), tagId } },
+                        create: { repoId: BigInt(repoId), tagId, source: 'ai' },
+                        update: {}, // 已存在则跳过
+                    })
+                    .catch(() => {});
             }
 
             // 修正 repo_count
@@ -430,12 +444,28 @@ export class TagService {
         }
         // 英文/简写映射
         const aliasMap: Record<string, string> = {
-            'tech': '📚 技术栈', '技术': '📚 技术栈', '语言': '📚 技术栈', 'framework': '📚 技术栈',
-            'domain': '🏷️ 领域', '领域': '🏷️ 领域', 'field': '🏷️ 领域',
-            'use': '🔧 用途', '用途': '🔧 用途', 'usage': '🔧 用途', 'type': '🔧 用途',
-            'status': '📊 状态', '状态': '📊 状态', 'state': '📊 状态',
-            'audience': '👥 服务人群', '人群': '👥 服务人群', '用户': '👥 服务人群', 'who': '👥 服务人群',
-            'problem': '💡 解决什么问题', '问题': '💡 解决什么问题', '解决': '💡 解决什么问题', 'why': '💡 解决什么问题',
+            tech: '📚 技术栈',
+            技术: '📚 技术栈',
+            语言: '📚 技术栈',
+            framework: '📚 技术栈',
+            domain: '🏷️ 领域',
+            领域: '🏷️ 领域',
+            field: '🏷️ 领域',
+            use: '🔧 用途',
+            用途: '🔧 用途',
+            usage: '🔧 用途',
+            type: '🔧 用途',
+            status: '📊 状态',
+            状态: '📊 状态',
+            state: '📊 状态',
+            audience: '👥 服务人群',
+            人群: '👥 服务人群',
+            用户: '👥 服务人群',
+            who: '👥 服务人群',
+            problem: '💡 解决什么问题',
+            问题: '💡 解决什么问题',
+            解决: '💡 解决什么问题',
+            why: '💡 解决什么问题',
         };
         for (const [key, groupName] of Object.entries(aliasMap)) {
             if (lower.includes(key)) return groupName;
@@ -484,9 +514,9 @@ export class TagService {
             }
         }
 
-        return groups.map(g => ({
+        return groups.map((g) => ({
             ...g,
-            tags: roots.filter(t => Number(t.groupId) === Number(g.id)),
+            tags: roots.filter((t) => Number(t.groupId) === Number(g.id)),
         }));
     }
 
@@ -542,8 +572,8 @@ export class TagService {
         const groupMap = new Map<string, any>();
         for (const g of groups) {
             const groupTags = tags
-                .filter(t => Number(t.groupId) === Number(g.id))
-                .map(t => ({ ...t, repoCount: countMap.get(String(t.id)) || 0 }));
+                .filter((t) => Number(t.groupId) === Number(g.id))
+                .map((t) => ({ ...t, repoCount: countMap.get(String(t.id)) || 0 }));
             groupMap.set(String(g.id), { ...g, tags: groupTags, children: [] as any[] });
         }
 
@@ -578,7 +608,7 @@ export class TagService {
             where: { tagId: BigInt(tagId) },
             select: { repoId: true },
         });
-        const repoIds = sourceRepoTags.map(rt => rt.repoId);
+        const repoIds = sourceRepoTags.map((rt) => rt.repoId);
         const totalRepos = repoIds.length;
 
         if (!totalRepos) return { totalRepos: 0, distributions: [] };
@@ -593,39 +623,65 @@ export class TagService {
         });
 
         // 3. 按 (groupId, tagId) 聚合计数
-        const aggregator = new Map<string, { groupId: bigint; groupName: string; groupColor: string; groupIcon: string | null; tagId: bigint; tagName: string; tagColor: string | null; count: number }>();
+        const aggregator = new Map<
+            string,
+            {
+                groupId: bigint;
+                groupName: string;
+                groupColor: string;
+                groupIcon: string | null;
+                tagId: bigint;
+                tagName: string;
+                tagColor: string | null;
+                count: number;
+            }
+        >();
         for (const rt of allRepoTags) {
             const gid = String(rt.tag.groupId);
             if (targetGroupId !== undefined && targetGroupId !== null && gid !== String(targetGroupId)) continue;
             const key = `${gid}::${String(rt.tag.id)}`;
             if (!aggregator.has(key)) {
                 aggregator.set(key, {
-                    groupId: rt.tag.groupId, groupName: rt.tag.group.name, groupColor: rt.tag.group.color, groupIcon: rt.tag.group.icon,
-                    tagId: rt.tag.id, tagName: rt.tag.name, tagColor: rt.tag.color, count: 0,
+                    groupId: rt.tag.groupId,
+                    groupName: rt.tag.group.name,
+                    groupColor: rt.tag.group.color,
+                    groupIcon: rt.tag.group.icon,
+                    tagId: rt.tag.id,
+                    tagName: rt.tag.name,
+                    tagColor: rt.tag.color,
+                    count: 0,
                 });
             }
             aggregator.get(key)!.count++;
         }
 
         // 4. 按维度分组组装
-        const groupBuckets = new Map<string, { groupId: number; groupName: string; groupColor: string; groupIcon: string | null; tags: any[] }>();
+        const groupBuckets = new Map<
+            string,
+            { groupId: number; groupName: string; groupColor: string; groupIcon: string | null; tags: any[] }
+        >();
         for (const item of aggregator.values()) {
             const gid = String(item.groupId);
             if (!groupBuckets.has(gid)) {
                 groupBuckets.set(gid, {
-                    groupId: Number(item.groupId), groupName: item.groupName, groupColor: item.groupColor, groupIcon: item.groupIcon,
+                    groupId: Number(item.groupId),
+                    groupName: item.groupName,
+                    groupColor: item.groupColor,
+                    groupIcon: item.groupIcon,
                     tags: [],
                 });
             }
             groupBuckets.get(gid)!.tags.push({
-                tagId: Number(item.tagId), tagName: item.tagName, tagColor: item.tagColor,
+                tagId: Number(item.tagId),
+                tagName: item.tagName,
+                tagColor: item.tagColor,
                 count: item.count,
                 percentage: Math.round((item.count / totalRepos) * 100),
             });
         }
 
         // 每个维度内按 count 降序
-        const distributions = Array.from(groupBuckets.values()).map(g => ({
+        const distributions = Array.from(groupBuckets.values()).map((g) => ({
             ...g,
             tags: g.tags.sort((a, b) => b.count - a.count),
         }));

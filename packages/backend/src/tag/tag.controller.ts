@@ -21,13 +21,12 @@ export class TagController {
      */
     @Get()
     @ApiOperation({ summary: '获取全部标签', description: '返回按维度分组的标签树结构，支持筛选上下文动态计数' })
-    async all(
-        @Query('language') language?: string,
-        @Query('keyword') keyword?: string,
-        @Query('contextTagIds') contextTagIds?: string,
-    ) {
+    async all(@Query('language') language?: string, @Query('keyword') keyword?: string, @Query('contextTagIds') contextTagIds?: string) {
         const ctxIds = contextTagIds
-            ? contextTagIds.split(',').map(Number).filter((n) => !isNaN(n))
+            ? contextTagIds
+                  .split(',')
+                  .map(Number)
+                  .filter((n) => !isNaN(n))
             : undefined;
         return this.service.listAll({
             language: language || undefined,
@@ -60,10 +59,7 @@ export class TagController {
     /** 标签下钻分布统计 */
     @Get(':id/distribution')
     @ApiOperation({ summary: '标签下钻分布', description: '返回该标签下的项目在其他维度（或指定维度）的标签分布统计' })
-    async getDistribution(
-        @Param('id', ParseIntPipe) id: number,
-        @Query('targetGroupId') targetGroupId?: string,
-    ) {
+    async getDistribution(@Param('id', ParseIntPipe) id: number, @Query('targetGroupId') targetGroupId?: string) {
         const tgid = targetGroupId ? parseInt(targetGroupId) : undefined;
         return this.service.getTagDistribution(id, tgid);
     }

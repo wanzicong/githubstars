@@ -151,7 +151,12 @@ export class GithubRepoService {
         this.logger.log('分页查询仓库列表: page=' + page + ', size=' + size + ', keyword=' + (params.keyword || ''));
         const languages = params.language ? params.language.split(',').filter(Boolean) : [];
         const catIds = await this.expandCategoryIds(params.categoryIds || '');
-        const tagIds = params.tagIds ? params.tagIds.split(',').map(Number).filter((n) => !isNaN(n)) : [];
+        const tagIds = params.tagIds
+            ? params.tagIds
+                  .split(',')
+                  .map(Number)
+                  .filter((n) => !isNaN(n))
+            : [];
         const sortField = SORT_MAP[params.sortBy || 'stars_count'] || 'starredAt';
         const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
         const where = this.buildWhere({
@@ -326,7 +331,21 @@ export class GithubRepoService {
      *
      * @param repos 仓库对象数组（会被原地修改写入 tagNames / tags）
      */
-    async fillTagNames(repos: Array<{ id: bigint; tagNames?: string[]; tags?: Array<{ id: number; name: string; groupName: string; groupId: number; groupColor: string; groupIcon: string | null; parentId: number | null }> }>) {
+    async fillTagNames(
+        repos: Array<{
+            id: bigint;
+            tagNames?: string[];
+            tags?: Array<{
+                id: number;
+                name: string;
+                groupName: string;
+                groupId: number;
+                groupColor: string;
+                groupIcon: string | null;
+                parentId: number | null;
+            }>;
+        }>,
+    ) {
         if (!repos.length) return;
         const ids = repos.map((r) => r.id);
         const mappings = await this.prisma.repoTag.findMany({
@@ -334,7 +353,18 @@ export class GithubRepoService {
             include: { tag: { include: { group: true } } },
         });
         const nameMap = new Map<bigint, string[]>();
-        const structMap = new Map<bigint, Array<{ id: number; name: string; groupName: string; groupId: number; groupColor: string; groupIcon: string | null; parentId: number | null }>>();
+        const structMap = new Map<
+            bigint,
+            Array<{
+                id: number;
+                name: string;
+                groupName: string;
+                groupId: number;
+                groupColor: string;
+                groupIcon: string | null;
+                parentId: number | null;
+            }>
+        >();
         for (const m of mappings) {
             const names = nameMap.get(m.repoId) || [];
             names.push(m.tag.name);
@@ -393,20 +423,12 @@ export class GithubRepoService {
             this.prisma.githubRepo.count({ where }),
             this.prisma.githubRepo.count({
                 where: {
-                    AND: [
-                        where,
-                        { descriptionCn: { not: null } },
-                        { descriptionCn: { not: '' } },
-                    ],
+                    AND: [where, { descriptionCn: { not: null } }, { descriptionCn: { not: '' } }],
                 },
             }),
             this.prisma.githubRepo.count({
                 where: {
-                    AND: [
-                        where,
-                        { readmeCn: { not: null } },
-                        { readmeCn: { not: '' } },
-                    ],
+                    AND: [where, { readmeCn: { not: null } }, { readmeCn: { not: '' } }],
                 },
             }),
         ]);

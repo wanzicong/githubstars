@@ -38,9 +38,7 @@ export class CloneTaskService {
         ]);
 
         // 批量统计非活跃任务计数（替代 N+1 逐条查询）
-        const nonActiveTaskIds = records
-            .filter((t) => t.status !== 'RUNNING' && t.status !== 'PENDING')
-            .map((t) => t.taskId);
+        const nonActiveTaskIds = records.filter((t) => t.status !== 'RUNNING' && t.status !== 'PENDING').map((t) => t.taskId);
 
         if (nonActiveTaskIds.length > 0) {
             const counts = await this.prisma.$queryRawUnsafe<Array<{ task_id: string; status: string; cnt: bigint }>>(
@@ -61,14 +59,26 @@ export class CloneTaskService {
             for (const task of records) {
                 const actual = countMap.get(task.taskId);
                 if (!actual) continue;
-                if (task.completedRepos !== actual.completed || task.failedRepos !== actual.failed || task.skippedRepos !== actual.skipped) {
+                const actualTotal = actual.completed + actual.failed + actual.skipped;
+                const needsRepair =
+                    task.completedRepos !== actual.completed ||
+                    task.failedRepos !== actual.failed ||
+                    task.skippedRepos !== actual.skipped ||
+                    task.totalRepos !== actualTotal;
+                if (needsRepair) {
                     await this.prisma.cloneTask.update({
                         where: { taskId: task.taskId },
-                        data: { completedRepos: actual.completed, failedRepos: actual.failed, skippedRepos: actual.skipped },
+                        data: {
+                            completedRepos: actual.completed,
+                            failedRepos: actual.failed,
+                            skippedRepos: actual.skipped,
+                            totalRepos: actualTotal,
+                        },
                     });
                     (task as any).completedRepos = actual.completed;
                     (task as any).failedRepos = actual.failed;
                     (task as any).skippedRepos = actual.skipped;
+                    (task as any).totalRepos = actualTotal;
                 }
             }
         }
@@ -147,7 +157,7 @@ export class CloneTaskService {
      * @returns 是否存在活跃任务
      */
     async hasActiveTask() {
-        const count = await this.prisma.cloneTask.count({ where: { status: { in: ['RUNNING', 'PENDING'] } } });
+        const count = await this.prisma.cloneTask.count({ where: { status: 'RUNNING' } });
         return count > 0;
     }
 

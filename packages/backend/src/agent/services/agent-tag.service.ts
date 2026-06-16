@@ -95,16 +95,25 @@ export class AgentTagService {
 
         // 注册运行任务
         const task: RunningTask = {
-            taskId, repoCount: allRepos.length, processedCount: 0,
-            currentBatch: 0, totalBatches: batches.length,
-            status: '已加载仓库，启动并发分析...', startedAt: Date.now(),
+            taskId,
+            repoCount: allRepos.length,
+            processedCount: 0,
+            currentBatch: 0,
+            totalBatches: batches.length,
+            status: '已加载仓库，启动并发分析...',
+            startedAt: Date.now(),
         };
         this.runningTasks.set(taskId, task);
         yield { type: 'status', message: `[${taskId}] 共 ${batches.length} 批，每批 ${BATCH_SIZE} 个，${CONCURRENCY} 批并发` };
 
         // 将 generator 转为收集事件的 Promise
-        const collectBatchEvents = async (batch: typeof allRepos, bi: number): Promise<{
-            bi: number; events: AgentTagStreamEvent[]; result: { tagCount: number; error?: string };
+        const collectBatchEvents = async (
+            batch: typeof allRepos,
+            bi: number,
+        ): Promise<{
+            bi: number;
+            events: AgentTagStreamEvent[];
+            result: { tagCount: number; error?: string };
         }> => {
             const events: AgentTagStreamEvent[] = [];
             try {
@@ -112,7 +121,10 @@ export class AgentTagService {
                 let resultValue: { tagCount: number; error?: string } = { tagCount: 0, error: '无结果' };
                 while (true) {
                     const { value, done } = await gen.next();
-                    if (done) { resultValue = value; break; }
+                    if (done) {
+                        resultValue = value;
+                        break;
+                    }
                     if (value) events.push(value);
                 }
                 return { bi, events, result: resultValue ?? { tagCount: 0, error: '无结果' } };
@@ -128,15 +140,16 @@ export class AgentTagService {
             if (signal.aborted) break;
             const group = batches.slice(gi, gi + CONCURRENCY);
             const startIdx = gi;
-            yield { type: 'status', message: `━━━ 并发处理第 ${gi + 1}-${Math.min(gi + CONCURRENCY, batches.length)}/${batches.length} 批 ━━━` };
+            yield {
+                type: 'status',
+                message: `━━━ 并发处理第 ${gi + 1}-${Math.min(gi + CONCURRENCY, batches.length)}/${batches.length} 批 ━━━`,
+            };
 
             task.currentBatch = gi + 1;
             task.processedCount = gi * BATCH_SIZE;
             task.status = `并发处理第 ${gi + 1} 组...`;
 
-            const groupResults = await Promise.all(
-                group.map((batch, i) => collectBatchEvents(batch, startIdx + i)),
-            );
+            const groupResults = await Promise.all(group.map((batch, i) => collectBatchEvents(batch, startIdx + i)));
 
             for (const { bi, events, result } of groupResults) {
                 // 输出该批的所有事件
@@ -160,8 +173,8 @@ export class AgentTagService {
         }
         this.runningTasks.delete(taskId);
 
-        const summary = `全部完成！${allRepos.length} 个仓库 → ${totalTagCount} 个标签` +
-            (failedBatches > 0 ? `（${failedBatches} 批失败）` : '');
+        const summary =
+            `全部完成！${allRepos.length} 个仓库 → ${totalTagCount} 个标签` + (failedBatches > 0 ? `（${failedBatches} 批失败）` : '');
         yield { type: 'result', content: summary };
     }
 
@@ -254,11 +267,7 @@ export class AgentTagService {
             .map((r, i) => `${i}. ${r.fullName} (${r.language || '?'}, ⭐${r.starsCount}) [ID:${r.id}]`)
             .join('\n');
 
-        const prompt = await this.promptService.buildAgentTagPrompt(
-            repoIndexText,
-            repoIndex.length,
-            tagSystem,
-        );
+        const prompt = await this.promptService.buildAgentTagPrompt(repoIndexText, repoIndex.length, tagSystem);
 
         yield { type: 'status', message: 'Agent 开始通过 MCP 本地数据库分析项目...' };
 
@@ -272,7 +281,24 @@ export class AgentTagService {
                 prompt,
                 options: {
                     tools: [], // 禁用所有内置工具（Read/Write/Grep/WebSearch 等），仅 MCP 工具可用
-                    disallowedTools: ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'Bash', 'Task', 'TaskOutput', 'TodoWrite', 'NotebookEdit', 'Agent', 'Skill', 'ExitPlanMode', 'EnterPlanMode'],
+                    disallowedTools: [
+                        'Read',
+                        'Write',
+                        'Edit',
+                        'Grep',
+                        'Glob',
+                        'WebSearch',
+                        'WebFetch',
+                        'Bash',
+                        'Task',
+                        'TaskOutput',
+                        'TodoWrite',
+                        'NotebookEdit',
+                        'Agent',
+                        'Skill',
+                        'ExitPlanMode',
+                        'EnterPlanMode',
+                    ],
                     mcpServers: { githubstars: mcpServer },
                     permissionMode: 'bypassPermissions',
                     allowDangerouslySkipPermissions: true,
@@ -292,7 +318,7 @@ export class AgentTagService {
                         if (msg.message?.content) {
                             for (const block of msg.message.content) {
                                 if (block.type === 'text' && 'text' in block) {
-                                    const text = block.text as string;
+                                    const text = block.text;
                                     fullResult += text;
                                     yield { type: 'thinking', content: text };
                                 } else if (block.type === 'tool_use') {
@@ -319,7 +345,9 @@ export class AgentTagService {
                                         }
                                     }
                                 }
-                            } catch { preview = '(工具返回)'; }
+                            } catch {
+                                preview = '(工具返回)';
+                            }
                             yield {
                                 type: 'tool_result',
                                 message: preview || '工具执行完成',
@@ -334,7 +362,10 @@ export class AgentTagService {
                                 message: `Agent 分析完成，耗时 ${(msg.duration_ms / 1000).toFixed(1)} 秒，正在解析结果...`,
                             };
                             // 解析并保存结果
-                            const parsed = this.parseTagResult(fullResult, repoIndex.map((r) => Number(r.id)));
+                            const parsed = this.parseTagResult(
+                                fullResult,
+                                repoIndex.map((r) => Number(r.id)),
+                            );
                             if (parsed && Object.keys(parsed).length > 0) {
                                 await this.tagService.saveAiTagResult(
                                     repoIndex.map((r) => Number(r.id)),
@@ -390,7 +421,7 @@ export class AgentTagService {
             for (const [key, tags] of Object.entries(parsed)) {
                 const idx = parseInt(key, 10);
                 if (!isNaN(idx) && idx >= 0 && idx < repoIds.length && Array.isArray(tags)) {
-                    result[String(idx)] = tags.filter((t: any) => typeof t === 'string') as string[];
+                    result[String(idx)] = tags.filter((t: any) => typeof t === 'string');
                 }
             }
             return Object.keys(result).length > 0 ? result : null;

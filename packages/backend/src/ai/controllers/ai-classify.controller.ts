@@ -36,7 +36,17 @@ export class AiClassifyController {
      */
     @Post('ai/classify/execute')
     @ApiOperation({ summary: '执行 AI 分类', description: '对指定的仓库列表执行 AI 智能分类' })
-    @ApiBody({ description: '仓库 ID 列表和分类参数', schema: { type: 'object', properties: { repoIds: { type: 'array', items: { type: 'number' }, description: '仓库 ID 列表' }, topN: { type: 'number', description: '最大分类数量，默认 8' } }, required: ['repoIds'] } })
+    @ApiBody({
+        description: '仓库 ID 列表和分类参数',
+        schema: {
+            type: 'object',
+            properties: {
+                repoIds: { type: 'array', items: { type: 'number' }, description: '仓库 ID 列表' },
+                topN: { type: 'number', description: '最大分类数量，默认 8' },
+            },
+            required: ['repoIds'],
+        },
+    })
     async execute(@Body() b: any) {
         if (!b.repoIds?.length) return { success: false, message: '请提供仓库ID列表' };
         return this.classifyService.classify(b.repoIds, b.topN || 8);

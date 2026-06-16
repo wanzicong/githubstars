@@ -25,7 +25,11 @@ export class StarsController {
     @ApiQuery({ name: 'keyword', required: false, description: '全文搜索关键词' })
     @ApiQuery({ name: 'language', required: false, description: '编程语言筛选' })
     @ApiQuery({ name: 'categoryIds', required: false, description: '分类 ID（逗号分隔）' })
-    @ApiQuery({ name: 'sortBy', required: false, description: '排序字段（starred_at/starsCount/forksCount/repoUpdatedAt），默认 starred_at' })
+    @ApiQuery({
+        name: 'sortBy',
+        required: false,
+        description: '排序字段（starred_at/starsCount/forksCount/repoUpdatedAt），默认 starred_at',
+    })
     @ApiQuery({ name: 'sortOrder', required: false, description: '排序方向（asc/desc），默认 desc' })
     @ApiQuery({ name: 'dateField', required: false, description: '日期筛选字段' })
     @ApiQuery({ name: 'startDate', required: false, description: '开始日期' })

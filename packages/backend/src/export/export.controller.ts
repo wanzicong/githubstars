@@ -31,9 +31,7 @@ export class ExportController {
     @ApiQuery({ name: 'maxCount', required: false, description: '最大导出数量，默认 50' })
     async exportMd(@Query() q: any, @Res() res: Response) {
         const maxCount = parseInt(q.maxCount) || 50;
-        this.logger.log(
-            '开始导出Markdown: keyword=' + (q.keyword || '') + ', language=' + (q.language || '') + ', maxCount=' + maxCount,
-        );
+        this.logger.log('开始导出Markdown: keyword=' + (q.keyword || '') + ', language=' + (q.language || '') + ', maxCount=' + maxCount);
         const result = await this.repoService.findPage({
             page: 1,
             size: maxCount,

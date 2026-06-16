@@ -53,4 +53,4 @@ async function bootstrap() {
 }
 
 /** 执行启动流程 */
-bootstrap();  
+bootstrap();

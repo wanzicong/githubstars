@@ -396,7 +396,10 @@ export class CategoryService {
                 const childIds = childrenByParent.get(String(cat.id)) || [];
                 for (const cid of childIds) {
                     const nid = Number(cid);
-                    if (!seen.has(nid)) { seen.add(nid); result.push(nid); }
+                    if (!seen.has(nid)) {
+                        seen.add(nid);
+                        result.push(nid);
+                    }
                 }
                 if (!childIds.length && !seen.has(Number(cat.id))) {
                     seen.add(Number(cat.id));
@@ -404,7 +407,10 @@ export class CategoryService {
                 }
             } else {
                 const nid = Number(cat.id);
-                if (!seen.has(nid)) { seen.add(nid); result.push(nid); }
+                if (!seen.has(nid)) {
+                    seen.add(nid);
+                    result.push(nid);
+                }
             }
         }
         return result;
