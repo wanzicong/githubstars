@@ -936,18 +936,20 @@ export class CloneService implements OnModuleInit {
         });
         let actualCompleted = 0,
             actualFailed = 0,
-            actualSkipped = 0;
+            actualSkipped = 0,
+            actualCloning = 0;
         for (const row of actualCounts) {
             if (row.status === 'CLONED') actualCompleted = row._count;
             else if (row.status === 'FAILED') actualFailed = row._count;
             else if (row.status === 'SKIPPED') actualSkipped = row._count;
+            else if (row.status === 'CLONING') actualCloning = row._count;
         }
 
         const cancelled = this.cancelledTasks.has(taskId);
         let finalStatus: string;
         if (cancelled) {
             finalStatus = 'FAILED';
-        } else if (actualCompleted === 0 && actualFailed > 0) {
+        } else if (actualCompleted === 0 && actualFailed > 0 && actualCloning === 0) {
             finalStatus = 'FAILED';
         } else {
             finalStatus = 'COMPLETED';
@@ -962,7 +964,7 @@ export class CloneService implements OnModuleInit {
                 completedRepos: actualCompleted,
                 failedRepos: actualFailed,
                 skippedRepos: actualSkipped,
-                totalRepos: actualCompleted + actualFailed + actualSkipped,
+                totalRepos: actualCompleted + actualFailed + actualSkipped + actualCloning,
             },
         });
 
