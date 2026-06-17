@@ -24,68 +24,34 @@ export class GithubRepoService {
     constructor(private readonly prisma: PrismaService) {}
 
     /**
-     * 展开分类 ID 字符串为实际分类 ID 列表
-     *
-     * 如果分类为一级分类（level=1），则查询其所有子分类的 ID；
-     * 否则直接返回该分类 ID。用于将前端传入的分类筛选参数转换为实际查询用的 ID 列表。
-     *
-     * @param str 逗号分隔的分类 ID 字符串，如 "1,2,3"
-     * @returns 展开后的分类 ID 数组
-     */
-    private async expandCategoryIds(str: string): Promise<number[]> {
-        if (!str) return [];
-        const ids = str
-            .split(',')
-            .map(Number)
-            .filter((n) => !isNaN(n));
-        if (ids.length === 0) return [];
-        const result: number[] = [];
-        for (const id of ids) {
-            const cat = await this.prisma.category.findUnique({ where: { id: BigInt(id) } });
-            if (cat?.level === 1) {
-                const children = await this.prisma.category.findMany({ where: { parentId: BigInt(id) }, select: { id: true } });
-                result.push(...(children.length > 0 ? children.map((c) => Number(c.id)) : [id]));
-            } else result.push(id);
-        }
-        return result;
-    }
-
-    /**
      * 根据筛选参数构建 Prisma where 条件
      *
-     * 支持关键词、语言、分类、日期范围、未翻译等多维度筛选，
+     * 支持关键词、语言、日期范围、未翻译等多维度筛选，
      * 各条件通过 AND 组合。
      *
      * @param params 筛选参数对象
      * @param params.keyword 搜索关键词，匹配仓库名、描述、所有者、全名
      * @param params.languages 编程语言数组
-     * @param params.categoryIds 分类 ID 数组
      * @param params.dateField 日期字段名（starred_at / repo_created_at / repo_updated_at / repo_pushed_at）
      * @param params.startDate 日期范围起始
      * @param params.endDate 日期范围结束
      * @param params.untranslatedOnly 是否仅查询未翻译的仓库
      * @returns Prisma where 条件对象
+     *
+     * @callers
+     *   - findPage()
+     *   - findAllUrls()
+     *   - countTranslationStatus()
      */
     private buildWhere(params: {
         keyword?: string;
         languages?: string[];
-        categoryIds?: number[];
-        tagIds?: number[];
         dateField?: string;
         startDate?: string;
         endDate?: string;
         untranslatedOnly?: boolean;
     }): Prisma.GithubRepoWhereInput {
         const AND: Prisma.GithubRepoWhereInput[] = [];
-        if (params.categoryIds?.length) {
-            AND.push({ repoCategories: { some: { categoryId: { in: params.categoryIds.map(BigInt) } } } });
-        }
-        // 每个 tagId 独立 AND 条件：仓库必须同时拥有所有选中标签（交集语义）
-        if (params.tagIds?.length) {
-            for (const tagId of params.tagIds) {
-                AND.push({ repoTags: { some: { tagId: BigInt(tagId) } } });
-            }
-        }
         if (params.keyword?.trim()) {
             const kw = params.keyword.trim();
             AND.push({
@@ -123,7 +89,6 @@ export class GithubRepoService {
      * @param params.size 每页数量，默认 12，最大 100
      * @param params.keyword 搜索关键词
      * @param params.language 语言筛选（逗号分隔多个）
-     * @param params.categoryIds 分类 ID（逗号分隔）
      * @param params.sortBy 排序字段
      * @param params.sortOrder 排序方向（asc/desc）
      * @param params.dateField 日期筛选字段
@@ -131,14 +96,18 @@ export class GithubRepoService {
      * @param params.endDate 日期范围结束
      * @param params.untranslatedOnly 是否仅显示未翻译仓库
      * @returns 分页结果，包含 records、total、size、current、pages
+     *
+     * @callers
+     *   - GithubController 各查询接口
+     *
+     * @depends
+     *   - PrismaService.githubRepo（github_repo 表）
      */
     async findPage(params: {
         page?: number;
         size?: number;
         keyword?: string;
         language?: string;
-        categoryIds?: string;
-        tagIds?: string;
         sortBy?: string;
         sortOrder?: string;
         dateField?: string;
@@ -150,20 +119,11 @@ export class GithubRepoService {
             size = params.size || 12;
         this.logger.log('分页查询仓库列表: page=' + page + ', size=' + size + ', keyword=' + (params.keyword || ''));
         const languages = params.language ? params.language.split(',').filter(Boolean) : [];
-        const catIds = await this.expandCategoryIds(params.categoryIds || '');
-        const tagIds = params.tagIds
-            ? params.tagIds
-                  .split(',')
-                  .map(Number)
-                  .filter((n) => !isNaN(n))
-            : [];
         const sortField = SORT_MAP[params.sortBy || 'stars_count'] || 'starredAt';
         const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
         const where = this.buildWhere({
             keyword: params.keyword,
             languages: languages.length > 0 ? languages : undefined,
-            categoryIds: catIds.length > 0 ? catIds : undefined,
-            tagIds: tagIds.length > 0 ? tagIds : undefined,
             dateField: params.dateField,
             startDate: params.startDate,
             endDate: params.endDate,
@@ -173,8 +133,6 @@ export class GithubRepoService {
             this.prisma.githubRepo.count({ where }),
             this.prisma.githubRepo.findMany({ where, orderBy: { [sortField]: sortDir }, skip: (page - 1) * size, take: size }),
         ]);
-        await this.fillCategoryNames(records);
-        await this.fillTagNames(records);
         // 附加翻译状态（前端列表可直接展示翻译徽标）
         const enriched = records.map((r) => ({
             ...r,
@@ -189,18 +147,16 @@ export class GithubRepoService {
     /**
      * 根据 ID 查询单个仓库详情
      *
-     * 返回仓库基本信息及其关联的分类名称列表。
-     *
      * @param id 仓库数字 ID
-     * @returns 仓库对象（含 categoryNames 数组），不存在返回 null
+     * @returns 仓库对象，不存在返回 null
+     *
+     * @callers
+     *   - GithubController.getById()
      */
     async findById(id: number) {
         const repo = await this.prisma.githubRepo.findUnique({ where: { id: BigInt(id) } });
         if (!repo) return null;
-        const result = { ...repo, categoryNames: [] as string[] };
-        await this.fillCategoryNames([result]);
-        await this.fillTagNames([result]);
-        return result;
+        return repo;
     }
 
     /**
@@ -214,7 +170,6 @@ export class GithubRepoService {
     async findAllUrls(params: {
         keyword?: string;
         language?: string;
-        categoryIds?: string;
         sortBy?: string;
         sortOrder?: string;
         dateField?: string;
@@ -223,13 +178,11 @@ export class GithubRepoService {
         untranslatedOnly?: boolean;
     }) {
         const languages = params.language ? params.language.split(',').filter(Boolean) : [];
-        const catIds = await this.expandCategoryIds(params.categoryIds || '');
         const sortField = SORT_MAP[params.sortBy || 'stars_count'] || 'starredAt';
         const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
         const where = this.buildWhere({
             keyword: params.keyword,
             languages: languages.length > 0 ? languages : undefined,
-            categoryIds: catIds.length > 0 ? catIds : undefined,
             dateField: params.dateField,
             startDate: params.startDate,
             endDate: params.endDate,
@@ -266,6 +219,9 @@ export class GithubRepoService {
      * 以 full_name 为唯一键判断是否存在，存在则更新字段，不存在则插入新记录。
      *
      * @param data 仓库数据对象，对应 github_repo 表字段
+     *
+     * @callers
+     *   - SyncService 同步流程
      */
     async upsertRepo(data: any) {
         this.logger.log('upsert 仓库: ' + (data.fullName || data.repoName || 'unknown'));
@@ -300,119 +256,29 @@ export class GithubRepoService {
     }
 
     /**
-     * 为仓库列表批量填充分类名称
-     *
-     * 通过 repo_category 关联表查询每个仓库的分类名称，
-     * 并将结果写入每个仓库对象的 categoryNames 属性。
-     *
-     * @param repos 仓库对象数组（需含 id 字段，会被原地修改写入 categoryNames）
-     */
-    async fillCategoryNames(repos: Array<{ id: bigint; categoryNames?: string[] }>) {
-        if (!repos.length) return;
-        const ids = repos.map((r) => r.id);
-        const mappings = await this.prisma.repoCategory.findMany({
-            where: { repoId: { in: ids } },
-            include: { category: { select: { name: true } } },
-        });
-        const map = new Map<bigint, string[]>();
-        for (const m of mappings) {
-            const list = map.get(m.repoId) || [];
-            list.push(m.category.name);
-            map.set(m.repoId, list);
-        }
-        for (const r of repos) r.categoryNames = map.get(r.id) || [];
-    }
-
-    /**
-     * 为仓库列表批量填充标签信息（含 tagId、维度名，支持前端下钻交互）
-     *
-     * 通过 repo_tag 关联表查询每个仓库的标签信息（含维度名），
-     * 并将结果写入每个仓库对象的 tagNames 和 tags 属性。
-     *
-     * @param repos 仓库对象数组（会被原地修改写入 tagNames / tags）
-     */
-    async fillTagNames(
-        repos: Array<{
-            id: bigint;
-            tagNames?: string[];
-            tags?: Array<{
-                id: number;
-                name: string;
-                groupName: string;
-                groupId: number;
-                groupColor: string;
-                groupIcon: string | null;
-                parentId: number | null;
-            }>;
-        }>,
-    ) {
-        if (!repos.length) return;
-        const ids = repos.map((r) => r.id);
-        const mappings = await this.prisma.repoTag.findMany({
-            where: { repoId: { in: ids } },
-            include: { tag: { include: { group: true } } },
-        });
-        const nameMap = new Map<bigint, string[]>();
-        const structMap = new Map<
-            bigint,
-            Array<{
-                id: number;
-                name: string;
-                groupName: string;
-                groupId: number;
-                groupColor: string;
-                groupIcon: string | null;
-                parentId: number | null;
-            }>
-        >();
-        for (const m of mappings) {
-            const names = nameMap.get(m.repoId) || [];
-            names.push(m.tag.name);
-            nameMap.set(m.repoId, names);
-
-            const structs = structMap.get(m.repoId) || [];
-            structs.push({
-                id: Number(m.tag.id),
-                name: m.tag.name,
-                groupName: m.tag.group.name,
-                groupId: Number(m.tag.groupId),
-                groupColor: m.tag.group.color,
-                groupIcon: m.tag.group.icon,
-                parentId: m.tag.parentId ? Number(m.tag.parentId) : null,
-            });
-            structMap.set(m.repoId, structs);
-        }
-        for (const r of repos) {
-            r.tagNames = nameMap.get(r.id) || [];
-            r.tags = structMap.get(r.id) || [];
-        }
-    }
-
-    /**
      * 统计筛选条件下的翻译覆盖情况
      *
      * 与 findPage 使用相同的 buildWhere 构建筛选条件，
      * 确保 total、descCompleted、readmeCompleted 都在同一筛选范围内计算。
-     * 修复之前 getTranslationSummary 中已翻译数不遵守筛选条件全库查询的 Bug。
      *
      * @param params 筛选参数（与 findPage / getTranslationSummary 一致）
      * @returns { total, descCompleted, descPending, readmeCompleted, readmePending }
+     *
+     * @callers
+     *   - 翻译相关 API
      */
     async countTranslationStatus(params: {
         keyword?: string;
         language?: string;
-        categoryIds?: string;
         dateField?: string;
         startDate?: string;
         endDate?: string;
         untranslatedOnly?: boolean;
     }) {
         const languages = params.language ? params.language.split(',').filter(Boolean) : [];
-        const catIds = await this.expandCategoryIds(params.categoryIds || '');
         const where = this.buildWhere({
             keyword: params.keyword,
             languages: languages.length > 0 ? languages : undefined,
-            categoryIds: catIds.length > 0 ? catIds : undefined,
             dateField: params.dateField,
             startDate: params.startDate,
             endDate: params.endDate,

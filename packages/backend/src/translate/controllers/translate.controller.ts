@@ -83,7 +83,6 @@ export class TranslateController {
             filters?: {
                 keyword?: string;
                 language?: string;
-                categoryIds?: string;
                 sortBy?: string;
                 sortOrder?: string;
                 dateField?: string;
@@ -144,14 +143,13 @@ export class TranslateController {
      *
      * 返回符合条件的仓库总数及描述/README 的翻译覆盖情况。
      *
-     * @param q 查询参数（keyword、language、categoryIds、日期范围等）
+     * @param q 查询参数（keyword、language、日期范围等）
      * @returns 覆盖率统计对象
      */
     @Get('status')
     @ApiOperation({ summary: '翻译覆盖统计', description: '返回符合条件的仓库总数及描述/README 的翻译覆盖情况' })
     @ApiQuery({ name: 'keyword', required: false, description: '关键词筛选' })
     @ApiQuery({ name: 'language', required: false, description: '编程语言筛选' })
-    @ApiQuery({ name: 'categoryIds', required: false, description: '分类 ID（逗号分隔）' })
     @ApiQuery({ name: 'dateField', required: false, description: '日期筛选字段' })
     @ApiQuery({ name: 'startDate', required: false, description: '开始日期' })
     @ApiQuery({ name: 'endDate', required: false, description: '结束日期' })
@@ -160,7 +158,6 @@ export class TranslateController {
         return this.service.getTranslationSummary({
             keyword: q.keyword || '',
             language: q.language || '',
-            categoryIds: q.categoryIds || '',
             dateField: q.dateField || '',
             startDate: q.startDate || '',
             endDate: q.endDate || '',

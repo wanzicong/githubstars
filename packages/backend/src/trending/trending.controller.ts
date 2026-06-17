@@ -1,7 +1,6 @@
-import { Controller, Get, Post, Query, Logger } from '@nestjs/common';
+import { Controller, Get, Query, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { GithubSearchService } from '../github/services/github-search.service';
-import { AiAnalyzeService } from '../ai/services/ai-analyze.service';
 
 @ApiTags('trending')
 @Controller('api/trending')
@@ -10,7 +9,6 @@ export class TrendingController {
 
     constructor(
         private readonly search: GithubSearchService,
-        private readonly ai: AiAnalyzeService,
     ) {}
 
     /**
@@ -46,32 +44,5 @@ export class TrendingController {
             repos: result.repos,
             dateRange: `${dateStr} ~ ${new Date().toISOString().split('T')[0]}`,
         };
-    }
-
-    /**
-     * 启动趋势分析任务：查询 Trending 仓库并创建 AI 分析任务（后台异步执行）
-     *
-     * @param q  查询参数：since（daily/weekly/monthly）、language
-     * @returns   包含 taskId 的响应，可通过 taskId 查询分析结果
-     */
-    @Post('analyze')
-    @ApiOperation({ summary: '启动趋势分析', description: '查询 Trending 仓库并创建 AI 分析任务（后台异步），返回 taskId' })
-    @ApiQuery({ name: 'since', required: false, description: '时间范围（daily/weekly/monthly），默认 daily' })
-    @ApiQuery({ name: 'language', required: false, description: '编程语言筛选' })
-    async analyze(@Query() q: any) {
-        const since = q.since || 'daily';
-        const language = q.language || '';
-        let days = 1;
-        if (since === 'weekly') days = 7;
-        else if (since === 'monthly') days = 30;
-        const sinceDate = new Date(Date.now() - days * 86400000);
-        const dateStr = sinceDate.toISOString().split('T')[0];
-        let query = `created:>=${dateStr}`;
-        if (language) query += ` language:${language}`;
-        this.logger.log('开始趋势分析: since=' + since + ', language=' + (language || 'all'));
-        const result = await this.search.searchRepos(query, '', 'stars', 1, 20);
-        const taskId = this.ai.createTrendingAnalyzeTask(since, language, result.repos as any[]);
-        this.logger.log('趋势分析任务已创建: taskId=' + taskId);
-        return { success: true, taskId, message: '趋势分析已启动' };
     }
 }

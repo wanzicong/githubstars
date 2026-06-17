@@ -1,10 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col, message, Button, Modal } from 'antd'
-import { StarFilled, ForkOutlined, FireOutlined, BulbOutlined } from '@ant-design/icons'
+import { useState, useEffect, useCallback } from 'react'
+import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col, message } from 'antd'
+import { StarFilled, ForkOutlined, FireOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { fetchTrending, analyzeTrending } from '../api/trending'
-import { getAnalyzeStatus } from '../api/analyze'
-import MarkdownRenderer from '../components/MarkdownRenderer'
+import { fetchTrending } from '../api/trending'
 import type { GithubSearchRepo } from '../api/github'
 
 const { Title, Text, Paragraph } = Typography
@@ -47,12 +45,6 @@ export default function Trending() {
     const [total, setTotal] = useState(0)
     const [dateRange, setDateRange] = useState('')
     const [loading, setLoading] = useState(false)
-    const [analyzing, setAnalyzing] = useState(false)
-    const [, setAnalyzeTaskId] = useState<string | null>(null)
-    const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
-    const [analyzeResult, setAnalyzeResult] = useState<string | null>(null)
-    const [analyzeStatus, setAnalyzeStatus] = useState('')
-    const analyzePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     const load = useCallback(async (s: string, lang: string) => {
         setLoading(true)
@@ -71,35 +63,6 @@ export default function Trending() {
     useEffect(() => {
         load(since, language)
     }, [since, language, load])
-
-    const handleAnalyze = useCallback(async () => {
-        setAnalyzing(true)
-        try {
-            const res = await analyzeTrending(since, language || undefined)
-            if (res.success && res.taskId) {
-                setAnalyzeTaskId(res.taskId)
-                setAnalyzeStatus('PROCESSING')
-                setAnalyzeResult(null)
-                setAnalyzeModalVisible(true)
-                const tid = res.taskId
-                if (analyzePollRef.current) clearInterval(analyzePollRef.current)
-                analyzePollRef.current = setInterval(async () => {
-                    try {
-                        const s = await getAnalyzeStatus(tid)
-                        if (s.status === 'COMPLETED') {
-                            clearInterval(analyzePollRef.current!)
-                            setAnalyzeStatus('COMPLETED')
-                            setAnalyzeResult(s.content || '')
-                        }
-                    } catch {}
-                }, 3000)
-            }
-        } catch {
-            message.error('分析请求失败')
-        } finally {
-            setAnalyzing(false)
-        }
-    }, [since, language])
 
     return (
         <div>
@@ -136,9 +99,6 @@ export default function Trending() {
                             { value: 'monthly', label: '📊 本月' },
                         ]}
                     />
-                    <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAnalyze} type='primary' ghost>
-                        AI 趋势分析
-                    </Button>
                 </Space>
             </div>
 
@@ -231,38 +191,6 @@ export default function Trending() {
                     </Row>
                 )}
             </Spin>
-
-            <Modal
-                title={
-                    <Space>
-                        <BulbOutlined style={{ color: '#faad14' }} />
-                        AI 趋势分析报告
-                    </Space>
-                }
-                open={analyzeModalVisible}
-                onCancel={() => {
-                    setAnalyzeModalVisible(false)
-                    if (analyzePollRef.current) clearInterval(analyzePollRef.current)
-                }}
-                footer={
-                    <Button type='primary' onClick={() => setAnalyzeModalVisible(false)}>
-                        关闭
-                    </Button>
-                }
-                width={900}
-                style={{ top: 20 }}
-                maskClosable={analyzeStatus === 'COMPLETED'}
-            >
-                {analyzeStatus === 'PROCESSING' && (
-                    <div style={{ textAlign: 'center', padding: 40 }}>
-                        <Spin size='large' />
-                        <div style={{ marginTop: 16 }}>AI 正在分析趋势数据...</div>
-                    </div>
-                )}
-                {analyzeStatus === 'COMPLETED' && analyzeResult && (
-                    <MarkdownRenderer content={analyzeResult} style={{ maxHeight: '65vh', overflow: 'auto' }} />
-                )}
-            </Modal>
         </div>
     )
 }

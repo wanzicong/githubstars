@@ -23,29 +23,11 @@ export interface GithubRepo {
     repoUpdatedAt: string | null
     repoPushedAt: string | null
     starredAt: string | null
-    categoryNames: string[]
-    /** 新标签系统 — 仓库的多维标签名列表 */
-    tagNames?: string[]
-    /** 新标签系统 — 结构化标签（含 ID、维度、层级，支持下钻和层级展示） */
-    tags?: Array<{ id: number; name: string; groupName: string; groupId: number; groupColor: string; groupIcon: string | null; parentId: number | null }>
     /** 翻译状态 (NestJS 增强字段) */
     translationStatus?: {
         description: 'completed' | 'pending' | 'none'
         readme: 'completed' | 'pending' | 'none'
     }
-}
-
-export interface Category {
-    id: number
-    name: string
-    description: string | null
-    sortOrder: number
-    repoCount: number
-    createdAt: string
-    updatedAt: string
-    parentId: number | null
-    children: Category[]
-    level: number
 }
 
 export interface SyncLog {
@@ -129,8 +111,6 @@ export interface StarListParams {
     size?: number
     keyword?: string
     language?: string
-    categoryIds?: string
-    tagIds?: string
     sortBy?: string
     sortOrder?: string
     dateField?: string

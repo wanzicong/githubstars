@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Tabs, Dropdown, type MenuProps } from 'antd'
+import { Tabs, Dropdown, theme, type MenuProps } from 'antd'
 import { CloseOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useMultipleTabStore } from '@/stores'
 import { getMenuTitle } from '@/router/menu'
@@ -25,6 +25,7 @@ import { getMenuTitle } from '@/router/menu'
 export default function MultipleTabs() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { token } = theme.useToken()
 
   const tabs = useMultipleTabStore((s) => s.tabs)
   const activeKey = useMultipleTabStore((s) => s.activeKey)
@@ -126,8 +127,8 @@ export default function MultipleTabs() {
   return (
     <div
       style={{
-        background: '#fff',
-        borderBottom: '1px solid #f0f0f0',
+        background: token.colorBgContainer,
+        borderBottom: `1px solid ${token.colorBorderSecondary}`,
         padding: '0 8px',
       }}
     >

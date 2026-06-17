@@ -11,9 +11,9 @@ export class ExportController {
     constructor(private readonly repoService: GithubRepoService) {}
 
     /**
-     * 导出仓库列表为 Markdown 文件，支持按关键词、语言、时间范围、分类、翻译状态筛选
+     * 导出仓库列表为 Markdown 文件，支持按关键词、语言、时间范围、翻译状态筛选
      *
-     * @param q   查询参数：keyword、language、categoryIds、sortBy、sortOrder、
+     * @param q   查询参数：keyword、language、sortBy、sortOrder、
      *            dateField、startDate、endDate、untranslatedOnly、maxCount
      * @param res Express Response 对象，用于设置 Content-Disposition 并返回文件
      */
@@ -21,7 +21,6 @@ export class ExportController {
     @ApiOperation({ summary: '导出 Markdown', description: '按筛选条件将仓库列表导出为 Markdown 文件下载' })
     @ApiQuery({ name: 'keyword', required: false, description: '关键词搜索' })
     @ApiQuery({ name: 'language', required: false, description: '编程语言筛选' })
-    @ApiQuery({ name: 'categoryIds', required: false, description: '分类 ID（逗号分隔）' })
     @ApiQuery({ name: 'sortBy', required: false, description: '排序字段，默认 starred_at' })
     @ApiQuery({ name: 'sortOrder', required: false, description: '排序方向（asc/desc），默认 desc' })
     @ApiQuery({ name: 'dateField', required: false, description: '日期筛选字段' })
@@ -37,7 +36,6 @@ export class ExportController {
             size: maxCount,
             keyword: q.keyword || '',
             language: q.language || '',
-            categoryIds: q.categoryIds || '',
             sortBy: q.sortBy || 'stars_count',
             sortOrder: q.sortOrder || 'desc',
             dateField: q.dateField || '',

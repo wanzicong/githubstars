@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Row, Col, Tag, Typography, Avatar, Tooltip } from 'antd'
+import { Card, Row, Col, Tag, Typography, Avatar } from 'antd'
 import { StarFilled, ForkOutlined, ReadOutlined } from '@ant-design/icons'
 import { formatNumberCn } from '@/utils/format'
 import type { GithubRepo } from '@/types'
@@ -21,14 +21,10 @@ function formatDate(dateStr: string | number[] | null): string {
 
 interface RepoRowProps {
     repo: GithubRepo
-    /** 点击标签下钻：传入 tagId 触发筛选 */
-    onTagClick?: (tagId: number) => void
-    /** 当前已选中的 tagId 集合（高亮已选标签） */
-    selectedTagIds?: Set<number>
 }
 
 /** 列表行视图 — 每个仓库展示为横向行卡片（React.memo 避免列表项无效重渲染） */
-const RepoRow = memo(function RepoRow({ repo, onTagClick, selectedTagIds }: RepoRowProps) {
+const RepoRow = memo(function RepoRow({ repo }: RepoRowProps) {
     const navigate = useNavigate()
 
     return (
@@ -55,57 +51,6 @@ const RepoRow = memo(function RepoRow({ repo, onTagClick, selectedTagIds }: Repo
                                         {repo.language}
                                     </Tag>
                                 )}
-                                {repo.tags && repo.tags.length > 0
-                                    ? (() => {
-                                          // 按维度分组 + 建树（父标签 → 子标签）
-                                          const groupMap = new Map<number, { gn: string; gc: string; gi: string | null; parents: Array<{ p: typeof repo.tags[0]; children: typeof repo.tags[0][] }> }>()
-                                          for (const t of repo.tags) {
-                                              if (!groupMap.has(t.groupId)) {
-                                                  groupMap.set(t.groupId, { gn: t.groupName, gc: t.groupColor, gi: t.groupIcon, parents: [] })
-                                              }
-                                          }
-                                          for (const g of groupMap.values()) {
-                                              const dimTags = repo.tags!.filter(t => t.groupId === repo.tags!.find(rt => rt.groupName === g.gn)!.groupId)
-                                              const parents = dimTags.filter(t => !t.parentId || !dimTags.some(rt => rt.id === t.parentId))
-                                              const childMap = new Map<number, typeof repo.tags[0][]>()
-                                              for (const t of dimTags.filter(t => t.parentId && dimTags.some(rt => rt.id === t.parentId))) {
-                                                  if (!childMap.has(t.parentId!)) childMap.set(t.parentId!, [])
-                                                  childMap.get(t.parentId!)!.push(t)
-                                              }
-                                              g.parents = parents.map(p => ({ p, children: childMap.get(p.id) || [] }))
-                                          }
-                                          return Array.from(groupMap.values()).slice(0, 2).map((g) => (
-                                              <span key={g.gn} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11 }}>
-                                                  <span style={{ fontSize: 10, opacity: 0.55, marginRight: 1 }} title={g.gn}>{g.gi || '📌'}</span>
-                                                  {g.parents.flatMap(({ p, children }) => {
-                                                      const pSel = selectedTagIds?.has(p.id)
-                                                      const tags = [
-                                                          <Tooltip key={p.id} title={`${g.gn} — 点击下钻`} mouseEnterDelay={0.5}>
-                                                              <Tag color={pSel ? 'blue' : 'cyan'} style={{ margin: 0, fontSize: 11, borderRadius: 10, cursor: 'pointer', padding: '0 6px', fontWeight: pSel ? 600 : 500, lineHeight: '18px' }}
-                                                                  onClick={(e) => { e.stopPropagation(); onTagClick?.(p.id) }}>{p.name}</Tag>
-                                                          </Tooltip>,
-                                                          ...children.slice(0, 3).map((c) => {
-                                                              const cSel = selectedTagIds?.has(c.id)
-                                                              return (
-                                                                  <Tooltip key={c.id} title={`${g.gn} · ${p.name} 的子标签`} mouseEnterDelay={0.5}>
-                                                                      <Tag color={cSel ? 'blue' : 'default'} style={{ margin: 0, fontSize: 10, borderRadius: 8, cursor: 'pointer', padding: '0 5px', fontWeight: cSel ? 600 : 400, opacity: 0.8, lineHeight: '16px' }}
-                                                                          onClick={(e) => { e.stopPropagation(); onTagClick?.(c.id) }}>{c.name}</Tag>
-                                                                  </Tooltip>
-                                                              )
-                                                          }),
-                                                      ]
-                                                      return tags
-                                                  })}
-                                              </span>
-                                          ))
-                                      })()
-                                    : repo.tagNames &&
-                                      repo.tagNames.length > 0 &&
-                                      repo.tagNames.slice(0, 2).map((t) => (
-                                          <Tag key={t} color='cyan' style={{ margin: 0, fontSize: 12, borderRadius: 10 }}>
-                                              {t}
-                                          </Tag>
-                                      ))}
                                 {repo.readmeFetched && repo.readmeCn ? (
                                     <Tag color='purple' style={{ margin: 0, fontSize: 11 }}>
                                         <ReadOutlined style={{ fontSize: 10 }} /> 已翻译

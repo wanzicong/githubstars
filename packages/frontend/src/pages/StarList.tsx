@@ -36,19 +36,14 @@ import {
     CloseCircleOutlined,
     AppstoreOutlined,
     UnorderedListOutlined,
-    BulbOutlined,
-    ThunderboltOutlined,
 } from '@ant-design/icons'
 import dayjs from '../setupDayjs'
 import * as statsApi from '../api/stats'
 import * as starsApi from '../api/stars'
 import * as translateApi from '../api/translate'
-import * as analyzeApi from '../api/analyze'
-import { fetchAllTags } from '../api/tags'
 import RepoCard from '../components/RepoCard'
 import RepoRow from '../components/RepoRow'
 import TranslatePanel from '../components/TranslatePanel'
-import MarkdownRenderer from '../components/MarkdownRenderer'
 import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
 
 const { Title, Text } = Typography
@@ -76,234 +71,6 @@ const DATE_FIELD_OPTIONS = [
 
 const PAGE_SIZE_OPTIONS = [36, 72, 144]
 
-/**
- * 标签层级选择树 —— 三级结构：维度 → 一级标签（父标签）→ 二级标签（子标签）
- *
- * 特性：
- * - 维度节点默认展开，标签节点默认折叠（有子标签时显示 ▶ 展开按钮）
- * - 选中标签高亮显示，支持原生 checkbox 交互
- * - 支持搜索过滤（通过父组件 DOM 操作，保持组件纯净）
- * - 每个标签显示上下文感知的仓库数量（由后端动态计算）
- *
- * @param nodes    TreeNode[] — buildTagHierarchy() 构建的三级树节点
- * @param selected 已选中的 tagId 集合
- * @param onToggle 点击标签 checkbox 时的回调
- */
-function TagCheckTree({ nodes, selected, onToggle }: {
-    nodes: TreeNode[]
-    selected: Set<number>
-    onToggle: (tagId: number) => void
-}) {
-    const [expanded, setExpanded] = useState<Set<string>>(new Set())
-    const prevNodesRef = useRef<TreeNode[] | null>(null)
-
-    // 当 nodes 刷新时（筛选条件变化），保留已展开的节点，首次加载则展开所有维度
-    useEffect(() => {
-        if (prevNodesRef.current === null) {
-            // 首次加载：展开所有维度节点
-            const keys = new Set<string>()
-            nodes.forEach(n => { if (n.type === 'group') keys.add(n.value) })
-            setExpanded(keys)
-            prevNodesRef.current = nodes
-            return
-        }
-        // 后续刷新：收集新 nodes 中所有有效 key，保留其中已展开的
-        const validKeys = new Set<string>()
-        const walk = (ns: TreeNode[]) => {
-            for (const n of ns) { validKeys.add(n.value); if (n.children) walk(n.children) }
-        }
-        walk(nodes)
-        setExpanded(prev => {
-            const next = new Set<string>()
-            prev.forEach(k => { if (validKeys.has(k)) next.add(k) })
-            return next
-        })
-        prevNodesRef.current = nodes
-    }, [nodes])
-
-    const toggleExpand = (key: string) => {
-        setExpanded(prev => {
-            const next = new Set(prev)
-            next.has(key) ? next.delete(key) : next.add(key)
-            return next
-        })
-    }
-
-    const renderNode = (node: TreeNode, depth: number) => {
-        const isExpanded = expanded.has(node.value)
-        const hasChildren = node.children && node.children.length > 0
-        const isChecked = node.tagId !== undefined && selected.has(node.tagId)
-        const isGroup = node.type === 'group'
-        const isParentTag = node.type === 'tag' && hasChildren
-        const isChildTag = node.type === 'subtag'
-
-        // 视觉样式按层级区分
-        const rowStyle: React.CSSProperties = {
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: isGroup ? '4px 6px' : isParentTag ? '3px 6px 3px 6px' : '2px 6px 2px 22px',
-            cursor: isGroup ? 'default' : 'pointer',
-            borderRadius: 4, marginBottom: 1,
-            background: isChecked ? '#e6f4ff' : undefined,
-            fontWeight: isGroup ? 600 : isParentTag ? 500 : 400,
-            fontSize: isGroup ? 13 : 12,
-            color: isGroup ? '#262626' : isChildTag ? '#8c8c8c' : '#434343',
-        }
-
-        return (
-            <div key={node.value}>
-                <div data-tag-row style={rowStyle}>
-                    {/* 展开/折叠箭头 */}
-                    {hasChildren ? (
-                        <span
-                            style={{ fontSize: 10, width: 14, flexShrink: 0, color: '#bbb', cursor: 'pointer' }}
-                            onClick={(e) => { e.stopPropagation(); toggleExpand(node.value) }}
-                        >
-                            {isExpanded ? '▼' : '▶'}
-                        </span>
-                    ) : (
-                        <span style={{ width: 14, flexShrink: 0 }} />
-                    )}
-
-                    {/* 维度图标 或 checkbox */}
-                    {isGroup ? (
-                        <span style={{ fontSize: 14, width: 20, flexShrink: 0, textAlign: 'center' }}>
-                            {node.icon || '📌'}
-                        </span>
-                    ) : (
-                        <input
-                            type='checkbox'
-                            checked={isChecked}
-                            style={{ margin: 0, flexShrink: 0, cursor: 'pointer', accentColor: '#1677ff' }}
-                            onChange={() => node.tagId !== undefined && onToggle(node.tagId)}
-                            onClick={(e) => e.stopPropagation()}
-                        />
-                    )}
-
-                    {/* 标签名 — 点击文字也可切换选中 */}
-                    <span
-                        style={{
-                            flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            cursor: isGroup ? 'default' : 'pointer',
-                        }}
-                        onClick={() => {
-                            if (!isGroup && node.tagId !== undefined) onToggle(node.tagId)
-                        }}
-                    >
-                        {node.label}
-                    </span>
-
-                    {/* 仓库数量（上下文感知） */}
-                    {node.count !== undefined && (
-                        <span style={{
-                            fontSize: 10, color: node.count > 0 ? '#8c8c8c' : '#d9d9d9',
-                            flexShrink: 0, minWidth: 28, textAlign: 'right',
-                        }}>
-                            {node.count}
-                        </span>
-                    )}
-
-                    {/* 选中标记 */}
-                    {isChecked && (
-                        <span style={{ color: '#1677ff', fontSize: 10, flexShrink: 0, fontWeight: 700 }}>✓</span>
-                    )}
-                </div>
-
-                {/* 递归渲染子节点（子组/子标签均缩进 14px） */}
-                {hasChildren && isExpanded && (
-                    <div data-child-container='true' style={isGroup ? {} : { paddingLeft: 14 }}>
-                        {node.children!.map(child => renderNode(child, depth + 1))}
-                    </div>
-                )}
-            </div>
-        )
-    }
-
-    return (
-        <div>
-            {nodes.map(node => renderNode(node, 0))}
-        </div>
-    )
-}
-
-/** 树节点类型 */
-interface TreeNode {
-    type: 'group' | 'tag' | 'subtag'
-    value: string
-    tagId?: number
-    label: string
-    count?: number
-    icon?: string
-    children?: TreeNode[]
-}
-
-/** 从维度 emoji 提取图标字符 */
-function getGroupEmoji(name: string): string {
-    const m = name.match(/^([\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F600}-\u{1F64F}])/u)
-    return m ? m[1] : '📌'
-}
-
-/** 将从后端获取的 TagGroup[] 构建为树节点：组扁平，组内标签按父子层级嵌套，过滤 count=0 */
-function buildTagHierarchy(groups: any[]): TreeNode[] {
-    return groups
-        .filter((g: any) => {
-            // 过滤：没有任何非零标签的组不显示
-            const hasTags = (g.tags || []).some((t: any) => (typeof t.repoCount === 'number' ? t.repoCount : 0) > 0)
-            return hasTags
-        })
-        .map((group: any) => {
-            // 过滤掉 count=0 的标签
-            const activeTags = (group.tags || []).filter(
-                (t: any) => (typeof t.repoCount === 'number' ? t.repoCount : 0) > 0,
-            )
-
-            const tagMap = new Map<number, { node: TreeNode; parentId: number | null }>()
-            for (const tag of activeTags) {
-                tagMap.set(tag.id, {
-                    node: {
-                        type: 'tag',
-                        value: `tag_${tag.id}`,
-                        tagId: tag.id,
-                        label: tag.name,
-                        count: typeof tag.repoCount === 'number' ? tag.repoCount : 0,
-                        children: [],
-                    },
-                    parentId: tag.parentId ?? null,
-                })
-            }
-
-            // 构建父子关系：子标签挂在父标签下面
-            const rootTags: TreeNode[] = []
-            for (const [, entry] of tagMap) {
-                if (entry.parentId && tagMap.has(entry.parentId)) {
-                    const parent = tagMap.get(entry.parentId)!
-                    parent.node.children!.push(entry.node)
-                    entry.node.type = 'subtag'
-                } else {
-                    rootTags.push(entry.node)
-                }
-            }
-
-            // 递归排序：按 count 降序
-            const sortByCount = (nodes: TreeNode[]) => {
-                nodes.sort((a, b) => (b.count || 0) - (a.count || 0))
-                for (const n of nodes) {
-                    if (n.children?.length) sortByCount(n.children)
-                    else delete n.children
-                }
-            }
-            sortByCount(rootTags)
-
-            return {
-                type: 'group' as const,
-                value: `group_${group.id}`,
-                label: group.name.replace(/^[^\s]+\s/, ''),
-                icon: getGroupEmoji(group.name),
-                count: activeTags.length,
-                children: rootTags.length > 0 ? rootTags : undefined,
-            }
-        })
-}
-
 const TIME_PRESETS: { label: string; value: string; days: number }[] = [
     { label: '不限', value: '', days: 0 },
     { label: '今天', value: 'today', days: 0 },
@@ -322,8 +89,6 @@ export default function StarList() {
     const keyword = searchParams.get('keyword') || ''
     const languageStr = searchParams.get('languages') || ''
     const selectedLanguages = languageStr ? languageStr.split(',') : []
-    const tagIdsStr = searchParams.get('tagIds') || ''
-    const selectedTagIds = tagIdsStr ? tagIdsStr.split(',').map(Number) : []
     const sortBy = searchParams.get('sortBy') || 'stars_count'
     const sortOrder = searchParams.get('sortOrder') || 'desc'
     const dateField = searchParams.get('dateField') || undefined
@@ -461,34 +226,10 @@ export default function StarList() {
     const dateFilterExpanded = !!(dateField || startDateStr || endDateStr || timePreset)
 
     const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({ records: [], total: 0, size: 12, current: 1, pages: 0 })
-    const [tagTree, setTagTree] = useState<TreeNode[]>([])
-    const [tagPopoverOpen, setTagPopoverOpen] = useState(false)
-    const [tagTreeKey, setTagTreeKey] = useState(0)                 // 强制TagCheckTree重新挂载
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
     const [loading, setLoading] = useState(true)
     const [initialLoading, setInitialLoading] = useState(true)
-
-    // ── 标签树随筛选条件动态加载（上下文感知计数）──
-    useEffect(() => {
-        let cancelled = false
-        const loadTags = async () => {
-            try {
-                const tagRes = await fetchAllTags({
-                    language: languageStr || undefined,
-                    keyword: keyword || undefined,
-                    contextTagIds: tagIdsStr || undefined,
-                }).catch(() => [])
-                if (cancelled) return
-                setTagTree(buildTagHierarchy(tagRes))
-            } catch {
-                if (!cancelled) setTagTree([])
-            }
-        }
-        loadTags()
-        return () => { cancelled = true }
-    }, [languageStr, keyword, tagIdsStr])
-
     // ── 首次加载概览和语言统计（仅一次）──
     useEffect(() => {
         const loadMeta = async () => {
@@ -517,8 +258,6 @@ export default function StarList() {
                     size: pageSize,
                     keyword: keyword || undefined,
                     language: languageStr || undefined,
-                    tagIds: tagIdsStr || undefined,
-                    
                     sortBy: sortBy || undefined,
                     sortOrder: sortOrder || undefined,
                     dateField: dateField || undefined,
@@ -542,7 +281,6 @@ export default function StarList() {
         pageSize,
         keyword,
         languageStr,
-        tagIdsStr,
         sortBy,
         sortOrder,
         dateField,
@@ -552,47 +290,10 @@ export default function StarList() {
         location.pathname, // 从详情页返回列表时触发刷新
     ])
 
-    // 已选标签名称列表（用于按钮文案和面包屑展示）
-    const selectedTagNames = useMemo(() => {
-        if (!selectedTagIds.length) return []
-        const idSet = new Set(selectedTagIds)
-        const names: { tagId: number; label: string; groupLabel: string }[] = []
-        const walk = (nodes: TreeNode[]) => {
-            for (const n of nodes) {
-                if (n.type === 'group') {
-                    if (n.children) walk(n.children)
-                } else if (n.tagId !== undefined && idSet.has(n.tagId)) {
-                    names.push({ tagId: n.tagId, label: n.label, groupLabel: '' })
-                }
-                if (n.children) walk(n.children)
-            }
-        }
-        walk(tagTree)
-        // 去重（同一个tagId可能在树中出现多次）
-        const seen = new Set<number>()
-        return names.filter(n => { if (seen.has(n.tagId)) return false; seen.add(n.tagId); return true })
-    }, [selectedTagIds, tagTree])
-
-    // 选中标签摘要（预留：后续可用于筛选栏展示）
-    void (selectedTagNames.slice(0, 3).map(n => n.label).join(', ')
-        + (selectedTagNames.length > 3 ? ` 等${selectedTagNames.length}个` : ''))
-
-    // 已选标签 ID 集合（O(1) 查找）
-    const selectedTagIdSet = useMemo(() => new Set(selectedTagIds), [selectedTagIds])
-
-    // 切换标签选中状态
-    const onToggleTag = useCallback((tagId: number) => {
-        const next = selectedTagIds.includes(tagId)
-            ? selectedTagIds.filter(id => id !== tagId)
-            : [...selectedTagIds, tagId]
-        setUrlParam('tagIds', next.length > 0 ? next.join(',') : null)
-    }, [selectedTagIds, setUrlParam])
-
     const handleClearFilters = useCallback(() => {
         setUrlParams({
             keyword: null,
             languages: null,
-            tagIds: null,
             timePreset: null,
             sortBy: 'stars_count',
             sortOrder: 'desc',
@@ -605,11 +306,6 @@ export default function StarList() {
 
     const [translatePanelOpen, setTranslatePanelOpen] = useState(false)
     const [translateModalVisible, setTranslateModalVisible] = useState(false)
-    const [analyzing, setAnalyzing] = useState(false)
-    const [analyzeModalVisible, setAnalyzeModalVisible] = useState(false)
-    const [analyzeResult, setAnalyzeResult] = useState<string | null>(null)
-    const [analyzeStatus, setAnalyzeStatus] = useState<string>('')
-    const analyzePollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const [translateTaskId, setTranslateTaskId] = useState<number | null>(null)
     const [translateProgress, setTranslateProgress] = useState<{
         status: string
@@ -659,8 +355,6 @@ export default function StarList() {
                                 size: pageSize,
                                 keyword: keyword || undefined,
                                 language: languageStr || undefined,
-                    tagIds: tagIdsStr || undefined,
-                                
                                 sortBy: sortBy || undefined,
                                 sortOrder: sortOrder || undefined,
                                 dateField: dateField || undefined,
@@ -673,53 +367,8 @@ export default function StarList() {
                 } catch {}
             }, 2000)
         },
-        [currentPage, pageSize, keyword, languageStr, tagIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly],
+        [currentPage, pageSize, keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly],
     )
-
-    const handleAiAnalyze = useCallback(async () => {
-        setAnalyzing(true)
-        try {
-            const result = await analyzeApi.startAnalyze({
-                keyword: keyword || undefined,
-                language: languageStr || undefined,
-                    tagIds: tagIdsStr || undefined,
-                
-                sortBy: sortBy || undefined,
-                sortOrder: sortOrder || undefined,
-            })
-            if (result.success && result.taskId) {
-                setAnalyzeStatus('PROCESSING')
-                setAnalyzeResult(null)
-                setAnalyzeModalVisible(true)
-                // 轮询结果
-                const taskId = result.taskId
-                if (analyzePollingRef.current) clearInterval(analyzePollingRef.current)
-                analyzePollingRef.current = setInterval(async () => {
-                    try {
-                        const status = await analyzeApi.getAnalyzeStatus(taskId)
-                        if (status.status === 'COMPLETED') {
-                            if (analyzePollingRef.current) clearInterval(analyzePollingRef.current)
-                            setAnalyzeStatus('COMPLETED')
-                            setAnalyzeResult(status.content || '分析完成，但无内容返回')
-                        }
-                    } catch {}
-                }, 3000)
-            } else {
-                message.info(result.message || '启动分析失败')
-            }
-        } catch {
-            message.error('AI 分析请求失败')
-        } finally {
-            setAnalyzing(false)
-        }
-    }, [keyword, languageStr, tagIdsStr, sortBy, sortOrder])
-
-    const handleCloseAnalyzeModal = useCallback(() => {
-        if (analyzePollingRef.current) clearInterval(analyzePollingRef.current)
-        setAnalyzeModalVisible(false)
-        setAnalyzeResult(null)
-        setAnalyzeStatus('')
-    }, [])
 
     const handleRetryFailed = useCallback(async () => {
         if (!translateTaskId) return
@@ -849,8 +498,6 @@ export default function StarList() {
             const blob = await starsApi.exportStarsUrls({
                 keyword: keyword || undefined,
                 language: languageStr || undefined,
-                    tagIds: tagIdsStr || undefined,
-                
                 sortBy: sortBy || undefined,
                 sortOrder: sortOrder || undefined,
                 dateField: dateField || undefined,
@@ -869,14 +516,13 @@ export default function StarList() {
         } catch {
             console.error('导出失败')
         }
-    }, [keyword, languageStr, tagIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly])
+    }, [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly])
 
     const handleExportMd = useCallback(async () => {
         try {
             const params = new URLSearchParams()
             if (keyword) params.set('keyword', keyword)
             if (languageStr) params.set('language', languageStr)
-            if (tagIdsStr) params.set('tagIds', tagIdsStr)
             if (sortBy) params.set('sortBy', sortBy)
             if (sortOrder) params.set('sortOrder', sortOrder)
             if (dateField) params.set('dateField', dateField)
@@ -907,30 +553,15 @@ export default function StarList() {
         } catch {
             message.error('导出MD失败')
         }
-    }, [keyword, languageStr, tagIdsStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, pageResult?.total])
+    }, [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, pageResult?.total])
 
     const languageSelectOptions = useMemo(
         () => languageOptions.map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })),
         [languageOptions],
     )
-        const buildTree = (cats: any[]): any[] => {
-            return cats.map((cat) => {
-                const node: any = {
-                    title: (cat.level === 1 ? '📁 ' : '📂 ') + cat.name + ' (' + cat.repoCount + ')',
-                    value: String(cat.id),
-                    key: String(cat.id),
-                }
-                if (cat.children && cat.children.length > 0) {
-                    node.children = buildTree(cat.children)
-                }
-                return node
-            })
-        }
-
     const hasActiveFilters =
         keyword.trim() !== '' ||
         languageStr !== '' ||
-        tagIdsStr !== '' ||
         dateField !== undefined ||
         !!startDateStr ||
         !!endDateStr ||
@@ -1036,99 +667,6 @@ export default function StarList() {
                                 style={{ width: '100%' }}
                             />
                         </Col>
-                        <Col xs={24} sm={12} md={6} lg={4} style={{ position: 'relative' }}>
-                            <Button
-                                style={{ width: '100%' }}
-                                onClick={() => { setTagPopoverOpen(!tagPopoverOpen); if (!tagPopoverOpen) setTagTreeKey(k => k + 1) }}
-                            >
-                                🏷️ {selectedTagIds.length > 0 ? `标签 (${selectedTagIds.length})` : '标签筛选'}
-                            </Button>
-                            {tagPopoverOpen && (
-                                <div style={{
-                                    position: 'absolute', top: '100%', left: 0, zIndex: 1050,
-                                    width: 440, maxHeight: 520, marginTop: 4,
-                                    background: '#fff', borderRadius: 8,
-                                    boxShadow: '0 6px 16px 0 rgba(0,0,0,0.08), 0 3px 6px -4px rgba(0,0,0,0.12)',
-                                    display: 'flex', flexDirection: 'column',
-                                }}>
-                                    {/* 搜索框 */}
-                                    <div style={{ padding: '10px 12px 6px' }}>
-                                        <Input.Search
-                                            placeholder='搜索标签...'
-                                            allowClear
-                                            size='small'
-                                            onChange={(e) => {
-                                                const kw = (e.target.value || '').toLowerCase()
-                                                const el = document.getElementById('tag-tree-panel')
-                                                if (!el) return
-                                                // 简单的 DOM 筛选：隐藏不匹配的行
-                                                const rows = el.querySelectorAll('[data-tag-row]')
-                                                rows.forEach((row: any) => {
-                                                    const text = (row.textContent || '').toLowerCase()
-                                                    const match = !kw || text.includes(kw)
-                                                    row.style.display = match ? '' : 'none'
-                                                    // 同时控制其子节点容器
-                                                    const childContainer = row.nextElementSibling
-                                                    if (childContainer && childContainer.getAttribute('data-child-container') === 'true') {
-                                                        childContainer.style.display = match ? '' : 'none'
-                                                    }
-                                                })
-                                            }}
-                                        />
-                                    </div>
-
-                                    {/* 已选标签面包屑 */}
-                                    {selectedTagNames.length > 0 && (
-                                        <div style={{
-                                            padding: '4px 12px 6px', borderBottom: '1px solid #f0f0f0',
-                                            display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center',
-                                        }}>
-                                            <span style={{ fontSize: 11, color: '#999', flexShrink: 0 }}>已选：</span>
-                                            {selectedTagNames.map(tn => (
-                                                <Tag
-                                                    key={tn.tagId}
-                                                    closable
-                                                    color='blue'
-                                                    style={{ margin: 0, fontSize: 11 }}
-                                                    onClose={(e) => {
-                                                        e.preventDefault()
-                                                        onToggleTag(tn.tagId)
-                                                    }}
-                                                >
-                                                    {tn.label}
-                                                </Tag>
-                                            ))}
-                                            {selectedTagNames.length > 1 && (
-                                                <Button
-                                                    size='small' type='link' danger
-                                                    style={{ fontSize: 11, padding: 0, height: 20 }}
-                                                    onClick={() => setUrlParam('tagIds', null)}
-                                                >
-                                                    清除全部
-                                                </Button>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* 标签树 */}
-                                    <div id='tag-tree-panel' style={{ flex: 1, overflow: 'auto', minHeight: 100, maxHeight: 380, padding: '4px 12px 8px' }}>
-                                        <TagCheckTree
-                                            key={tagTreeKey}
-                                            nodes={tagTree}
-                                            selected={selectedTagIdSet}
-                                            onToggle={onToggleTag}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                            {/* 点击外部关闭 */}
-                            {tagPopoverOpen && (
-                                <div
-                                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1049 }}
-                                    onClick={() => setTagPopoverOpen(false)}
-                                />
-                            )}
-                        </Col>
                         <Col xs={12} sm={8} md={6} lg={4}>
                             <Select
                                 placeholder='排序字段'
@@ -1164,11 +702,6 @@ export default function StarList() {
                                             语言: {languageStr}
                                         </Tag>
                                     )}
-                                    {tagIdsStr && (
-                                        <Tag closable onClose={() => setUrlParam('tagIds', null)} color='cyan'>
-                                            标签({selectedTagIds.length}个)
-                                        </Tag>
-                                    )}
                                     {timeFilterSummary && (
                                         <Tag closable onClose={() => setUrlParams({ dateField: null, startDate: null, endDate: null, timePreset: null })} color='purple'>
                                             时间: {timeFilterSummary}
@@ -1196,22 +729,6 @@ export default function StarList() {
                                 )}
                                 <Button icon={<TranslationOutlined />} onClick={() => setTranslatePanelOpen(true)}>
                                     翻译管理
-                                </Button>
-                                <Button icon={<ThunderboltOutlined />} onClick={() => {
-                                    // 收集当前筛选条件，拼接到 URL 参数
-                                    const params = new URLSearchParams()
-                                    if (keyword) params.set('keyword', keyword)
-                                    if (languageStr) params.set('language', languageStr)
-                                    if (tagIdsStr) params.set('tagIds', tagIdsStr)
-                                    const qs = params.toString()
-                                    const url = qs ? `/tags?${qs}` : '/tags'
-                                    window.open(url, '_blank')
-                                    message.info('已在标签管理页打开，点击「Agent智能打标签」后配置参数再开始分析')
-                                }}>
-                                    🤖 Agent打标签
-                                </Button>
-                                <Button icon={<BulbOutlined />} loading={analyzing} onClick={handleAiAnalyze}>
-                                    AI 分析
                                 </Button>
                                 <Button icon={<DownloadOutlined />} onClick={handleExportMd}>
                                     导出MD
@@ -1316,14 +833,14 @@ export default function StarList() {
                     viewMode === 'list' ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                             {repos.map((repo) => (
-                                <RepoRow key={repo.id} repo={repo} onTagClick={onToggleTag} selectedTagIds={selectedTagIdSet} />
+                                <RepoRow key={repo.id} repo={repo} />
                             ))}
                         </div>
                     ) : (
                         <Row gutter={[16, 16]}>
                             {repos.map((repo) => (
                                 <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
-                                    <RepoCard repo={repo} onTagClick={onToggleTag} selectedTagIds={selectedTagIdSet} />
+                                    <RepoCard repo={repo} />
                                 </Col>
                             ))}
                         </Row>
@@ -1364,44 +881,6 @@ export default function StarList() {
             </Spin>
             {renderTranslateProgress()}
 
-            {/* AI 分析结果弹窗 */}
-            <Modal
-                title={
-                    <Space>
-                        <BulbOutlined style={{ color: '#faad14' }} />
-                        AI 项目分析总结
-                    </Space>
-                }
-                open={analyzeModalVisible}
-                onCancel={handleCloseAnalyzeModal}
-                footer={
-                    <Button type='primary' onClick={handleCloseAnalyzeModal}>
-                        关闭
-                    </Button>
-                }
-                width={900}
-                style={{ top: 20 }}
-                maskClosable={analyzeStatus === 'COMPLETED'}
-                closable={analyzeStatus === 'COMPLETED'}
-            >
-                {analyzeStatus === 'PROCESSING' && (
-                    <div style={{ textAlign: 'center', padding: 40 }}>
-                        <Spin size='large' />
-                        <div style={{ marginTop: 16, fontSize: 15, color: '#666' }}>
-                            <BulbOutlined style={{ color: '#faad14', marginRight: 8 }} />
-                            AI 正在分析筛选出的项目，请耐心等待...
-                        </div>
-                        <div style={{ marginTop: 8, fontSize: 13, color: '#999' }}>最多分析 30 个项目 | 分析内容包括描述和 README</div>
-                    </div>
-                )}
-                {analyzeStatus === 'COMPLETED' && analyzeResult && (
-                    <MarkdownRenderer
-                        content={analyzeResult}
-                        style={{ maxHeight: '70vh', overflow: 'auto', padding: '8px 0' }}
-                    />
-                )}
-            </Modal>
-
             {/* 翻译管理面板 */}
             <TranslatePanel
                 open={translatePanelOpen}
@@ -1409,7 +888,6 @@ export default function StarList() {
                 filters={{
                     keyword: keyword || undefined,
                     language: languageStr || undefined,
-                    tagIds: tagIdsStr || undefined,
                     sortBy: sortBy || undefined,
                     sortOrder: sortOrder || undefined,
                     dateField: dateField || undefined,
@@ -1425,8 +903,6 @@ export default function StarList() {
                             size: pageSize,
                             keyword: keyword || undefined,
                             language: languageStr || undefined,
-                    tagIds: tagIdsStr || undefined,
-                            
                             sortBy: sortBy || undefined,
                             sortOrder: sortOrder || undefined,
                             dateField: dateField || undefined,

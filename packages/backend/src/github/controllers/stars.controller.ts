@@ -24,7 +24,6 @@ export class StarsController {
     @ApiQuery({ name: 'size', required: false, description: '每页条数，默认 12，最大 100' })
     @ApiQuery({ name: 'keyword', required: false, description: '全文搜索关键词' })
     @ApiQuery({ name: 'language', required: false, description: '编程语言筛选' })
-    @ApiQuery({ name: 'categoryIds', required: false, description: '分类 ID（逗号分隔）' })
     @ApiQuery({
         name: 'sortBy',
         required: false,
@@ -34,7 +33,6 @@ export class StarsController {
     @ApiQuery({ name: 'dateField', required: false, description: '日期筛选字段' })
     @ApiQuery({ name: 'startDate', required: false, description: '开始日期' })
     @ApiQuery({ name: 'endDate', required: false, description: '结束日期' })
-    @ApiQuery({ name: 'tagIds', required: false, description: '标签 ID（逗号分隔，交集筛选）' })
     @ApiQuery({ name: 'untranslatedOnly', required: false, description: '仅显示未翻译仓库（true/false）' })
     async list(@Query() q: any) {
         const page = Math.max(1, parseInt(q.page) || 1);
@@ -45,8 +43,6 @@ export class StarsController {
             size,
             keyword: q.keyword || '',
             language: q.language || '',
-            categoryIds: q.categoryIds || '',
-            tagIds: q.tagIds || '',
             sortBy: q.sortBy || 'stars_count',
             sortOrder: q.sortOrder || 'desc',
             dateField: q.dateField || '',
@@ -85,7 +81,6 @@ export class StarsController {
     @ApiOperation({ summary: '导出仓库 URL', description: '按筛选条件导出仓库 GitHub URL 列表（纯文本下载）' })
     @ApiQuery({ name: 'keyword', required: false, description: '关键词筛选' })
     @ApiQuery({ name: 'language', required: false, description: '编程语言筛选' })
-    @ApiQuery({ name: 'categoryIds', required: false, description: '分类 ID（逗号分隔）' })
     @ApiQuery({ name: 'sortBy', required: false, description: '排序字段，默认 starred_at' })
     @ApiQuery({ name: 'sortOrder', required: false, description: '排序方向，默认 desc' })
     @ApiQuery({ name: 'dateField', required: false, description: '日期筛选字段' })
@@ -96,7 +91,6 @@ export class StarsController {
         const urls = await this.service.findAllUrls({
             keyword: q.keyword || '',
             language: q.language || '',
-            categoryIds: q.categoryIds || '',
             sortBy: q.sortBy || 'stars_count',
             sortOrder: q.sortOrder || 'desc',
             dateField: q.dateField || '',

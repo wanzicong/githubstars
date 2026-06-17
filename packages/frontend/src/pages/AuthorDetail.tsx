@@ -230,7 +230,7 @@ export default function AuthorDetail() {
                                         style={{ height: '100%', cursor: 'pointer' }}
                                         styles={{ body: { padding: 16 } }}
                                         onClick={() => {
-                                            window.location.href = `/stars/${repo.id}`
+                                            navigate(`/stars/${repo.id}`)
                                         }}
                                     >
                                         <div
@@ -273,13 +273,6 @@ export default function AuthorDetail() {
                                                     {repo.language}
                                                 </Tag>
                                             )}
-                                            {repo.categoryNames &&
-                                                repo.categoryNames.length > 0 &&
-                                                repo.categoryNames.map((cat) => (
-                                                    <Tag key={cat} color='green' style={{ margin: 0, fontSize: 11 }}>
-                                                        {cat}
-                                                    </Tag>
-                                                ))}
                                             <Space size={4}>
                                                 <StarFilled style={{ color: '#faad14', fontSize: 12 }} />
                                                 <Text style={{ fontSize: 12 }}>{repo.starsCount}</Text>

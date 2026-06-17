@@ -20,13 +20,6 @@ function createMockPrisma() {
             findMany: jest.fn().mockResolvedValue([]),
             findUnique: jest.fn().mockResolvedValue(null),
         },
-        repoCategory: {
-            findMany: jest.fn().mockResolvedValue([]),
-        },
-        category: {
-            findUnique: jest.fn().mockResolvedValue(null),
-            findMany: jest.fn().mockResolvedValue([]),
-        },
         $executeRaw: jest.fn().mockResolvedValue(0),
         $queryRaw: jest.fn().mockResolvedValue([]),
     };
@@ -84,14 +77,12 @@ describe('GithubRepoService', () => {
     describe('findPage 参数传递', () => {
         it('应传递所有筛选参数到 buildWhere — 防止导出 bug 复现', async () => {
             mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            mockPrisma.category.findUnique.mockResolvedValue({ id: BigInt(1), level: 2 } as any);
 
             await service.findPage({
                 page: 1,
                 size: 50,
                 keyword: 'mcp',
                 language: 'TypeScript,Python',
-                categoryIds: '1',
                 sortBy: 'stars_count',
                 sortOrder: 'asc',
                 dateField: 'starred_at',
@@ -102,7 +93,7 @@ describe('GithubRepoService', () => {
 
             const callArgs = mockPrisma.githubRepo.count.mock.calls[0][0];
             expect(callArgs).toBeDefined();
-            // 验证 where 包含 AND 条件数组（至少包含 keyword、language、category、dateRange、untranslatedOnly）
+            // 验证 where 包含 AND 条件数组（至少包含 keyword、language、dateRange、untranslatedOnly）
             expect(callArgs.where.AND).toBeDefined();
             expect(callArgs.where.AND.length).toBeGreaterThanOrEqual(4);
         });

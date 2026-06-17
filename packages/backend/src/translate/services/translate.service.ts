@@ -281,13 +281,12 @@ export class TranslateService {
      *
      * 统计符合条件的仓库总数，以及描述和 README 的翻译完成/待处理数量。
      *
-     * @param params 筛选参数（keyword、language、categoryIds、日期范围等）
+     * @param params 筛选参数（keyword、language、日期范围等）
      * @returns 翻译覆盖率统计 { total, descCompleted, descPending, readmeCompleted, readmePending }
      */
     async getTranslationSummary(params: {
         keyword?: string;
         language?: string;
-        categoryIds?: string;
         dateField?: string;
         startDate?: string;
         endDate?: string;

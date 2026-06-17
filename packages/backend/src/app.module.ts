@@ -6,23 +6,17 @@ import { ConfigModule } from './config/config.module';
 import { LoggingModule } from './logging/logging.module';
 import { GithubModule } from './github/github.module';
 import { SyncModule } from './sync/sync.module';
-import { CategoryModule } from './category/category.module';
 import { StatsModule } from './stats/stats.module';
 import { AuthorModule } from './author/author.module';
 import { TranslateModule } from './translate/translate.module';
-import { AiModule } from './ai/ai.module';
 import { TrendingModule } from './trending/trending.module';
 import { ExportModule } from './export/export.module';
-import { AgentModule } from './agent/agent.module';
-import { TagModule } from './tag/tag.module';
-import { PromptModule } from './prompt/prompt.module';
-import { SimilarCacheModule } from './similar-cache/similar-cache.module';
 import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
 
 /**
  * 应用根模块
  *
- * 注册所有业务子模块（GitHub、同步、分类、翻译、AI、统计、导出等），
+ * 注册所有业务子模块（GitHub、同步、统计、作者、翻译、趋势、导出等），
  * 导入定时任务调度器、Prisma ORM、配置管理、日志服务等基础设施，
  * 并在全局范围注册 BigInt 拦截器，将 BigInt 类型的 ID 序列化为 Number。
  */
@@ -34,17 +28,11 @@ import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
         LoggingModule,
         GithubModule,
         SyncModule,
-        CategoryModule,
         StatsModule,
         AuthorModule,
         TranslateModule,
-        AiModule,
         TrendingModule,
         ExportModule,
-        AgentModule,
-        TagModule,
-        PromptModule,
-        SimilarCacheModule,
     ],
     providers: [
         {

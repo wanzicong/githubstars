@@ -30,26 +30,6 @@ export default defineConfig({
           }
         },
       },
-      '/categories': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        rewrite: (path) => '/api' + path,
-        bypass(req) {
-          if (req.headers.accept?.includes('text/html')) {
-            return '/index.html'
-          }
-        },
-      },
-      '/ai': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        rewrite: (path) => '/api' + path,
-        bypass(req) {
-          if (req.headers.accept?.includes('text/html')) {
-            return '/index.html'
-          }
-        },
-      },
       '/authors': {
         target: 'http://localhost:3000',
         changeOrigin: true,

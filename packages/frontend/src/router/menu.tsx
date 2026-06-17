@@ -8,10 +8,6 @@ import {
   SearchOutlined,
   FireOutlined,
   FileTextOutlined,
-  TagsOutlined,
-  ApartmentOutlined,
-  FolderOutlined,
-  ExperimentOutlined,
 } from '@ant-design/icons'
 /**
  * 导航菜单项定义 —— 集中管理所有菜单的 key、图标、标题、排序。
@@ -31,15 +27,11 @@ export const menuItems: MenuItem[] = [
   { key: '/', icon: <StarOutlined />, label: 'Star列表', orderNo: 0 },
   { key: '/sync', icon: <SyncOutlined />, label: '同步管理', orderNo: 10 },
   { key: '/stats', icon: <BarChartOutlined />, label: '数据统计', orderNo: 20 },
-  { key: '/categories', icon: <FolderOutlined />, label: '分类管理', orderNo: 30 },
-  { key: '/tags', icon: <TagsOutlined />, label: '标签管理', orderNo: 40 },
-  { key: '/classify', icon: <ExperimentOutlined />, label: 'AI分类', orderNo: 50 },
-  { key: '/authors', icon: <UserOutlined />, label: '作者中心', orderNo: 60 },
-  { key: '/search', icon: <SearchOutlined />, label: 'GitHub搜索', orderNo: 70 },
-  { key: '/trending', icon: <FireOutlined />, label: '趋势排行', orderNo: 80 },
-  { key: '/settings', icon: <SettingOutlined />, label: '系统配置', orderNo: 90 },
-  { key: '/logs', icon: <FileTextOutlined />, label: '系统日志', orderNo: 100 },
-  { key: '/similar-cache', icon: <ApartmentOutlined />, label: '相似推荐', orderNo: 110 },
+  { key: '/authors', icon: <UserOutlined />, label: '作者中心', orderNo: 30 },
+  { key: '/search', icon: <SearchOutlined />, label: 'GitHub搜索', orderNo: 40 },
+  { key: '/trending', icon: <FireOutlined />, label: '趋势排行', orderNo: 50 },
+  { key: '/settings', icon: <SettingOutlined />, label: '系统配置', orderNo: 60 },
+  { key: '/logs', icon: <FileTextOutlined />, label: '系统日志', orderNo: 70 },
 ]
 
 // ── 懒加载页面 ──（只在此处定义一次，路由模块直接引用）
@@ -53,11 +45,6 @@ export const Settings = lazy(() => import('@/pages/Settings'))
 export const GithubSearch = lazy(() => import('@/pages/GithubSearch'))
 export const Trending = lazy(() => import('@/pages/Trending'))
 export const Logs = lazy(() => import('@/pages/Logs'))
-export const TagBrowse = lazy(() => import('@/pages/TagBrowse'))
-export const SimilarCacheList = lazy(() => import('@/pages/SimilarCacheList'))
-export const CategoryList = lazy(() => import('@/pages/CategoryList'))
-export const CategoryDetail = lazy(() => import('@/pages/CategoryDetail'))
-export const Classify = lazy(() => import('@/pages/Classify'))
 
 /**
  * 根据当前路径获取匹配的菜单标题（用于面包屑、标签页标题）。
@@ -77,7 +64,5 @@ export function getMenuTitle(pathname: string): string {
   // 特殊路径
   if (pathname.startsWith('/stars/')) return 'Star详情'
   if (pathname.startsWith('/authors/')) return '作者详情'
-  if (pathname.startsWith('/categories/')) return '分类详情'
-
   return pathname
 }

@@ -388,7 +388,6 @@ export class TranslateTaskService {
     async createAndStartFilterBatch(params: {
         keyword?: string;
         language?: string;
-        categoryIds?: string;
         sortBy?: string;
         sortOrder?: string;
         dateField?: string;

@@ -86,40 +86,6 @@ export async function insertRepo(prisma: PrismaService, overrides?: Partial<Repo
     return repo;
 }
 
-// ========== Category ==========
-
-export interface CategoryFixture {
-    id?: bigint;
-    name: string;
-    description: string | null;
-    sortOrder: number;
-    parentId: bigint | null;
-    level: number;
-    createdAt: Date;
-    updatedAt: Date;
-}
-
-let _catSeq = 0;
-export function createCategoryFixture(overrides?: Partial<CategoryFixture>): CategoryFixture {
-    _catSeq++;
-    const now = new Date();
-    return {
-        name: `test-category-${_catSeq}`,
-        description: null,
-        sortOrder: _catSeq,
-        parentId: null,
-        level: 1,
-        createdAt: now,
-        updatedAt: now,
-        ...overrides,
-    };
-}
-
-export async function insertCategory(prisma: PrismaService, overrides?: Partial<CategoryFixture>) {
-    const cat = createCategoryFixture(overrides);
-    return prisma.category.create({ data: cat });
-}
-
 // ========== TranslationTask ==========
 
 export async function insertTranslationTask(prisma: PrismaService, overrides?: any) {

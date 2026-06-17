@@ -9,6 +9,9 @@ import SettingDrawer from './setting/SettingDrawer'
 
 const { Footer, Content } = Layout
 
+const SIDER_WIDTH = 220
+const SIDER_COLLAPSED_WIDTH = 80
+
 /** 路由切换时滚动到顶部 */
 function useScrollToTop() {
   const { pathname } = useLocation()
@@ -23,6 +26,7 @@ export default function DefaultLayout() {
   const showTabs = useAppStore((s) => s.showTabs)
   const darkMode = useAppStore((s) => s.darkMode)
   const contentWidth = useAppStore((s) => s.contentWidth)
+  const siderCollapsed = useAppStore((s) => s.siderCollapsed)
   const [settingOpen, setSettingOpen] = useState(false)
 
   useEffect(() => {
@@ -44,13 +48,20 @@ export default function DefaultLayout() {
     `}</style>
   )
 
+  const isSideMode = layoutMode === 'side'
+  const sideMargin = siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH
+  const minHeight = showTabs
+    ? 'calc(100vh - 56px - 40px - 40px)'  // header 56px + tabs 40px + footer 40px
+    : 'calc(100vh - 56px - 40px)'         // header 56px + footer 40px
+
   const content = (
     <Content style={{
       padding: '16px 24px',
       maxWidth: contentWidth === 'fixed' ? 1400 : 'none',
       width: '100%', margin: '0 auto',
-      minHeight: 'calc(100vh - 56px - 40px - 48px)',
+      minHeight,
       background: 'var(--content-bg)',
+      ...(isSideMode ? { marginLeft: sideMargin, transition: 'margin-left 0.2s ease' } : {}),
     }}>
       <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh' }}><Spin size='large' /></div>}>
         <Outlet />
@@ -59,7 +70,10 @@ export default function DefaultLayout() {
   )
 
   const footer = (
-    <Footer style={{ textAlign: 'center', color: token.colorTextTertiary, fontSize: 12, padding: 12 }}>
+    <Footer style={{
+      textAlign: 'center', color: token.colorTextTertiary, fontSize: 12, padding: 12,
+      ...(isSideMode ? { marginLeft: sideMargin, transition: 'margin-left 0.2s ease' } : {}),
+    }}>
       GitHub Stars 管理系统 ©{new Date().getFullYear()}
     </Footer>
   )
