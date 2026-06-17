@@ -65,6 +65,35 @@ export default function AuthorDetail() {
         ownerAvatarUrl: string
     } | null>(null)
 
+    // 作者统计信息（仅在 ownerName 变化时获取，不受翻页影响）
+    useEffect(() => {
+        if (!ownerName) return
+        const loadStats = async () => {
+            try {
+                // 通过作者列表 API 获取精确的 totalStars / topLanguage 等聚合统计
+                const authorList = await authorsApi.fetchAuthorList({
+                    page: 1,
+                    size: 100,
+                    keyword: ownerName,
+                })
+                const exactMatch = authorList.records.find((a) => a.ownerName === ownerName)
+                if (exactMatch) {
+                    setAuthorStats({
+                        repoCount: exactMatch.repoCount,
+                        totalStars: exactMatch.totalStars,
+                        topLanguage: exactMatch.topLanguage,
+                        ownerAvatarUrl: exactMatch.ownerAvatarUrl,
+                    })
+                } else {
+                    setAuthorStats(null)
+                }
+            } catch {
+                // 降级：仓库列表加载后从首页数据推断
+            }
+        }
+        loadStats()
+    }, [ownerName])
+
     useEffect(() => {
         if (!ownerName) return
 
@@ -80,11 +109,10 @@ export default function AuthorDetail() {
 
                 setPageResult(result)
 
-                // 从返回的仓库数据中提取作者统计信息
-                if (result.records.length > 0 || result.total > 0) {
+                // 降级：如果 authorStats 尚未加载，从首页数据推断
+                if (!authorStats && (result.records.length > 0 || result.total > 0)) {
                     const repos = result.records
                     const totalStars = repos.reduce((sum, r) => sum + (r.starsCount || 0), 0)
-                    // 找出现最多的语言
                     const langCount: Record<string, number> = {}
                     repos.forEach((r) => {
                         if (r.language) {
@@ -99,8 +127,6 @@ export default function AuthorDetail() {
                         topLanguage,
                         ownerAvatarUrl: repos[0]?.ownerAvatarUrl || '',
                     })
-                } else {
-                    setAuthorStats(null)
                 }
             } catch {
                 // errors logged by interceptor
@@ -109,6 +135,7 @@ export default function AuthorDetail() {
             }
         }
         loadData()
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- authorStats 仅用于降级判断，不应触发重新请求
     }, [ownerName, currentPage, sortBy, sortOrder])
 
     const handleExport = useCallback(async () => {

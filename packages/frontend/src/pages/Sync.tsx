@@ -119,13 +119,7 @@ export default function Sync() {
             } catch {
                 /* ignore */
             }
-            try {
-                const res = await syncApi.fetchSyncLogs(1, 10)
-                setLogs(res.records)
-                setTotal(res.total)
-            } catch {
-                /* ignore */
-            }
+            // 日志数据由下方的 pagination effect 负责拉取，此处不再重复请求
             setLoading(false)
         }
         init()

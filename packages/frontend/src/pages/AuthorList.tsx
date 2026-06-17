@@ -35,7 +35,7 @@ export default function AuthorList() {
                 next.set(key, value)
             }
             if (key !== 'page') next.delete('page')
-            navigate({ search: next.toString() }, { replace: true })
+            navigate({ search: next.toString() })
         },
         [navigate, searchParams],
     )

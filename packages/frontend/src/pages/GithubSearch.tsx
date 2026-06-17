@@ -118,9 +118,29 @@ export default function GithubSearch() {
         (value: number) => {
             setPerPage(value)
             setPage(1)
-            doSearch(1)
+            // 不能用 doSearch(1)，因为 setPerPage 尚未生效，doSearch 闭包中的 perPage 仍是旧值
+            setLoading(true)
+            setSearched(true)
+            searchRepos({
+                keyword: keyword || undefined,
+                language: language || undefined,
+                sort: sort || undefined,
+                page: 1,
+                perPage: value,
+            })
+                .then((data) => {
+                    setResults(data.repos || [])
+                    setTotal(data.total || 0)
+                    setPage(1)
+                })
+                .catch(() => {
+                    message.error('搜索失败，请稍后重试')
+                    setResults([])
+                    setTotal(0)
+                })
+                .finally(() => setLoading(false))
         },
-        [doSearch],
+        [keyword, language, sort],
     )
 
     const handleLanguageChange = useCallback(
