@@ -71,7 +71,7 @@ export default function Trending() {
                     marginBottom: 24,
                     display: 'flex',
                     justifyContent: 'space-between',
-                    alignItems: 'center',
+                    alignItems: 'flex-start',
                     flexWrap: 'wrap',
                     gap: 12,
                 }}
@@ -80,7 +80,7 @@ export default function Trending() {
                     <FireOutlined style={{ color: '#ff4d4f', marginRight: 8 }} />
                     趋势排行榜
                 </Title>
-                <Space>
+                <Space wrap size={[8, 8]}>
                     <Select
                         value={language || ''}
                         onChange={(v) => setLanguage(v)}
@@ -94,9 +94,9 @@ export default function Trending() {
                             setSince(v as string)
                         }}
                         options={[
-                            { value: 'daily', label: '📅 今日' },
-                            { value: 'weekly', label: '📆 本周' },
-                            { value: 'monthly', label: '📊 本月' },
+                            { value: 'daily', label: '今日' },
+                            { value: 'weekly', label: '本周' },
+                            { value: 'monthly', label: '本月' },
                         ]}
                     />
                 </Space>

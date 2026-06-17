@@ -19,10 +19,13 @@ export default function LayoutSider() {
   const width = siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH
 
   return (
-    <div style={{
-      position: 'fixed', left: 0, top: 0, bottom: 0, width, zIndex: 100,
-      transition: `width var(--transition-duration) var(--transition-timing)`,
-    }}>
+    <div
+      className='layout-sider-wrapper'
+      style={{
+        position: 'fixed', left: 0, top: 0, bottom: 0, width, zIndex: 101,
+        transition: `width var(--transition-duration) var(--transition-timing)`,
+      }}
+    >
       <Layout.Sider
         width={SIDER_WIDTH} collapsedWidth={SIDER_COLLAPSED_WIDTH}
         collapsible collapsed={siderCollapsed} onCollapse={toggleSiderCollapsed}
@@ -30,7 +33,7 @@ export default function LayoutSider() {
         style={{
           height: '100%', background: token.colorBgContainer,
           borderRight: `1px solid ${token.colorBorderSecondary}`,
-          overflow: 'hidden', display: 'flex', flexDirection: 'column',
+          overflow: 'hidden',
         }}
       >
         {/* Logo */}

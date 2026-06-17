@@ -55,7 +55,7 @@ export default function DefaultLayout() {
     : 'calc(100vh - 56px - 40px)'         // header 56px + footer 40px
 
   const content = (
-    <Content style={{
+    <Content className={isSideMode ? 'layout-content-side' : undefined} style={{
       padding: '16px 24px',
       maxWidth: contentWidth === 'fixed' ? 1400 : 'none',
       width: '100%', margin: '0 auto',
@@ -70,7 +70,7 @@ export default function DefaultLayout() {
   )
 
   const footer = (
-    <Footer style={{
+    <Footer className={isSideMode ? 'layout-footer-side' : undefined} style={{
       textAlign: 'center', color: token.colorTextTertiary, fontSize: 12, padding: 12,
       ...(isSideMode ? { marginLeft: sideMargin, transition: 'margin-left 0.2s ease' } : {}),
     }}>

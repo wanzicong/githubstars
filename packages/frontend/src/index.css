@@ -23,7 +23,7 @@
   --header-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   --sider-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
 
-  /* ── 过渡 ── */
+  /* ── 过渡（使用 transform 替代 margin-left 以解决 Safari calc+transition bug）── */
   --transition-duration: 0.2s;
   --transition-timing: cubic-bezier(0.645, 0.045, 0.355, 1);
 
@@ -31,6 +31,12 @@
   --scrollbar-width: 6px;
   --scrollbar-thumb: rgba(0, 0, 0, 0.12);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.2);
+
+  /* ── 移动端安全区 ── */
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
 }
 
 /* ── 深色主题 ── */
@@ -56,6 +62,16 @@ html, body, #root {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 阻止水平溢出滚动（侧边栏+内容区的 margin-left 方案可能在窄屏产生横向滚动条） */
+  overflow-x: hidden;
+}
+
+/* ── Firefox 专用：确保 Antd Typography ellipsis 正常工作 ── */
+@-moz-document url-prefix() {
+  .ant-typography-ellipsis {
+    display: block;
+    width: 100%;
+  }
 }
 
 /* ── 自定义滚动条 ── */
@@ -77,6 +93,33 @@ html, body, #root {
   background: transparent;
 }
 
+/* ── 移动端安全区适配 ── */
+@media (max-width: 768px) {
+  body {
+    padding-bottom: var(--safe-area-inset-bottom);
+  }
+}
+
+/* ── 响应式断点：移动端隐藏/折叠侧边栏 ── */
+@media (max-width: 768px) {
+  .layout-sider-wrapper {
+    display: none;
+  }
+
+  .layout-header-side,
+  .layout-content-side,
+  .layout-footer-side {
+    margin-left: 0 !important;
+  }
+}
+
+/* ── 响应式断点：平板端使用折叠侧边栏 ── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .layout-sider-wrapper {
+    width: var(--sider-collapsed-width) !important;
+  }
+}
+
 /* ── 页面过渡动画 ── */
 .fade-slide-enter {
   opacity: 0;
@@ -87,4 +130,32 @@ html, body, #root {
   opacity: 1;
   transform: translateY(0);
   transition: opacity 0.3s var(--transition-timing), transform 0.3s var(--transition-timing);
+}
+
+/* ── 多标签页超出时水平滚动 ── */
+.multiple-tabs-container .ant-tabs-nav {
+  margin-bottom: 0 !important;
+}
+
+.multiple-tabs-container .ant-tabs-tab {
+  flex-shrink: 0;
+}
+
+/* ── Chart.js 图表容器必需样式 ── */
+.chart-container {
+  position: relative;
+  width: 100%;
+}
+
+/* ── 水平菜单在窄屏下保持不换行 ── */
+@media (max-width: 1024px) {
+  .ant-menu-horizontal {
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .ant-menu-horizontal::-webkit-scrollbar {
+    height: 0;
+  }
 }

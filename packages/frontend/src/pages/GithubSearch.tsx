@@ -222,7 +222,7 @@ export default function GithubSearch() {
                 </Title>
 
                 <Row gutter={[12, 12]} align='middle'>
-                    <Col flex='auto'>
+                    <Col xs={24} sm={24} md={12} lg={14}>
                         <Input.Search
                             placeholder='搜索 GitHub 仓库...'
                             value={keyword}
@@ -233,20 +233,20 @@ export default function GithubSearch() {
                             allowClear
                         />
                     </Col>
-                    <Col>
+                    <Col xs={8} sm={8} md={4} lg={3}>
                         <Select
                             value={language}
                             onChange={handleLanguageChange}
                             options={LANGUAGE_OPTIONS}
-                            style={{ width: 140 }}
+                            style={{ width: '100%' }}
                             placeholder='语言'
                         />
                     </Col>
-                    <Col>
-                        <Select value={sort} onChange={handleSortChange} options={SORT_OPTIONS} style={{ width: 140 }} placeholder='排序' />
+                    <Col xs={8} sm={8} md={4} lg={3}>
+                        <Select value={sort} onChange={handleSortChange} options={SORT_OPTIONS} style={{ width: '100%' }} placeholder='排序' />
                     </Col>
-                    <Col>
-                        <Select value={perPage} onChange={handlePerPageChange} options={PER_PAGE_OPTIONS} style={{ width: 120 }} />
+                    <Col xs={8} sm={8} md={4} lg={4}>
+                        <Select value={perPage} onChange={handlePerPageChange} options={PER_PAGE_OPTIONS} style={{ width: '100%' }} />
                     </Col>
                 </Row>
             </div>

@@ -126,10 +126,12 @@ export default function MultipleTabs() {
 
   return (
     <div
+      className='multiple-tabs-container'
       style={{
         background: token.colorBgContainer,
         borderBottom: `1px solid ${token.colorBorderSecondary}`,
         padding: '0 8px',
+        overflow: 'hidden',
       }}
     >
       <Tabs

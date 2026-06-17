@@ -41,14 +41,16 @@ export default function LayoutHeader({ onOpenSetting }: Props) {
   // ── 侧边栏模式 ──
   if (layoutMode === 'side') {
     return (
-      <Layout.Header style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        background: token.colorBgContainer, borderBottom: `1px solid ${token.colorBorderSecondary}`,
-        padding: '0 16px', height: 56, position: 'sticky', top: 0, zIndex: 99,
-        marginLeft: siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH,
-        transition: `margin-left var(--transition-duration) var(--transition-timing)`,
-      }}>
-        <Space size={8}>
+      <Layout.Header
+        className='layout-header-side'
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: token.colorBgContainer, borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          padding: '0 16px', height: 56, position: 'sticky', top: 0, zIndex: 99,
+          marginLeft: siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH,
+          transition: `margin-left var(--transition-duration) var(--transition-timing)`,
+        }}>
+        <Space size={8} style={{ minWidth: 0, overflow: 'hidden' }}>
           <Button type='text' icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={toggleSiderCollapsed} />
           {showBreadcrumb && segments.length > 0 && <Breadcrumb style={{ fontSize: 13 }} items={breadcrumbItems} />}
         </Space>
@@ -62,7 +64,7 @@ export default function LayoutHeader({ onOpenSetting }: Props) {
     <Layout.Header style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       background: token.colorBgContainer, borderBottom: `1px solid ${token.colorBorderSecondary}`,
-      padding: '0 16px', height: 56, position: 'sticky', top: 0, zIndex: 100,
+      padding: '0 16px', height: 56, position: 'sticky', top: 0, zIndex: 102,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
         <span style={{ fontSize: 18, fontWeight: 600, color: token.colorPrimary, whiteSpace: 'nowrap' }}>GitHub Stars</span>

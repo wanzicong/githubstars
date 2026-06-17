@@ -239,7 +239,7 @@ export default function Stats() {
 
             <Spin spinning={loading}>
                 <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-                    <Col xs={12} sm={8} md={4}>
+                    <Col xs={24} sm={12} md={4}>
                         <Card>
                             <Statistic
                                 title='总仓库数'
@@ -248,7 +248,7 @@ export default function Stats() {
                             />
                         </Card>
                     </Col>
-                    <Col xs={12} sm={8} md={5}>
+                    <Col xs={24} sm={12} md={5}>
                         <Card>
                             <Statistic
                                 title='总 Star 数'
@@ -258,7 +258,7 @@ export default function Stats() {
                             />
                         </Card>
                     </Col>
-                    <Col xs={12} sm={8} md={5}>
+                    <Col xs={24} sm={12} md={5}>
                         <Card>
                             <Statistic
                                 title='总 Fork 数'
@@ -268,7 +268,7 @@ export default function Stats() {
                             />
                         </Card>
                     </Col>
-                    <Col xs={12} sm={8} md={5}>
+                    <Col xs={24} sm={12} md={5}>
                         <Card>
                             <Statistic
                                 title='语言种类数'
@@ -281,7 +281,7 @@ export default function Stats() {
                             />
                         </Card>
                     </Col>
-                    <Col xs={12} sm={8} md={5}>
+                    <Col xs={24} sm={12} md={5}>
                         <Card>
                             <Statistic
                                 title='作者数'
@@ -296,7 +296,7 @@ export default function Stats() {
                     <Col xs={24} lg={12}>
                         <Card title='语言分布' style={{ height: '100%' }}>
                             {languages.length > 0 ? (
-                                <div style={{ height: 400 }}>
+                                <div className='chart-container' style={{ height: 400 }}>
                                     <Doughnut
                                         data={languageDoughnutData}
                                         options={{
@@ -334,7 +334,7 @@ export default function Stats() {
                     <Col xs={24} lg={12}>
                         <Card title='作者排行' style={{ height: '100%' }}>
                             {owners.length > 0 ? (
-                                <div style={{ height: 400 }}>
+                                <div className='chart-container' style={{ height: 400 }}>
                                     <Bar
                                         data={ownerBarData}
                                         options={{
@@ -367,7 +367,7 @@ export default function Stats() {
                     <Col span={24}>
                         <Card title='Star 时间趋势'>
                             {timeline.length > 0 ? (
-                                <div style={{ height: 400 }}>
+                                <div className='chart-container' style={{ height: 400 }}>
                                     <Line
                                         data={timelineLineData}
                                         options={{

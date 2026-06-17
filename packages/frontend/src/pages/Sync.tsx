@@ -192,7 +192,7 @@ export default function Sync() {
 
             <Spin spinning={loading}>
                 <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-                    <Col xs={12} sm={6}>
+                    <Col xs={24} sm={12} md={6}>
                         <Card>
                             <Statistic
                                 title='仓库总数'
