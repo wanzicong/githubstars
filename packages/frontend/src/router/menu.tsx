@@ -54,15 +54,16 @@ export function getMenuTitle(pathname: string): string {
   const exact = menuItems.find((m) => m.key === pathname)
   if (exact) return exact.label
 
-  // 前缀匹配（如 /stars/xxx → Star列表 > 详情）
+  // 详情页特殊路径（必须在前缀匹配之前检查，否则 /authors/xxx 会被 /authors 前缀拦截返回“作者中心”）
+  if (pathname.startsWith('/stars/')) return 'Star详情'
+  if (pathname.startsWith('/authors/')) return '作者详情'
+
+  // 前缀匹配（如 /sync/xxx → 同步管理）
   for (const item of menuItems) {
     if (item.key !== '/' && pathname.startsWith(item.key + '/')) {
       return item.label
     }
   }
 
-  // 特殊路径
-  if (pathname.startsWith('/stars/')) return 'Star详情'
-  if (pathname.startsWith('/authors/')) return '作者详情'
   return pathname
 }

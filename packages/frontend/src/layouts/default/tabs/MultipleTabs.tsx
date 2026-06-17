@@ -79,7 +79,8 @@ export default function MultipleTabs() {
           icon: <ReloadOutlined />,
           label: '刷新页面',
           onClick: () => {
-            // 递增 refreshKey 强制 Outlet 内容重新挂载，实现真正的页面刷新
+            // 先导航到右键的标签页，再递增 refreshKey 强制内容重新挂载
+            if (key !== activeKey) navigate(key)
             refreshTab()
           },
         },

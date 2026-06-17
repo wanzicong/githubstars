@@ -23,7 +23,7 @@
   --header-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   --sider-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
 
-  /* ── 过渡（使用 transform translateX 替代 margin-left —— Safari calc+transition 兼容，GPU 加速）── */
+  /* ── 过渡（侧边栏折叠/展开动画时长与缓动函数）── */
   --transition-duration: 0.2s;
   --transition-timing: cubic-bezier(0.645, 0.045, 0.355, 1);
 
@@ -113,10 +113,8 @@ html, body {
     display: none;
   }
 
-  .layout-header-side,
-  .layout-content-side,
-  .layout-footer-side {
-    transform: translateX(0) !important;
+  .layout-inner-side {
+    margin-left: 0 !important;
   }
 }
 

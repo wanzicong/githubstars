@@ -3,7 +3,6 @@ import { Layout, theme, Space, Button, Tooltip, Breadcrumb, Menu } from 'antd'
 import { MenuFoldOutlined, MenuUnfoldOutlined, SettingOutlined } from '@ant-design/icons'
 import { useAppStore } from '@/stores'
 import { menuItems, getMenuTitle } from '@/router/menu'
-import { SIDER_WIDTH, SIDER_COLLAPSED_WIDTH } from '../constants'
 
 interface Props { onOpenSetting?: () => void }
 
@@ -45,8 +44,6 @@ export default function LayoutHeader({ onOpenSetting }: Props) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: token.colorBgContainer, borderBottom: `1px solid ${token.colorBorderSecondary}`,
           padding: '0 16px', height: 56, position: 'sticky', top: 0, zIndex: 99,
-          transform: `translateX(${siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH}px)`,
-          transition: `transform var(--transition-duration) var(--transition-timing)`,
         }}>
         <Space size={8} style={{ minWidth: 0, overflow: 'hidden' }}>
           <Button type='text' icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={toggleSiderCollapsed} />

@@ -26,6 +26,7 @@ export default function DefaultLayout() {
   const contentWidth = useAppStore((s) => s.contentWidth)
   const siderCollapsed = useAppStore((s) => s.siderCollapsed)
   const refreshKey = useMultipleTabStore((s) => s.refreshKey)
+  const tabs = useMultipleTabStore((s) => s.tabs)
   const [settingOpen, setSettingOpen] = useState(false)
 
   useEffect(() => {
@@ -62,9 +63,9 @@ export default function DefaultLayout() {
 
   const isSideMode = layoutMode === 'side'
   const sideMargin = siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH
-  const minHeight = showTabs
-    ? 'calc(100vh - 56px - 40px - 40px)'  // header 56px + tabs 40px + footer 40px
-    : 'calc(100vh - 56px - 40px)'         // header 56px + footer 40px
+  // MultipleTabs 在仅 1 个标签时不渲染，minHeight 需据此计算避免底部空白
+  const tabsVisible = showTabs && tabs.length > 1
+  const minHeight = `calc(100vh - 56px - ${tabsVisible ? 40 : 0}px - 40px)`  // header 56px + tabs(可选) + footer 40px
 
   const content = (
     <Content className={isSideMode ? 'layout-content-side' : undefined} style={{
@@ -73,7 +74,6 @@ export default function DefaultLayout() {
       width: '100%', margin: '0 auto',
       minHeight,
       background: 'var(--content-bg)',
-      ...(isSideMode ? { transform: `translateX(${sideMargin}px)`, transition: `transform var(--transition-duration) var(--transition-timing)` } : {}),
     }}>
       <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh' }}><Spin size='large' /></div>}>
         <div key={refreshKey}>
@@ -86,7 +86,6 @@ export default function DefaultLayout() {
   const footer = (
     <Footer className={isSideMode ? 'layout-footer-side' : undefined} style={{
       textAlign: 'center', color: token.colorTextTertiary, fontSize: 12, padding: 12,
-      ...(isSideMode ? { transform: `translateX(${sideMargin}px)`, transition: `transform var(--transition-duration) var(--transition-timing)` } : {}),
     }}>
       GitHub Stars 管理系统 ©{new Date().getFullYear()}
     </Footer>
@@ -113,7 +112,13 @@ export default function DefaultLayout() {
     <Layout style={{ minHeight: '100vh' }}>
       {menuStyles}
       <LayoutSider />
-      <Layout>
+      <Layout
+        className='layout-inner-side'
+        style={{
+          marginLeft: sideMargin,
+          transition: `margin-left var(--transition-duration) var(--transition-timing)`,
+        }}
+      >
         <LayoutHeader onOpenSetting={() => setSettingOpen(true)} />
         {showTabs && <MultipleTabs />}
         {content}

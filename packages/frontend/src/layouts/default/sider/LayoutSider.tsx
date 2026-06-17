@@ -32,6 +32,8 @@ export default function LayoutSider() {
           height: '100%', background: token.colorBgContainer,
           borderRight: `1px solid ${token.colorBorderSecondary}`,
           overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         {/* Logo */}
