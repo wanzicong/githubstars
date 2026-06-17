@@ -9,6 +9,7 @@ import type { AuthorDTO, PageResult } from '../types'
 const { Title, Text } = Typography
 
 const PAGE_SIZE = 24
+const PAGE_SIZE_OPTIONS = [12, 24, 48, 96]
 
 export default function AuthorList() {
     const [searchParams] = useSearchParams()
@@ -16,6 +17,7 @@ export default function AuthorList() {
 
     const keyword = searchParams.get('keyword') || ''
     const currentPage = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('size') || String(PAGE_SIZE), 10)
 
     const [pageResult, setPageResult] = useState<PageResult<AuthorDTO>>({
         records: [],
@@ -46,7 +48,7 @@ export default function AuthorList() {
             try {
                 const result = await authorsApi.fetchAuthorList({
                     page: currentPage,
-                    size: PAGE_SIZE,
+                    size: pageSize,
                     keyword: keyword || undefined,
                 })
                 setPageResult(result)
@@ -57,7 +59,7 @@ export default function AuthorList() {
             }
         }
         loadAuthors()
-    }, [currentPage, keyword])
+    }, [currentPage, keyword, pageSize])
 
     const formatDate = (dateStr: string | null): string => {
         if (!dateStr) return '-'
@@ -186,16 +188,24 @@ export default function AuthorList() {
                             ))}
                         </Row>
 
-                        {pageResult.total > PAGE_SIZE && (
+                        {pageResult.total > pageSize && (
                             <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
                                 <Pagination
                                     current={currentPage}
-                                    pageSize={PAGE_SIZE}
+                                    pageSize={pageSize}
                                     total={pageResult.total}
+                                    showSizeChanger
+                                    pageSizeOptions={PAGE_SIZE_OPTIONS.map(String)}
                                     showQuickJumper
                                     showTotal={(total) => `共 ${total} 位作者 / ${pageResult.pages} 页`}
-                                    onChange={(page) => {
-                                        setUrlParam('page', String(page))
+                                    onChange={(page, size) => {
+                                        const currentSize = parseInt(searchParams.get('size') || String(PAGE_SIZE), 10)
+                                        if (size !== currentSize) {
+                                            // size 变化时重置到第 1 页（setUrlParam 在 key !== 'page' 时自动重置 page）
+                                            setUrlParam('size', String(size))
+                                        } else {
+                                            setUrlParam('page', String(page))
+                                        }
                                     }}
                                 />
                             </div>

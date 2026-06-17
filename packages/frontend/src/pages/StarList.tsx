@@ -872,8 +872,15 @@ export default function StarList() {
                             showQuickJumper
                             showTotal={(total) => `共 ${total} 条 / ${pageResult.pages} 页`}
                             onChange={(page, size) => {
-                                setUrlParam('page', String(page), false)
-                                if (size !== parseInt(searchParams.get('size') || '36', 10)) setUrlParam('size', String(size), false)
+                                const currentSize = parseInt(searchParams.get('size') || '36', 10)
+                                if (size !== currentSize) {
+                                    // size 变化时重置到第 1 页（setUrlParam 在 key !== 'page' 时自动重置 page）
+                                    setUrlParam('size', String(size), false)
+                                    // 显式重置 page 为 1（避免 currentSize 恰好等于 default 导致逻辑跳进 else 分支）
+                                    setUrlParam('page', '1', false)
+                                } else {
+                                    setUrlParam('page', String(page), false)
+                                }
                             }}
                         />
                     </div>
