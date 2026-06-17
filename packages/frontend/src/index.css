@@ -23,7 +23,7 @@
   --header-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   --sider-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
 
-  /* ── 过渡（使用 transform 替代 margin-left 以解决 Safari calc+transition bug）── */
+  /* ── 过渡（使用 transform translateX 替代 margin-left —— Safari calc+transition 兼容，GPU 加速）── */
   --transition-duration: 0.2s;
   --transition-timing: cubic-bezier(0.645, 0.045, 0.355, 1);
 
@@ -57,13 +57,20 @@
   padding: 0;
 }
 
-html, body, #root {
+html, body {
   height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* 阻止水平溢出滚动（侧边栏+内容区的 margin-left 方案可能在窄屏产生横向滚动条） */
+  /* 阻止水平溢出滚动（侧边栏+内容区偏移方案可能在窄屏产生横向滚动条） */
   overflow-x: hidden;
+}
+
+#root {
+  height: 100%;
+  /* overflow-x: clip 不创建 scroll container，因此不会破坏 Safari sticky 定位 */
+  /* overflow-x: hidden 在祖先元素上会使 Safari 的 position: sticky 失效 */
+  overflow-x: clip;
 }
 
 /* ── Firefox 专用：确保 Antd Typography ellipsis 正常工作 ── */
@@ -109,14 +116,14 @@ html, body, #root {
   .layout-header-side,
   .layout-content-side,
   .layout-footer-side {
-    margin-left: 0 !important;
+    transform: translateX(0) !important;
   }
 }
 
-/* ── 响应式断点：平板端使用折叠侧边栏 ── */
+/* ── 响应式断点：平板端默认折叠侧边栏（用户可手动展开，JS 内联样式优先级高于 CSS）── */
 @media (min-width: 769px) and (max-width: 1024px) {
   .layout-sider-wrapper {
-    width: var(--sider-collapsed-width) !important;
+    width: var(--sider-collapsed-width);
   }
 }
 

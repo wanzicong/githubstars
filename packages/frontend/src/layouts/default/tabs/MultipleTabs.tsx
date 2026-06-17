@@ -36,6 +36,7 @@ export default function MultipleTabs() {
   const removeRightTabs = useMultipleTabStore((s) => s.removeRightTabs)
   const removeAllTabs = useMultipleTabStore((s) => s.removeAllTabs)
   const setActiveKey = useMultipleTabStore((s) => s.setActiveKey)
+  const refreshTab = useMultipleTabStore((s) => s.refreshTab)
 
   // 路由变化时自动添加标签
   useEffect(() => {
@@ -78,8 +79,8 @@ export default function MultipleTabs() {
           icon: <ReloadOutlined />,
           label: '刷新页面',
           onClick: () => {
-            // 强制刷新当前标签页：先导航到同路径触发重新渲染
-            navigate(key, { replace: true })
+            // 递增 refreshKey 强制 Outlet 内容重新挂载，实现真正的页面刷新
+            refreshTab()
           },
         },
         { type: 'divider' },
@@ -101,12 +102,25 @@ export default function MultipleTabs() {
         {
           key: 'close-left',
           label: '关闭左侧',
-          onClick: () => removeLeftTabs(key),
+          onClick: () => {
+            removeLeftTabs(key)
+            // 如果当前激活标签被移除了，导航到 store 中的新 activeKey
+            const state = useMultipleTabStore.getState()
+            if (!state.tabs.find((t) => t.key === activeKey)) {
+              navigate(state.activeKey)
+            }
+          },
         },
         {
           key: 'close-right',
           label: '关闭右侧',
-          onClick: () => removeRightTabs(key),
+          onClick: () => {
+            removeRightTabs(key)
+            const state = useMultipleTabStore.getState()
+            if (!state.tabs.find((t) => t.key === activeKey)) {
+              navigate(state.activeKey)
+            }
+          },
         },
         {
           key: 'close-all',
@@ -118,7 +132,7 @@ export default function MultipleTabs() {
         },
       ],
     }),
-    [activeKey, navigate, handleTabRemove, removeOtherTabs, removeLeftTabs, removeRightTabs, removeAllTabs],
+    [activeKey, navigate, handleTabRemove, removeOtherTabs, removeLeftTabs, removeRightTabs, removeAllTabs, refreshTab],
   )
 
   // 无标签或仅首页时不显示
@@ -144,7 +158,7 @@ export default function MultipleTabs() {
           label: (
             <Dropdown menu={contextMenu(tab.key)} trigger={['contextMenu']}>
               <span
-                onDoubleClick={() => navigate(tab.key, { replace: true })}
+                onDoubleClick={() => refreshTab()}
                 style={{ display: 'inline-block', userSelect: 'none' }}
               >
                 {tab.title}

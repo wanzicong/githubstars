@@ -1,16 +1,14 @@
 import { useState, useEffect, Suspense } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Layout, theme, Spin } from 'antd'
-import { useAppStore } from '@/stores'
+import { useAppStore, useMultipleTabStore } from '@/stores'
 import LayoutSider from './sider/LayoutSider'
 import LayoutHeader from './header/LayoutHeader'
 import MultipleTabs from './tabs/MultipleTabs'
 import SettingDrawer from './setting/SettingDrawer'
+import { SIDER_WIDTH, SIDER_COLLAPSED_WIDTH } from './constants'
 
 const { Footer, Content } = Layout
-
-const SIDER_WIDTH = 220
-const SIDER_COLLAPSED_WIDTH = 80
 
 /** 路由切换时滚动到顶部 */
 function useScrollToTop() {
@@ -27,11 +25,25 @@ export default function DefaultLayout() {
   const darkMode = useAppStore((s) => s.darkMode)
   const contentWidth = useAppStore((s) => s.contentWidth)
   const siderCollapsed = useAppStore((s) => s.siderCollapsed)
+  const refreshKey = useMultipleTabStore((s) => s.refreshKey)
   const [settingOpen, setSettingOpen] = useState(false)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
+
+  // 平板端（769-1024px）自动折叠侧边栏，用户可手动展开（CSS 不再使用 !important）
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 769px) and (max-width: 1024px)')
+    const handler = (e: MediaQueryListEvent | MediaQueryList) => {
+      if (e.matches) {
+        useAppStore.getState().setSiderCollapsed(true)
+      }
+    }
+    handler(mq)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   // Menu 样式覆盖
   const menuStyles = (
@@ -61,10 +73,12 @@ export default function DefaultLayout() {
       width: '100%', margin: '0 auto',
       minHeight,
       background: 'var(--content-bg)',
-      ...(isSideMode ? { marginLeft: sideMargin, transition: 'margin-left 0.2s ease' } : {}),
+      ...(isSideMode ? { transform: `translateX(${sideMargin}px)`, transition: `transform var(--transition-duration) var(--transition-timing)` } : {}),
     }}>
       <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh' }}><Spin size='large' /></div>}>
-        <Outlet />
+        <div key={refreshKey}>
+          <Outlet />
+        </div>
       </Suspense>
     </Content>
   )
@@ -72,7 +86,7 @@ export default function DefaultLayout() {
   const footer = (
     <Footer className={isSideMode ? 'layout-footer-side' : undefined} style={{
       textAlign: 'center', color: token.colorTextTertiary, fontSize: 12, padding: 12,
-      ...(isSideMode ? { marginLeft: sideMargin, transition: 'margin-left 0.2s ease' } : {}),
+      ...(isSideMode ? { transform: `translateX(${sideMargin}px)`, transition: `transform var(--transition-duration) var(--transition-timing)` } : {}),
     }}>
       GitHub Stars 管理系统 ©{new Date().getFullYear()}
     </Footer>
@@ -99,7 +113,7 @@ export default function DefaultLayout() {
     <Layout style={{ minHeight: '100vh' }}>
       {menuStyles}
       <LayoutSider />
-      <Layout style={{ minHeight: '100vh' }}>
+      <Layout>
         <LayoutHeader onOpenSetting={() => setSettingOpen(true)} />
         {showTabs && <MultipleTabs />}
         {content}

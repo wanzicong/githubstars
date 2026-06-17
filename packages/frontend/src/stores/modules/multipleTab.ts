@@ -28,6 +28,10 @@ export interface MultipleTabState {
   tabs: TabItem[]
   activeKey: string
 
+  // ── 刷新计数器 ──
+  /** 递增以强制 Outlet 内容重新挂载，实现标签页刷新 */
+  refreshKey: number
+
   // ── Actions ──
   /** 添加或激活标签页（已存在则激活，不存在则追加） */
   addTab: (tab: TabItem) => void
@@ -45,6 +49,8 @@ export interface MultipleTabState {
   setActiveKey: (key: string) => void
   /** 更新标签标题 */
   updateTabTitle: (key: string, title: string) => void
+  /** 递增 refreshKey 以触发内容重新挂载（标签页刷新） */
+  refreshTab: () => void
 }
 
 const HOME_TAB: TabItem = {
@@ -56,6 +62,7 @@ const HOME_TAB: TabItem = {
 export const useMultipleTabStore = create<MultipleTabState>()((set, get) => ({
   tabs: [HOME_TAB],
   activeKey: '/',
+  refreshKey: 0,
 
   addTab: (tab) => {
     const { tabs } = get()
@@ -106,20 +113,31 @@ export const useMultipleTabStore = create<MultipleTabState>()((set, get) => ({
   },
 
   removeLeftTabs: (key) => {
-    const { tabs } = get()
+    const { tabs, activeKey } = get()
     const idx = tabs.findIndex((t) => t.key === key)
     if (idx === -1) return
     // 保留不可关闭的 + 当前位置及右侧的
     const newTabs = tabs.filter((t, i) => !t.closable || i >= idx)
-    set({ tabs: newTabs })
+    // 如果当前激活的标签被移除了（在左侧），切换到第一个剩余标签
+    if (!newTabs.find((t) => t.key === activeKey)) {
+      set({ tabs: newTabs, activeKey: newTabs[0]?.key || '/' })
+    } else {
+      set({ tabs: newTabs })
+    }
   },
 
   removeRightTabs: (key) => {
-    const { tabs } = get()
+    const { tabs, activeKey } = get()
     const idx = tabs.findIndex((t) => t.key === key)
     if (idx === -1) return
     const newTabs = tabs.filter((t, i) => !t.closable || i <= idx)
-    set({ tabs: newTabs })
+    // 如果当前激活的标签被移除了（在右侧），切换到目标标签（key）所在位置
+    if (!newTabs.find((t) => t.key === activeKey)) {
+      const targetIdx = newTabs.findIndex((t) => t.key === key)
+      set({ tabs: newTabs, activeKey: newTabs[targetIdx]?.key || '/' })
+    } else {
+      set({ tabs: newTabs })
+    }
   },
 
   setActiveKey: (activeKey) => set({ activeKey }),
@@ -129,4 +147,6 @@ export const useMultipleTabStore = create<MultipleTabState>()((set, get) => ({
       tabs: state.tabs.map((t) => (t.key === key ? { ...t, title } : t)),
     }))
   },
+
+  refreshTab: () => set((state) => ({ refreshKey: state.refreshKey + 1 })),
 }))

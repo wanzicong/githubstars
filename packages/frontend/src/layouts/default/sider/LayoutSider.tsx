@@ -3,9 +3,7 @@ import { Layout, Menu, theme } from 'antd'
 import { StarOutlined } from '@ant-design/icons'
 import { useAppStore } from '@/stores'
 import { menuItems } from '@/router/menu'
-
-const SIDER_WIDTH = 220
-const SIDER_COLLAPSED_WIDTH = 80
+import { SIDER_WIDTH, SIDER_COLLAPSED_WIDTH } from '../constants'
 
 /** 侧边栏 —— Logo + 菜单 */
 export default function LayoutSider() {
