@@ -573,8 +573,9 @@ export default function StarList() {
         return names.filter(n => { if (seen.has(n.tagId)) return false; seen.add(n.tagId); return true })
     }, [selectedTagIds, tagTree])
 
-    const selectedTagSummary = selectedTagNames.slice(0, 3).map(n => n.label).join(', ')
-        + (selectedTagNames.length > 3 ? ` 等${selectedTagNames.length}个` : '')
+    // 选中标签摘要（预留：后续可用于筛选栏展示）
+    void (selectedTagNames.slice(0, 3).map(n => n.label).join(', ')
+        + (selectedTagNames.length > 3 ? ` 等${selectedTagNames.length}个` : ''))
 
     // 已选标签 ID 集合（O(1) 查找）
     const selectedTagIdSet = useMemo(() => new Set(selectedTagIds), [selectedTagIds])

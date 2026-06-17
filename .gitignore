@@ -36,8 +36,8 @@ packages/shared/dist/
 .turbo/
 
 # Legacy directories (migrated to packages/)
-backend-nestjs/
-frontend/
+/backend-nestjs/
+/frontend/
 
 # Claude Code
 .code-index/

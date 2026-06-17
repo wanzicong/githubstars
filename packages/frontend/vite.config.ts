@@ -18,8 +18,8 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
       },
-      // 同步管理 API（后端路径：/api/sync/status, /api/sync/logs, /api/sync/manual）
-      // 注意：页面请求（Accept: text/html）不要代理，交给 SPA
+      // 以下路径的前端 SPA 页面会被 Vite 处理（Accept: text/html 不代理）
+      // API 请求（Accept 非 html）会被代理到后端 /api + path
       '/sync': {
         target: 'http://localhost:3000',
         changeOrigin: true,
@@ -30,8 +30,6 @@ export default defineConfig({
           }
         },
       },
-      // 分类管理 API（后端路径：/api/categories/all 等）
-      // 页面请求不代理
       '/categories': {
         target: 'http://localhost:3000',
         changeOrigin: true,
@@ -42,8 +40,6 @@ export default defineConfig({
           }
         },
       },
-      // AI 分类 API（后端路径：/api/ai/classify/*）
-      // 页面请求不代理
       '/ai': {
         target: 'http://localhost:3000',
         changeOrigin: true,
@@ -54,8 +50,6 @@ export default defineConfig({
           }
         },
       },
-      // 作者中心 API（后端路径：/api/authors/*）
-      // 页面请求不代理
       '/authors': {
         target: 'http://localhost:3000',
         changeOrigin: true,
@@ -66,7 +60,6 @@ export default defineConfig({
           }
         },
       },
-      // 导出接口（后端路径：/api/stars/export, /api/export/md）
       '/stars/export': {
         target: 'http://localhost:3000',
         changeOrigin: true,

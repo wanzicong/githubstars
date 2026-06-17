@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
     Card, Tag, Typography, Button, Spin, Empty, Space, Modal,
-    Input, Alert, message, Steps, Tooltip, Popconfirm, Divider,
+    Input, Alert, message, Steps, Tooltip, Popconfirm,
     Segmented, Select as AntSelect, Drawer, Progress,
 } from 'antd'
 import {
@@ -511,7 +511,7 @@ export default function TagBrowse() {
     }
 
     /** 递归渲染下钻层级 */
-    const renderDrillDown = (tagId: number, groupId: number, parentPath: string, depth: number) => {
+    const renderDrillDown = (tagId: number, _groupId: number, parentPath: string, depth: number) => {
         const path = parentPath ? `${parentPath}/${tagId}` : String(tagId)
         if (!drillPath.has(path)) return null
         const dists = drillDataMap.get(path) || []

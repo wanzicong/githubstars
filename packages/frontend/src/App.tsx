@@ -1,84 +1,38 @@
-import { lazy, Suspense, type ComponentType } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { ConfigProvider, App as AntApp, Spin } from 'antd'
+import { RouterProvider } from 'react-router-dom'
+import { ConfigProvider, App as AntApp } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
-import ErrorBoundary from './components/ErrorBoundary'
-import AppLayout from './components/Layout'
+import { useAppStore } from '@/stores'
+import { generateThemeConfig } from '@/designs'
+import { router } from '@/router'
 
-// ── 懒加载页面 — 首屏仅加载 StarList，其余按需加载 ──
-const StarList = lazy(() => import('./pages/StarList'))
-const StarDetail = lazy(() => import('./pages/StarDetail'))
-const Stats = lazy(() => import('./pages/Stats'))
-const Sync = lazy(() => import('./pages/Sync'))
-const AuthorList = lazy(() => import('./pages/AuthorList'))
-const AuthorDetail = lazy(() => import('./pages/AuthorDetail'))
-const Settings = lazy(() => import('./pages/Settings'))
-const GithubSearch = lazy(() => import('./pages/GithubSearch'))
-const Trending = lazy(() => import('./pages/Trending'))
-const Logs = lazy(() => import('./pages/Logs'))
-const TagBrowse = lazy(() => import('./pages/TagBrowse'))
-const SimilarCacheList = lazy(() => import('./pages/SimilarCacheList'))
-
-/** 页面级 Suspense 回退 — 居中加载指示器 */
-function PageLoader() {
-    return (
-        <div
-            style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                minHeight: '40vh',
-            }}
-        >
-            <Spin size='large' />
-        </div>
-    )
-}
-
-/** 懒加载页面包装器 — 统一 ErrorBoundary + Suspense */
-function LazyPage({ Page }: { Page: ComponentType }) {
-    return (
-        <ErrorBoundary>
-            <Suspense fallback={<PageLoader />}>
-                <Page />
-            </Suspense>
-        </ErrorBoundary>
-    )
-}
-
+/**
+ * 应用根组件 —— 配置 Antd 主题 + 提供路由。
+ *
+ * 主题由 appStore（Zustand）驱动，用户通过设置抽屉实时调整。
+ * 路由由 router/index.ts 通过 createBrowserRouter 创建。
+ *
+ * 架构层级：根组件，无上层调用方。
+ *
+ * @depends
+ *   - useAppStore（主题色、暗色模式）
+ *   - generateThemeConfig（生成 Antd ThemeConfig）
+ *   - router（createBrowserRouter 创建的路由器）
+ */
 export default function App() {
-    return (
-        <ConfigProvider
-            locale={zhCN}
-            theme={{
-                token: {
-                    colorPrimary: '#1a1a2e',
-                    borderRadius: 8,
-                },
-            }}
-        >
-            <AntApp>
-                <BrowserRouter>
-                    <ErrorBoundary>
-                        <Routes>
-                            <Route element={<AppLayout />}>
-                                <Route path='/' element={<LazyPage Page={StarList} />} />
-                                <Route path='/stars/:id' element={<LazyPage Page={StarDetail} />} />
-                                <Route path='/stats' element={<LazyPage Page={Stats} />} />
-                                <Route path='/sync' element={<LazyPage Page={Sync} />} />
-                                <Route path='/authors' element={<LazyPage Page={AuthorList} />} />
-                                <Route path='/authors/:ownerName' element={<LazyPage Page={AuthorDetail} />} />
-                                <Route path='/settings' element={<LazyPage Page={Settings} />} />
-                                <Route path='/search' element={<LazyPage Page={GithubSearch} />} />
-                                <Route path='/trending' element={<LazyPage Page={Trending} />} />
-                                <Route path='/logs' element={<LazyPage Page={Logs} />} />
-                                <Route path='/tags' element={<LazyPage Page={TagBrowse} />} />
-                                <Route path='/similar-cache' element={<LazyPage Page={SimilarCacheList} />} />
-                            </Route>
-                        </Routes>
-                    </ErrorBoundary>
-                </BrowserRouter>
-            </AntApp>
-        </ConfigProvider>
-    )
+  const primaryColor = useAppStore((s) => s.primaryColor)
+  const darkMode = useAppStore((s) => s.darkMode)
+
+  const themeConfig = generateThemeConfig({
+    darkMode,
+    primaryColor,
+    borderRadius: 8,
+  })
+
+  return (
+    <ConfigProvider locale={zhCN} theme={themeConfig}>
+      <AntApp>
+        <RouterProvider router={router} />
+      </AntApp>
+    </ConfigProvider>
+  )
 }
