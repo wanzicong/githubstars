@@ -46,6 +46,7 @@ import RepoRow from '../components/RepoRow'
 import TranslatePanel from '../components/TranslatePanel'
 import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
 import { usePolling } from '../hooks/usePolling'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS_SMALL, INITIAL_TASK_PROGRESS, type TaskProgress } from '../constants'
 
 const { Title, Text } = Typography
 
@@ -69,8 +70,6 @@ const DATE_FIELD_OPTIONS = [
     { label: '更新时间', value: 'repo_updated_at' },
     { label: '推送时间', value: 'repo_pushed_at' },
 ]
-
-const PAGE_SIZE_OPTIONS = [36, 72, 144]
 
 const TIME_PRESETS: { label: string; value: string; days: number }[] = [
     { label: '不限', value: '', days: 0 },
@@ -226,6 +225,17 @@ export default function StarList() {
 
     const dateFilterExpanded = !!(dateField || startDateStr || endDateStr || timePreset)
 
+    const buildFilters = useCallback(() => ({
+        keyword: keyword || undefined,
+        language: languageStr || undefined,
+        sortBy: sortBy || undefined,
+        sortOrder: sortOrder || undefined,
+        dateField: dateField || undefined,
+        startDate: startDateStr || undefined,
+        endDate: endDateStr || undefined,
+        untranslatedOnly: untranslatedOnly || undefined,
+    }), [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly])
+
     const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({ records: [], total: 0, size: 12, current: 1, pages: 0 })
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
@@ -257,14 +267,7 @@ export default function StarList() {
                 const result = await starsApi.fetchStarList({
                     page: currentPage,
                     size: pageSize,
-                    keyword: keyword || undefined,
-                    language: languageStr || undefined,
-                    sortBy: sortBy || undefined,
-                    sortOrder: sortOrder || undefined,
-                    dateField: dateField || undefined,
-                    startDate: startDateStr || undefined,
-                    endDate: endDateStr || undefined,
-                    untranslatedOnly: untranslatedOnly || undefined,
+                    ...buildFilters(),
                 })
                 if (!cancelled) setPageResult(result)
             } catch {
@@ -308,19 +311,7 @@ export default function StarList() {
     const [translatePanelOpen, setTranslatePanelOpen] = useState(false)
     const [translateModalVisible, setTranslateModalVisible] = useState(false)
     const [translateTaskId, setTranslateTaskId] = useState<number | null>(null)
-    const [translateProgress, setTranslateProgress] = useState<{
-        status: string
-        totalItems: number
-        completedItems: number
-        failedItems: number
-        descTotal: number
-        descCompleted: number
-        descFailed: number
-        readmeTotal: number
-        readmeCompleted: number
-        readmeFailed: number
-        progress: number
-    } | null>(null)
+    const [translateProgress, setTranslateProgress] = useState<TaskProgress | null>(null)
 
     const translateTaskIdRef = useRef<number | null>(null)
 
@@ -338,6 +329,7 @@ export default function StarList() {
                     totalItems: res.totalItems,
                     completedItems: res.completedItems,
                     failedItems: res.failedItems,
+                    pendingItems: res.pendingItems,
                     descTotal: res.descTotal,
                     descCompleted: res.descCompleted,
                     descFailed: res.descFailed,
@@ -351,13 +343,7 @@ export default function StarList() {
                     const result = await starsApi.fetchStarList({
                         page: currentPage,
                         size: pageSize,
-                        keyword: keyword || undefined,
-                        language: languageStr || undefined,
-                        sortBy: sortBy || undefined,
-                        sortOrder: sortOrder || undefined,
-                        dateField: dateField || undefined,
-                        startDate: startDateStr || undefined,
-                        endDate: endDateStr || undefined,
+                        ...buildFilters(),
                     })
                     setPageResult(result)
                 }
@@ -373,19 +359,7 @@ export default function StarList() {
             const result = await translateApi.retryFailed(translateTaskId)
             if (result.success && result.taskId) {
                 setTranslateTaskId(result.taskId)
-                setTranslateProgress({
-                    status: 'PENDING',
-                    totalItems: 0,
-                    completedItems: 0,
-                    failedItems: 0,
-                    descTotal: 0,
-                    descCompleted: 0,
-                    descFailed: 0,
-                    readmeTotal: 0,
-                    readmeCompleted: 0,
-                    readmeFailed: 0,
-                    progress: 0,
-                })
+                setTranslateProgress({ ...INITIAL_TASK_PROGRESS })
                 translateTaskIdRef.current = result.taskId
                 polling.start()
             } else {
@@ -493,16 +467,7 @@ export default function StarList() {
 
     const handleExport = useCallback(async () => {
         try {
-            const blob = await starsApi.exportStarsUrls({
-                keyword: keyword || undefined,
-                language: languageStr || undefined,
-                sortBy: sortBy || undefined,
-                sortOrder: sortOrder || undefined,
-                dateField: dateField || undefined,
-                startDate: startDateStr || undefined,
-                endDate: endDateStr || undefined,
-                untranslatedOnly: untranslatedOnly || undefined,
-            })
+            const blob = await starsApi.exportStarsUrls(buildFilters())
             const url = window.URL.createObjectURL(blob)
             const a = document.createElement('a')
             a.href = url
@@ -514,7 +479,7 @@ export default function StarList() {
         } catch {
             console.error('导出失败')
         }
-    }, [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly])
+    }, [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, buildFilters])
 
     const handleExportMd = useCallback(async () => {
         try {
@@ -866,7 +831,7 @@ export default function StarList() {
                             pageSize={pageSize}
                             total={pageResult.total}
                             showSizeChanger
-                            pageSizeOptions={PAGE_SIZE_OPTIONS.map(String)}
+                            pageSizeOptions={PAGE_SIZE_OPTIONS_SMALL.map(String)}
                             showQuickJumper
                             showTotal={(total) => `共 ${total} 条 / ${pageResult.pages} 页`}
                             onChange={(page, size) => {
@@ -890,29 +855,14 @@ export default function StarList() {
             <TranslatePanel
                 open={translatePanelOpen}
                 onClose={() => setTranslatePanelOpen(false)}
-                filters={{
-                    keyword: keyword || undefined,
-                    language: languageStr || undefined,
-                    sortBy: sortBy || undefined,
-                    sortOrder: sortOrder || undefined,
-                    dateField: dateField || undefined,
-                    startDate: startDateStr || undefined,
-                    endDate: endDateStr || undefined,
-                    untranslatedOnly: untranslatedOnly || undefined,
-                }}
+                filters={buildFilters()}
                 hasActiveFilters={hasActiveFilters}
                 onRefreshList={() => {
                     const fetchList = async () => {
                         const res = await starsApi.fetchStarList({
                             page: currentPage,
                             size: pageSize,
-                            keyword: keyword || undefined,
-                            language: languageStr || undefined,
-                            sortBy: sortBy || undefined,
-                            sortOrder: sortOrder || undefined,
-                            dateField: dateField || undefined,
-                            startDate: startDateStr || undefined,
-                            endDate: endDateStr || undefined,
+                            ...buildFilters(),
                         })
                         setPageResult(res)
                     }

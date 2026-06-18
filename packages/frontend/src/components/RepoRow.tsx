@@ -2,22 +2,10 @@ import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, Row, Col, Tag, Typography, Avatar } from 'antd'
 import { StarFilled, ForkOutlined, ReadOutlined } from '@ant-design/icons'
-import { formatNumberCn } from '@/utils/format'
+import { formatNumberCn, formatDate, daysSince, getStalenessColor } from '@/utils/format'
 import type { GithubRepo } from '@/types'
 
 const { Text, Paragraph } = Typography
-
-function formatDate(dateStr: string | number[] | null): string {
-    if (!dateStr) return '-'
-    if (Array.isArray(dateStr)) {
-        const [y, m, d] = dateStr
-        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    }
-    if (typeof dateStr === 'string') {
-        return dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr
-    }
-    return String(dateStr)
-}
 
 interface RepoRowProps {
     repo: GithubRepo
@@ -97,12 +85,8 @@ const RepoRow = memo(function RepoRow({ repo }: RepoRowProps) {
                         </span>
                         {repo.repoPushedAt &&
                             (() => {
-                                const days = Math.floor(
-                                    (Date.now() - new Date(repo.repoPushedAt).getTime()) / (1000 * 60 * 60 * 24),
-                                )
-                                let color: string = 'green'
-                                if (days > 180) color = 'red'
-                                else if (days > 30) color = 'orange'
+                                const days = daysSince(repo.repoPushedAt)
+                                const color = getStalenessColor(days)
                                 return (
                                     <Tag color={color} style={{ margin: 0, fontSize: 12 }}>
                                         未更新 {days} 天

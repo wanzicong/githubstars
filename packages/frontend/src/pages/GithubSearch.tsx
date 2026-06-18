@@ -1,10 +1,10 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { Input, Select, Card, Pagination, Spin, Empty, Typography, Tag, Button, Space, Row, Col, message } from 'antd'
 import { SearchOutlined, StarFilled, StarOutlined, ForkOutlined, GithubOutlined } from '@ant-design/icons'
 import { searchRepos, starRepo, checkStarred } from '../api/github'
 import type { GithubSearchRepo } from '../types'
 import { LANGUAGE_OPTIONS } from '../constants'
-import { formatNumberShort, getRelativeTime } from '../utils/format'
+import { formatNumberShort, getRelativeTime, parseFullName } from '../utils/format'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -28,39 +28,45 @@ export default function GithubSearch() {
     const [page, setPage] = useState(1)
     const [perPage, setPerPage] = useState(20)
 
+    // ── Refs: 供 doSearch 始终读取最新值，避免 setState 后闭包过期 ──
+    const keywordRef = useRef(keyword)
+    const languageRef = useRef(language)
+    const sortRef = useRef(sort)
+    const perPageRef = useRef(perPage)
+
+    useEffect(() => { keywordRef.current = keyword }, [keyword])
+    useEffect(() => { languageRef.current = language }, [language])
+    useEffect(() => { sortRef.current = sort }, [sort])
+    useEffect(() => { perPageRef.current = perPage }, [perPage])
+
     const [results, setResults] = useState<GithubSearchRepo[]>([])
     const [total, setTotal] = useState(0)
     const [loading, setLoading] = useState(false)
     const [searched, setSearched] = useState(false)
     const [starredMap, setStarredMap] = useState<Record<string, boolean>>({})
 
-    const doSearch = useCallback(
-        async (searchPage: number) => {
-            setLoading(true)
-            setSearched(true)
-            try {
-                const data = await searchRepos({
-                    keyword: keyword || undefined,
-                    language: language || undefined,
-                    sort: sort || undefined,
-                    page: searchPage,
-                    perPage,
-                })
-                console.log('search result:', data)
-                setResults(data.repos || [])
-                setTotal(data.total || 0)
-                setPage(data.page || searchPage)
-            } catch (e) {
-                console.error('search error:', e)
-                message.error('搜索失败，请稍后重试')
-                setResults([])
-                setTotal(0)
-            } finally {
-                setLoading(false)
-            }
-        },
-        [keyword, language, sort, perPage],
-    )
+    const doSearch = useCallback(async (searchPage: number, overridePerPage?: number) => {
+        setLoading(true)
+        setSearched(true)
+        try {
+            const data = await searchRepos({
+                keyword: keywordRef.current || undefined,
+                language: languageRef.current || undefined,
+                sort: sortRef.current || undefined,
+                page: searchPage,
+                perPage: overridePerPage ?? perPageRef.current,
+            })
+            setResults(data.repos || [])
+            setTotal(data.total || 0)
+            setPage(data.page || searchPage)
+        } catch {
+            message.error('搜索失败，请稍后重试')
+            setResults([])
+            setTotal(0)
+        } finally {
+            setLoading(false)
+        }
+    }, [])
 
     const handleSearch = useCallback(() => {
         setPage(1)
@@ -75,97 +81,27 @@ export default function GithubSearch() {
         [doSearch],
     )
 
-    const handlePerPageChange = useCallback(
-        (value: number) => {
-            setPerPage(value)
-            setPage(1)
-            // 不能用 doSearch(1)，因为 setPerPage 尚未生效，doSearch 闭包中的 perPage 仍是旧值
-            setLoading(true)
-            setSearched(true)
-            searchRepos({
-                keyword: keyword || undefined,
-                language: language || undefined,
-                sort: sort || undefined,
-                page: 1,
-                perPage: value,
-            })
-                .then((data) => {
-                    setResults(data.repos || [])
-                    setTotal(data.total || 0)
-                    setPage(1)
-                })
-                .catch(() => {
-                    message.error('搜索失败，请稍后重试')
-                    setResults([])
-                    setTotal(0)
-                })
-                .finally(() => setLoading(false))
-        },
-        [keyword, language, sort],
-    )
+    const handlePerPageChange = useCallback((value: number) => {
+        setPerPage(value)
+        setPage(1)
+        doSearch(1, value)
+    }, [doSearch])
 
-    const handleLanguageChange = useCallback(
-        (value: string) => {
-            setLanguage(value)
-            setPage(1)
-            // Trigger search after state update via useEffect would be cleaner,
-            // but per the requirement we trigger on filter change directly.
-            // We call doSearch with the new value directly.
-            setLoading(true)
-            setSearched(true)
-            searchRepos({
-                keyword: keyword || undefined,
-                language: value || undefined,
-                sort: sort || undefined,
-                page: 1,
-                perPage,
-            })
-                .then((data) => {
-                    setResults(data.repos || [])
-                    setTotal(data.total || 0)
-                    setPage(1)
-                })
-                .catch(() => {
-                    message.error('搜索失败，请稍后重试')
-                    setResults([])
-                    setTotal(0)
-                })
-                .finally(() => setLoading(false))
-        },
-        [keyword, sort, perPage],
-    )
+    const handleLanguageChange = useCallback((value: string) => {
+        setLanguage(value)
+        setPage(1)
+        doSearch(1)
+    }, [doSearch])
 
-    const handleSortChange = useCallback(
-        (value: string) => {
-            setSort(value)
-            setPage(1)
-            setLoading(true)
-            setSearched(true)
-            searchRepos({
-                keyword: keyword || undefined,
-                language: language || undefined,
-                sort: value || undefined,
-                page: 1,
-                perPage,
-            })
-                .then((data) => {
-                    setResults(data.repos || [])
-                    setTotal(data.total || 0)
-                    setPage(1)
-                })
-                .catch(() => {
-                    message.error('搜索失败，请稍后重试')
-                    setResults([])
-                    setTotal(0)
-                })
-                .finally(() => setLoading(false))
-        },
-        [keyword, language, perPage],
-    )
+    const handleSortChange = useCallback((value: string) => {
+        setSort(value)
+        setPage(1)
+        doSearch(1)
+    }, [doSearch])
 
     const handleStar = useCallback(async (repo: GithubSearchRepo) => {
         const fullName = repo.fullName
-        const [owner, repoName] = fullName.split('/')
+        const [owner, repoName] = parseFullName(fullName)
         try {
             const data = await starRepo(owner, repoName)
             if (data.success && data.starred) {
@@ -183,7 +119,7 @@ export default function GithubSearch() {
 
     const handleCheckStar = useCallback(async (repo: GithubSearchRepo) => {
         const fullName = repo.fullName
-        const [owner, repoName] = fullName.split('/')
+        const [owner, repoName] = parseFullName(fullName)
         try {
             const data = await checkStarred(owner, repoName)
             if (data.success && data.starred) {

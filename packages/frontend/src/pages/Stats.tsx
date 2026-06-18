@@ -17,35 +17,11 @@ import {
 import * as statsApi from '../api/stats'
 import type { OverviewStatsDTO, LanguageStatsDTO, OwnerStatsDTO, TimelineStatsDTO, GithubRepo } from '../types'
 import { formatDate, formatNumberShort } from '../utils/format'
+import { CHART_COLORS } from '../constants'
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Filler)
 
 const { Title } = Typography
-
-const CHART_COLORS = [
-    '#FF6384',
-    '#36A2EB',
-    '#FFCE56',
-    '#4BC0C0',
-    '#9966FF',
-    '#FF9F40',
-    '#C9CBCF',
-    '#7BC8A4',
-    '#E8A87C',
-    '#6C8EBF',
-    '#B85450',
-    '#F4B400',
-    '#4285F4',
-    '#0F9D58',
-    '#AB47BC',
-    '#26A69A',
-    '#EC407A',
-    '#5C6BC0',
-    '#8D6E63',
-    '#29B6F6',
-    '#66BB6A',
-    '#EF5350',
-]
 
 const TOP_N_OWNERS = 15
 const TOP_N_REPOS = 10

@@ -3,7 +3,7 @@ import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col,
 import { StarFilled, ForkOutlined, FireOutlined } from '@ant-design/icons'
 import { fetchTrending } from '../api/trending'
 import type { GithubSearchRepo } from '../types'
-import { LANGUAGE_OPTIONS } from '../constants'
+import { LANGUAGE_OPTIONS, RANK_BADGE_COLORS } from '../constants'
 import { formatNumberShort, getRelativeTime } from '../utils/format'
 
 const { Title, Text, Paragraph } = Typography
@@ -94,7 +94,7 @@ export default function Trending() {
                                                 height: 36,
                                                 borderRadius: 8,
                                                 flexShrink: 0,
-                                                background: idx < 3 ? ['#ff4d4f', '#ff7a45', '#ffa940'][idx] : '#f0f0f0',
+                                                background: idx < 3 ? RANK_BADGE_COLORS[idx] : '#f0f0f0',
                                                 color: idx < 3 ? '#fff' : '#666',
                                                 display: 'flex',
                                                 alignItems: 'center',

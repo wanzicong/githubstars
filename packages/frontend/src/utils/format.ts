@@ -109,3 +109,42 @@ export function formatSize(bytes: number): string {
     return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
 
+// ─── 日期工具 ───
+
+/**
+ * 计算距今多少天
+ * @param dateStr 日期字符串
+ * @returns 天数，无效日期返回 null
+ */
+export function daysSince(dateStr: string | null | undefined): number {
+    if (!dateStr) return 0
+    const date = new Date(dateStr.replace(' ', 'T'))
+    if (isNaN(date.getTime())) return 0
+    const diffMs = Date.now() - date.getTime()
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+}
+
+/**
+ * 根据未更新天数返回对应的颜色标签
+ * @param days 未更新天数
+ * @returns 颜色名称：'green' | 'orange' | 'red'
+ */
+export function getStalenessColor(days: number): string {
+    if (days > 180) return 'red'
+    if (days > 30) return 'orange'
+    return 'green'
+}
+
+// ─── 仓库名称解析 ───
+
+/**
+ * 将 "owner/repoName" 解析为 [owner, repoName]
+ * @param fullName 完整仓库名，如 "facebook/react"
+ * @returns [owner, repoName]，格式异常时返回 [fullName, '']
+ */
+export function parseFullName(fullName: string): [string, string] {
+    const idx = fullName.indexOf('/')
+    if (idx === -1) return [fullName, '']
+    return [fullName.slice(0, idx), fullName.slice(idx + 1)]
+}
+

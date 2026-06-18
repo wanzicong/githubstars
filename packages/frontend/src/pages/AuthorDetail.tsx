@@ -2,29 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card, Select, Button, Row, Col, Tag, Avatar, Typography, Pagination, Empty, Space, Spin, Breadcrumb, Statistic } from 'antd'
 import { StarFilled, ForkOutlined, ArrowLeftOutlined, DownloadOutlined, GithubOutlined, UserOutlined } from '@ant-design/icons'
-import dayjs from 'dayjs'
 import * as authorsApi from '../api/authors'
+import { formatNumberShort, formatDate, daysSince, getStalenessColor } from '../utils/format'
 import type { GithubRepo, PageResult } from '../types'
 
 const { Title, Text, Paragraph } = Typography
-
-function formatDate(dateStr: string | number[] | null): string {
-    if (!dateStr) return '-'
-    if (Array.isArray(dateStr)) {
-        const [y, m, d] = dateStr
-        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    }
-    if (typeof dateStr === 'string') {
-        return dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr
-    }
-    return String(dateStr)
-}
-
-function formatNumber(n: number): string {
-    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
-    if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
-    return String(n)
-}
 
 const SORT_BY_OPTIONS = [
     { label: 'Star 数量', value: 'stars_count' },
@@ -207,7 +189,7 @@ export default function AuthorDetail() {
                         <Col xs={8} sm={3}>
                             <Statistic
                                 title='总 Star'
-                                value={formatNumber(authorStats.totalStars)}
+                                value={formatNumberShort(authorStats.totalStars)}
                                 prefix={<StarFilled style={{ color: '#faad14' }} />}
                             />
                         </Col>
@@ -323,10 +305,8 @@ export default function AuthorDetail() {
                                             </Text>
                                             {repo.repoPushedAt &&
                                                 (() => {
-                                                    const days = dayjs().diff(dayjs(repo.repoPushedAt), 'day')
-                                                    let color = 'green'
-                                                    if (days > 180) color = 'red'
-                                                    else if (days > 30) color = 'orange'
+                                                    const days = daysSince(repo.repoPushedAt)
+                                                    const color = getStalenessColor(days)
                                                     return (
                                                         <Tag color={color} style={{ margin: 0, fontSize: 10 }}>
                                                             未更新 {days} 天

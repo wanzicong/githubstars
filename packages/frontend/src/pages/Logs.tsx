@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, Select, Button, Typography, Space, message, Popconfirm, Spin, Switch } from 'antd'
 import { ReloadOutlined, DeleteOutlined, FileTextOutlined, SyncOutlined } from '@ant-design/icons'
 import * as logsApi from '../api/logs'
 import type { LogFile } from '../types'
 import { formatSize } from '../utils/format'
+import { usePolling } from '../hooks/usePolling'
+import { POLLING_INTERVAL_MS } from '../constants'
 
 const { Title, Text } = Typography
 
@@ -13,7 +15,6 @@ export default function Logs() {
     const [content, setContent] = useState('')
     const [loading, setLoading] = useState(false)
     const [autoRefresh, setAutoRefresh] = useState(false)
-    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     const loadFiles = useCallback(async () => {
         try {
@@ -42,25 +43,21 @@ export default function Logs() {
 
     useEffect(() => {
         loadFiles()
-    }, [])
+    }, [loadFiles])
 
     useEffect(() => {
         loadContent()
     }, [selectedFile, loadContent])
 
+    const polling = usePolling(async () => {
+        await loadFiles()
+        await loadContent()
+    }, POLLING_INTERVAL_MS)
+
     useEffect(() => {
-        if (autoRefresh) {
-            timerRef.current = setInterval(() => {
-                loadContent()
-                loadFiles()
-            }, 3000)
-        } else {
-            if (timerRef.current) clearInterval(timerRef.current)
-        }
-        return () => {
-            if (timerRef.current) clearInterval(timerRef.current)
-        }
-    }, [autoRefresh, loadContent, loadFiles])
+        if (autoRefresh) polling.start()
+        else polling.stop()
+    }, [autoRefresh, polling])
 
     const handleClear = useCallback(async () => {
         try {
