@@ -5,11 +5,11 @@ import type { AuthorDTO, AuthorListParams, AuthorRepoParams, GithubRepo, PageRes
  * 获取作者列表（分页 + 搜索）
  */
 export async function fetchAuthorList(params: AuthorListParams): Promise<PageResult<AuthorDTO>> {
-    const searchParams = new URLSearchParams()
-    if (params.page) searchParams.set('page', String(params.page))
-    if (params.size) searchParams.set('size', String(params.size))
-    if (params.keyword) searchParams.set('keyword', params.keyword)
-    const { data } = await api.get<PageResult<AuthorDTO>>('/api/authors', { params: searchParams })
+    const body: Record<string, any> = {}
+    if (params.page) body.page = params.page
+    if (params.size) body.size = params.size
+    if (params.keyword) body.keyword = params.keyword
+    const { data } = await api.post<PageResult<AuthorDTO>>('/api/authors/list', body)
     return data
 }
 
@@ -17,14 +17,12 @@ export async function fetchAuthorList(params: AuthorListParams): Promise<PageRes
  * 获取某作者的仓库列表（分页 + 排序）
  */
 export async function fetchAuthorRepos(ownerName: string, params: AuthorRepoParams): Promise<PageResult<GithubRepo>> {
-    const searchParams = new URLSearchParams()
-    if (params.page) searchParams.set('page', String(params.page))
-    if (params.size) searchParams.set('size', String(params.size))
-    if (params.sortBy) searchParams.set('sortBy', params.sortBy)
-    if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder)
-    const { data } = await api.get<PageResult<GithubRepo>>(`/api/authors/${encodeURIComponent(ownerName)}`, {
-        params: searchParams,
-    })
+    const body: Record<string, any> = { ownerName }
+    if (params.page) body.page = params.page
+    if (params.size) body.size = params.size
+    if (params.sortBy) body.sortBy = params.sortBy
+    if (params.sortOrder) body.sortOrder = params.sortOrder
+    const { data } = await api.post<PageResult<GithubRepo>>('/api/authors/repos', body)
     return data
 }
 
@@ -32,11 +30,10 @@ export async function fetchAuthorRepos(ownerName: string, params: AuthorRepoPara
  * 导出某作者的全部仓库链接为 txt 文件
  */
 export async function exportAuthorUrls(ownerName: string, sortBy?: string, sortOrder?: string): Promise<Blob> {
-    const searchParams = new URLSearchParams()
-    if (sortBy) searchParams.set('sortBy', sortBy)
-    if (sortOrder) searchParams.set('sortOrder', sortOrder)
-    const { data } = await api.get(`/api/authors/${encodeURIComponent(ownerName)}/export`, {
-        params: searchParams,
+    const body: Record<string, any> = { ownerName }
+    if (sortBy) body.sortBy = sortBy
+    if (sortOrder) body.sortOrder = sortOrder
+    const { data } = await api.post('/api/authors/export', body, {
         responseType: 'blob',
     })
     return data

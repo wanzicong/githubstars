@@ -28,9 +28,7 @@ export interface TranslateTaskProgress {
     createdAt: string
     finishedAt: string | null
     progress: number
-    /** 已完成项明细（成功时也有备注，如"该仓库没有 README 文件"） */
     completedDetails?: Array<{ fullName: string; type: string; note: string }>
-    /** 失败项明细 */
     failedDetails?: Array<{ fullName: string; type: string; error: string }>
 }
 
@@ -49,74 +47,77 @@ export interface TaskListResult {
 
 /** 翻译单个仓库的描述 */
 export async function translateDescription(repoId: number): Promise<TranslateResult> {
-    const { data } = await api.post<TranslateResult>(`/api/translate/${repoId}/description`)
+    const { data } = await api.post<TranslateResult>('/api/translate/description', { id: repoId })
     return data
 }
 
 /** 翻译单个仓库的 README */
 export async function translateReadme(repoId: number): Promise<TranslateResult> {
-    const { data } = await api.post<TranslateResult>(`/api/translate/${repoId}/readme`)
+    const { data } = await api.post<TranslateResult>('/api/translate/readme', { id: repoId })
     return data
 }
 
 /** 全量翻译单个仓库（描述 + README） */
 export async function translateAll(repoId: number): Promise<TranslateResult> {
-    const { data } = await api.post<TranslateResult>(`/api/translate/${repoId}`)
+    const { data } = await api.post<TranslateResult>('/api/translate/full', { id: repoId })
     return data
 }
 
 /** 批量翻译描述 */
 export async function translateBatch(repoIds?: number[]): Promise<TranslateResult> {
-    const body = repoIds ? { repoIds } : {}
-    const { data } = await api.post<TranslateResult>('/api/translate/batch', body)
+    const { data } = await api.post<TranslateResult>('/api/translate', {
+        type: 'description',
+        scope: repoIds?.length ? 'selected' : 'all',
+        repoIds,
+    })
     return data
 }
 
 /** 获取翻译状态 */
 export async function getTranslateStatus(repoId: number): Promise<TranslateResult> {
-    const { data } = await api.get<TranslateResult>(`/api/translate/${repoId}/status`)
+    const { data } = await api.post<TranslateResult>('/api/translate/repo-status', { id: repoId })
     return data
 }
 
 /** 获取仓库详情 */
 export async function fetchRepoDetail(repoId: number): Promise<GithubRepo> {
-    const { data } = await api.get<GithubRepo>(`/api/stars/${repoId}`)
+    const { data } = await api.post<GithubRepo>('/api/stars/detail', { id: repoId })
     return data
 }
 
 /** 启动全量翻译（异步） */
 export async function startFullTranslate(): Promise<{ success: boolean; taskId?: number; message?: string }> {
-    const { data } = await api.post('/api/translate/start')
+    const { data } = await api.post('/api/translate', { type: 'both', scope: 'all' })
     return data
 }
 
 /** 启动单个仓库的 README 翻译（异步，立即返回 taskId） */
 export async function startSingleReadme(repoId: number): Promise<{ success: boolean; taskId?: number; message?: string }> {
-    const { data } = await api.post(`/api/translate/${repoId}/readme/async`)
+    const { data } = await api.post('/api/translate/readme-async', { id: repoId })
     return data
 }
 
 /** 强制重新翻译单个仓库的 README（异步，忽略已处理标记） */
 export async function retranslateReadme(repoId: number): Promise<{ success: boolean; taskId?: number; message?: string }> {
-    const { data } = await api.post(`/api/translate/${repoId}/readme/retranslate`)
+    const { data } = await api.post('/api/translate/retranslate', { id: repoId })
     return data
 }
 
 /** 启动 README 批量翻译（翻译全部未获取 README 的仓库，异步） */
 export async function startReadmeBatch(): Promise<{ success: boolean; taskId?: number; message?: string }> {
-    const { data } = await api.post('/api/translate/readme-start')
+    const { data } = await api.post('/api/translate', { type: 'readme', scope: 'all' })
     return data
 }
 
 /** 获取翻译任务进度 */
 export async function getTaskProgress(taskId: number): Promise<TranslateTaskProgress> {
-    const { data } = await api.get<TranslateTaskProgress>(`/api/translate/tasks/${taskId}`)
+    const { data } = await api.post<TranslateTaskProgress>('/api/translate/tasks/detail', { id: taskId })
     return data
 }
 
 /** 重试失败项 */
 export async function retryFailed(taskId: number): Promise<{ success: boolean; taskId?: number; message?: string }> {
-    const { data } = await api.post(`/api/translate/tasks/${taskId}/retry`)
+    const { data } = await api.post('/api/translate/tasks/retry', { id: taskId })
     return data
 }
 
@@ -126,7 +127,7 @@ export async function getTaskFailures(taskId: number): Promise<{
     failures: Array<{ id: number; repoId: number; fullName: string; translateType: string; errorMessage: string }>
     count: number
 }> {
-    const { data } = await api.get(`/api/translate/tasks/${taskId}/failures`)
+    const { data } = await api.post('/api/translate/tasks/failures', { id: taskId })
     return data
 }
 
@@ -141,22 +142,17 @@ export async function startFilterBatch(params: {
     startDate?: string
     endDate?: string
 }): Promise<{ success: boolean; taskId?: number; message?: string }> {
-    const searchParams = new URLSearchParams()
-    if (params.keyword) searchParams.set('keyword', params.keyword)
-    if (params.language) searchParams.set('language', params.language)
-    if (params.categoryIds) searchParams.set('categoryIds', params.categoryIds)
-    if (params.sortBy) searchParams.set('sortBy', params.sortBy)
-    if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder)
-    if (params.dateField) searchParams.set('dateField', params.dateField)
-    if (params.startDate) searchParams.set('startDate', params.startDate)
-    if (params.endDate) searchParams.set('endDate', params.endDate)
-    const { data } = await api.post(`/api/translate/filter-batch?${searchParams.toString()}`)
+    const { data } = await api.post('/api/translate', {
+        type: 'description',
+        scope: 'filtered',
+        filters: params,
+    })
     return data
 }
 
 /** 获取最近任务列表 */
 export async function getRecentTasks(): Promise<TaskListResult> {
-    const { data } = await api.get<TaskListResult>('/api/translate/tasks')
+    const { data } = await api.post<TaskListResult>('/api/translate/tasks/list')
     return data
 }
 
@@ -173,7 +169,7 @@ export async function createTranslateTask(params: {
 
 /** 获取翻译配置（检查 API Key 是否已配置） */
 export async function getTranslateConfig(): Promise<{ success: boolean; apiKeyConfigured: boolean }> {
-    const { data } = await api.get('/api/translate/config')
+    const { data } = await api.post('/api/translate/config')
     return data
 }
 
@@ -186,12 +182,12 @@ export async function getTranslationStatus(filters?: Record<string, string | und
     readmeCompleted: number
     readmePending: number
 }> {
-    const searchParams = new URLSearchParams()
+    const body: Record<string, any> = {}
     if (filters) {
         Object.entries(filters).forEach(([k, v]) => {
-            if (v) searchParams.set(k, v)
+            if (v) body[k] = v === 'true' ? true : v
         })
     }
-    const { data } = await api.get(`/api/translate/status?${searchParams.toString()}`)
+    const { data } = await api.post('/api/translate/status', body)
     return data
 }

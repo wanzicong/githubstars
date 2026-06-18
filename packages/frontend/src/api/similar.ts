@@ -19,6 +19,6 @@ export interface SimilarResult {
 }
 
 export async function findSimilarRepos(repoId: number): Promise<SimilarResult> {
-    const { data } = await api.get<SimilarResult>(`/api/similar/${repoId}`)
+    const { data } = await api.post<SimilarResult>('/api/similar', { repoId })
     return data
 }

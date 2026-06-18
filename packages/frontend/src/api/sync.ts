@@ -7,13 +7,11 @@ export async function triggerManualSync(): Promise<{ success: boolean; message?:
 }
 
 export async function fetchSyncStatus(): Promise<SyncStatus> {
-    const { data } = await api.get<SyncStatus>('/sync/status')
+    const { data } = await api.post<SyncStatus>('/sync/status')
     return data
 }
 
 export async function fetchSyncLogs(pageNum: number = 1, pageSize: number = 10): Promise<PageResult<SyncLog>> {
-    const { data } = await api.get<PageResult<SyncLog>>('/sync/logs', {
-        params: { pageNum, pageSize },
-    })
+    const { data } = await api.post<PageResult<SyncLog>>('/sync/logs', { pageNum, pageSize })
     return data
 }

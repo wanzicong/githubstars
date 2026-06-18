@@ -10,18 +10,16 @@ export interface TrendingResult {
 }
 
 export async function fetchTrending(since: string, language?: string, perPage?: number): Promise<TrendingResult> {
-    const params = new URLSearchParams()
-    params.set('since', since)
-    if (language) params.set('language', language)
-    if (perPage) params.set('perPage', String(perPage))
-    const { data } = await api.get<TrendingResult>('/api/trending', { params })
+    const body: Record<string, any> = { since }
+    if (language) body.language = language
+    if (perPage) body.perPage = perPage
+    const { data } = await api.post<TrendingResult>('/api/trending', body)
     return data
 }
 
 export async function analyzeTrending(since: string, language?: string): Promise<{ success: boolean; taskId?: string; message?: string }> {
-    const params = new URLSearchParams()
-    params.set('since', since)
-    if (language) params.set('language', language)
-    const { data } = await api.post('/api/trending/analyze', null, { params })
+    const body: Record<string, any> = { since }
+    if (language) body.language = language
+    const { data } = await api.post('/api/trending/analyze', body)
     return data
 }

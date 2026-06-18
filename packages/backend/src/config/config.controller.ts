@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { ConfigService } from './config.service';
 
@@ -21,7 +21,7 @@ export class ConfigController {
      *
      * @returns 配置项数组
      */
-    @Get()
+    @Post('list')
     @ApiOperation({ summary: '获取所有配置项', description: '返回包含原始值和脱敏显示值的配置列表，敏感字段（Token/API Key）自动打码' })
     async getAll() {
         return this.configService.listAll();

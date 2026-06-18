@@ -7,7 +7,7 @@ export interface LogFile {
 }
 
 export async function fetchLogFiles(): Promise<LogFile[]> {
-    const { data } = await api.get<{ success: boolean; files: LogFile[] }>('/api/logs/files')
+    const { data } = await api.post<{ success: boolean; files: LogFile[] }>('/api/logs/files')
     return data.files || []
 }
 
@@ -15,9 +15,9 @@ export async function fetchLogContent(
     file: string,
     lines?: number,
 ): Promise<string> {
-    const { data } = await api.get<{ success: boolean; content: string }>(
+    const { data } = await api.post<{ success: boolean; content: string }>(
         '/api/logs/view',
-        { params: { file, lines } },
+        { file, lines },
     )
     return data.content || ''
 }

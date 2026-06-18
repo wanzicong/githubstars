@@ -1,6 +1,6 @@
-import { Controller, Get, Query, Res, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Res, Logger } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubRepoService } from '../github/services/github-repo.service';
 
 @ApiTags('export')
@@ -13,45 +13,37 @@ export class ExportController {
     /**
      * 导出仓库列表为 Markdown 文件，支持按关键词、语言、时间范围、翻译状态筛选
      *
-     * @param q   查询参数：keyword、language、sortBy、sortOrder、
-     *            dateField、startDate、endDate、untranslatedOnly、maxCount
-     * @param res Express Response 对象，用于设置 Content-Disposition 并返回文件
+     * @param body 查询参数：keyword、language、sortBy、sortOrder、
+     *             dateField、startDate、endDate、untranslatedOnly、maxCount
+     * @param res  Express Response 对象，用于设置 Content-Disposition 并返回文件
      */
-    @Get('md')
+    @Post('md')
     @ApiOperation({ summary: '导出 Markdown', description: '按筛选条件将仓库列表导出为 Markdown 文件下载' })
-    @ApiQuery({ name: 'keyword', required: false, description: '关键词搜索' })
-    @ApiQuery({ name: 'language', required: false, description: '编程语言筛选' })
-    @ApiQuery({ name: 'sortBy', required: false, description: '排序字段，默认 starred_at' })
-    @ApiQuery({ name: 'sortOrder', required: false, description: '排序方向（asc/desc），默认 desc' })
-    @ApiQuery({ name: 'dateField', required: false, description: '日期筛选字段' })
-    @ApiQuery({ name: 'startDate', required: false, description: '开始日期' })
-    @ApiQuery({ name: 'endDate', required: false, description: '结束日期' })
-    @ApiQuery({ name: 'untranslatedOnly', required: false, description: '仅未翻译（true/false）' })
-    @ApiQuery({ name: 'maxCount', required: false, description: '最大导出数量，默认 50' })
-    async exportMd(@Query() q: any, @Res() res: Response) {
-        const maxCount = parseInt(q.maxCount) || 50;
-        this.logger.log('开始导出Markdown: keyword=' + (q.keyword || '') + ', language=' + (q.language || '') + ', maxCount=' + maxCount);
+    @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'string' }, maxCount: { type: 'number' } } } })
+    async exportMd(@Body() body: any, @Res() res: Response) {
+        const maxCount = parseInt(body.maxCount) || 50;
+        this.logger.log('开始导出Markdown: keyword=' + (body.keyword || '') + ', language=' + (body.language || '') + ', maxCount=' + maxCount);
         const result = await this.repoService.findPage({
             page: 1,
             size: maxCount,
-            keyword: q.keyword || '',
-            language: q.language || '',
-            sortBy: q.sortBy || 'stars_count',
-            sortOrder: q.sortOrder || 'desc',
-            dateField: q.dateField || '',
-            startDate: q.startDate || '',
-            endDate: q.endDate || '',
-            untranslatedOnly: q.untranslatedOnly === 'true',
+            keyword: body.keyword || '',
+            language: body.language || '',
+            sortBy: body.sortBy || 'stars_count',
+            sortOrder: body.sortOrder || 'desc',
+            dateField: body.dateField || '',
+            startDate: body.startDate || '',
+            endDate: body.endDate || '',
+            untranslatedOnly: body.untranslatedOnly === 'true',
         });
         const repos = result.records as any[];
         this.logger.log('查询到 ' + repos.length + ' 个仓库，开始生成Markdown');
         let md = '# GitHub Stars 导出\n\n';
-        if (q.keyword) md += `> 关键词: ${q.keyword}\n`;
-        if (q.language) md += `> 语言: ${q.language}\n`;
-        if (q.dateField && (q.startDate || q.endDate)) {
-            md += `> 时间范围: ${q.startDate || '不限'} ~ ${q.endDate || '不限'}\n`;
+        if (body.keyword) md += `> 关键词: ${body.keyword}\n`;
+        if (body.language) md += `> 语言: ${body.language}\n`;
+        if (body.dateField && (body.startDate || body.endDate)) {
+            md += `> 时间范围: ${body.startDate || '不限'} ~ ${body.endDate || '不限'}\n`;
         }
-        if (q.untranslatedOnly === 'true') md += `> 仅未翻译\n`;
+        if (body.untranslatedOnly === 'true') md += `> 仅未翻译\n`;
         md += `> 导出时间: ${new Date().toISOString()}\n\n---\n\n`;
 
         const total = repos.length;

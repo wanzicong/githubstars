@@ -24,16 +24,16 @@ export function createSuccess(data: any) {
 // ============ Stars ============
 
 export const starsHandlers = [
-    http.get('/api/stars', () => {
+    http.post('/api/stars/list', () => {
         return HttpResponse.json(createPageResult([], 0))
     }),
-    http.get('/api/stars/:id', ({ params }) => {
-        return HttpResponse.json({ success: true, id: Number(params.id) })
+    http.post('/api/stars/detail', () => {
+        return HttpResponse.json({ success: true, id: 1 })
     }),
-    http.get('/stars/export', () => {
+    http.post('/api/stars/export', () => {
         return HttpResponse.json('https://github.com/test/repo1\nhttps://github.com/test/repo2')
     }),
-    http.get('/export/md', () => {
+    http.post('/api/export/md', () => {
         return new HttpResponse('# GitHub Stars 导出\n\n> 关键词: test\n> 导出时间: 2024-01-01T00:00:00.000Z', {
             headers: { 'Content-Type': 'text/plain; charset=utf-8' },
         })
@@ -46,7 +46,7 @@ export const syncHandlers = [
     http.post('/api/sync/manual', () => {
         return createSuccess({ message: '同步已开始' })
     }),
-    http.get('/api/sync/status', () => {
+    http.post('/api/sync/status', () => {
         return HttpResponse.json({
             success: true,
             syncing: false,
@@ -57,7 +57,7 @@ export const syncHandlers = [
             lastSyncType: 'manual',
         })
     }),
-    http.get('/api/sync/logs', () => {
+    http.post('/api/sync/logs', () => {
         return HttpResponse.json(
             createPageResult([
                 {
@@ -78,7 +78,7 @@ export const syncHandlers = [
 // ============ Translate ============
 
 export const translateHandlers = [
-    http.get('/api/translate/status', () => {
+    http.post('/api/translate/status', () => {
         return HttpResponse.json({
             success: true,
             total: 100,
@@ -88,16 +88,16 @@ export const translateHandlers = [
             readmePending: 50,
         })
     }),
-    http.get('/api/translate/tasks/recent', () => {
+    http.post('/api/translate/tasks/list', () => {
         return HttpResponse.json({
             success: true,
             tasks: [],
         })
     }),
-    http.post('/api/translate/tasks', () => {
+    http.post('/api/translate', () => {
         return createSuccess({ taskId: 1, message: '翻译任务已创建' })
     }),
-    http.get('/api/translate/tasks/:id/progress', () => {
+    http.post('/api/translate/tasks/detail', () => {
         return HttpResponse.json({
             success: true,
             taskId: 1,
@@ -116,7 +116,7 @@ export const translateHandlers = [
             progress: 100,
         })
     }),
-    http.post('/api/translate/tasks/:id/retry', () => {
+    http.post('/api/translate/tasks/retry', () => {
         return createSuccess({ taskId: 2, message: '重试任务已创建' })
     }),
 ]
@@ -124,7 +124,7 @@ export const translateHandlers = [
 // ============ Category ============
 
 export const categoryHandlers = [
-    http.get('/api/categories', () => {
+    http.post('/api/categories', () => {
         return HttpResponse.json({
             success: true,
             categories: [
@@ -133,7 +133,7 @@ export const categoryHandlers = [
             ],
         })
     }),
-    http.get('/api/categories/uncategorized', () => {
+    http.post('/api/categories/uncategorized', () => {
         return HttpResponse.json(createPageResult([], 0))
     }),
     http.post('/api/categories/classify/smart', () => {
@@ -144,13 +144,13 @@ export const categoryHandlers = [
 // ============ Clone ============
 
 export const cloneHandlers = [
-    http.get('/api/clone/config', () => {
+    http.post('/api/clone/config', () => {
         return HttpResponse.json({ success: true, baseDir: '/tmp/clones', defaultConcurrency: 5, defaultCloneDepth: 1 })
     }),
     http.post('/api/clone/start', () => {
         return createSuccess({ taskId: 'test-task-id' })
     }),
-    http.get('/api/clone/task/:id', () => {
+    http.post('/api/clone/task/:id', () => {
         return HttpResponse.json({
             success: true,
             taskId: 'test-task-id',
@@ -173,7 +173,7 @@ export const cloneHandlers = [
 // ============ Stats ============
 
 export const statsHandlers = [
-    http.get('/api/stats/overview', () => {
+    http.post('/api/stats/overview', () => {
         return HttpResponse.json({
             totalRepos: 100,
             totalStars: 50000,
@@ -182,7 +182,7 @@ export const statsHandlers = [
             totalOwners: 80,
         })
     }),
-    http.get('/api/stats/languages', () => {
+    http.post('/api/stats/languages', () => {
         return HttpResponse.json([
             { language: 'TypeScript', count: 40, percentage: 40 },
             { language: 'Python', count: 30, percentage: 30 },
@@ -190,7 +190,7 @@ export const statsHandlers = [
             { language: 'Rust', count: 10, percentage: 10 },
         ])
     }),
-    http.get('/api/stats/owners', () => {
+    http.post('/api/stats/owners', () => {
         return HttpResponse.json([
             {
                 ownerName: 'google',
@@ -201,17 +201,17 @@ export const statsHandlers = [
             },
         ])
     }),
-    http.get('/api/stats/timeline', () => {
+    http.post('/api/stats/timeline', () => {
         return HttpResponse.json([
             { month: '2024-01', count: 15 },
             { month: '2024-02', count: 20 },
             { month: '2024-03', count: 10 },
         ])
     }),
-    http.get('/api/stats/top-repos', () => {
+    http.post('/api/stats/top-repos', () => {
         return HttpResponse.json(createPageResult([], 0))
     }),
-    http.get('/api/stats/recent', () => {
+    http.post('/api/stats/recent', () => {
         return HttpResponse.json(createPageResult([], 0))
     }),
 ]
@@ -219,19 +219,14 @@ export const statsHandlers = [
 // ============ AI / Analyze ============
 
 export const analyzeHandlers = [
-    http.get('/api/analyze', ({ request }) => {
-        const url = new URL(request.url)
-        const taskId = url.searchParams.get('taskId')
-        if (taskId) {
-            return HttpResponse.json({
-                success: true,
-                status: 'COMPLETED',
-                content: '# AI 分析结果\n\n这是一个测试分析',
-            })
-        }
-        return createSuccess({ message: '分析已开始', taskId: 'test-analyze-task' })
+    http.post('/api/analyze', () => {
+        return HttpResponse.json({
+            success: true,
+            status: 'COMPLETED',
+            content: '# AI 分析结果\n\n这是一个测试分析',
+        })
     }),
-    http.get('/api/classify/repos', () => {
+    http.post('/api/classify/repos', () => {
         return HttpResponse.json(createPageResult([], 0))
     }),
     http.post('/api/classify/execute', () => {
@@ -242,7 +237,7 @@ export const analyzeHandlers = [
 // ============ Config ============
 
 export const configHandlers = [
-    http.get('/api/config', () => {
+    http.post('/api/config/list', () => {
         return HttpResponse.json([
             { configKey: 'github.token', configValue: 'ghp_****xxxx', description: 'GitHub Token' },
             { configKey: 'deepseek.api_key', configValue: 'sk-****xxxx', description: 'DeepSeek API Key' },
@@ -253,10 +248,10 @@ export const configHandlers = [
 // ============ Author ============
 
 export const authorHandlers = [
-    http.get('/api/authors', () => {
+    http.post('/api/authors/list', () => {
         return HttpResponse.json(createPageResult([], 0))
     }),
-    http.get('/api/authors/:owner/repos', () => {
+    http.post('/api/authors/repos', () => {
         return HttpResponse.json(createPageResult([], 0))
     }),
 ]

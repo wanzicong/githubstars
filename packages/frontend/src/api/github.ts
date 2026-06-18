@@ -31,22 +31,22 @@ export interface SearchReposResult {
 }
 
 export async function searchRepos(params: SearchReposParams): Promise<SearchReposResult> {
-    const searchParams = new URLSearchParams()
-    if (params.keyword) searchParams.set('keyword', params.keyword)
-    if (params.language) searchParams.set('language', params.language)
-    if (params.sort) searchParams.set('sort', params.sort)
-    if (params.page !== undefined) searchParams.set('page', String(params.page))
-    if (params.perPage !== undefined) searchParams.set('perPage', String(params.perPage))
-    const { data } = await api.get<SearchReposResult>('/api/github/search', { params: searchParams })
+    const body: Record<string, any> = {}
+    if (params.keyword) body.keyword = params.keyword
+    if (params.language) body.language = params.language
+    if (params.sort) body.sort = params.sort
+    if (params.page !== undefined) body.page = params.page
+    if (params.perPage !== undefined) body.perPage = params.perPage
+    const { data } = await api.post<SearchReposResult>('/api/github/search', body)
     return data
 }
 
 export async function starRepo(owner: string, repo: string): Promise<{ success: boolean; starred: boolean; message?: string }> {
-    const { data } = await api.post<{ success: boolean; starred: boolean; message?: string }>(`/api/github/star/${owner}/${repo}`)
+    const { data } = await api.post<{ success: boolean; starred: boolean; message?: string }>('/api/github/star', { owner, repo })
     return data
 }
 
 export async function checkStarred(owner: string, repo: string): Promise<{ success: boolean; starred: boolean }> {
-    const { data } = await api.get<{ success: boolean; starred: boolean }>(`/api/github/starred/${owner}/${repo}`)
+    const { data } = await api.post<{ success: boolean; starred: boolean }>('/api/github/starred', { owner, repo })
     return data
 }

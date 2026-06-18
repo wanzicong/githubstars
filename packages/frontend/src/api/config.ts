@@ -10,7 +10,7 @@ export interface ConfigItem {
 }
 
 export async function fetchAllConfig(): Promise<ConfigItem[]> {
-    const { data } = await api.get<ConfigItem[]>('/api/config')
+    const { data } = await api.post<ConfigItem[]>('/api/config/list')
     return data
 }
 

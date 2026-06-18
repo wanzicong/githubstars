@@ -1,5 +1,5 @@
-import { Controller, Get, Logger, Post, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { Controller, Logger, Post, Body } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { SyncService } from './sync.service';
 
 @ApiTags('sync')
@@ -31,7 +31,7 @@ export class SyncController {
      *
      * @returns 同步状态、仓库总数、上次成功同步时间等概览信息
      */
-    @Get('sync/status')
+    @Post('sync/status')
     @ApiOperation({ summary: '获取同步状态', description: '返回当前是否在同步中、仓库总数、上次成功同步时间等' })
     async status() {
         return this.service.getSyncStatus();
@@ -40,15 +40,13 @@ export class SyncController {
     /**
      * 分页获取同步日志
      *
-     * @param q.pageNum 页码，默认1
-     * @param q.pageSize 每页条数，默认10
+     * @param body { pageNum, pageSize }
      * @returns 分页后的同步日志列表
      */
-    @Get('sync/logs')
+    @Post('sync/logs')
     @ApiOperation({ summary: '获取同步日志', description: '分页返回历史同步记录' })
-    @ApiQuery({ name: 'pageNum', required: false, description: '页码，默认 1' })
-    @ApiQuery({ name: 'pageSize', required: false, description: '每页条数，默认 10' })
-    async logs(@Query() q: any) {
-        return this.service.getSyncLogs(parseInt(q.pageNum) || 1, parseInt(q.pageSize) || 10);
+    @ApiBody({ schema: { type: 'object', properties: { pageNum: { type: 'number' }, pageSize: { type: 'number' } } } })
+    async logs(@Body() body: { pageNum?: number; pageSize?: number }) {
+        return this.service.getSyncLogs(body.pageNum || 1, body.pageSize || 10);
     }
 }

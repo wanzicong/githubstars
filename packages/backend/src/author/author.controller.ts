@@ -1,6 +1,6 @@
-import { Controller, Get, Logger, Param, Query, Res } from '@nestjs/common';
+import { Controller, Post, Logger, Body, Res } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiTags, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { AuthorService } from './author.service';
 
 @ApiTags('authors')
@@ -15,18 +15,18 @@ export class AuthorController {
      *
      * 支持关键字搜索，按总 Star 数降序排列
      *
-     * @param q.page 页码，默认1
-     * @param q.size 每页条数，默认24
-     * @param q.keyword 搜索关键字，按作者名模糊匹配
+     * @param body { page, size, keyword }
      * @returns 分页后的作者列表
      */
-    @Get()
+    @Post('list')
     @ApiOperation({ summary: '获取作者列表', description: '分页获取作者列表，支持关键字搜索，按总 Star 数降序排列' })
-    @ApiQuery({ name: 'page', required: false, description: '页码，默认 1' })
-    @ApiQuery({ name: 'size', required: false, description: '每页条数，默认 24' })
-    @ApiQuery({ name: 'keyword', required: false, description: '按作者名模糊搜索' })
-    async list(@Query() q: any) {
-        return this.service.getAuthorPage(parseInt(q.page) || 1, parseInt(q.size) || 24, q.keyword || '');
+    @ApiBody({ schema: { type: 'object', properties: { page: { type: 'number' }, size: { type: 'number' }, keyword: { type: 'string' } } } })
+    async list(@Body() body: any) {
+        return this.service.getAuthorPage(
+            parseInt(body.page) || 1,
+            parseInt(body.size) || 24,
+            body.keyword || '',
+        );
     }
 
     /**
@@ -34,27 +34,19 @@ export class AuthorController {
      *
      * 支持多种排序方式
      *
-     * @param ownerName 作者名
-     * @param q.page 页码，默认1
-     * @param q.size 每页条数，默认12
-     * @param q.sortBy 排序字段，默认 starred_at
-     * @param q.sortOrder 排序方向，默认 desc
+     * @param body { ownerName, page, size, sortBy, sortOrder }
      * @returns 分页后的仓库列表
      */
-    @Get(':ownerName')
+    @Post('repos')
     @ApiOperation({ summary: '获取作者仓库列表', description: '分页获取指定作者的所有 Star 仓库，支持多字段排序' })
-    @ApiParam({ name: 'ownerName', description: 'GitHub 用户名' })
-    @ApiQuery({ name: 'page', required: false, description: '页码，默认 1' })
-    @ApiQuery({ name: 'size', required: false, description: '每页条数，默认 12' })
-    @ApiQuery({ name: 'sortBy', required: false, description: '排序字段，默认 starred_at' })
-    @ApiQuery({ name: 'sortOrder', required: false, description: '排序方向（asc/desc），默认 desc' })
-    async repos(@Param('ownerName') owner: string, @Query() q: any) {
+    @ApiBody({ schema: { type: 'object', properties: { ownerName: { type: 'string' }, page: { type: 'number' }, size: { type: 'number' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' } }, required: ['ownerName'] } })
+    async repos(@Body() body: any) {
         return this.service.getAuthorRepos(
-            owner,
-            parseInt(q.page) || 1,
-            parseInt(q.size) || 12,
-            q.sortBy || 'stars_count',
-            q.sortOrder || 'desc',
+            body.ownerName,
+            parseInt(body.page) || 1,
+            parseInt(body.size) || 12,
+            body.sortBy || 'stars_count',
+            body.sortOrder || 'desc',
         );
     }
 
@@ -63,21 +55,17 @@ export class AuthorController {
      *
      * 以纯文本文件下载，每行一个 GitHub 仓库地址
      *
-     * @param ownerName 作者名
-     * @param q.sortBy 排序字段，默认 starred_at
-     * @param q.sortOrder 排序方向，默认 desc
+     * @param body { ownerName, sortBy, sortOrder }
      * @param res Express Response 对象，用于设置下载头并返回文件内容
      */
-    @Get(':ownerName/export')
+    @Post('export')
     @ApiOperation({ summary: '导出作者仓库 URL', description: '以纯文本文件下载指定作者的所有 Star 仓库地址（每行一个）' })
-    @ApiParam({ name: 'ownerName', description: 'GitHub 用户名' })
-    @ApiQuery({ name: 'sortBy', required: false, description: '排序字段，默认 starred_at' })
-    @ApiQuery({ name: 'sortOrder', required: false, description: '排序方向（asc/desc），默认 desc' })
-    async export(@Param('ownerName') owner: string, @Query() q: any, @Res() res: Response) {
-        const urls = await this.service.getAuthorAllRepoUrls(owner, q.sortBy || 'stars_count', q.sortOrder || 'desc');
+    @ApiBody({ schema: { type: 'object', properties: { ownerName: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' } }, required: ['ownerName'] } })
+    async export(@Body() body: any, @Res() res: Response) {
+        const urls = await this.service.getAuthorAllRepoUrls(body.ownerName, body.sortBy || 'stars_count', body.sortOrder || 'desc');
         res.set({
             'Content-Type': 'text/plain; charset=utf-8',
-            'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(owner + '-stars.txt')}`,
+            'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(body.ownerName + '-stars.txt')}`,
         });
         res.send(urls.join('\n'));
     }

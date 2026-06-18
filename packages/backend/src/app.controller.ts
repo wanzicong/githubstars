@@ -1,4 +1,4 @@
-import { Controller, Get, Logger } from '@nestjs/common';
+import { Controller, Post, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AppService } from './app.service';
 
@@ -19,10 +19,10 @@ export class AppController {
      *
      * @returns 返回 "Hello World!" 字符串，用于验证服务是否正常运行
      */
-    @Get()
+    @Post()
     @ApiOperation({ summary: '健康检查' })
     getHello(): string {
-        this.logger.log('[API] GET / 健康检查请求');
+        this.logger.log('[API] POST / 健康检查请求');
         return this.appService.getHello();
     }
 }
