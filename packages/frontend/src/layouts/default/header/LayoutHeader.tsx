@@ -29,7 +29,7 @@ export default function LayoutHeader({ onOpenSetting }: Props) {
 
   const settingBtn = (
     <Tooltip title='布局设置'>
-      <Button type='text' icon={<SettingOutlined />} onClick={onOpenSetting} />
+      <Button type='text' icon={<SettingOutlined />} onClick={onOpenSetting} aria-label='布局设置' />
     </Tooltip>
   )
 
@@ -46,7 +46,7 @@ export default function LayoutHeader({ onOpenSetting }: Props) {
           padding: '0 16px', height: 56, position: 'sticky', top: 0, zIndex: 99,
         }}>
         <Space size={8} style={{ minWidth: 0, overflow: 'hidden' }}>
-          <Button type='text' icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={toggleSiderCollapsed} />
+          <Button type='text' icon={siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={toggleSiderCollapsed} aria-label={siderCollapsed ? '展开侧边栏' : '折叠侧边栏'} />
           {showBreadcrumb && segments.length > 0 && <Breadcrumb style={{ fontSize: 13 }} items={breadcrumbItems} />}
         </Space>
         {settingBtn}

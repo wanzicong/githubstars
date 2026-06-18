@@ -68,6 +68,7 @@ export default function SettingDrawer({ open, onClose }: SettingDrawerProps) {
           icon={<ReloadOutlined />}
           onClick={handleReset}
           title='恢复默认设置'
+          aria-label='恢复默认设置'
         />
       }
       styles={{ body: { padding: '16px' } }}

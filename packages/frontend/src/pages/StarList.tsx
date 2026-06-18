@@ -252,6 +252,7 @@ export default function StarList() {
                 if (overviewRes.status === 'fulfilled') setOverview(overviewRes.value)
                 if (langRes.status === 'fulfilled') setLanguageOptions(langRes.value)
             } catch {
+                /* 概览加载失败不阻塞列表 */
             } finally {
                 setInitialLoading(false)
             }

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import path from 'node:path'
 
 export default defineConfig({
   plugins: [react()],
@@ -8,12 +9,12 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./test/setup.ts'],
     include: ['test/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['test/e2e/**', 'node_modules/**', 'dist/**'],
     css: true,
-    // 匹配 Vite 的路径别名（如果有的话）
-    resolve: {
-      alias: {
-        '@': '/src',
-      },
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
     },
   },
 })

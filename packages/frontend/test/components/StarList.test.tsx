@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -16,14 +17,18 @@ import { http, HttpResponse } from 'msw'
 import { server } from '../mocks/server'
 
 // Mock dayjs
-vi.mock('dayjs', () => ({
-  default: Object.assign(
-    () => ({
-      format: () => '20240101_000000',
+vi.mock('dayjs', () => {
+  const dayjsFn = () => ({
+    format: () => '20240101_000000',
+  })
+  // 保留 dayjs 静态方法，避免 setupDayjs 调用 dayjs.extend / dayjs.locale 失败
+  return {
+    default: Object.assign(dayjsFn, {
+      extend: () => {},
+      locale: () => {},
     }),
-    { extend: () => {} },
-  ),
-}))
+  }
+})
 
 // Mock antd message
 vi.mock('antd', async () => {

@@ -2,7 +2,7 @@ import api from './request'
 import type { GithubRepo, StarListParams, PageResult } from '../types'
 
 export async function fetchStarList(params: StarListParams): Promise<PageResult<GithubRepo>> {
-    const body: Record<string, any> = {}
+    const body: Record<string, unknown> = {}
     if (params.page) body.page = params.page
     if (params.size) body.size = params.size
     if (params.keyword) body.keyword = params.keyword
@@ -23,7 +23,7 @@ export async function fetchStarDetail(id: number): Promise<string> {
 }
 
 export async function exportStarsUrls(params: StarListParams): Promise<Blob> {
-    const body: Record<string, any> = {}
+    const body: Record<string, unknown> = {}
     if (params.keyword) body.keyword = params.keyword
     if (params.language) body.language = params.language
     if (params.sortBy) body.sortBy = params.sortBy

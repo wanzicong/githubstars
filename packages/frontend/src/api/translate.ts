@@ -116,7 +116,7 @@ export async function getTranslationStatus(filters?: Record<string, string | und
     readmeCompleted: number
     readmePending: number
 }> {
-    const body: Record<string, any> = {}
+    const body: Record<string, unknown> = {}
     if (filters) {
         Object.entries(filters).forEach(([k, v]) => {
             if (v) body[k] = v === 'true' ? true : v

@@ -4,7 +4,7 @@ import type { GithubSearchRepo, SearchReposParams, SearchReposResult } from '../
 export type { GithubSearchRepo, SearchReposParams, SearchReposResult }
 
 export async function searchRepos(params: SearchReposParams): Promise<SearchReposResult> {
-    const body: Record<string, any> = {}
+    const body: Record<string, unknown> = {}
     if (params.keyword) body.keyword = params.keyword
     if (params.language) body.language = params.language
     if (params.sort) body.sort = params.sort

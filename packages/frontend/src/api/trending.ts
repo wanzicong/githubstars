@@ -1,8 +1,8 @@
 import api from './request'
-import type { GithubSearchRepo, TrendingResult } from '../types'
+import type { TrendingResult } from '../types'
 
 export async function fetchTrending(since: string, language?: string, perPage?: number): Promise<TrendingResult> {
-    const body: Record<string, any> = { since }
+    const body: Record<string, unknown> = { since }
     if (language) body.language = language
     if (perPage) body.perPage = perPage
     const { data } = await api.post<TrendingResult>('/api/trending', body)
@@ -10,7 +10,7 @@ export async function fetchTrending(since: string, language?: string, perPage?: 
 }
 
 export async function analyzeTrending(since: string, language?: string): Promise<{ success: boolean; taskId?: string; message?: string }> {
-    const body: Record<string, any> = { since }
+    const body: Record<string, unknown> = { since }
     if (language) body.language = language
     const { data } = await api.post('/api/trending/analyze', body)
     return data

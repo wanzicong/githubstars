@@ -33,6 +33,7 @@ import {
 } from '@ant-design/icons'
 import * as translateApi from '../api/translate'
 import { usePolling } from '../hooks/usePolling'
+import type { TranslateTaskProgress } from '../types'
 
 const { Text } = Typography
 
@@ -78,29 +79,17 @@ function normalizeFilters(filters: Props['filters']): Record<string, string | un
 export default function TranslatePanel({ open, onClose, filters, hasActiveFilters, onRefreshList }: Props) {
     // 翻译覆盖统计
     const [coverage, setCoverage] = useState<{
+        success: boolean
+        total: number
         descCompleted: number
         descPending: number
         readmeCompleted: number
         readmePending: number
-        total: number
     } | null>(null)
 
     // 活跃任务
     const [activeTaskId, setActiveTaskId] = useState<number | null>(null)
-    const [taskProgress, setTaskProgress] = useState<{
-        status: string
-        totalItems: number
-        completedItems: number
-        failedItems: number
-        pendingItems: number
-        descTotal: number
-        descCompleted: number
-        descFailed: number
-        readmeTotal: number
-        readmeCompleted: number
-        readmeFailed: number
-        progress: number
-    } | null>(null)
+    const [taskProgress, setTaskProgress] = useState<TranslateTaskProgress | null>(null)
 
     // 历史任务
     const [recentTasks, setRecentTasks] = useState<TaskSummary[]>([])
@@ -112,7 +101,7 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
     const loadCoverage = useCallback(async () => {
         try {
             const res = await translateApi.getTranslationStatus(normalizeFilters(filters))
-            if (res.success) setCoverage(res as any)
+            if (res.success) setCoverage(res)
         } catch {
             /* ignore */
         }
@@ -138,7 +127,7 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
         try {
             const res = await translateApi.getTaskProgress(taskId)
             if (res.success) {
-                setTaskProgress(res as any)
+                setTaskProgress(res)
                 if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
                     polling.stop()
                     loadCoverage()
@@ -170,6 +159,8 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
             if (res.success && res.taskId) {
                 setActiveTaskId(res.taskId)
                 setTaskProgress({
+                    success: true,
+                    taskId: res.taskId,
                     status: 'PENDING',
                     totalItems: 0,
                     completedItems: 0,
@@ -181,6 +172,8 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
                     readmeTotal: 0,
                     readmeCompleted: 0,
                     readmeFailed: 0,
+                    createdAt: new Date().toISOString(),
+                    finishedAt: null,
                     progress: 0,
                 })
                 taskIdRef.current = res.taskId
@@ -203,6 +196,8 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
             if (res.success && res.taskId) {
                 setActiveTaskId(res.taskId)
                 setTaskProgress({
+                    success: true,
+                    taskId: res.taskId,
                     status: 'PENDING',
                     totalItems: 0,
                     completedItems: 0,
@@ -214,6 +209,8 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
                     readmeTotal: 0,
                     readmeCompleted: 0,
                     readmeFailed: 0,
+                    createdAt: new Date().toISOString(),
+                    finishedAt: null,
                     progress: 0,
                 })
                 taskIdRef.current = res.taskId

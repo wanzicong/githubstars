@@ -1,6 +1,5 @@
 import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
-import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 
@@ -107,7 +106,7 @@ const MarkdownRenderer = memo(function MarkdownRenderer({ content, components, c
 
     return (
         <div className={className} style={style}>
-            <ReactMarkdown rehypePlugins={[rehypeRaw]} remarkPlugins={[remarkGfm]} components={mergedComponents}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mergedComponents}>
                 {content}
             </ReactMarkdown>
         </div>
