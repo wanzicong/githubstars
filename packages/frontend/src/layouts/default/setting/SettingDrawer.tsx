@@ -61,7 +61,7 @@ export default function SettingDrawer({ open, onClose }: SettingDrawerProps) {
       }
       open={open}
       onClose={onClose}
-      width={300}
+      size='300px'
       extra={
         <Button
           type='text'

@@ -13,7 +13,7 @@ import {
     Col,
     Spin,
     Empty,
-    message,
+    App,
     Modal,
     Progress,
     Alert,
@@ -73,6 +73,7 @@ function parseTopics(topics: string | null): string[] {
 }
 
 export default function StarDetail() {
+    const { message } = App.useApp()
     const { id } = useParams<{ id: string }>()
     const navigate = useNavigate()
 
@@ -637,7 +638,7 @@ export default function StarDetail() {
                         </Button>
                     ) : null
                 }
-                maskClosable={false}
+                mask={{ closable: false }}
                 closable={translateProgress?.status !== 'PENDING' && translateProgress?.status !== 'PROCESSING'}
             >
                 {translateProgress && (

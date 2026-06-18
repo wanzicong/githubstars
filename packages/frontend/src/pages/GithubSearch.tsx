@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Input, Select, Card, Pagination, Spin, Empty, Typography, Tag, Button, Space, Row, Col, message } from 'antd'
+import { Input, Select, Card, Pagination, Spin, Empty, Typography, Tag, Button, Space, Row, Col, App } from 'antd'
 import { SearchOutlined, StarFilled, StarOutlined, ForkOutlined, GithubOutlined } from '@ant-design/icons'
 import { searchRepos, starRepo, checkStarred } from '../api/github'
 import type { GithubSearchRepo } from '../types'
@@ -22,6 +22,7 @@ const PER_PAGE_OPTIONS = [
 ]
 
 export default function GithubSearch() {
+    const { message } = App.useApp()
     const [keyword, setKeyword] = useState('')
     const [language, setLanguage] = useState('')
     const [sort, setSort] = useState('')

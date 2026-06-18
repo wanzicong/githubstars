@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Card, Form, Input, Button, Typography, message, Spin, Space, Tag, Divider } from 'antd'
+import { Card, Form, Input, Button, Typography, App, Spin, Space, Tag, Divider } from 'antd'
 import { SaveOutlined, ReloadOutlined, KeyOutlined, SettingOutlined } from '@ant-design/icons'
 import * as configApi from '../api/config'
 import type { ConfigItem } from '../types'
@@ -7,6 +7,7 @@ import type { ConfigItem } from '../types'
 const { Title, Text, Paragraph } = Typography
 
 export default function Settings() {
+    const { message } = App.useApp()
     const [configs, setConfigs] = useState<ConfigItem[]>([])
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)

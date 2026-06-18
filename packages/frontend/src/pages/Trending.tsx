@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col, message } from 'antd'
+import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col, App } from 'antd'
 import { StarFilled, ForkOutlined, FireOutlined } from '@ant-design/icons'
 import { fetchTrending } from '../api/trending'
 import type { GithubSearchRepo } from '../types'
@@ -9,6 +9,7 @@ import { formatNumberShort, getRelativeTime } from '../utils/format'
 const { Title, Text, Paragraph } = Typography
 
 export default function Trending() {
+    const { message } = App.useApp()
     const [since, setSince] = useState<string>('daily')
     const [language, setLanguage] = useState<string>('')
     const [repos, setRepos] = useState<GithubSearchRepo[]>([])

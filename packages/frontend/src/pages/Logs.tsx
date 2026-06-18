@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Card, Select, Button, Typography, Space, message, Popconfirm, Spin, Switch } from 'antd'
+import { Card, Select, Button, Typography, Space, App, Popconfirm, Spin, Switch } from 'antd'
 import { ReloadOutlined, DeleteOutlined, FileTextOutlined, SyncOutlined } from '@ant-design/icons'
 import * as logsApi from '../api/logs'
 import type { LogFile } from '../types'
@@ -10,6 +10,7 @@ import { POLLING_INTERVAL_MS } from '../constants'
 const { Title, Text } = Typography
 
 export default function Logs() {
+    const { message } = App.useApp()
     const [files, setFiles] = useState<LogFile[]>([])
     const [selectedFile, setSelectedFile] = useState<string>('app.log')
     const [content, setContent] = useState('')

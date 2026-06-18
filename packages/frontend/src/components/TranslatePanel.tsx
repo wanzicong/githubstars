@@ -19,7 +19,7 @@ import {
     Alert,
     Empty,
     Tooltip,
-    message,
+    App,
 } from 'antd'
 import {
     TranslationOutlined,
@@ -77,6 +77,7 @@ function normalizeFilters(filters: Props['filters']): Record<string, string | un
 }
 
 export default function TranslatePanel({ open, onClose, filters, hasActiveFilters, onRefreshList }: Props) {
+    const { message } = App.useApp()
     // 翻译覆盖统计
     const [coverage, setCoverage] = useState<{
         success: boolean
@@ -240,7 +241,7 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
             width={760}
             footer={<Button onClick={onClose}>关闭</Button>}
             styles={{ body: { maxHeight: '70vh', overflow: 'auto', padding: '20px 24px' } }}
-            maskClosable={!isRunning}
+            mask={{ closable: !isRunning }}
         >
             {/* ===== 翻译覆盖统计 ===== */}
             <Card size='small' style={{ marginBottom: 16 }}>
@@ -268,7 +269,7 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
                         </Space>
                     </Col>
                     <Col span={12}>
-                        <Space direction='vertical' style={{ width: '100%' }}>
+                        <Space orientation='vertical' style={{ width: '100%' }}>
                             <Space>
                                 <ReadOutlined /> <Text>README 翻译</Text>
                             </Space>

@@ -18,7 +18,7 @@ import {
     Collapse,
     Modal,
     Progress,
-    message,
+    App,
     Alert,
     Segmented,
     Switch,
@@ -83,6 +83,7 @@ const TIME_PRESETS: { label: string; value: string; days: number }[] = [
 
 
 export default function StarList() {
+    const { message } = App.useApp()
     const [searchParams, setSearchParams] = useSearchParams()
     const location = useLocation()
 
@@ -414,7 +415,7 @@ export default function StarList() {
                         </Space>
                     ) : null
                 }
-                maskClosable={!isRunning}
+                mask={{ closable: !isRunning }}
                 closable={!isRunning}
             >
                 <div style={{ textAlign: 'center', padding: '16px 0' }}>
@@ -604,7 +605,7 @@ export default function StarList() {
             </Spin>
 
             <Card style={{ marginBottom: 20 }}>
-                <Space direction='vertical' size='middle' style={{ width: '100%' }}>
+                <Space orientation='vertical' size='middle' style={{ width: '100%' }}>
                     <Row gutter={[8, 12]} align='middle' style={{ flexWrap: 'wrap' }}>
                         <Col xs={24} sm={12} md={8} lg={6}>
                             <Input.Search
