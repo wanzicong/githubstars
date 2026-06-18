@@ -46,7 +46,7 @@ import RepoRow from '../components/RepoRow'
 import TranslatePanel from '../components/TranslatePanel'
 import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
 import { usePolling } from '../hooks/usePolling'
-import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS_SMALL, INITIAL_TASK_PROGRESS, type TaskProgress } from '../constants'
+import { PAGE_SIZE_OPTIONS_SMALL, INITIAL_TASK_PROGRESS, type TaskProgress } from '../constants'
 
 const { Title, Text } = Typography
 
