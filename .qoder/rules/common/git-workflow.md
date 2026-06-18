@@ -1,3 +1,6 @@
+---
+trigger: always_on
+---
 # Git 工作流程
 
 ## 提交信息格式

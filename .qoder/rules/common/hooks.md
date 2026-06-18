@@ -1,3 +1,6 @@
+---
+trigger: always_on
+---
 # Hooks 系统
 
 ## Hook 类型

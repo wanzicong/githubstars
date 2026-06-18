@@ -1,3 +1,7 @@
+---
+trigger: manual
+alwaysApply: false
+---
 # 规则
 
 ## 结构

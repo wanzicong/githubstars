@@ -1,3 +1,6 @@
+---
+trigger: always_on
+---
 # 开发工作流程
 
 > 本文档在 [common/git-workflow.md](git-workflow.md) 的基础上进行了扩展，涵盖了在 git 操作之前发生的完整功能开发过程。

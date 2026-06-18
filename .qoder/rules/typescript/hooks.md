@@ -1,9 +1,5 @@
 ---
-paths:
-  - "**/*.ts"
-  - "**/*.tsx"
-  - "**/*.js"
-  - "**/*.jsx"
+trigger: always_on
 ---
 
 # TypeScript/JavaScript 钩子
