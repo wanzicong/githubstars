@@ -2,6 +2,9 @@ import { Controller, Post, Logger, Body, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { AuthorService } from './author.service';
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { AuthorListSchema, AuthorReposSchema, AuthorExportSchema } from '../common/dto/filter.dto';
+import type { AuthorListDto, AuthorReposDto, AuthorExportDto } from '../common/dto/filter.dto';
 
 @ApiTags('authors')
 @Controller('api/authors')
@@ -21,11 +24,11 @@ export class AuthorController {
     @Post('list')
     @ApiOperation({ summary: '获取作者列表', description: '分页获取作者列表，支持关键字搜索，按总 Star 数降序排列' })
     @ApiBody({ schema: { type: 'object', properties: { page: { type: 'number' }, size: { type: 'number' }, keyword: { type: 'string' } } } })
-    async list(@Body() body: any) {
+    async list(@Body(new ZodValidationPipe(AuthorListSchema)) body: AuthorListDto) {
         return this.service.getAuthorPage(
-            parseInt(body.page) || 1,
-            parseInt(body.size) || 24,
-            body.keyword || '',
+            body.page,
+            body.size,
+            body.keyword,
         );
     }
 
@@ -40,13 +43,13 @@ export class AuthorController {
     @Post('repos')
     @ApiOperation({ summary: '获取作者仓库列表', description: '分页获取指定作者的所有 Star 仓库，支持多字段排序' })
     @ApiBody({ schema: { type: 'object', properties: { ownerName: { type: 'string' }, page: { type: 'number' }, size: { type: 'number' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' } }, required: ['ownerName'] } })
-    async repos(@Body() body: any) {
+    async repos(@Body(new ZodValidationPipe(AuthorReposSchema)) body: AuthorReposDto) {
         return this.service.getAuthorRepos(
             body.ownerName,
-            parseInt(body.page) || 1,
-            parseInt(body.size) || 12,
-            body.sortBy || 'stars_count',
-            body.sortOrder || 'desc',
+            body.page,
+            body.size,
+            body.sortBy,
+            body.sortOrder,
         );
     }
 
@@ -61,8 +64,8 @@ export class AuthorController {
     @Post('export')
     @ApiOperation({ summary: '导出作者仓库 URL', description: '以纯文本文件下载指定作者的所有 Star 仓库地址（每行一个）' })
     @ApiBody({ schema: { type: 'object', properties: { ownerName: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' } }, required: ['ownerName'] } })
-    async export(@Body() body: any, @Res() res: Response) {
-        const urls = await this.service.getAuthorAllRepoUrls(body.ownerName, body.sortBy || 'stars_count', body.sortOrder || 'desc');
+    async export(@Body(new ZodValidationPipe(AuthorExportSchema)) body: AuthorExportDto, @Res() res: Response) {
+        const urls = await this.service.getAuthorAllRepoUrls(body.ownerName, body.sortBy, body.sortOrder);
         res.set({
             'Content-Type': 'text/plain; charset=utf-8',
             'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(body.ownerName + '-stars.txt')}`,

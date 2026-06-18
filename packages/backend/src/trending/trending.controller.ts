@@ -2,6 +2,9 @@ import { Controller, Post, Body, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubSearchService } from '../github/services/github-search.service';
 import { TranslateTaskService } from '../translate/services/translate-task.service';
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { TrendingSchema } from '../common/dto/filter.dto';
+import type { TrendingDto } from '../common/dto/filter.dto';
 
 @ApiTags('trending')
 @Controller('api/trending')
@@ -23,10 +26,10 @@ export class TrendingController {
     @Post()
     @ApiOperation({ summary: '获取 Trending 仓库', description: '通过 GitHub Search API 查询指定时间段内创建的高星仓库' })
     @ApiBody({ schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' }, perPage: { type: 'number' } } } })
-    async trending(@Body() body: any) {
-        const since = body.since || 'daily';
-        const language = body.language || '';
-        const perPage = parseInt(body.perPage) || 20;
+    async trending(@Body(new ZodValidationPipe(TrendingSchema)) body: TrendingDto) {
+        const since = body.since;
+        const language = body.language;
+        const perPage = body.perPage;
         let days = 1;
         if (since === 'weekly') days = 7;
         else if (since === 'monthly') days = 30;
@@ -57,7 +60,7 @@ export class TrendingController {
     @Post('analyze')
     @ApiOperation({ summary: 'AI 分析趋势仓库', description: '获取趋势仓库列表并创建批量翻译分析任务' })
     @ApiBody({ schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' } } } })
-    async analyze(@Body() body: any) {
+    async analyze(@Body() body: { since?: string; language?: string }) {
         const since = body.since || 'daily';
         const language = body.language || '';
         this.logger.log('分析趋势仓库: since=' + since + ', language=' + (language || 'all'));

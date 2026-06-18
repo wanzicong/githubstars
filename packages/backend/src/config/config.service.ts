@@ -4,13 +4,20 @@ import { PrismaService } from '../prisma/prisma.service';
 /**
  * 系统配置服务
  *
- * 负责管理 system_config 表的读写操作，在模块初始化时自动写入默认配置项。
+ * 负责管理 system_config 表的读写操作，在模块初始化时自动写入默认配置项并加载到内存缓存。
  * 配置项以键值对形式存储，包含 GitHub、DeepSeek 等模块的配置。
  * 敏感字段（token/api_key）在列表查询时自动脱敏显示。
+ *
+ * 缓存策略：
+ * - onModuleInit 时全量加载到 Map 缓存
+ * - getValue/getValueDefault 优先读缓存，避免频繁查库
+ * - update/batchUpdate 同步更新缓存和数据库
  */
 @Injectable()
 export class ConfigService implements OnModuleInit {
     private readonly logger = new Logger(ConfigService.name);
+    /** 内存缓存：配置键 → 配置值 */
+    private readonly cache = new Map<string, string>();
     private readonly defaults: Array<{ key: string; value: string; description: string }> = [
         { key: 'github.username', value: 'wanzicong', description: 'GitHub 用户名' },
         { key: 'github.token', value: '', description: 'GitHub Personal Access Token' },
@@ -29,7 +36,19 @@ export class ConfigService implements OnModuleInit {
     async onModuleInit() {
         this.logger.log('ConfigService 初始化: 开始检查默认配置项...');
         await this.ensureDefaults();
-        this.logger.log('ConfigService 初始化完成');
+        await this.loadCache();
+        this.logger.log('ConfigService 初始化完成，缓存项数: ' + this.cache.size);
+    }
+
+    /**
+     * 全量加载配置到内存缓存
+     */
+    private async loadCache() {
+        const configs = await this.prisma.systemConfig.findMany({ select: { configKey: true, configValue: true } });
+        this.cache.clear();
+        for (const c of configs) {
+            this.cache.set(c.configKey, c.configValue || '');
+        }
     }
 
     /**
@@ -56,28 +75,30 @@ export class ConfigService implements OnModuleInit {
     /**
      * 获取配置值
      *
-     * 直接从数据库读取指定 key 的最新值，不依赖缓存。
+     * 优先从内存缓存读取，缓存未命中时回源数据库并回填缓存。
      *
      * @param key 配置键名
      * @returns 配置值，不存在时返回 undefined
      */
     async getValue(key: string): Promise<string | undefined> {
+        if (this.cache.has(key)) return this.cache.get(key) || undefined;
         const row = await this.prisma.systemConfig.findUnique({ where: { configKey: key }, select: { configValue: true } });
+        if (row) this.cache.set(key, row.configValue || '');
         return row?.configValue ?? undefined;
     }
 
     /**
      * 获取配置值（带默认值）
      *
-     * 直接从数据库读取指定 key 的最新值，不存在时返回指定的默认值。
+     * 优先从内存缓存读取，缓存未命中时回源数据库并回填缓存。
      *
      * @param key 配置键名
      * @param defaultValue 默认值
      * @returns 配置值或默认值
      */
     async getValueDefault(key: string, defaultValue: string): Promise<string> {
-        const row = await this.prisma.systemConfig.findUnique({ where: { configKey: key }, select: { configValue: true } });
-        return row?.configValue || defaultValue;
+        const value = await this.getValue(key);
+        return value || defaultValue;
     }
 
     /**
@@ -121,11 +142,12 @@ export class ConfigService implements OnModuleInit {
         const existing = await this.prisma.systemConfig.findUnique({ where: { configKey: key } });
         if (existing) {
             await this.prisma.systemConfig.update({ where: { configKey: key }, data: { configValue: value, updatedAt: new Date() } });
-            this.logger.log('配置已更新: key=' + key + ', value=' + value);
         } else {
             await this.prisma.systemConfig.create({ data: { configKey: key, configValue: value, createdAt: new Date() } });
-            this.logger.log('新配置已创建: key=' + key + ', value=' + value);
         }
+        // 同步更新缓存
+        this.cache.set(key, value);
+        this.logger.log('配置已更新: key=' + key);
     }
 
     /**

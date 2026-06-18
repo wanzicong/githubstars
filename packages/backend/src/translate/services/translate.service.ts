@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ConfigService } from '../../config/config.service';
 import { GithubApiService } from '../../github/services/github-api.service';
 import { GithubRepoService } from '../../github/services/github-repo.service';
+import { RATE_LIMITED, NO_README } from '../../common/constants/translate.constants';
 
 @Injectable()
 export class TranslateService {
@@ -78,7 +79,7 @@ export class TranslateService {
             });
             if (res.status === 429) {
                 this.logger.warn('DeepSeek API 限流 (429)，需等待');
-                return '__RATE_LIMITED__';
+                return RATE_LIMITED;
             }
             if (!res.ok) {
                 this.logger.error(`DeepSeek API ${res.status}`);
@@ -112,11 +113,11 @@ export class TranslateService {
         if (repo.descriptionCn) return repo.descriptionCn; // 幂等
         if (!repo.description) return null;
         const result = await this.callDeepSeek(repo.description, false);
-        if (result && result !== '__RATE_LIMITED__') {
+        if (result && result !== RATE_LIMITED) {
             await this.prisma.githubRepo.update({ where: { id: BigInt(repoId) }, data: { descriptionCn: result, updatedAt: new Date() } });
             this.logger.log(`描述翻译成功: ${repo.fullName}`);
         }
-        return result === '__RATE_LIMITED__' ? null : result;
+        return result === RATE_LIMITED ? null : result;
     }
 
     /**
@@ -144,17 +145,17 @@ export class TranslateService {
         if (repo.readmeOriginal && !repo.readmeCn) {
             this.logger.log(`重试翻译 README: ${repo.fullName} (复用已获取的原始内容)`);
             const result = await this.callDeepSeek(repo.readmeOriginal, true);
-            if (result && result !== '__RATE_LIMITED__') {
+            if (result && result !== RATE_LIMITED) {
                 await this.prisma.githubRepo.update({
                     where: { id: BigInt(repoId) },
                     data: { readmeCn: result, readmeFetched: true, updatedAt: new Date() },
                 });
             }
-            return result === '__RATE_LIMITED__' ? null : result;
+            return result === RATE_LIMITED ? null : result;
         }
 
         // 已确认过没有 README → 不再重试，返回哨兵让 processItem 识别为终态
-        if (repo.readmeFetched && !repo.readmeOriginal && !repo.readmeCn) return '__NO_README__';
+        if (repo.readmeFetched && !repo.readmeOriginal && !repo.readmeCn) return NO_README;
 
         // 首次获取 README
         let content: string | null = null;
@@ -175,7 +176,7 @@ export class TranslateService {
                 data: { readmeFetched: true, readmeCn: null, updatedAt: new Date() },
             });
             this.logger.log(`仓库 ${repo.fullName} 没有 README 文件（已确认）`);
-            const sentinel = githubBody ? `__NO_README__|${githubBody}` : '__NO_README__';
+            const sentinel = githubBody ? `${NO_README}|${githubBody}` : NO_README;
             return sentinel;
         }
 
@@ -183,7 +184,7 @@ export class TranslateService {
         await this.prisma.githubRepo.update({ where: { id: BigInt(repoId) }, data: { readmeOriginal: content, updatedAt: new Date() } });
 
         const result = await this.callDeepSeek(content, true);
-        if (result && result !== '__RATE_LIMITED__') {
+        if (result && result !== RATE_LIMITED) {
             // 翻译成功 → 保存结果 + 标记 fetched
             await this.prisma.githubRepo.update({
                 where: { id: BigInt(repoId) },
@@ -216,7 +217,7 @@ export class TranslateService {
                 where: { id: BigInt(repoId) },
                 data: { readmeFetched: true, readmeCn: null, readmeOriginal: null, updatedAt: new Date() },
             });
-            const sentinel = ghResult.githubBody ? `__NO_README__|${ghResult.githubBody}` : '__NO_README__';
+            const sentinel = ghResult.githubBody ? `${NO_README}|${ghResult.githubBody}` : NO_README;
             return sentinel;
         }
         await this.prisma.githubRepo.update({
@@ -224,7 +225,7 @@ export class TranslateService {
             data: { readmeOriginal: ghResult.content, updatedAt: new Date() },
         });
         const result = await this.callDeepSeek(ghResult.content, true);
-        if (result && result !== '__RATE_LIMITED__') {
+        if (result && result !== RATE_LIMITED) {
             await this.prisma.githubRepo.update({
                 where: { id: BigInt(repoId) },
                 data: { readmeCn: result, readmeFetched: true, updatedAt: new Date() },
@@ -265,7 +266,7 @@ export class TranslateService {
             try {
                 if (!r.description) continue;
                 const result = await this.callDeepSeek(r.description, false);
-                if (result && result !== '__RATE_LIMITED__') {
+                if (result && result !== RATE_LIMITED) {
                     await this.prisma.githubRepo.update({ where: { id: r.id }, data: { descriptionCn: result, updatedAt: new Date() } });
                     count++;
                 }

@@ -2,6 +2,9 @@ import { Controller, Post, Body, Res, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubRepoService } from '../github/services/github-repo.service';
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { ExportFilterSchema } from '../common/dto/filter.dto';
+import type { ExportFilterDto } from '../common/dto/filter.dto';
 
 @ApiTags('export')
 @Controller('api/export')
@@ -20,20 +23,20 @@ export class ExportController {
     @Post('md')
     @ApiOperation({ summary: '导出 Markdown', description: '按筛选条件将仓库列表导出为 Markdown 文件下载' })
     @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'string' }, maxCount: { type: 'number' } } } })
-    async exportMd(@Body() body: any, @Res() res: Response) {
-        const maxCount = parseInt(body.maxCount) || 50;
+    async exportMd(@Body(new ZodValidationPipe(ExportFilterSchema)) body: ExportFilterDto, @Res() res: Response) {
+        const maxCount = body.maxCount;
         this.logger.log('开始导出Markdown: keyword=' + (body.keyword || '') + ', language=' + (body.language || '') + ', maxCount=' + maxCount);
         const result = await this.repoService.findPage({
             page: 1,
             size: maxCount,
-            keyword: body.keyword || '',
-            language: body.language || '',
-            sortBy: body.sortBy || 'stars_count',
-            sortOrder: body.sortOrder || 'desc',
-            dateField: body.dateField || '',
-            startDate: body.startDate || '',
-            endDate: body.endDate || '',
-            untranslatedOnly: body.untranslatedOnly === 'true' || body.untranslatedOnly === true,
+            keyword: body.keyword,
+            language: body.language,
+            sortBy: body.sortBy,
+            sortOrder: body.sortOrder,
+            dateField: body.dateField,
+            startDate: body.startDate,
+            endDate: body.endDate,
+            untranslatedOnly: body.untranslatedOnly,
         });
         const repos = result.records as any[];
         this.logger.log('查询到 ' + repos.length + ' 个仓库，开始生成Markdown');
@@ -43,7 +46,7 @@ export class ExportController {
         if (body.dateField && (body.startDate || body.endDate)) {
             md += `> 时间范围: ${body.startDate || '不限'} ~ ${body.endDate || '不限'}\n`;
         }
-        if (body.untranslatedOnly === 'true' || body.untranslatedOnly === true) md += `> 仅未翻译\n`;
+        if (body.untranslatedOnly) md += `> 仅未翻译\n`;
         md += `> 导出时间: ${new Date().toISOString()}\n\n---\n\n`;
 
         const total = repos.length;

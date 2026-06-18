@@ -13,23 +13,24 @@
 /** 分页请求参数 */
 export interface PaginationParams {
   page?: number;
-  pageSize?: number;
+  size?: number;
 }
 
-/** 分页响应 */
+/** 分页响应（与后端 findPage 返回格式一致） */
 export interface PaginatedResponse<T> {
-  list: T[];
+  records: T[];
   total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
+  size: number;
+  current: number;
+  pages: number;
 }
 
-/** API 统一响应包装 */
+/** API 统一响应包装（与后端 ResponseInterceptor 一致） */
 export interface ApiResponse<T = unknown> {
-  code: number;
-  data: T;
-  message: string;
+  success: boolean;
+  data?: T;
+  message?: string;
+  meta?: Record<string, unknown>;
 }
 
 // ===================== 星标仓库 =====================
@@ -85,4 +86,18 @@ export interface LanguageStat {
   language: string;
   count: number;
   percentage: number;
+}
+
+// ===================== 翻译状态 =====================
+
+/** 翻译任务状态 */
+export type TranslationTaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL';
+
+/** 单仓库翻译状态 */
+export interface TranslationStatus {
+  descriptionTranslated: boolean;
+  readmeFetched: boolean;
+  readmeTranslated: boolean;
+  descriptionCn: string | null;
+  readmeCn: string | null;
 }

@@ -39,9 +39,9 @@ export interface MappedRepoData {
  * GitHub REST API 服务
  *
  * 负责从 GitHub API 获取用户星标仓库列表和 README 内容。
- * 每次翻页都有详细的 console.log 进度输出；
+ * 每次翻页都有详细的日志输出；
  * 解析 Link header 以支持完整的分页导航；
- * 遇到 JSON 解析失败时使用 console.error 输出失败数据。
+ * 遇到 JSON 解析失败时输出失败数据。
  */
 @Injectable()
 export class GithubApiService {
@@ -57,7 +57,7 @@ export class GithubApiService {
      * 获取所有已 Star 的仓库（自动翻页至末尾）
      *
      * 使用 star+json media type 以获取 starred_at 字段。
-     * 每一页的进度、数量、Link header 解析结果都通过 console.log 输出。
+     * 每一页的进度、数量、Link header 解析结果都通过 logger 输出。
      *
      * @returns 映射为 DB 友好格式的仓库数组
      */
@@ -66,8 +66,8 @@ export class GithubApiService {
         const token = await this.config.getValueDefault('github.token', '');
 
         this.logger.log('开始全量获取星标仓库, 用户名=' + username + ', 每页大小=100');
-        console.log('[GithubApi] ===== 开始全量获取星标仓库 =====');
-        console.log(`[GithubApi] 用户名: ${username}, 每页大小: 100`);
+        this.logger.log('===== 开始全量获取星标仓库 =====');
+        this.logger.log(`用户名: ${username}, 每页大小: 100`);
 
         const all: MappedRepoData[] = [];
         let currentPage = 1;
@@ -76,7 +76,7 @@ export class GithubApiService {
         const startTime = Date.now();
 
         while (nextUrl) {
-            console.log(`[GithubApi] >>>>> 正在获取第 ${currentPage} 页... URL=${nextUrl}`);
+            this.logger.log(`>>>>> 正在获取第 ${currentPage} 页... URL=${nextUrl}`);
             const pageStart = Date.now();
 
             const headers: Record<string, string> = {
@@ -92,23 +92,21 @@ export class GithubApiService {
                 response = await fetch(nextUrl, { headers });
             } catch (fetchErr) {
                 const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-                this.logger.error('网络请求失败! 第' + currentPage + '页, 错误=' + errMsg);
-                console.error(`[GithubApi] 网络请求失败! 第${currentPage}页, URL=${nextUrl}, 错误: ${errMsg}`);
+                this.logger.error('网络请求失败! 第' + currentPage + '页, URL=' + nextUrl + ', 错误: ' + errMsg);
                 if (all.length > 0) {
-                    console.log(`[GithubApi] 第${currentPage}页网络失败，但已有${all.length}条数据，停止翻页`);
+                    this.logger.log(`第${currentPage}页网络失败，但已有${all.length}条数据，停止翻页`);
                     break;
                 }
                 throw new Error(`GitHub API 网络请求失败: ${errMsg}`);
             }
 
-            console.log(`[GithubApi] 第${currentPage}页 响应状态: ${response.status} ${response.statusText}`);
+            this.logger.log(`第${currentPage}页 响应状态: ${response.status} ${response.statusText}`);
 
             if (response.status !== 200) {
                 const errorBody = await response.text().catch(() => '(无法读取响应体)');
-                this.logger.error('API 响应异常! 第' + currentPage + '页, 状态码=' + response.status);
-                console.error(`[GithubApi] API 响应异常! 状态码=${response.status}, 响应体: ${errorBody.substring(0, 500)}`);
+                this.logger.error('API 响应异常! 第' + currentPage + '页, 状态码=' + response.status + ', 响应体: ' + errorBody.substring(0, 500));
                 if (all.length > 0) {
-                    console.log(`[GithubApi] 第${currentPage}页失败(status=${response.status})，但已有${all.length}条数据，停止翻页`);
+                    this.logger.log(`第${currentPage}页失败(status=${response.status})，但已有${all.length}条数据，停止翻页`);
                     break;
                 }
                 throw new Error(`GitHub API 请求失败 (HTTP ${response.status}): ${errorBody.substring(0, 200)}`);
@@ -127,18 +125,15 @@ export class GithubApiService {
                 this.logger.error(
                     'JSON 解析失败! 第' + currentPage + '页, 错误=' + (parseErr instanceof Error ? parseErr.message : String(parseErr)),
                 );
-                console.error(`[GithubApi] ===== JSON 解析失败! 第${currentPage}页 =====`);
-                console.error(`[GithubApi] 错误信息: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
-                console.error(`[GithubApi] 原始响应内容 (前2000字符):`);
-                console.error(rawText.substring(0, 2000));
+                this.logger.error('原始响应内容 (前2000字符): ' + rawText.substring(0, 2000));
                 if (all.length > 0) {
-                    console.log(`[GithubApi] 第${currentPage}页解析失败，但已有${all.length}条数据，停止翻页`);
+                    this.logger.log(`第${currentPage}页解析失败，但已有${all.length}条数据，停止翻页`);
                     break;
                 }
                 throw new Error(`GitHub API 响应 JSON 解析失败: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
             }
 
-            console.log(`[GithubApi] 第${currentPage}页返回 ${pageItems.length} 条数据`);
+            this.logger.log(`第${currentPage}页返回 ${pageItems.length} 条数据`);
 
             // 逐条映射到 DB 格式
             let mappedCount = 0;
@@ -150,9 +145,8 @@ export class GithubApiService {
                         mappedCount++;
                     }
                 } catch (mapErr) {
-                    console.error(`[GithubApi] 映射单条数据失败, 第${currentPage}页, 原始数据前500字符:`);
-                    console.error(JSON.stringify(item).substring(0, 500));
-                    console.error(`[GithubApi] 映射错误: ${mapErr instanceof Error ? mapErr.message : String(mapErr)}`);
+                    this.logger.error(`映射单条数据失败, 第${currentPage}页, 数据: ` + JSON.stringify(item).substring(0, 500));
+                    this.logger.error(`映射错误: ${mapErr instanceof Error ? mapErr.message : String(mapErr)}`);
                 }
             }
 
@@ -163,20 +157,20 @@ export class GithubApiService {
             // 首次获取时估算总页数
             if (totalPagesEstimate === '?' && links.last) {
                 totalPagesEstimate = String(this.estimateTotalPages(links, currentPage));
-                console.log(`[GithubApi] 估算总页数: ${totalPagesEstimate}`);
+                this.logger.log(`估算总页数: ${totalPagesEstimate}`);
             }
 
             if (linkHeader) {
-                console.log(`[GithubApi] Link header: ${linkHeader}`);
-                console.log(
-                    `[GithubApi] 解析分页链接: next=${links.next || '(无)'}, last=${links.last || '(无)'}, first=${links.first || '(无)'}, prev=${links.prev || '(无)'}`,
+                this.logger.verbose(`Link header: ${linkHeader}`);
+                this.logger.log(
+                    `解析分页链接: next=${links.next || '(无)'}, last=${links.last || '(无)'}, first=${links.first || '(无)'}, prev=${links.prev || '(无)'}`,
                 );
             } else {
-                console.log(`[GithubApi] Link header: (空)`);
+                this.logger.verbose(`Link header: (空)`);
             }
 
             const pageDuration = ((Date.now() - pageStart) / 1000).toFixed(1);
-            console.log(`[GithubApi] <<<<< 第${currentPage}页完成: 映射${mappedCount}条, 累计${all.length}条, 耗时${pageDuration}s`);
+            this.logger.log(`<<<<< 第${currentPage}页完成: 映射${mappedCount}条, 累计${all.length}条, 耗时${pageDuration}s`);
 
             // 判断是否还有下一页
             if (links.next && pageItems.length > 0) {
@@ -186,7 +180,7 @@ export class GithubApiService {
                 await this.delay(300);
             } else {
                 const reason = !links.next ? 'next链接不存在' : pageItems.length === 0 ? '本页无数据' : '未知';
-                console.log(`[GithubApi] 翻页终止: ${reason}`);
+                this.logger.log(`翻页终止: ${reason}`);
                 nextUrl = null;
             }
         }
@@ -199,11 +193,11 @@ export class GithubApiService {
             return true;
         });
         if (deduped.length < all.length) {
-            console.log(`[GithubApi] 去重: ${all.length} -> ${deduped.length} (移除${all.length - deduped.length}条重复)`);
+            this.logger.log(`去重: ${all.length} -> ${deduped.length} (移除${all.length - deduped.length}条重复)`);
         }
 
         const totalDuration = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`[GithubApi] ===== 全量获取完成: 共${deduped.length}个星标仓库, 共${currentPage}页, 总耗时${totalDuration}s =====`);
+        this.logger.log(`===== 全量获取完成: 共${deduped.length}个星标仓库, 共${currentPage}页, 总耗时${totalDuration}s =====`);
 
         return deduped;
     }
@@ -218,7 +212,6 @@ export class GithubApiService {
         const token = await this.config.getValueDefault('github.token', '');
 
         this.logger.log('获取 README: ' + fullName);
-        console.log(`[GithubApi] 获取 README: ${fullName}`);
 
         const headers: Record<string, string> = {
             Accept: 'application/vnd.github.v3.raw',
@@ -255,26 +248,26 @@ export class GithubApiService {
         try {
             let result = await doFetch(!!token);
 
-            console.log(`[GithubApi] README 响应状态: ${result.status} (${fullName})`);
+            this.logger.log(`README 响应状态: ${result.status} (${fullName})`);
 
             if (result.status === 200) {
-                console.log(`[GithubApi] README 获取成功: ${fullName}, 大小=${result.body!.length} 字符`);
+                this.logger.log(`README 获取成功: ${fullName}, 大小=${result.body!.length} 字符`);
                 return { content: result.body, githubStatus: 200, githubBody: null };
             }
 
             // P0-FIX: 带 Token 返回 404 时，可能是 Token 无该组织 SSO 授权，回退到无认证重试
             if (result.status === 404 && token) {
-                console.log(`[GithubApi] 带 Token 返回 404，回退到无认证重试: ${fullName}`);
+                this.logger.log(`带 Token 返回 404，回退到无认证重试: ${fullName}`);
                 result = await doFetch(false);
-                console.log(`[GithubApi] 无认证重试状态: ${result.status} (${fullName})`);
+                this.logger.log(`无认证重试状态: ${result.status} (${fullName})`);
                 if (result.status === 200) {
-                    console.log(`[GithubApi] README 无认证获取成功: ${fullName}, 大小=${result.body!.length} 字符`);
+                    this.logger.log(`README 无认证获取成功: ${fullName}, 大小=${result.body!.length} 字符`);
                     return { content: result.body, githubStatus: 200, githubBody: null };
                 }
             }
 
             if (result.status === 404) {
-                console.log(`[GithubApi] 仓库 ${fullName} 没有 README 文件`);
+                this.logger.log(`仓库 ${fullName} 没有 README 文件`);
                 return { content: null, githubStatus: 404, githubBody: result.body };
             }
 
@@ -295,7 +288,7 @@ export class GithubApiService {
                     bodyLower.includes('api rate limit exceeded') ||
                     bodyLower.includes('secondary rate limit');
 
-                console.error(`[GithubApi] README 403: ${fullName}, 响应体=${result.body?.substring(0, 300)}`);
+                this.logger.error(`README 403: ${fullName}, 响应体=${result.body?.substring(0, 300)}`);
 
                 if (isRealRateLimit) {
                     this.logger.error('README API 真正限流: ' + fullName);
@@ -306,10 +299,10 @@ export class GithubApiService {
                 }
 
                 // 非限流的 403 → 可能是 raw 格式不兼容大文件，回退到 json 格式
-                console.log(`[GithubApi] 403 非限流，回退到 vnd.github.v3+json 格式: ${fullName}`);
+                this.logger.log(`403 非限流，回退到 vnd.github.v3+json 格式: ${fullName}`);
                 const jsonResult = await this.fetchReadmeAsJson(fullName, token);
                 if (jsonResult.content !== null) {
-                    console.log(`[GithubApi] JSON 格式回退成功: ${fullName}, 大小=${jsonResult.content.length} 字符`);
+                    this.logger.log(`JSON 格式回退成功: ${fullName}, 大小=${jsonResult.content.length} 字符`);
                     return { content: jsonResult.content, githubStatus: 200, githubBody: null };
                 }
                 if (jsonResult.status === 404) {
@@ -324,7 +317,6 @@ export class GithubApiService {
             }
 
             this.logger.error('README 请求失败: ' + fullName + ', status=' + result.status);
-            console.error(`[GithubApi] README 请求失败: ${fullName}, status=${result.status}`);
             const err2 = new Error(`GitHub API error: ${result.status}`);
             (err2 as any).githubBody = result.body;
             throw err2;
@@ -334,12 +326,10 @@ export class GithubApiService {
             }
             if ((err as Error).name === 'AbortError') {
                 this.logger.error('README 请求超时 (30s): ' + fullName);
-                console.error(`[GithubApi] README 请求超时 (30s): ${fullName}`);
                 throw new Error('GitHub API 网络超时');
             }
             const msg = err instanceof Error ? err.message : String(err);
             this.logger.error('README 请求异常: ' + fullName + ', ' + msg);
-            console.error(`[GithubApi] README 请求异常: ${fullName}, ${msg}`);
             throw new Error(`GitHub API 网络错误: ${msg}`);
         }
     }
@@ -378,17 +368,17 @@ export class GithubApiService {
                 // content 是 base64 编码的，需要解码
                 if (data.content) {
                     const decoded = Buffer.from(data.content, 'base64').toString('utf-8');
-                    console.log(`[GithubApi] JSON 格式 README 解码成功: ${fullName}, 大小=${decoded.length}`);
+                    this.logger.log(`JSON 格式 README 解码成功: ${fullName}, 大小=${decoded.length}`);
                     return { content: decoded, status: 200, githubBody: null };
                 }
                 return { content: null, status: 200, githubBody: body };
             }
 
-            console.log(`[GithubApi] JSON 格式 README 响应: status=${response.status}`);
+            this.logger.log(`JSON 格式 README 响应: status=${response.status}`);
             return { content: null, status: response.status, githubBody: body };
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            console.error(`[GithubApi] JSON 格式 README 请求失败: ${fullName}, ${msg}`);
+            this.logger.error(`JSON 格式 README 请求失败: ${fullName}, ${msg}`);
             return { content: null, status: 0, githubBody: msg };
         }
     }
@@ -405,7 +395,7 @@ export class GithubApiService {
         const token = await this.config.getValueDefault('github.token', '');
 
         this.logger.log('搜索仓库: q="' + query + '", sort=' + sort + ', order=' + order);
-        console.log(`[GithubApi] 搜索仓库: q="${query}", sort=${sort}, order=${order}, perPage=${perPage}`);
+        this.logger.log(`搜索仓库详情: q="${query}", sort=${sort}, order=${order}, perPage=${perPage}`);
 
         const headers: Record<string, string> = {
             Accept: 'application/vnd.github.v3+json',
@@ -427,27 +417,26 @@ export class GithubApiService {
         try {
             const response = await fetch(url, { headers });
 
-            console.log(`[GithubApi] 搜索响应状态: ${response.status}`);
+            this.logger.log(`搜索响应状态: ${response.status}`);
 
             if (response.status === 200) {
                 const data = await response.json();
                 const items = (data.items || []) as any[];
-                console.log(`[GithubApi] 搜索结果: 共${data.total_count || 0}个, 返回${items.length}个`);
+                this.logger.log(`搜索结果: 共${data.total_count || 0}个, 返回${items.length}个`);
                 return items;
             }
 
             if (response.status === 403) {
-                console.error('[GithubApi] 搜索 API 限流');
+                this.logger.error('搜索 API 限流');
                 this.logger.warn('GitHub API rate limited');
             } else {
                 const errorBody = await response.text().catch(() => '');
-                console.error(`[GithubApi] 搜索失败: status=${response.status}, body=${errorBody.substring(0, 300)}`);
+                this.logger.error(`搜索失败: status=${response.status}, body=${errorBody.substring(0, 300)}`);
             }
             return [];
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             this.logger.error('搜索请求异常: ' + msg);
-            console.error(`[GithubApi] 搜索请求异常: ${msg}`);
             return [];
         }
     }
@@ -533,7 +522,7 @@ export class GithubApiService {
             // 匹配 <url>; rel="type" 的格式
             const match = trimmed.match(/<([^>]+)>;\s*rel="([^"]+)"/);
             if (!match) {
-                console.log(`[GithubApi] Link header 中存在无法解析的条目: "${trimmed}"`);
+                this.logger.verbose(`Link header 中存在无法解析的条目: "${trimmed}"`);
                 continue;
             }
 

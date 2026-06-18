@@ -1,8 +1,8 @@
 ---
 name: type-design-analyzer
 description: 分析封装、不变式表达、实用性和强制性的类型设计。
-model: sonnet
 tools: [Read, Grep, Glob]
+model: "[deepseek-v4-pro-pg](custom:model_1781782589765_cm5ebwu)"
 ---
 
 # 类型设计分析代理

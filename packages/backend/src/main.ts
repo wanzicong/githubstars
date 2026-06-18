@@ -17,8 +17,12 @@ async function bootstrap() {
     app.useLogger(app.get(LoggingService));
 
     // CORS — 允许前端开发服务器直连（SSE 流式端点需要绕过 Vite 代理缓冲）
+    const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
     app.enableCors({
-        origin: ['http://localhost:5173', 'http://localhost:5174'],
+        origin: corsOrigins,
         credentials: true,
     });
 

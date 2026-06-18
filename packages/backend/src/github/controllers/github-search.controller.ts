@@ -1,6 +1,9 @@
 import { Controller, Post, Logger, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubSearchService } from '../services/github-search.service';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { GithubSearchSchema } from '../../common/dto/filter.dto';
+import type { GithubSearchDto } from '../../common/dto/filter.dto';
 
 /**
  * GitHub 搜索与 Star 操作控制器
@@ -23,14 +26,14 @@ export class GithubSearchController {
     @Post('search')
     @ApiOperation({ summary: '搜索 GitHub 仓库', description: '通过 GitHub Search API 搜索仓库' })
     @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, sort: { type: 'string' }, page: { type: 'number' }, perPage: { type: 'number' } } } })
-    async search(@Body() body: any) {
-        this.logger.log('GitHub 搜索: keyword=' + (body.keyword || '') + ', language=' + (body.language || ''));
+    async search(@Body(new ZodValidationPipe(GithubSearchSchema)) body: GithubSearchDto) {
+        this.logger.log('GitHub 搜索: keyword=' + body.keyword + ', language=' + body.language);
         return this.service.searchRepos(
-            body.keyword || '',
-            body.language || '',
-            body.sort || 'stars',
-            parseInt(body.page) || 1,
-            parseInt(body.perPage) || 20,
+            body.keyword,
+            body.language,
+            body.sort,
+            body.page,
+            body.perPage,
         );
     }
 

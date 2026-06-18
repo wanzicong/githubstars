@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from './config/config.module';
@@ -12,6 +12,8 @@ import { TranslateModule } from './translate/translate.module';
 import { TrendingModule } from './trending/trending.module';
 import { ExportModule } from './export/export.module';
 import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 /**
  * 应用根模块
@@ -38,6 +40,14 @@ import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
         {
             provide: APP_INTERCEPTOR,
             useClass: BigIntInterceptor,
+        },
+        {
+            provide: APP_INTERCEPTOR,
+            useClass: ResponseInterceptor,
+        },
+        {
+            provide: APP_FILTER,
+            useClass: HttpExceptionFilter,
         },
     ],
 })

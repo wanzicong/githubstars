@@ -77,19 +77,19 @@ export class StatsService {
      */
     async getOverviewStats() {
         this.logger.log('查询整体概览统计');
-        const [total, stars, forks, langs, owners] = await Promise.all([
+        const [total, stars, forks, langResult, ownerResult] = await Promise.all([
             this.prisma.githubRepo.count(),
             this.prisma.githubRepo.aggregate({ _sum: { starsCount: true } }),
             this.prisma.githubRepo.aggregate({ _sum: { forksCount: true } }),
-            this.prisma.githubRepo.findMany({ where: { language: { not: null } }, select: { language: true }, distinct: ['language'] }),
-            this.prisma.githubRepo.findMany({ where: { ownerName: { not: null } }, select: { ownerName: true }, distinct: ['ownerName'] }),
+            this.prisma.$queryRaw<Array<{ cnt: bigint }>>`SELECT COUNT(DISTINCT language) AS cnt FROM github_repo WHERE language IS NOT NULL`,
+            this.prisma.$queryRaw<Array<{ cnt: bigint }>>`SELECT COUNT(DISTINCT owner_name) AS cnt FROM github_repo WHERE owner_name IS NOT NULL`,
         ]);
         return {
             totalRepos: total,
             totalStars: Number(stars._sum.starsCount || 0),
             totalForks: Number(forks._sum.forksCount || 0),
-            totalLanguages: langs.length,
-            totalOwners: owners.length,
+            totalLanguages: Number(langResult[0]?.cnt || 0),
+            totalOwners: Number(ownerResult[0]?.cnt || 0),
         };
     }
 

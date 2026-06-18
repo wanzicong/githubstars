@@ -5,6 +5,9 @@ import { Subject } from 'rxjs';
 import { TranslateService } from '../services/translate.service';
 import { TranslateTaskService } from '../services/translate-task.service';
 import { GithubRepoService } from '../../github/services/github-repo.service';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { FilterSchema } from '../../common/dto/filter.dto';
+import type { FilterDto } from '../../common/dto/filter.dto';
 
 // SSE 进度事件流管理
 const sseStreams = new Map<number, Subject<MessageEvent>>();
@@ -122,14 +125,14 @@ export class TranslateController {
     @Post('status')
     @ApiOperation({ summary: '翻译覆盖统计', description: '返回符合条件的仓库总数及描述/README 的翻译覆盖情况' })
     @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'boolean' } } } })
-    async translationStatus(@Body() body: any) {
+    async translationStatus(@Body(new ZodValidationPipe(FilterSchema)) body: FilterDto) {
         return this.service.getTranslationSummary({
-            keyword: body.keyword || '',
-            language: body.language || '',
-            dateField: body.dateField || '',
-            startDate: body.startDate || '',
-            endDate: body.endDate || '',
-            untranslatedOnly: body.untranslatedOnly === 'true' || body.untranslatedOnly === true,
+            keyword: body.keyword,
+            language: body.language,
+            dateField: body.dateField,
+            startDate: body.startDate,
+            endDate: body.endDate,
+            untranslatedOnly: body.untranslatedOnly,
         });
     }
 

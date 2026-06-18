@@ -2,6 +2,9 @@ import { Controller, Post, Logger, Body, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubRepoService } from '../services/github-repo.service';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { FilterSchema } from '../../common/dto/filter.dto';
+import type { FilterDto } from '../../common/dto/filter.dto';
 
 @ApiTags('stars')
 @Controller('api/stars')
@@ -21,21 +24,19 @@ export class StarsController {
     @Post('list')
     @ApiOperation({ summary: '获取星标仓库列表', description: '分页获取 Star 仓库，支持多维度筛选、排序和分页' })
     @ApiBody({ schema: { type: 'object', properties: { page: { type: 'number' }, size: { type: 'number' }, keyword: { type: 'string' }, language: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'boolean' } } } })
-    async list(@Body() body: any) {
-        const page = Math.max(1, parseInt(body.page) || 1);
-        const size = Math.min(100, Math.max(1, parseInt(body.size) || 12));
-        this.logger.log('获取星标仓库列表: page=' + page + ', size=' + size);
+    async list(@Body(new ZodValidationPipe(FilterSchema)) body: FilterDto) {
+        this.logger.log('获取星标仓库列表: page=' + body.page + ', size=' + body.size);
         return this.service.findPage({
-            page,
-            size,
-            keyword: body.keyword || '',
-            language: body.language || '',
-            sortBy: body.sortBy || 'stars_count',
-            sortOrder: body.sortOrder || 'desc',
-            dateField: body.dateField || '',
-            startDate: body.startDate || '',
-            endDate: body.endDate || '',
-            untranslatedOnly: body.untranslatedOnly === 'true' || body.untranslatedOnly === true,
+            page: body.page,
+            size: body.size,
+            keyword: body.keyword,
+            language: body.language,
+            sortBy: body.sortBy,
+            sortOrder: body.sortOrder,
+            dateField: body.dateField,
+            startDate: body.startDate,
+            endDate: body.endDate,
+            untranslatedOnly: body.untranslatedOnly,
         });
     }
 
@@ -67,17 +68,17 @@ export class StarsController {
     @Post('export')
     @ApiOperation({ summary: '导出仓库 URL', description: '按筛选条件导出仓库 GitHub URL 列表（纯文本下载）' })
     @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'boolean' } } } })
-    async exportApi(@Body() body: any, @Res() res: Response) {
+    async exportApi(@Body(new ZodValidationPipe(FilterSchema)) body: FilterDto, @Res() res: Response) {
         this.logger.log('导出仓库 URL 列表');
         const urls = await this.service.findAllUrls({
-            keyword: body.keyword || '',
-            language: body.language || '',
-            sortBy: body.sortBy || 'stars_count',
-            sortOrder: body.sortOrder || 'desc',
-            dateField: body.dateField || '',
-            startDate: body.startDate || '',
-            endDate: body.endDate || '',
-            untranslatedOnly: body.untranslatedOnly === 'true' || body.untranslatedOnly === true,
+            keyword: body.keyword,
+            language: body.language,
+            sortBy: body.sortBy,
+            sortOrder: body.sortOrder,
+            dateField: body.dateField,
+            startDate: body.startDate,
+            endDate: body.endDate,
+            untranslatedOnly: body.untranslatedOnly,
         });
         res.set({ 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': 'attachment; filename="stars-export.txt"' });
         res.send(urls.join('\n'));

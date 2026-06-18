@@ -33,8 +33,8 @@ model GithubRepo {
   repoUpdatedAt  DateTime? @map("repo_updated_at") @db.DateTime
   repoPushedAt   DateTime? @map("repo_pushed_at") @db.DateTime
   starredAt      DateTime? @map("starred_at") @db.DateTime
-  createdAt      DateTime? @map("created_at") @db.DateTime
-  updatedAt      DateTime? @map("updated_at") @db.DateTime
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime
 
   // 关联
   translationItems TranslationTaskItem[]

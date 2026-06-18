@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '../config/config.module';
 import { GithubApiService } from './services/github-api.service';
 import { GithubSearchService } from './services/github-search.service';
 import { GithubRepoService } from './services/github-repo.service';
@@ -19,7 +18,6 @@ import { SimilarController } from './controllers/similar.controller';
  * - SimilarController：相似仓库推荐的 HTTP 接口
  */
 @Module({
-    imports: [ConfigModule],
     controllers: [StarsController, GithubSearchController, SimilarController],
     providers: [GithubApiService, GithubSearchService, GithubRepoService],
     exports: [GithubApiService, GithubSearchService, GithubRepoService],

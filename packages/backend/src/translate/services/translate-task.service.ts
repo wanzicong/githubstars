@@ -3,11 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { GithubRepoService } from '../../github/services/github-repo.service';
 import { TranslateService } from './translate.service';
 import { ConfigService } from '../../config/config.service';
-
-/** P2-FIX: 重命名为 MAX_ATTEMPTS (实际尝试次数，含首次) */
-const MAX_ATTEMPTS = 4;
-const MAX_CONCURRENT = 10;
-const RATE_LIMIT_BACKOFF_MS = 60_000; // 限流时等待 60s
+import { RATE_LIMITED, NO_README, MAX_ATTEMPTS, MAX_CONCURRENT, RATE_LIMIT_BACKOFF_MS } from '../../common/constants/translate.constants';
 
 @Injectable()
 export class TranslateTaskService {
@@ -42,11 +38,13 @@ export class TranslateTaskService {
     /**
      * 释放信号量许可
      *
-     * 递减并发计数，并唤醒队列中第一个等待的任务。
+     * 递减并发计数，并通过 queueMicrotask 安全唤醒队列中第一个等待的任务，
+     * 避免回调异常影响 release 后续流程。
      */
     private release() {
         this.semaphore--;
-        this.waitQueue.shift()?.();
+        const next = this.waitQueue.shift();
+        if (next) queueMicrotask(next);
     }
 
     /**
@@ -104,25 +102,25 @@ export class TranslateTaskService {
                     const repoId = Number(item.repoId);
                     if (item.translateType === 'description') {
                         const r = await this.translate.translateDescription(repoId);
-                        if (r !== null && (r as any) !== '__RATE_LIMITED__') {
+                        if (r !== null && r !== RATE_LIMITED) {
                             success = true;
                             resultNote = '翻译成功';
-                        } else resultNote = r === ('__RATE_LIMITED__' as any) ? 'DeepSeek API 限流' : '翻译返回空结果';
+                        } else resultNote = r === RATE_LIMITED ? 'DeepSeek API 限流' : '翻译返回空结果';
                     } else {
                         const r = await this.translate.translateReadme(repoId);
-                        const rStr = r as any as string;
-                        if (rStr === '__NO_README__') {
+                        const rStr = r as string;
+                        if (rStr === NO_README) {
                             success = true;
                             resultNote = '该仓库没有 README 文件';
-                        } else if (typeof rStr === 'string' && rStr.startsWith('__NO_README__|')) {
+                        } else if (typeof rStr === 'string' && rStr.startsWith(NO_README + '|')) {
                             success = true;
-                            const ghBody = rStr.substring('__NO_README__|'.length);
+                            const ghBody = rStr.substring((NO_README + '|').length);
                             resultNote = '该仓库没有 README 文件\nGitHub 响应: ' + ghBody;
-                        } else if (r !== null && (r as any) !== '__RATE_LIMITED__') {
+                        } else if (r !== null && r !== RATE_LIMITED) {
                             success = true;
                             resultNote = '翻译成功';
                         } else {
-                            resultNote = r === ('__RATE_LIMITED__' as any) ? 'DeepSeek API 限流' : '翻译返回空结果';
+                            resultNote = r === RATE_LIMITED ? 'DeepSeek API 限流' : '翻译返回空结果';
                         }
                     }
                 } catch (e) {
@@ -133,34 +131,26 @@ export class TranslateTaskService {
             }
 
             if (success) {
-                // 成功时也保存 resultNote，让前端能感知"翻译成功"还是"没有 README"
-                await this.prisma.$transaction([
-                    this.prisma.translationTaskItem.update({
-                        where: { id: item.id },
-                        data: { status: 'SUCCESS', errorMessage: resultNote, updatedAt: new Date() },
-                    }),
-                ]);
-                const task = await this.prisma.translationTask.findUnique({ where: { id: item.taskId } });
-                if (task) {
-                    const upd: any = { completedItems: (task.completedItems || 0) + 1 };
-                    if (item.translateType === 'description') upd.descCompleted = (task.descCompleted || 0) + 1;
-                    else upd.readmeCompleted = (task.readmeCompleted || 0) + 1;
-                    await this.prisma.translationTask.update({ where: { id: item.taskId }, data: upd });
-                }
+                // 成功时保存 resultNote，让前端能感知"翻译成功"还是"没有 README"
+                await this.prisma.translationTaskItem.update({
+                    where: { id: item.id },
+                    data: { status: 'SUCCESS', errorMessage: resultNote, updatedAt: new Date() },
+                });
+                // 使用 Prisma 原子 increment 避免并发竞态（read-then-write 问题）
+                const incrementData: Record<string, { increment: number }> = { completedItems: { increment: 1 } };
+                if (item.translateType === 'description') incrementData.descCompleted = { increment: 1 };
+                else incrementData.readmeCompleted = { increment: 1 };
+                await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incrementData });
             } else {
-                await this.prisma.$transaction([
-                    this.prisma.translationTaskItem.update({
-                        where: { id: item.id },
-                        data: { status: 'FAILED', errorMessage: resultNote, retryCount: attempts, updatedAt: new Date() },
-                    }),
-                ]);
-                const task = await this.prisma.translationTask.findUnique({ where: { id: item.taskId } });
-                if (task) {
-                    const upd: any = { failedItems: (task.failedItems || 0) + 1 };
-                    if (item.translateType === 'description') upd.descFailed = (task.descFailed || 0) + 1;
-                    else upd.readmeFailed = (task.readmeFailed || 0) + 1;
-                    await this.prisma.translationTask.update({ where: { id: item.taskId }, data: upd });
-                }
+                await this.prisma.translationTaskItem.update({
+                    where: { id: item.id },
+                    data: { status: 'FAILED', errorMessage: resultNote, retryCount: attempts, updatedAt: new Date() },
+                });
+                // 使用 Prisma 原子 increment 避免并发竞态
+                const incrementData: Record<string, { increment: number }> = { failedItems: { increment: 1 } };
+                if (item.translateType === 'description') incrementData.descFailed = { increment: 1 };
+                else incrementData.readmeFailed = { increment: 1 };
+                await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incrementData });
             }
         } finally {
             this.release();
