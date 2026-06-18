@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Input, Select, Card, Pagination, Spin, Empty, Typography, Tag, Button, Space, Row, Col, message } from 'antd'
 import { SearchOutlined, StarFilled, StarOutlined, ForkOutlined, GithubOutlined } from '@ant-design/icons'
-import dayjs from '../setupDayjs'
 import { searchRepos, starRepo, checkStarred } from '../api/github'
 import type { GithubSearchRepo } from '../types'
 import { LANGUAGE_OPTIONS } from '../constants'

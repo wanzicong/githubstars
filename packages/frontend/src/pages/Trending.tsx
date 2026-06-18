@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col, message } from 'antd'
 import { StarFilled, ForkOutlined, FireOutlined } from '@ant-design/icons'
-import dayjs from '../setupDayjs'
 import { fetchTrending } from '../api/trending'
 import type { GithubSearchRepo } from '../types'
 import { LANGUAGE_OPTIONS } from '../constants'
