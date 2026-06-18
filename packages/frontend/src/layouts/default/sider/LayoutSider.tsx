@@ -13,7 +13,7 @@ export default function LayoutSider() {
   const siderCollapsed = useAppStore((s) => s.siderCollapsed)
   const toggleSiderCollapsed = useAppStore((s) => s.toggleSiderCollapsed)
 
-  const selectedKey = '/' + location.pathname.split('/').filter(Boolean)[0] || '/'
+  const selectedKey = '/' + (location.pathname.split('/').filter(Boolean)[0] ?? '')
   const width = siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH
 
   return (
