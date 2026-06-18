@@ -121,55 +121,6 @@ export const translateHandlers = [
     }),
 ]
 
-// ============ Category ============
-
-export const categoryHandlers = [
-    http.post('/api/categories', () => {
-        return HttpResponse.json({
-            success: true,
-            categories: [
-                { id: 1, name: 'AI/ML', children: [{ id: 2, name: 'LLM', level: 2, repoCount: 5 }], level: 1, repoCount: 5 },
-                { id: 3, name: 'Frontend', level: 1, repoCount: 0 },
-            ],
-        })
-    }),
-    http.post('/api/categories/uncategorized', () => {
-        return HttpResponse.json(createPageResult([], 0))
-    }),
-    http.post('/api/categories/classify/smart', () => {
-        return createSuccess({ message: '智能分类完成' })
-    }),
-]
-
-// ============ Clone ============
-
-export const cloneHandlers = [
-    http.post('/api/clone/config', () => {
-        return HttpResponse.json({ success: true, baseDir: '/tmp/clones', defaultConcurrency: 5, defaultCloneDepth: 1 })
-    }),
-    http.post('/api/clone/start', () => {
-        return createSuccess({ taskId: 'test-task-id' })
-    }),
-    http.post('/api/clone/task/:id', () => {
-        return HttpResponse.json({
-            success: true,
-            taskId: 'test-task-id',
-            status: 'RUNNING',
-            totalRepos: 10,
-            completedRepos: 5,
-            failedRepos: 0,
-            skippedRepos: 0,
-            results: [],
-        })
-    }),
-    http.post('/api/clone/task/:id/cancel', () => {
-        return createSuccess({ message: '任务已取消' })
-    }),
-    http.post('/api/clone/task/:id/retry', () => {
-        return createSuccess({ message: '重试已开始', taskId: 'retry-task-id' })
-    }),
-]
-
 // ============ Stats ============
 
 export const statsHandlers = [
@@ -208,29 +159,11 @@ export const statsHandlers = [
             { month: '2024-03', count: 10 },
         ])
     }),
-    http.post('/api/stats/top-repos', () => {
-        return HttpResponse.json(createPageResult([], 0))
+    http.post('/api/stats/top-starred', () => {
+        return HttpResponse.json([])
     }),
-    http.post('/api/stats/recent', () => {
-        return HttpResponse.json(createPageResult([], 0))
-    }),
-]
-
-// ============ AI / Analyze ============
-
-export const analyzeHandlers = [
-    http.post('/api/analyze', () => {
-        return HttpResponse.json({
-            success: true,
-            status: 'COMPLETED',
-            content: '# AI 分析结果\n\n这是一个测试分析',
-        })
-    }),
-    http.post('/api/classify/repos', () => {
-        return HttpResponse.json(createPageResult([], 0))
-    }),
-    http.post('/api/classify/execute', () => {
-        return createSuccess({ results: {} })
+    http.post('/api/stats/recent-active', () => {
+        return HttpResponse.json([])
     }),
 ]
 
@@ -240,7 +173,7 @@ export const configHandlers = [
     http.post('/api/config/list', () => {
         return HttpResponse.json([
             { configKey: 'github.token', configValue: 'ghp_****xxxx', description: 'GitHub Token' },
-            { configKey: 'deepseek.api_key', configValue: 'sk-****xxxx', description: 'DeepSeek API Key' },
+            { configKey: 'deepseek.api_key', configValue: 'sk_****xxxx', description: 'DeepSeek API Key' },
         ])
     }),
 ]
@@ -256,16 +189,37 @@ export const authorHandlers = [
     }),
 ]
 
+// ============ Trending ============
+
+export const trendingHandlers = [
+    http.post('/api/trending', () => {
+        return HttpResponse.json({
+            success: true,
+            since: 'daily',
+            total: 0,
+            repos: [],
+            dateRange: '2024-01-01 ~ 2024-01-02',
+        })
+    }),
+]
+
+// ============ Logs ============
+
+export const logsHandlers = [
+    http.post('/api/logs/files', () => {
+        return HttpResponse.json({ success: true, files: [] })
+    }),
+]
+
 // ============ 聚合全部 ============
 
 export const handlers = [
     ...starsHandlers,
     ...syncHandlers,
     ...translateHandlers,
-    ...categoryHandlers,
-    ...cloneHandlers,
     ...statsHandlers,
-    ...analyzeHandlers,
     ...configHandlers,
     ...authorHandlers,
+    ...trendingHandlers,
+    ...logsHandlers,
 ]

@@ -33,7 +33,7 @@ export class ExportController {
             dateField: body.dateField || '',
             startDate: body.startDate || '',
             endDate: body.endDate || '',
-            untranslatedOnly: body.untranslatedOnly === 'true',
+            untranslatedOnly: body.untranslatedOnly === 'true' || body.untranslatedOnly === true,
         });
         const repos = result.records as any[];
         this.logger.log('查询到 ' + repos.length + ' 个仓库，开始生成Markdown');
@@ -43,7 +43,7 @@ export class ExportController {
         if (body.dateField && (body.startDate || body.endDate)) {
             md += `> 时间范围: ${body.startDate || '不限'} ~ ${body.endDate || '不限'}\n`;
         }
-        if (body.untranslatedOnly === 'true') md += `> 仅未翻译\n`;
+        if (body.untranslatedOnly === 'true' || body.untranslatedOnly === true) md += `> 仅未翻译\n`;
         md += `> 导出时间: ${new Date().toISOString()}\n\n---\n\n`;
 
         const total = repos.length;

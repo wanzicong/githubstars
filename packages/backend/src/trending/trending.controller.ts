@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubSearchService } from '../github/services/github-search.service';
+import { TranslateTaskService } from '../translate/services/translate-task.service';
 
 @ApiTags('trending')
 @Controller('api/trending')
@@ -9,6 +10,7 @@ export class TrendingController {
 
     constructor(
         private readonly search: GithubSearchService,
+        private readonly taskService: TranslateTaskService,
     ) {}
 
     /**
@@ -42,5 +44,25 @@ export class TrendingController {
             repos: result.repos,
             dateRange: `${dateStr} ~ ${new Date().toISOString().split('T')[0]}`,
         };
+    }
+
+    /**
+     * POST /api/trending/analyze — AI 分析趋势仓库
+     *
+     * 获取当前趋势仓库列表并创建翻译/分析任务。
+     *
+     * @param body { since, language }
+     * @returns { success, taskId?, message }
+     */
+    @Post('analyze')
+    @ApiOperation({ summary: 'AI 分析趋势仓库', description: '获取趋势仓库列表并创建批量翻译分析任务' })
+    @ApiBody({ schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' } } } })
+    async analyze(@Body() body: any) {
+        const since = body.since || 'daily';
+        const language = body.language || '';
+        this.logger.log('分析趋势仓库: since=' + since + ', language=' + (language || 'all'));
+        const taskId = await this.taskService.createAndStartFullTranslate();
+        if (!taskId) return { success: false, message: '没有需要分析的项目' }; 
+        return { success: true, taskId: String(taskId), message: '趋势分析任务已启动' }; 
     }
 }

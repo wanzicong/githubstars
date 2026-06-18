@@ -4,7 +4,7 @@ import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubRepoService } from '../services/github-repo.service';
 
 @ApiTags('stars')
-@Controller()
+@Controller('api/stars')
 export class StarsController {
     private readonly logger = new Logger(StarsController.name);
 
@@ -18,7 +18,7 @@ export class StarsController {
      * @param body { page, size, keyword, language, sortBy, sortOrder, dateField, startDate, endDate, untranslatedOnly }
      * @returns 分页结果（records、total、size、current、pages）
      */
-    @Post('api/stars/list')
+    @Post('list')
     @ApiOperation({ summary: '获取星标仓库列表', description: '分页获取 Star 仓库，支持多维度筛选、排序和分页' })
     @ApiBody({ schema: { type: 'object', properties: { page: { type: 'number' }, size: { type: 'number' }, keyword: { type: 'string' }, language: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'boolean' } } } })
     async list(@Body() body: any) {
@@ -45,7 +45,7 @@ export class StarsController {
      * @param body { id }
      * @returns 仓库详情对象（含分类名称），ID 无效或不存在时返回错误信息
      */
-    @Post('api/stars/detail')
+    @Post('detail')
     @ApiOperation({ summary: '获取仓库详情', description: '根据仓库 ID 获取详细信息（含分类名称）' })
     @ApiBody({ schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } })
     async detail(@Body() body: { id: number }) {
@@ -64,7 +64,7 @@ export class StarsController {
      * @param body { keyword, language, sortBy, sortOrder, dateField, startDate, endDate, untranslatedOnly }
      * @param res  Express Response 对象，用于设置下载头和返回文件内容
      */
-    @Post('api/stars/export')
+    @Post('export')
     @ApiOperation({ summary: '导出仓库 URL', description: '按筛选条件导出仓库 GitHub URL 列表（纯文本下载）' })
     @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'boolean' } } } })
     async exportApi(@Body() body: any, @Res() res: Response) {

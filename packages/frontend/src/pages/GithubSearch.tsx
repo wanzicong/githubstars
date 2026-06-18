@@ -203,7 +203,7 @@ export default function GithubSearch() {
     )
 
     const handleStar = useCallback(async (repo: GithubSearchRepo) => {
-        const fullName = repo.full_name
+        const fullName = repo.fullName
         const [owner, repoName] = fullName.split('/')
         try {
             const data = await starRepo(owner, repoName)
@@ -221,7 +221,7 @@ export default function GithubSearch() {
     }, [])
 
     const handleCheckStar = useCallback(async (repo: GithubSearchRepo) => {
-        const fullName = repo.full_name
+        const fullName = repo.fullName
         const [owner, repoName] = fullName.split('/')
         try {
             const data = await checkStarred(owner, repoName)
@@ -283,7 +283,7 @@ export default function GithubSearch() {
                         </div>
                         <Row gutter={[16, 16]}>
                             {results.map((repo) => {
-                                const fullName = repo.full_name
+                                const fullName = repo.fullName
                                 const isStarred = starredMap[fullName] || false
 
                                 return (
@@ -296,13 +296,13 @@ export default function GithubSearch() {
                                         >
                                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
                                                 <img
-                                                    src={repo.owner_avatar_url || ''}
-                                                    alt={repo.owner_login || ''}
+                                                    src={repo.ownerAvatarUrl || ''}
+                                                    alt={repo.ownerName || ''}
                                                     style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0 }}
                                                 />
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <a
-                                                        href={repo.html_url}
+                                                        href={repo.htmlUrl}
                                                         target='_blank'
                                                         rel='noopener noreferrer'
                                                         style={{ fontWeight: 600, fontSize: 14, wordBreak: 'break-all' }}
@@ -346,15 +346,15 @@ export default function GithubSearch() {
                                                 <Space size='middle'>
                                                     <span>
                                                         <StarOutlined style={{ marginRight: 4, color: '#faad14' }} />
-                                                        {formatCount(repo.stargazers_count)}
+                                                        {formatCount(repo.starsCount)}
                                                     </span>
                                                     <span>
                                                         <ForkOutlined style={{ marginRight: 4 }} />
-                                                        {formatCount(repo.forks_count)}
+                                                        {formatCount(repo.forksCount)}
                                                     </span>
                                                 </Space>
                                                 <Text type='secondary' style={{ fontSize: 12 }}>
-                                                    {getRelativeTime(repo.pushed_at)}
+                                                    {getRelativeTime(repo.pushedAt)}
                                                 </Text>
                                             </div>
 

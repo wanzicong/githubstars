@@ -58,14 +58,13 @@ describe('StarList', () => {
     })
 
     it('数据为空时应展示空状态', async () => {
-      // 所有 API 返回空数据
+      // 所有 API 返回空数据（接口已改为 POST）
       server.use(
-        http.get('/api/stars', () => HttpResponse.json({
+        http.post('/api/stars/list', () => HttpResponse.json({
           records: [], total: 0, size: 36, current: 1, pages: 0,
         })),
-        http.get('/api/stats/overview', () => HttpResponse.json({})),
-        http.get('/api/stats/languages', () => HttpResponse.json([])),
-        http.get('/api/categories', () => HttpResponse.json({ success: true, categories: [] })),
+        http.post('/api/stats/overview', () => HttpResponse.json({})),
+        http.post('/api/stats/languages', () => HttpResponse.json([])),
       )
 
       renderStarList()
@@ -79,8 +78,9 @@ describe('StarList', () => {
     it('输入关键词后 API 请求应包含 keyword 参数', async () => {
       let capturedKeyword = ''
       server.use(
-        http.get('/api/stars', ({ request }) => {
-          capturedKeyword = new URL(request.url).searchParams.get('keyword') || ''
+        http.post('/api/stars/list', async ({ request }) => {
+          const body = await request.json() as any
+          capturedKeyword = body.keyword || ''
           return HttpResponse.json({ records: [], total: 0, size: 36, current: 1, pages: 0 })
         }),
       )

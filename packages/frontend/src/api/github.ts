@@ -2,16 +2,16 @@ import api from './request'
 
 export interface GithubSearchRepo {
     id: number
-    full_name: string
+    fullName: string
     description: string
     language: string
-    stargazers_count: number
-    forks_count: number
-    html_url: string
-    owner_login: string
-    owner_avatar_url: string
+    starsCount: number
+    forksCount: number
+    htmlUrl: string
+    ownerName: string
+    ownerAvatarUrl: string
     topics: string[]
-    pushed_at: string
+    pushedAt: string
 }
 
 export interface SearchReposParams {

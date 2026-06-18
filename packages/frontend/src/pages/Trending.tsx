@@ -139,17 +139,17 @@ export default function Trending() {
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                                                 <img
-                                                    src={repo.owner_avatar_url}
+                                                    src={repo.ownerAvatarUrl}
                                                     alt=''
                                                     style={{ width: 18, height: 18, borderRadius: '50%' }}
                                                 />
                                                 <a
-                                                    href={repo.html_url}
+                                                    href={repo.htmlUrl}
                                                     target='_blank'
                                                     rel='noopener noreferrer'
                                                     style={{ fontWeight: 600, fontSize: 14, color: '#1677ff' }}
                                                 >
-                                                    {repo.full_name}
+                                                    {repo.fullName}
                                                 </a>
                                             </div>
 
@@ -172,15 +172,15 @@ export default function Trending() {
                                                 <span>
                                                     <StarFilled style={{ color: '#faad14', fontSize: 12 }} />{' '}
                                                     <Text style={{ fontSize: 13, fontWeight: 600 }}>
-                                                        {formatCount(repo.stargazers_count)}
+                                                        {formatCount(repo.starsCount)}
                                                     </Text>
                                                 </span>
                                                 <span>
                                                     <ForkOutlined style={{ fontSize: 12 }} />{' '}
-                                                    <Text style={{ fontSize: 12 }}>{formatCount(repo.forks_count)}</Text>
+                                                    <Text style={{ fontSize: 12 }}>{formatCount(repo.forksCount)}</Text>
                                                 </span>
                                                 <Text type='secondary' style={{ fontSize: 11, marginLeft: 'auto' }}>
-                                                    {getRelativeTime(repo.pushed_at)}
+                                                    {getRelativeTime(repo.pushedAt)}
                                                 </Text>
                                             </div>
                                         </div>
