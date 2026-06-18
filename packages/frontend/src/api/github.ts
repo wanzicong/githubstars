@@ -1,34 +1,7 @@
 import api from './request'
+import type { GithubSearchRepo, SearchReposParams, SearchReposResult } from '../types'
 
-export interface GithubSearchRepo {
-    id: number
-    fullName: string
-    description: string
-    language: string
-    starsCount: number
-    forksCount: number
-    htmlUrl: string
-    ownerName: string
-    ownerAvatarUrl: string
-    topics: string[]
-    pushedAt: string
-}
-
-export interface SearchReposParams {
-    keyword?: string
-    language?: string
-    sort?: string
-    page?: number
-    perPage?: number
-}
-
-export interface SearchReposResult {
-    success: boolean
-    total: number
-    repos: GithubSearchRepo[]
-    page: number
-    perPage: number
-}
+export type { GithubSearchRepo, SearchReposParams, SearchReposResult }
 
 export async function searchRepos(params: SearchReposParams): Promise<SearchReposResult> {
     const body: Record<string, any> = {}

@@ -32,6 +32,7 @@ import {
     SyncOutlined,
 } from '@ant-design/icons'
 import * as translateApi from '../api/translate'
+import { usePolling } from '../hooks/usePolling'
 
 const { Text } = Typography
 
@@ -105,7 +106,7 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
     const [recentTasks, setRecentTasks] = useState<TaskSummary[]>([])
 
     const [loading, setLoading] = useState<'description' | 'readme' | 'both' | null>(null)
-    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const taskIdRef = useRef<number | null>(null)
 
     // 加载覆盖统计
     const loadCoverage = useCallback(async () => {
@@ -128,37 +129,32 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
     }, [])
 
     // 轮询任务进度
-    const startPolling = useCallback(
-        (taskId: number) => {
-            if (pollingRef.current) clearInterval(pollingRef.current)
-            pollingRef.current = setInterval(async () => {
-                try {
-                    const res = await translateApi.getTaskProgress(taskId)
-                    if (res.success) {
-                        setTaskProgress(res as any)
-                        if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
-                            clearInterval(pollingRef.current!)
-                            pollingRef.current = null
-                            loadCoverage()
-                            loadRecentTasks()
-                            onRefreshList()
-                        }
-                    }
-                } catch {
-                    /* ignore */
+    const polling = usePolling(async () => {
+        const taskId = taskIdRef.current
+        if (!taskId) {
+            polling.stop()
+            return
+        }
+        try {
+            const res = await translateApi.getTaskProgress(taskId)
+            if (res.success) {
+                setTaskProgress(res as any)
+                if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
+                    polling.stop()
+                    loadCoverage()
+                    loadRecentTasks()
+                    onRefreshList()
                 }
-            }, 2000)
-        },
-        [loadCoverage, loadRecentTasks, onRefreshList],
-    )
+            }
+        } catch {
+            /* ignore */
+        }
+    }, 2000)
 
     useEffect(() => {
         if (open) {
             loadCoverage()
             loadRecentTasks()
-        }
-        return () => {
-            if (pollingRef.current) clearInterval(pollingRef.current)
         }
     }, [open, loadCoverage, loadRecentTasks])
 
@@ -187,7 +183,8 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
                     readmeFailed: 0,
                     progress: 0,
                 })
-                startPolling(res.taskId)
+                taskIdRef.current = res.taskId
+                polling.start()
                 message.success('翻译任务已启动')
             } else {
                 message.info(res.message || '没有需要翻译的项目')
@@ -219,7 +216,8 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
                     readmeFailed: 0,
                     progress: 0,
                 })
-                startPolling(res.taskId)
+                taskIdRef.current = res.taskId
+                polling.start()
                 message.success('重试任务已启动')
             } else {
                 message.info(res.message || '没有失败项')

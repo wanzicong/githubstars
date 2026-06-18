@@ -16,6 +16,7 @@ import {
 } from 'chart.js'
 import * as statsApi from '../api/stats'
 import type { OverviewStatsDTO, LanguageStatsDTO, OwnerStatsDTO, TimelineStatsDTO, GithubRepo } from '../types'
+import { formatDate, formatNumberShort } from '../utils/format'
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Filler)
 
@@ -49,24 +50,6 @@ const CHART_COLORS = [
 const TOP_N_OWNERS = 15
 const TOP_N_REPOS = 10
 const TOP_N_LANGUAGES = 15
-
-function formatNumber(n: number): string {
-    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
-    if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
-    return String(n)
-}
-
-function formatDate(dateStr: string | number[] | null): string {
-    if (!dateStr) return '-'
-    if (Array.isArray(dateStr)) {
-        const [y, m, d] = dateStr
-        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    }
-    if (typeof dateStr === 'string') {
-        return dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr
-    }
-    return String(dateStr)
-}
 
 export default function Stats() {
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
@@ -171,7 +154,7 @@ export default function Stats() {
             key: 'starsCount',
             width: 100,
             align: 'right' as const,
-            render: (v: number) => formatNumber(v),
+            render: (v: number) => formatNumberShort(v),
             sorter: (a: { starsCount: number }, b: { starsCount: number }) => a.starsCount - b.starsCount,
         },
         {
@@ -180,7 +163,7 @@ export default function Stats() {
             key: 'forksCount',
             width: 100,
             align: 'right' as const,
-            render: (v: number) => formatNumber(v),
+            render: (v: number) => formatNumberShort(v),
         },
     ]
 
@@ -210,7 +193,7 @@ export default function Stats() {
             key: 'starsCount',
             width: 100,
             align: 'right' as const,
-            render: (v: number) => formatNumber(v),
+            render: (v: number) => formatNumberShort(v),
         },
         {
             title: '最近更新时间',
@@ -253,7 +236,7 @@ export default function Stats() {
                             <Statistic
                                 title='总 Star 数'
                                 value={overview?.totalStars ?? 0}
-                                formatter={(value) => formatNumber(value as number)}
+                                formatter={(value) => formatNumberShort(value as number)}
                                 prefix={<StarFilled style={{ color: '#faad14' }} />}
                             />
                         </Card>
@@ -263,7 +246,7 @@ export default function Stats() {
                             <Statistic
                                 title='总 Fork 数'
                                 value={overview?.totalForks ?? 0}
-                                formatter={(value) => formatNumber(value as number)}
+                                formatter={(value) => formatNumberShort(value as number)}
                                 prefix={<ForkOutlined style={{ color: '#52c41a' }} />}
                             />
                         </Card>

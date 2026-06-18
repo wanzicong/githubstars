@@ -1,13 +1,5 @@
 import api from './request'
-
-export interface ConfigItem {
-    id: number
-    configKey: string
-    configValue: string
-    displayValue: string
-    description: string
-    sensitive: boolean
-}
+import type { ConfigItem } from '../types'
 
 export async function fetchAllConfig(): Promise<ConfigItem[]> {
     const { data } = await api.post<ConfigItem[]>('/api/config/list')

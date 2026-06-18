@@ -71,11 +71,41 @@ export function formatDate(
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
         if (diffDays < 0) return '-'
         if (diffDays === 0) return '今天'
-        if (diffDays < 30) return `${diffDays}天前`
+        if (diffDays === 1) return '昨天'
+        if (diffDays < 7) return `${diffDays}天前`
+        if (diffDays < 30) return `${Math.floor(diffDays / 7)}周前`
         if (diffDays < 365) return `${Math.floor(diffDays / 30)}月前`
         return `${Math.floor(diffDays / 365)}年前`
     }
 
     return `${y}-${mo}-${d}`
+}
+
+/**
+ * 获取相对时间描述（中文口语化）
+ * 例："今天"、"昨天"、"3天前"、"2周前"、"5月前"
+ */
+export function getRelativeTime(dateStr: string | null | undefined): string {
+    return formatDate(dateStr, 'relative')
+}
+
+/**
+ * 英文数字缩写（用于紧凑展示）
+ * 例：1049→"1.0k"、61217→"61.2k"、1933367→"1.9M"
+ */
+export function formatNumberShort(n: number): string {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
+    return String(n)
+}
+
+/**
+ * 格式化文件大小为人类可读格式
+ * 例：512→"512 B"、2048→"2.0 KB"、1048576→"1.0 MB"
+ */
+export function formatSize(bytes: number): string {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
 

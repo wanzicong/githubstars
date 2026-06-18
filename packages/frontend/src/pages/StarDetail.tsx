@@ -35,20 +35,12 @@ import {
 } from '@ant-design/icons'
 import * as statsApi from '../api/stats'
 import * as translateApi from '../api/translate'
-import { formatNumberCn } from '../utils/format'
+import { formatNumberCn, formatDate } from '../utils/format'
 import MarkdownRenderer from '../components/MarkdownRenderer'
-import type { GithubRepo } from '../types'
+import { usePolling } from '../hooks/usePolling'
+import type { GithubRepo, TranslateTaskProgress } from '../types'
 
 const { Title, Text, Paragraph } = Typography
-
-function formatDate(dateStr: string | null | undefined): string {
-    if (!dateStr) return '-'
-    if (Array.isArray(dateStr)) {
-        const [y, m, d, h = 0, min = 0] = dateStr
-        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')} ${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
-    }
-    return dateStr.substring(0, 19).replace('T', ' ')
-}
 
 function daysSince(dateStr: string | null | undefined): string | null {
     if (!dateStr) return null
@@ -95,56 +87,45 @@ export default function StarDetail() {
     // 异步翻译进度
     const [, setTranslateTaskId] = useState<number | null>(null)
     const [translateModalVisible, setTranslateModalVisible] = useState(false)
-    const [translateProgress, setTranslateProgress] = useState<translateApi.TranslateTaskProgress | null>(null)
-    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const [translateProgress, setTranslateProgress] = useState<TranslateTaskProgress | null>(null)
+    const translateTaskIdRef = useRef<number | null>(null)
     const repoIdRef = useRef<number | null>(null)
+    const elapsedRef = useRef(0)
 
     // 同步 repo.id 到 ref
     useEffect(() => {
         repoIdRef.current = repo?.id ?? null
     }, [repo?.id])
 
-    const stopPolling = useCallback(() => {
-        if (pollingRef.current) {
-            clearInterval(pollingRef.current)
-            pollingRef.current = null
+    const polling = usePolling(async () => {
+        const taskId = translateTaskIdRef.current
+        if (!taskId) {
+            polling.stop()
+            return
         }
-    }, [])
-    const startPolling = useCallback(
-        (taskId: number) => {
-            stopPolling()
-            let elapsed = 0
-            const MAX_POLL_MS = 10 * 60 * 1000 // 单条目任务最多等待 10 分钟
-            pollingRef.current = setInterval(async () => {
-                elapsed += 2000
-                try {
-                    const res = await translateApi.getTaskProgress(taskId)
-                    if (res.success) {
-                        setTranslateProgress(res)
-                        // COMPLETED / FAILED / PARTIAL 都是终态
-                        if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
-                            stopPolling()
-                            const rid = repoIdRef.current
-                            if (rid) {
-                                const updated = await translateApi.fetchRepoDetail(rid)
-                                if (updated && updated.id) setRepo(updated)
-                            }
-                        }
+        elapsedRef.current += 2000
+        try {
+            const res = await translateApi.getTaskProgress(taskId)
+            if (res.success) {
+                setTranslateProgress(res)
+                if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
+                    polling.stop()
+                    const rid = repoIdRef.current
+                    if (rid) {
+                        const updated = await translateApi.fetchRepoDetail(rid)
+                        if (updated && updated.id) setRepo(updated)
                     }
-                    // 超时保护：超过最大轮询时间自动停止
-                    if (elapsed >= MAX_POLL_MS) {
-                        stopPolling()
-                        setTranslateProgress((prev) => (prev ? { ...prev, status: 'FAILED' } : null))
-                        message.warning('翻译超时，请稍后重试')
-                    }
-                } catch {
-                    // 连续多次失败也停止（最多容忍 5 次连续失败 = 10s）
-                    // 注意：不在这里硬停止，让超时保护兜底
                 }
-            }, 2000)
-        },
-        [stopPolling],
-    )
+            }
+            if (elapsedRef.current >= 10 * 60 * 1000) {
+                polling.stop()
+                setTranslateProgress((prev) => (prev ? { ...prev, status: 'FAILED' } : null))
+                message.warning('翻译超时，请稍后重试')
+            }
+        } catch {
+            /* ignore polling errors */
+        }
+    }, 2000)
 
     useEffect(() => {
         let cancelled = false
@@ -254,9 +235,11 @@ export default function StarDetail() {
                     readmeCompleted: 0,
                     readmeFailed: 0,
                     readmeTotal: 1,
-                } as translateApi.TranslateTaskProgress)
+                } as TranslateTaskProgress)
                 setTranslateModalVisible(true)
-                startPolling(result.taskId)
+                translateTaskIdRef.current = result.taskId
+                elapsedRef.current = 0
+                polling.start()
                 message.success('翻译任务已提交，正在后台执行...')
             } else {
                 message.info(result.message || '提交失败')
@@ -282,9 +265,11 @@ export default function StarDetail() {
                     readmeCompleted: 0,
                     readmeFailed: 0,
                     readmeTotal: 1,
-                } as translateApi.TranslateTaskProgress)
+                } as TranslateTaskProgress)
                 setTranslateModalVisible(true)
-                startPolling(result.taskId)
+                translateTaskIdRef.current = result.taskId
+                elapsedRef.current = 0
+                polling.start()
                 message.success('重新翻译任务已提交，正在后台执行...')
             } else {
                 message.info(result.message || '提交失败')
@@ -301,7 +286,7 @@ export default function StarDetail() {
 
 
     const handleCloseTranslateModal = () => {
-        stopPolling()
+        polling.stop()
         setTranslateModalVisible(false)
         setTranslateTaskId(null)
         setTranslateProgress(null)

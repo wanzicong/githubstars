@@ -1,31 +1,13 @@
 import { useState, useCallback } from 'react'
 import { Input, Select, Card, Pagination, Spin, Empty, Typography, Tag, Button, Space, Row, Col, message } from 'antd'
 import { SearchOutlined, StarFilled, StarOutlined, ForkOutlined, GithubOutlined } from '@ant-design/icons'
-import dayjs from 'dayjs'
+import dayjs from '../setupDayjs'
 import { searchRepos, starRepo, checkStarred } from '../api/github'
-import type { GithubSearchRepo } from '../api/github'
+import type { GithubSearchRepo } from '../types'
+import { LANGUAGE_OPTIONS } from '../constants'
+import { formatNumberShort, getRelativeTime } from '../utils/format'
 
 const { Title, Text, Paragraph } = Typography
-
-const LANGUAGE_OPTIONS = [
-    { value: '', label: '全部语言' },
-    { value: 'JavaScript', label: 'JavaScript' },
-    { value: 'TypeScript', label: 'TypeScript' },
-    { value: 'Python', label: 'Python' },
-    { value: 'Java', label: 'Java' },
-    { value: 'Go', label: 'Go' },
-    { value: 'Rust', label: 'Rust' },
-    { value: 'C++', label: 'C++' },
-    { value: 'C', label: 'C' },
-    { value: 'C#', label: 'C#' },
-    { value: 'Ruby', label: 'Ruby' },
-    { value: 'PHP', label: 'PHP' },
-    { value: 'Swift', label: 'Swift' },
-    { value: 'Kotlin', label: 'Kotlin' },
-    { value: 'Vue', label: 'Vue' },
-    { value: 'Shell', label: 'Shell' },
-    { value: 'Dockerfile', label: 'Dockerfile' },
-]
 
 const SORT_OPTIONS = [
     { value: '', label: '最佳匹配' },
@@ -39,26 +21,6 @@ const PER_PAGE_OPTIONS = [
     { value: 50, label: '50条/页' },
     { value: 100, label: '100条/页' },
 ]
-
-function getRelativeTime(pushedAt: string): string {
-    const days = dayjs().diff(dayjs(pushedAt), 'day')
-    if (days <= 0) return '今天'
-    if (days === 1) return '1天前'
-    if (days < 30) return `${days}天前`
-    if (days < 365) {
-        const months = Math.floor(days / 30)
-        return `${months}个月前`
-    }
-    const years = Math.floor(days / 365)
-    return `${years}年前`
-}
-
-function formatCount(count: number): string {
-    if (count >= 1000) {
-        return (count / 1000).toFixed(1) + 'k'
-    }
-    return String(count)
-}
 
 export default function GithubSearch() {
     const [keyword, setKeyword] = useState('')
@@ -346,11 +308,11 @@ export default function GithubSearch() {
                                                 <Space size='middle'>
                                                     <span>
                                                         <StarOutlined style={{ marginRight: 4, color: '#faad14' }} />
-                                                        {formatCount(repo.starsCount)}
+                                                        {formatNumberShort(repo.starsCount)}
                                                     </span>
                                                     <span>
                                                         <ForkOutlined style={{ marginRight: 4 }} />
-                                                        {formatCount(repo.forksCount)}
+                                                        {formatNumberShort(repo.forksCount)}
                                                     </span>
                                                 </Space>
                                                 <Text type='secondary' style={{ fontSize: 12 }}>

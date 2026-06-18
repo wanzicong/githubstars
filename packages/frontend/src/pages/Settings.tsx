@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, Form, Input, Button, Typography, message, Spin, Space, Tag, Divider } from 'antd'
 import { SaveOutlined, ReloadOutlined, KeyOutlined, SettingOutlined } from '@ant-design/icons'
 import * as configApi from '../api/config'
-import type { ConfigItem } from '../api/config'
+import type { ConfigItem } from '../types'
 
 const { Title, Text, Paragraph } = Typography
 

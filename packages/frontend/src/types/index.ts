@@ -126,4 +126,124 @@ export interface ApiResponse<T = unknown> {
     [key: string]: unknown
 }
 
+// ─── 日志 ───
+export interface LogFile {
+    name: string
+    size: number
+    mtime: string
+}
+
+// ─── 配置 ───
+export interface ConfigItem {
+    id: number
+    configKey: string
+    configValue: string
+    displayValue: string
+    description: string
+    sensitive: boolean
+}
+
+// ─── GitHub 搜索 ───
+export interface GithubSearchRepo {
+    id: number
+    fullName: string
+    description: string
+    language: string
+    starsCount: number
+    forksCount: number
+    htmlUrl: string
+    ownerName: string
+    ownerAvatarUrl: string
+    topics: string[]
+    pushedAt: string
+}
+
+export interface SearchReposParams {
+    keyword?: string
+    language?: string
+    sort?: string
+    page?: number
+    perPage?: number
+}
+
+export interface SearchReposResult {
+    success: boolean
+    total: number
+    repos: GithubSearchRepo[]
+    page: number
+    perPage: number
+}
+
+// ─── Trending ───
+export interface TrendingResult {
+    success: boolean
+    since: string
+    total: number
+    repos: GithubSearchRepo[]
+    dateRange: string
+}
+
+// ─── Similar ───
+export interface SimilarRepo {
+    fullName: string
+    description: string
+    language: string
+    stars: number
+    forks: number
+    htmlUrl: string
+    pushedAt: string
+    aiReason: string
+    score: number
+}
+
+export interface SimilarResult {
+    success: boolean
+    repos: SimilarRepo[]
+    count: number
+}
+
+// ─── 翻译 ───
+export interface TranslateResult {
+    success: boolean
+    descriptionCn?: string | null
+    readmeCn?: string | null
+    readmeFetched?: boolean
+    message?: string
+    translatedCount?: number
+    total?: number
+}
+
+export interface TranslateTaskProgress {
+    success: boolean
+    taskId: number
+    status: string
+    totalItems: number
+    completedItems: number
+    failedItems: number
+    pendingItems: number
+    descTotal: number
+    descCompleted: number
+    descFailed: number
+    readmeTotal: number
+    readmeCompleted: number
+    readmeFailed: number
+    createdAt: string
+    finishedAt: string | null
+    progress: number
+    completedDetails?: Array<{ fullName: string; type: string; note: string }>
+    failedDetails?: Array<{ fullName: string; type: string; error: string }>
+}
+
+export interface TaskListResult {
+    success: boolean
+    tasks: Array<{
+        id: number
+        status: string
+        totalItems: number
+        completedItems: number
+        failedItems: number
+        createdAt: string
+        finishedAt: string | null
+    }>
+}
 

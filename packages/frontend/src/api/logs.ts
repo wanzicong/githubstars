@@ -1,10 +1,5 @@
 import api from './request'
-
-export interface LogFile {
-    name: string
-    size: number
-    mtime: string
-}
+import type { LogFile } from '../types'
 
 export async function fetchLogFiles(): Promise<LogFile[]> {
     const { data } = await api.post<{ success: boolean; files: LogFile[] }>('/api/logs/files')

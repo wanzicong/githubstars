@@ -1,42 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col, message } from 'antd'
 import { StarFilled, ForkOutlined, FireOutlined } from '@ant-design/icons'
-import dayjs from 'dayjs'
+import dayjs from '../setupDayjs'
 import { fetchTrending } from '../api/trending'
-import type { GithubSearchRepo } from '../api/github'
+import type { GithubSearchRepo } from '../types'
+import { LANGUAGE_OPTIONS } from '../constants'
+import { formatNumberShort, getRelativeTime } from '../utils/format'
 
 const { Title, Text, Paragraph } = Typography
-
-const LANGUAGE_OPTIONS = [
-    { value: '', label: '全部语言' },
-    { value: 'JavaScript', label: 'JavaScript' },
-    { value: 'TypeScript', label: 'TypeScript' },
-    { value: 'Python', label: 'Python' },
-    { value: 'Java', label: 'Java' },
-    { value: 'Go', label: 'Go' },
-    { value: 'Rust', label: 'Rust' },
-    { value: 'C++', label: 'C++' },
-    { value: 'C', label: 'C' },
-    { value: 'C#', label: 'C#' },
-    { value: 'Ruby', label: 'Ruby' },
-    { value: 'Swift', label: 'Swift' },
-    { value: 'Kotlin', label: 'Kotlin' },
-]
-
-function getRelativeTime(dateStr: string): string {
-    if (!dateStr) return ''
-    const days = dayjs().diff(dayjs(dateStr), 'day')
-    if (days <= 0) return '今天'
-    if (days === 1) return '昨天'
-    if (days < 7) return `${days}天前`
-    if (days < 30) return `${Math.floor(days / 7)}周前`
-    return `${Math.floor(days / 30)}月前`
-}
-
-function formatCount(count: number): string {
-    if (count >= 1000) return (count / 1000).toFixed(1) + 'k'
-    return String(count)
-}
 
 export default function Trending() {
     const [since, setSince] = useState<string>('daily')
@@ -172,12 +143,12 @@ export default function Trending() {
                                                 <span>
                                                     <StarFilled style={{ color: '#faad14', fontSize: 12 }} />{' '}
                                                     <Text style={{ fontSize: 13, fontWeight: 600 }}>
-                                                        {formatCount(repo.starsCount)}
+                                                        {formatNumberShort(repo.starsCount)}
                                                     </Text>
                                                 </span>
                                                 <span>
                                                     <ForkOutlined style={{ fontSize: 12 }} />{' '}
-                                                    <Text style={{ fontSize: 12 }}>{formatCount(repo.forksCount)}</Text>
+                                                    <Text style={{ fontSize: 12 }}>{formatNumberShort(repo.forksCount)}</Text>
                                                 </span>
                                                 <Text type='secondary' style={{ fontSize: 11, marginLeft: 'auto' }}>
                                                     {getRelativeTime(repo.pushedAt)}

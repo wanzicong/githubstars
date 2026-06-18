@@ -45,6 +45,7 @@ import RepoCard from '../components/RepoCard'
 import RepoRow from '../components/RepoRow'
 import TranslatePanel from '../components/TranslatePanel'
 import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
+import { usePolling } from '../hooks/usePolling'
 
 const { Title, Text } = Typography
 
@@ -320,55 +321,51 @@ export default function StarList() {
         readmeFailed: number
         progress: number
     } | null>(null)
-    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    const stopPolling = useCallback(() => {
-        if (pollingRef.current) {
-            clearInterval(pollingRef.current)
-            pollingRef.current = null
+    const translateTaskIdRef = useRef<number | null>(null)
+
+    const polling = usePolling(async () => {
+        const taskId = translateTaskIdRef.current
+        if (!taskId) {
+            polling.stop()
+            return
         }
-    }, [])
-    const startPolling = useCallback(
-        (taskId: number) => {
-            stopPolling()
-            pollingRef.current = setInterval(async () => {
-                try {
-                    const res = await translateApi.getTaskProgress(taskId)
-                    if (res.success) {
-                        setTranslateProgress({
-                            status: res.status,
-                            totalItems: res.totalItems,
-                            completedItems: res.completedItems,
-                            failedItems: res.failedItems,
-                            descTotal: res.descTotal,
-                            descCompleted: res.descCompleted,
-                            descFailed: res.descFailed,
-                            readmeTotal: res.readmeTotal,
-                            readmeCompleted: res.readmeCompleted,
-                            readmeFailed: res.readmeFailed,
-                            progress: res.progress,
-                        })
-                        if (res.status === 'COMPLETED' || res.status === 'FAILED') {
-                            stopPolling()
-                            const result = await starsApi.fetchStarList({
-                                page: currentPage,
-                                size: pageSize,
-                                keyword: keyword || undefined,
-                                language: languageStr || undefined,
-                                sortBy: sortBy || undefined,
-                                sortOrder: sortOrder || undefined,
-                                dateField: dateField || undefined,
-                                startDate: startDateStr || undefined,
-                                endDate: endDateStr || undefined,
-                            })
-                            setPageResult(result)
-                        }
-                    }
-                } catch {}
-            }, 2000)
-        },
-        [currentPage, pageSize, keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly],
-    )
+        try {
+            const res = await translateApi.getTaskProgress(taskId)
+            if (res.success) {
+                setTranslateProgress({
+                    status: res.status,
+                    totalItems: res.totalItems,
+                    completedItems: res.completedItems,
+                    failedItems: res.failedItems,
+                    descTotal: res.descTotal,
+                    descCompleted: res.descCompleted,
+                    descFailed: res.descFailed,
+                    readmeTotal: res.readmeTotal,
+                    readmeCompleted: res.readmeCompleted,
+                    readmeFailed: res.readmeFailed,
+                    progress: res.progress,
+                })
+                if (res.status === 'COMPLETED' || res.status === 'FAILED') {
+                    polling.stop()
+                    const result = await starsApi.fetchStarList({
+                        page: currentPage,
+                        size: pageSize,
+                        keyword: keyword || undefined,
+                        language: languageStr || undefined,
+                        sortBy: sortBy || undefined,
+                        sortOrder: sortOrder || undefined,
+                        dateField: dateField || undefined,
+                        startDate: startDateStr || undefined,
+                        endDate: endDateStr || undefined,
+                    })
+                    setPageResult(result)
+                }
+            }
+        } catch {
+            /* ignore polling errors */
+        }
+    }, 2000)
 
     const handleRetryFailed = useCallback(async () => {
         if (!translateTaskId) return
@@ -389,21 +386,22 @@ export default function StarList() {
                     readmeFailed: 0,
                     progress: 0,
                 })
-                startPolling(result.taskId)
+                translateTaskIdRef.current = result.taskId
+                polling.start()
             } else {
                 message.info(result.message || '没有失败项')
             }
         } catch {
             message.error('重试失败')
         }
-    }, [translateTaskId, startPolling])
+    }, [translateTaskId, polling])
 
     const handleCloseTranslateModal = useCallback(() => {
-        stopPolling()
+        polling.stop()
         setTranslateModalVisible(false)
         setTranslateTaskId(null)
         setTranslateProgress(null)
-    }, [stopPolling])
+    }, [polling])
 
     const renderTranslateProgress = () => {
         if (!translateProgress) return null

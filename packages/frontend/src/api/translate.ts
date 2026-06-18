@@ -1,49 +1,5 @@
 import api from './request'
-import type { GithubRepo } from '../types'
-
-export interface TranslateResult {
-    success: boolean
-    descriptionCn?: string | null
-    readmeCn?: string | null
-    readmeFetched?: boolean
-    message?: string
-    translatedCount?: number
-    total?: number
-}
-
-export interface TranslateTaskProgress {
-    success: boolean
-    taskId: number
-    status: string
-    totalItems: number
-    completedItems: number
-    failedItems: number
-    pendingItems: number
-    descTotal: number
-    descCompleted: number
-    descFailed: number
-    readmeTotal: number
-    readmeCompleted: number
-    readmeFailed: number
-    createdAt: string
-    finishedAt: string | null
-    progress: number
-    completedDetails?: Array<{ fullName: string; type: string; note: string }>
-    failedDetails?: Array<{ fullName: string; type: string; error: string }>
-}
-
-export interface TaskListResult {
-    success: boolean
-    tasks: Array<{
-        id: number
-        status: string
-        totalItems: number
-        completedItems: number
-        failedItems: number
-        createdAt: string
-        finishedAt: string | null
-    }>
-}
+import type { GithubRepo, TranslateResult, TranslateTaskProgress, TaskListResult } from '../types'
 
 /** 翻译单个仓库的描述 */
 export async function translateDescription(repoId: number): Promise<TranslateResult> {

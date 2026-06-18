@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Card, Input, Row, Col, Tag, Avatar, Typography, Pagination, Empty, Spin, Statistic } from 'antd'
 import { StarFilled, GithubOutlined } from '@ant-design/icons'
 import * as authorsApi from '../api/authors'
-import { formatNumberCn } from '../utils/format'
+import { formatNumberCn, formatDate } from '../utils/format'
 import type { AuthorDTO, PageResult } from '../types'
 
 const { Title, Text } = Typography
@@ -60,14 +60,6 @@ export default function AuthorList() {
         }
         loadAuthors()
     }, [currentPage, keyword, pageSize])
-
-    const formatDate = (dateStr: string | null): string => {
-        if (!dateStr) return '-'
-        if (typeof dateStr === 'string') {
-            return dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr
-        }
-        return String(dateStr)
-    }
 
     const { records: authors } = pageResult
 

@@ -1,3 +1,7 @@
+---
+trigger: always_on
+alwaysApply: true
+---
 # 编码风格
 
 ## 不可变性（关键）

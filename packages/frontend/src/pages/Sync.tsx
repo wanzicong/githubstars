@@ -3,7 +3,8 @@ import { Card, Button, Table, Tag, Statistic, Row, Col, Alert, Typography, Spin 
 import { SyncOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import * as syncApi from '../api/sync'
 import type { SyncStatus, SyncLog } from '../types'
-import dayjs from 'dayjs'
+import { formatDate } from '../utils/format'
+import { usePolling } from '../hooks/usePolling'
 
 const { Title } = Typography
 
@@ -16,29 +17,15 @@ const statusColorMap: Record<string, string> = {
     failed: 'error',
 }
 
-function formatDateTime(value: string | number[] | null): string {
-    if (!value) return '-'
-    if (Array.isArray(value)) {
-        const [y, m, d, h = 0, min = 0, s = 0] = value
-        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')} ${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-    }
-    if (typeof value === 'string') {
-        return dayjs(value).format('YYYY-MM-DD HH:mm:ss')
-    }
-    return '-'
-}
-
 export default function Sync() {
     const [status, setStatus] = useState<SyncStatus | null>(null)
     const [logs, setLogs] = useState<SyncLog[]>([])
     const [total, setTotal] = useState(0)
     const [loading, setLoading] = useState(true)
-    const [isPolling, setIsPolling] = useState(false)
     const [pageNum, setPageNum] = useState(1)
     const [pageSize, setPageSize] = useState(10)
     const [syncError, setSyncError] = useState<string | null>(null)
 
-    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const pageNumRef = useRef(pageNum)
     const pageSizeRef = useRef(pageSize)
 
@@ -48,37 +35,6 @@ export default function Sync() {
     useEffect(() => {
         pageSizeRef.current = pageSize
     }, [pageSize])
-
-    const stopPolling = useCallback(() => {
-        if (timerRef.current) {
-            clearInterval(timerRef.current)
-            timerRef.current = null
-        }
-        setIsPolling(false)
-    }, [])
-
-    const startPolling = useCallback(() => {
-        if (timerRef.current) return
-        setIsPolling(true)
-        timerRef.current = setInterval(async () => {
-            try {
-                const s = await syncApi.fetchSyncStatus()
-                setStatus(s)
-                if (!s.syncing) {
-                    stopPolling()
-                    try {
-                        const res = await syncApi.fetchSyncLogs(pageNumRef.current, pageSizeRef.current)
-                        setLogs(res.records)
-                        setTotal(res.total)
-                    } catch {
-                        /* ignore */
-                    }
-                }
-            } catch {
-                /* keep polling */
-            }
-        }, 2000)
-    }, [stopPolling])
 
     const fetchLogs = useCallback(async (page: number, size: number) => {
         try {
@@ -90,20 +46,38 @@ export default function Sync() {
         }
     }, [])
 
+    const polling = usePolling(async () => {
+        try {
+            const s = await syncApi.fetchSyncStatus()
+            setStatus(s)
+            if (!s.syncing) {
+                polling.stop()
+                try {
+                    const res = await syncApi.fetchSyncLogs(pageNumRef.current, pageSizeRef.current)
+                    setLogs(res.records)
+                    setTotal(res.total)
+                } catch {
+                    /* ignore */
+                }
+            }
+        } catch {
+            /* keep polling */
+        }
+    }, 2000)
+
     const handleSync = async () => {
         setSyncError(null)
-        setIsPolling(true)
+        polling.start()
         try {
             const res = await syncApi.triggerManualSync()
             if (!res.success) {
                 setSyncError(res.message || '同步触发失败')
-                setIsPolling(false)
+                polling.stop()
                 return
             }
-            startPolling()
         } catch {
             setSyncError('同步请求失败，请稍后重试')
-            setIsPolling(false)
+            polling.stop()
         }
     }
 
@@ -114,23 +88,16 @@ export default function Sync() {
                 const s = await syncApi.fetchSyncStatus()
                 setStatus(s)
                 if (s.syncing) {
-                    startPolling()
+                    polling.start()
                 }
             } catch {
                 /* ignore */
             }
-            // 日志数据由下方的 pagination effect 负责拉取，此处不再重复请求
             setLoading(false)
         }
         init()
-
-        return () => {
-            if (timerRef.current) {
-                clearInterval(timerRef.current)
-                timerRef.current = null
-            }
-        }
-    }, [startPolling])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     useEffect(() => {
         fetchLogs(pageNum, pageSize)
@@ -159,14 +126,14 @@ export default function Sync() {
             dataIndex: 'startedAt',
             key: 'startedAt',
             width: 170,
-            render: (v: string | null) => formatDateTime(v),
+            render: (v: string | null) => formatDate(v, 'datetime'),
         },
         {
             title: '完成时间',
             dataIndex: 'finishedAt',
             key: 'finishedAt',
             width: 170,
-            render: (v: string | null) => formatDateTime(v),
+            render: (v: string | null) => formatDate(v, 'datetime'),
         },
         {
             title: '错误信息',
@@ -208,7 +175,7 @@ export default function Sync() {
                         <Card>
                             <Statistic
                                 title='上次同步时间'
-                                value={formatDateTime(status?.lastSyncTime ?? null)}
+                                value={formatDate(status?.lastSyncTime ?? null, 'datetime')}
                                 valueStyle={{ fontSize: 14 }}
                                 prefix={<ClockCircleOutlined style={{ color: '#faad14' }} />}
                             />
@@ -235,10 +202,10 @@ export default function Sync() {
 
                 <Card style={{ marginBottom: 24 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                        <Button type='primary' icon={<SyncOutlined spin={isPolling} />} onClick={handleSync} loading={isPolling}>
+                        <Button type='primary' icon={<SyncOutlined spin={polling.isPolling} />} onClick={handleSync} loading={polling.isPolling}>
                             立即同步
                         </Button>
-                        {isPolling && <span style={{ color: '#1677ff' }}>正在同步中，请稍候...</span>}
+                        {polling.isPolling && <span style={{ color: '#1677ff' }}>正在同步中，请稍候...</span>}
                     </div>
                     {syncError && (
                         <Alert type='error' message={syncError} closable onClose={() => setSyncError(null)} style={{ marginTop: 12 }} />

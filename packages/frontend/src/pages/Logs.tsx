@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, Select, Button, Typography, Space, message, Popconfirm, Spin, Switch } from 'antd'
 import { ReloadOutlined, DeleteOutlined, FileTextOutlined, SyncOutlined } from '@ant-design/icons'
 import * as logsApi from '../api/logs'
-import type { LogFile } from '../api/logs'
+import type { LogFile } from '../types'
+import { formatSize } from '../utils/format'
 
 const { Title, Text } = Typography
 
@@ -71,12 +72,6 @@ export default function Logs() {
             message.error('清空失败')
         }
     }, [selectedFile, loadFiles])
-
-    const formatSize = (bytes: number) => {
-        if (bytes < 1024) return bytes + ' B'
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-        return (bytes / 1024 / 1024).toFixed(1) + ' MB'
-    }
 
     return (
         <div>

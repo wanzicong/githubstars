@@ -1,13 +1,5 @@
 import api from './request'
-import type { GithubSearchRepo } from './github'
-
-export interface TrendingResult {
-    success: boolean
-    since: string
-    total: number
-    repos: GithubSearchRepo[]
-    dateRange: string
-}
+import type { GithubSearchRepo, TrendingResult } from '../types'
 
 export async function fetchTrending(since: string, language?: string, perPage?: number): Promise<TrendingResult> {
     const body: Record<string, any> = { since }
