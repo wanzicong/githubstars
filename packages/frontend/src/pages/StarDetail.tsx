@@ -16,11 +16,6 @@ import {
 } from 'antd'
 import {
     ArrowLeftOutlined,
-    GithubOutlined,
-    LinkOutlined,
-    TranslationOutlined,
-    ReadOutlined,
-    ReloadOutlined,
     CheckCircleOutlined,
     CloseCircleOutlined,
 } from '@ant-design/icons'
@@ -33,7 +28,7 @@ import RepoReadmeCard from '../components/repo/RepoReadmeCard'
 import { usePolling } from '../hooks/usePolling'
 import type { GithubRepo, TranslateTaskProgress } from '../types'
 
-const { Title, Text, Paragraph } = Typography
+const { Text } = Typography
 
 function daysSince(dateStr: string | null | undefined): string | null {
     if (!dateStr) return null

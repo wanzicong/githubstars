@@ -11,7 +11,6 @@ import {
     Typography,
     Space,
     DatePicker,
-    Spin,
     Collapse,
     App,
     Segmented,
@@ -35,7 +34,7 @@ import StarRepoView from '../components/stars/StarRepoView'
 import TranslateProgressModal from '../components/translate/TranslateProgressModal'
 import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
 import { usePolling } from '../hooks/usePolling'
-import { PAGE_SIZE_OPTIONS_SMALL, INITIAL_TASK_PROGRESS, type TaskProgress } from '../constants'
+import { INITIAL_TASK_PROGRESS, type TaskProgress } from '../constants'
 
 const { Title, Text } = Typography
 
