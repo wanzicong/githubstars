@@ -18,6 +18,7 @@ rules/
 │   ├── dead-code.md
 │   ├── dependency-management.md
 │   ├── development-workflow.md
+│   ├── directory-structure.md
 │   ├── frontend-constraints.md
 │   ├── git-workflow.md
 │   ├── hooks.md
