@@ -16,7 +16,9 @@ rules/
 │   ├── coding-style.md
 │   ├── comments.md
 │   ├── dead-code.md
+│   ├── dependency-management.md
 │   ├── development-workflow.md
+│   ├── frontend-constraints.md
 │   ├── git-workflow.md
 │   ├── hooks.md
 │   ├── patterns.md
