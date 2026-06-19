@@ -78,7 +78,7 @@ export class TranslateService {
                 signal: controller.signal,
             });
             if (res.status === 429) {
-                this.logger.warn('DeepSeek API 限流 (429)，需等待');
+                this.logger.error('DeepSeek API 限流 (429)，需等待');
                 return RATE_LIMITED;
             }
             if (!res.ok) {
@@ -205,7 +205,7 @@ export class TranslateService {
         }
 
         // 翻译失败 → 不标记 fetched，允许下次重试
-        this.logger.warn(`README 翻译失败: ${repo.fullName}，原始内容已保存，可稍后重试`);
+        this.logger.error(`README 翻译失败: ${repo.fullName}，原始内容已保存，可稍后重试`);
         return null;
     }
 

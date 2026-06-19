@@ -9,11 +9,11 @@
  * 所有外部依赖 (Prisma, ConfigService, GithubApiService, Fetch) 被 Mock。
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { TranslateService } from '../../src/translate/services/translate.service';
+import { TranslateService } from '../../src/translate/translate.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConfigService } from '../../src/config/config.service';
-import { GithubApiService } from '../../src/github/services/github-api.service';
-import { GithubRepoService } from '../../src/github/services/github-repo.service';
+import { GithubApiService } from '../../src/github/github-api.service';
+import { GithubRepoService } from '../../src/github/github-repo.service';
 
 function createMockPrisma() {
     return {

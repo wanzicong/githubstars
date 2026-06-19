@@ -9,7 +9,7 @@
  * 所有 Prisma 调用被 Mock，测试纯逻辑。
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { GithubRepoService } from '../../src/github/services/github-repo.service';
+import { GithubRepoService } from '../../src/github/github-repo.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 // 辅助: 创建 Mock PrismaService

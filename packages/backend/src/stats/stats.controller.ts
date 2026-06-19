@@ -4,6 +4,23 @@ import { StatsService } from './stats.service';
 
 @ApiTags('stats')
 @Controller('api/stats')
+/**
+ * 统计 Controller — 提供仓库数据的多维统计分析
+ *
+ * 架构层级：Controller 层，负责接收 HTTP 请求并委托 StatsService 处理。
+ *
+ * @callers
+ *   - 前端 StarList 页面（概览统计、语言分布）
+ *   - 前端 Stats 页面（全量统计图表）
+ *
+ * @depends
+ *   - StatsService.getLanguageStats()  — 编程语言分布
+ *   - StatsService.getOwnerStats()      — 仓库所有者排名
+ *   - StatsService.getTimelineStats()   — Star 时间线
+ *   - StatsService.getOverviewStats()   — 整体概览
+ *   - StatsService.getTopStarred()      — Star 排行榜
+ *   - StatsService.getRecentActive()    — 最近活跃仓库
+ */
 export class StatsController {
     private readonly logger = new Logger(StatsController.name);
 

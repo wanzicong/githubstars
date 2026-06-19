@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Card, Select, Button, Row, Col, Tag, Avatar, Typography, Pagination, Empty, Space, Spin, Breadcrumb, Statistic } from 'antd'
+import { Card, Select, Button, Row, Col, Tag, Avatar, Typography, Pagination, Empty, Space, Spin, Breadcrumb, Statistic, App } from 'antd'
 import { StarFilled, ForkOutlined, ArrowLeftOutlined, DownloadOutlined, GithubOutlined, UserOutlined } from '@ant-design/icons'
 import * as authorsApi from '../../api'
 import { formatNumberShort, formatDate, daysSince, getStalenessColor } from '../../utils/format'
@@ -27,6 +27,7 @@ const PAGE_SIZE = 12
 export default function AuthorDetail() {
     const { ownerName } = useParams<{ ownerName: string }>()
     const navigate = useNavigate()
+    const { message } = App.useApp()
 
     const [sortBy, setSortBy] = useState('stars_count')
     const [sortOrder, setSortOrder] = useState('desc')
@@ -133,7 +134,7 @@ export default function AuthorDetail() {
             document.body.removeChild(a)
             window.URL.revokeObjectURL(url)
         } catch {
-            console.error('导出失败')
+            message.error('导出失败')
         }
     }, [ownerName, sortBy, sortOrder])
 

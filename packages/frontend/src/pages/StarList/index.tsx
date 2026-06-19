@@ -25,9 +25,7 @@ import {
     UnorderedListOutlined,
 } from '@ant-design/icons'
 import dayjs from '../../config/setupDayjs'
-import * as statsApi from '../../api'
-import * as starsApi from '../../api'
-import * as translateApi from '../../api'
+import * as api from '../../api'
 import { TranslatePanel } from '../../components/translate'
 import { StarStatsBar } from '../../components/stars'
 import { StarRepoView } from '../../components/stars'
@@ -166,8 +164,8 @@ export default function StarList() {
         const loadMeta = async () => {
             try {
                 const [overviewRes, langRes] = await Promise.allSettled([
-                    statsApi.fetchOverviewStats(),
-                    statsApi.fetchLanguageStats(),
+                    api.fetchOverviewStats(),
+                    api.fetchLanguageStats(),
                 ])
                 if (overviewRes.status === 'fulfilled') setOverview(overviewRes.value)
                 if (langRes.status === 'fulfilled') setLanguageOptions(langRes.value)
@@ -185,7 +183,7 @@ export default function StarList() {
         const loadPage = async () => {
             setLoading(true)
             try {
-                const result = await starsApi.fetchStarList({
+                const result = await api.fetchStarList({
                     page: currentPage,
                     size: pageSize,
                     ...buildFilters(),
@@ -243,7 +241,7 @@ export default function StarList() {
             return
         }
         try {
-            const res = await translateApi.getTaskProgress(taskId)
+            const res = await api.getTaskProgress(taskId)
             if (res.success) {
                 setTranslateProgress({
                     status: res.status,
@@ -261,7 +259,7 @@ export default function StarList() {
                 })
                 if (res.status === 'COMPLETED' || res.status === 'FAILED') {
                     polling.stop()
-                    const result = await starsApi.fetchStarList({
+                    const result = await api.fetchStarList({
                         page: currentPage,
                         size: pageSize,
                         ...buildFilters(),
@@ -277,7 +275,7 @@ export default function StarList() {
     const handleRetryFailed = useCallback(async () => {
         if (!translateTaskId) return
         try {
-            const result = await translateApi.retryFailed(translateTaskId)
+            const result = await api.retryFailed(translateTaskId)
             if (result.success && result.taskId) {
                 setTranslateTaskId(result.taskId)
                 setTranslateProgress({ ...INITIAL_TASK_PROGRESS })
@@ -311,7 +309,7 @@ export default function StarList() {
 
     const handleExport = useCallback(async () => {
         try {
-            const blob = await starsApi.exportStarsUrls(buildFilters())
+            const blob = await api.exportStarsUrls(buildFilters())
             const url = window.URL.createObjectURL(blob)
             const a = document.createElement('a')
             a.href = url
@@ -321,7 +319,7 @@ export default function StarList() {
             document.body.removeChild(a)
             window.URL.revokeObjectURL(url)
         } catch {
-            console.error('导出失败')
+            message.error('导出URL失败')
         }
     }, [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, buildFilters])
 
@@ -621,7 +619,7 @@ export default function StarList() {
                 hasActiveFilters={hasActiveFilters}
                 onRefreshList={() => {
                     const fetchList = async () => {
-                        const res = await starsApi.fetchStarList({
+                        const res = await api.fetchStarList({
                             page: currentPage,
                             size: pageSize,
                             ...buildFilters(),

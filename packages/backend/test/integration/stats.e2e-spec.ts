@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { TestTransaction } from '../helpers/test-transaction';
@@ -273,7 +273,7 @@ describe('stats (e2e)', () => {
         });
 
         it('should handle repos with null language and ownerName', async () => {
-            await insertRepo(prisma, { language: null, ownerName: null, fullName: 'anon/repo' });
+            await insertRepo(prisma, { language: undefined, ownerName: undefined, fullName: 'anon/repo' });
 
             const res = await request(app.getHttpServer()).get('/api/stats/overview').expect(200);
 

@@ -9,7 +9,8 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { ExportController } from '../../src/export/export.controller';
-import { GithubRepoService } from '../../src/github/services/github-repo.service';
+import { GithubRepoService } from '../../src/github/github-repo.service';
+import type { ExportFilterDto } from '../../src/common/dto/filter.dto';
 
 describe('ExportController', () => {
     let controller: ExportController;
@@ -57,9 +58,9 @@ describe('ExportController', () => {
                     dateField: 'starred_at',
                     startDate: '2024-01-01',
                     endDate: '2024-06-30',
-                    untranslatedOnly: 'true',
-                    maxCount: '100',
-                },
+                    untranslatedOnly: true,
+                    maxCount: 100
+                } as unknown as ExportFilterDto,
                 res,
             );
 
@@ -82,7 +83,7 @@ describe('ExportController', () => {
             mockRepoService.findPage.mockResolvedValue(mockFindPageResult([], 0));
             const res = createMockResponse();
 
-            await controller.exportMd({ maxCount: '10' }, res);
+            await controller.exportMd({ maxCount: 10 } as ExportFilterDto, res);
 
             expect(mockRepoService.findPage).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -105,7 +106,7 @@ describe('ExportController', () => {
             mockRepoService.findPage.mockResolvedValue(mockFindPageResult([], 0));
             const res = createMockResponse();
 
-            await controller.exportMd({ keyword: 'mcp', language: 'TypeScript', maxCount: '10' }, res);
+            await controller.exportMd({ keyword: 'mcp', language: 'TypeScript', maxCount: 10 } as ExportFilterDto, res);
 
             const md = res.send.mock.calls[0][0];
             expect(md).toContain('# GitHub Stars 导出');
@@ -123,8 +124,8 @@ describe('ExportController', () => {
                     dateField: 'starred_at',
                     startDate: '2024-01-01',
                     endDate: '2024-12-31',
-                    maxCount: '10',
-                },
+                    maxCount: 10,
+                } as ExportFilterDto,
                 res,
             );
 
@@ -136,7 +137,7 @@ describe('ExportController', () => {
             mockRepoService.findPage.mockResolvedValue(mockFindPageResult([], 0));
             const res = createMockResponse();
 
-            await controller.exportMd({ untranslatedOnly: 'true', maxCount: '10' }, res);
+            await controller.exportMd({ untranslatedOnly: true, maxCount: 10 } as ExportFilterDto, res);
 
             const md = res.send.mock.calls[0][0];
             expect(md).toContain('> 仅未翻译');
@@ -164,7 +165,7 @@ describe('ExportController', () => {
             );
             const res = createMockResponse();
 
-            await controller.exportMd({ maxCount: '10' }, res);
+            await controller.exportMd({ maxCount: 10 } as ExportFilterDto, res);
 
             const md = res.send.mock.calls[0][0];
             expect(md).toContain('## test-owner/test-repo');
@@ -199,7 +200,7 @@ describe('ExportController', () => {
             );
             const res = createMockResponse();
 
-            await controller.exportMd({ maxCount: '10' }, res);
+            await controller.exportMd({ maxCount: 10 } as ExportFilterDto, res);
 
             const md = res.send.mock.calls[0][0];
             expect(md).toContain('original desc');
@@ -229,7 +230,7 @@ describe('ExportController', () => {
             );
             const res = createMockResponse();
 
-            await controller.exportMd({ maxCount: '10' }, res);
+            await controller.exportMd({ maxCount: 10 } as ExportFilterDto, res);
 
             const md = res.send.mock.calls[0][0];
             const readmeSection = md.substring(md.indexOf('### README 中文翻译'));
@@ -260,7 +261,7 @@ describe('ExportController', () => {
             );
             const res = createMockResponse();
 
-            await controller.exportMd({ maxCount: '10' }, res);
+            await controller.exportMd({ maxCount: 10 } as ExportFilterDto, res);
 
             const md = res.send.mock.calls[0][0];
             expect(md).toContain('### README 中文翻译');
@@ -291,7 +292,7 @@ describe('ExportController', () => {
             );
             const res = createMockResponse();
 
-            await controller.exportMd({ maxCount: '10' }, res);
+            await controller.exportMd({ maxCount: 10 } as ExportFilterDto, res);
 
             const md = res.send.mock.calls[0][0];
             expect(md).toContain('### README');
@@ -302,7 +303,7 @@ describe('ExportController', () => {
             mockRepoService.findPage.mockResolvedValue(mockFindPageResult([], 0));
             const res = createMockResponse();
 
-            await controller.exportMd({ maxCount: '10' }, res);
+            await controller.exportMd({ maxCount: 10 } as ExportFilterDto, res);
 
             const md = res.send.mock.calls[0][0];
             expect(md).toContain('# GitHub Stars 导出');

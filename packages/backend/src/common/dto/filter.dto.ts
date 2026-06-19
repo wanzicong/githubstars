@@ -77,16 +77,6 @@ export const GithubSearchSchema = z.object({
 export type GithubSearchDto = z.infer<typeof GithubSearchSchema>;
 
 /**
- * GitHub 操作参数（Star/Unstar/CheckStarred）
- */
-export const GithubOwnerRepoSchema = z.object({
-    owner: z.string().min(1, 'owner 不能为空'),
-    repo: z.string().min(1, 'repo 不能为空'),
-});
-
-export type GithubOwnerRepoDto = z.infer<typeof GithubOwnerRepoSchema>;
-
-/**
  * Trending 查询参数
  */
 export const TrendingSchema = z.object({
@@ -97,30 +87,3 @@ export const TrendingSchema = z.object({
 
 export type TrendingDto = z.infer<typeof TrendingSchema>;
 
-/**
- * TopN 参数
- */
-export const TopNSchema = z.object({
-    topN: z.coerce.number().int().min(1).max(100).optional().default(10),
-});
-
-export type TopNDto = z.infer<typeof TopNSchema>;
-
-/**
- * 分页日志查询参数
- */
-export const LogPaginationSchema = z.object({
-    pageNum: z.coerce.number().int().min(1).optional().default(1),
-    pageSize: z.coerce.number().int().min(1).max(100).optional().default(10),
-});
-
-export type LogPaginationDto = z.infer<typeof LogPaginationSchema>;
-
-/**
- * 相似仓库查询参数
- */
-export const SimilarSchema = z.object({
-    repoId: z.coerce.number().int().positive('repoId 必须为正整数'),
-});
-
-export type SimilarDto = z.infer<typeof SimilarSchema>;

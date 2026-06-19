@@ -24,7 +24,7 @@ export class SyncService {
      */
     async executeSync(syncType: string, replace: boolean = true) {
         if (this.syncing) {
-            this.logger.warn(`同步锁已被持有，拒绝 ${syncType}`);
+            this.logger.error(`同步锁已被持有，拒绝 ${syncType}`);
             return;
         }
         this.syncing = true;
@@ -133,7 +133,7 @@ export class SyncService {
      */
     startManualSync() {
         if (this.syncing) {
-            this.logger.warn('手动同步：已有同步任务在执行中，跳过');
+            this.logger.error('手动同步：已有同步任务在执行中，跳过');
             return;
         }
         this.logger.log('手动同步任务已启动');

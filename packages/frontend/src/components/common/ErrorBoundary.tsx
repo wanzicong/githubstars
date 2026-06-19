@@ -26,6 +26,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     }
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        // ErrorBoundary 作为异常最后防线，允许 console.error 输出到浏览器控制台
         console.error('[ErrorBoundary] 捕获到未处理异常:', error, errorInfo)
         this.setState({ errorInfo })
     }

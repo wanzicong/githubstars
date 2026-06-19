@@ -8,8 +8,6 @@ import {
 
 const GITHUB_API = 'https://api.github.com'
 
-export type { MappedRepoData } from './repo-data.interface'
-
 /**
  * GitHub REST API 服务
  *
@@ -360,7 +358,7 @@ export class GithubApiService {
 
             if (response.status === 403) {
                 this.logger.error('搜索 API 限流');
-                this.logger.warn('GitHub API rate limited');
+                this.logger.error('GitHub API rate limited');
             } else {
                 const errorBody = await response.text().catch(() => '');
                 this.logger.error(`搜索失败: status=${response.status}, body=${errorBody.substring(0, 300)}`);

@@ -80,7 +80,7 @@ export class TranslateTaskService {
             while (attempts < MAX_ATTEMPTS && !success) {
                 if (attempts > 0) {
                     const delay = this.calculateRetryDelay(resultNote, attempts);
-                    this.logger.warn(`翻译重试 item=${item.id} attempt=${attempts}/${MAX_ATTEMPTS} delay=${delay}ms note=${resultNote.substring(0, 100)}`);
+                    this.logger.error(`翻译重试 item=${item.id} attempt=${attempts}/${MAX_ATTEMPTS} delay=${delay}ms note=${resultNote.substring(0, 100)}`);
                     await new Promise((r) => setTimeout(r, delay));
                 }
                 await this.prisma.translationTaskItem.update({ where: { id: item.id }, data: { status: 'PROCESSING' } });
@@ -229,7 +229,9 @@ export class TranslateTaskService {
                 this.logger.error('任务执行异常', e);
                 try {
                     await this.prisma.translationTask.update({ where: { id: taskId }, data: { status: 'FAILED', finishedAt: new Date() } });
-                } catch {}
+                } catch (updateErr) {
+                    this.logger.error('更新任务失败状态时出错', updateErr);
+                }
             }
         })().catch((e) => this.logger.error(e));
     }

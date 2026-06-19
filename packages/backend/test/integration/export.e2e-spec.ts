@@ -12,7 +12,7 @@
  * 每个测试用例包裹在 MySQL 事务中，afterEach 回滚，零数据污染。
  */
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { TestTransaction, createTestingApp } from '../helpers/test-transaction';
 import { createRepoFixture, insertRepo } from '../helpers/fixtures';

@@ -14,7 +14,7 @@ export interface BaseFilterParams {
 }
 
 /** 日期范围筛选参数 */
-export interface DateRangeParams {
+interface DateRangeParams {
     dateField?: string;
     startDate?: string;
     endDate?: string;

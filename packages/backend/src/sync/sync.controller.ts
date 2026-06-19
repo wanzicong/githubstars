@@ -18,7 +18,7 @@ export class SyncController {
     @ApiOperation({ summary: '手动触发同步', description: '从 GitHub API 全量拉取 Star 仓库并同步到数据库' })
     async manual() {
         if (this.service.isSyncing()) {
-            this.logger.warn('手动同步请求被拒绝：已有同步任务在执行中');
+            this.logger.error('手动同步请求被拒绝：已有同步任务在执行中');
             return { success: false, message: '已有同步任务在执行中' };
         }
         this.logger.log('收到手动同步请求');

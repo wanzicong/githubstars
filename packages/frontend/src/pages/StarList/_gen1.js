@@ -48,4 +48,3 @@ const DATE_FIELD_OPTIONS = [
     { label: '推送时间', value: 'repo_pushed_at' },
 ]
 `;
-console.log('Phase1 done');

@@ -6,7 +6,7 @@
  */
 
 /** 前端排序字段 → Prisma 模型字段映射表 */
-export const SORT_FIELD_MAP: Record<string, string> = {
+const SORT_FIELD_MAP: Record<string, string> = {
     stars_count: 'starsCount',
     forks_count: 'forksCount',
     repo_updated_at: 'repoUpdatedAt',

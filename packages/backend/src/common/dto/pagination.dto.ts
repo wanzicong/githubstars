@@ -11,5 +11,3 @@ export const PaginationSchema = z
         size: z.coerce.number().int().min(1).max(100).default(12),
     })
     .passthrough();
-
-export type PaginationDto = z.infer<typeof PaginationSchema>;

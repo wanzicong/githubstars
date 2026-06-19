@@ -127,7 +127,7 @@ export default function StarDetail() {
                     setNotFound(true)
                 }
             } catch (e) {
-                console.error('获取仓库详情失败', e)
+                message.error('获取仓库详情失败')
                 if (!cancelled) {
                     setNotFound(true)
                 }

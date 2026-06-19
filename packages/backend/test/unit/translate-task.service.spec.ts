@@ -15,11 +15,11 @@
  * 所有外部依赖 (PrismaService, ConfigService, GithubRepoService, TranslateService) 被 Mock。
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { TranslateTaskService } from '../../src/translate/services/translate-task.service';
+import { TranslateTaskService } from '../../src/translate/translate-task.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConfigService } from '../../src/config/config.service';
-import { GithubRepoService } from '../../src/github/services/github-repo.service';
-import { TranslateService } from '../../src/translate/services/translate.service';
+import { GithubRepoService } from '../../src/github/github-repo.service';
+import { TranslateService } from '../../src/translate/translate.service';
 
 // ==================== Mock 工厂 ====================
 
