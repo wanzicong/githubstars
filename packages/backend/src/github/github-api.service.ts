@@ -1,18 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
-import type { MappedRepoData } from './repo-data.interface';
+import type { MappedRepoData } from './repo-data.interface'
+import {
+    buildGithubHeaders, mapStarredItem, parseLinkHeader,
+    estimateTotalPages, sleep, type PaginationLinks,
+} from '../common/utils/github-api.util'
 
-const GITHUB_API = 'https://api.github.com';
+const GITHUB_API = 'https://api.github.com'
 
-export type { MappedRepoData } from './repo-data.interface';
-
-/** Link header 解析结果 */
-export interface PaginationLinks {
-    first?: string;
-    prev?: string;
-    next?: string;
-    last?: string;
-}
+export type { MappedRepoData } from './repo-data.interface'
 
 /**
  * GitHub REST API 服务
@@ -61,14 +57,14 @@ export class GithubApiService {
 
             // 首次获取时估算总页数
             if (currentPage === 1 && pageResult.links.last) {
-                this.logger.log(`估算总页数: ${this.estimateTotalPages(pageResult.links, currentPage)}`);
+                this.logger.log(`估算总页数: ${estimateTotalPages(pageResult.links, currentPage)}`);
             }
 
             // 判断是否还有下一页
             if (pageResult.links.next && pageResult.rawCount > 0) {
                 nextUrl = pageResult.links.next;
                 currentPage++;
-                await this.sleep(300);
+                await sleep(300);
             } else {
                 this.logger.log(`翻页终止: ${!pageResult.links.next ? 'next链接不存在' : '本页无数据'}`);
                 nextUrl = null;
@@ -102,7 +98,7 @@ export class GithubApiService {
         const pageStart = Date.now();
         this.logger.log(`>>>>> 正在获取第 ${currentPage} 页...`);
 
-        const headers = this.buildGithubHeaders(token, 'application/vnd.github.v3.star+json');
+        const headers = buildGithubHeaders(token, 'application/vnd.github.v3.star+json');
         let response: Response;
         try {
             response = await fetch(url, { headers });
@@ -135,14 +131,14 @@ export class GithubApiService {
         const mapped: MappedRepoData[] = [];
         for (const item of pageItems) {
             try {
-                const result = this.mapStarredItem(item);
+                const result = mapStarredItem(item);
                 if (result) mapped.push(result);
             } catch (mapErr) {
                 this.logger.error(`映射单条数据失败, 第${currentPage}页: ${mapErr instanceof Error ? mapErr.message : String(mapErr)}`);
             }
         }
 
-        const links = this.parseLinkHeader(response.headers.get('Link') || '');
+        const links = parseLinkHeader(response.headers.get('Link') || '');
         const duration = ((Date.now() - pageStart) / 1000).toFixed(1);
         return { mapped, links, rawCount: pageItems.length, duration };
     }
@@ -173,7 +169,7 @@ export class GithubApiService {
         const token = await this.config.getValueDefault('github.token', '');
         this.logger.log('获取 README: ' + fullName);
     
-        const headers = this.buildGithubHeaders(token, 'application/vnd.github.v3.raw');
+        const headers = buildGithubHeaders(token, 'application/vnd.github.v3.raw');
         const [owner, repo] = fullName.split('/');
         const url = `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`;
     
@@ -296,7 +292,7 @@ export class GithubApiService {
         fullName: string,
         token: string,
     ): Promise<{ content: string | null; status: number; githubBody: string | null }> {
-        const headers = this.buildGithubHeaders(token);
+        const headers = buildGithubHeaders(token);
 
         const [owner, repo] = fullName.split('/');
         const url = `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`;
@@ -339,7 +335,7 @@ export class GithubApiService {
         this.logger.log('搜索仓库: q="' + query + '", sort=' + sort + ', order=' + order);
         this.logger.log(`搜索仓库详情: q="${query}", sort=${sort}, order=${order}, perPage=${perPage}`);
 
-        const headers = this.buildGithubHeaders(token);
+        const headers = buildGithubHeaders(token);
 
         const params = new URLSearchParams({
             q: query,
@@ -377,163 +373,5 @@ export class GithubApiService {
         }
     }
 
-    // ============================================================
-    // 内部工具方法
-    // ============================================================
-
-    /**
-     * 构建 GitHub API 请求头
-     *
-     * @param token GitHub Token，空则不加 Authorization
-     * @param accept Accept header 值，默认 v3+json
-     */
-    private buildGithubHeaders(token: string, accept = 'application/vnd.github.v3+json'): Record<string, string> {
-        const headers: Record<string, string> = { Accept: accept, 'User-Agent': 'GithubStars-Manager' };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        return headers;
-    }
-
-    /**
-     * 将单条 GitHub starred API 返回数据映射为 DB 格式
-     *
-     * GitHub starred API 返回格式（star+json media type）:
-     * {
-     *   starred_at: "2024-01-01T00:00:00Z",
-     *   repo: {
-     *     id, name, full_name, description, language,
-     *     owner: { login, avatar_url },
-     *     html_url, homepage, stargazers_count, forks_count,
-     *     watchers_count, open_issues_count, topics: [],
-     *     license: { spdx_id, name } | null,
-     *     fork, archived, created_at, updated_at, pushed_at
-     *   }
-     * }
-     *
-     * @param item GitHub starred API 返回的单条原始数据
-     * @returns 映射后的 MappedRepoData 对象，无效数据返回 null
-     */
-    private mapStarredItem(item: Record<string, any>): MappedRepoData | null {
-        const repo = item.repo || {};
-        if (!repo || !repo.full_name) {
-            return null; // 无效数据，跳过
-        }
-
-        const owner = repo.owner || {};
-        const license = repo.license || {};
-
-        return {
-            repoName: repo.name || '',
-            fullName: repo.full_name || '',
-            description: repo.description || null,
-            language: repo.language || null,
-            ownerName: owner.login || '',
-            ownerAvatarUrl: owner.avatar_url || '',
-            htmlUrl: repo.html_url || '',
-            homepage: repo.homepage || null,
-            starsCount: repo.stargazers_count || 0,
-            forksCount: repo.forks_count || 0,
-            watchersCount: repo.watchers_count || 0,
-            openIssuesCount: repo.open_issues_count || 0,
-            topics: JSON.stringify(Array.isArray(repo.topics) ? repo.topics : []),
-            licenseName: license.name || null,
-            isFork: !!repo.fork,
-            isArchived: !!repo.archived,
-            repoCreatedAt: repo.created_at ? new Date(repo.created_at) : null,
-            repoUpdatedAt: repo.updated_at ? new Date(repo.updated_at) : null,
-            repoPushedAt: repo.pushed_at ? new Date(repo.pushed_at) : null,
-            starredAt: item.starred_at ? new Date(item.starred_at) : null,
-        };
-    }
-
-    /**
-     * 解析 GitHub API 的 Link header，提取所有分页链接
-     *
-     * Link header 格式示例:
-     * <https://api.github.com/user/123/starred?page=2>; rel="next",
-     * <https://api.github.com/user/123/starred?page=10>; rel="last"
-     *
-     * @param linkHeader 原始 Link header 字符串
-     * @returns 包含 first/prev/next/last URL 的对象
-     */
-    parseLinkHeader(linkHeader: string): PaginationLinks {
-        const links: PaginationLinks = {};
-
-        if (!linkHeader || linkHeader.trim() === '') {
-            return links;
-        }
-
-        // 按逗号分割每个 link 条目
-        const parts = linkHeader.split(',');
-
-        for (const part of parts) {
-            const trimmed = part.trim();
-            // 匹配 <url>; rel="type" 的格式
-            const match = trimmed.match(/<([^>]+)>;\s*rel="([^"]+)"/);
-            if (!match) {
-                this.logger.verbose(`Link header 中存在无法解析的条目: "${trimmed}"`);
-                continue;
-            }
-
-            const url = match[1];
-            const rel = match[2].toLowerCase();
-
-            switch (rel) {
-                case 'first':
-                    links.first = url;
-                    break;
-                case 'prev':
-                    links.prev = url;
-                    break;
-                case 'next':
-                    links.next = url;
-                    break;
-                case 'last':
-                    links.last = url;
-                    break;
-                default:
-                    // 忽略不认识的 rel（如 "prev" 在某些版本中拼写不同）
-                    break;
-            }
-        }
-
-        return links;
-    }
-
-    /**
-     * 从分页链接估算总页数
-     *
-     * 优先从 last 链接提取 page 参数；
-     * 没有 last 链接时认为当前是最后一页。
-     */
-    private estimateTotalPages(links: PaginationLinks, currentPage: number): number {
-        if (links.last) {
-            try {
-                const url = new URL(links.last);
-                const pageParam = url.searchParams.get('page');
-                if (pageParam) {
-                    const total = parseInt(pageParam, 10);
-                    if (!isNaN(total) && total > 0) {
-                        return total;
-                    }
-                }
-            } catch {
-                // URL 格式异常，忽略
-            }
-        }
-
-        // 没有 next 也没有 last：只有一页
-        if (!links.next) {
-            return currentPage;
-        }
-
-        // 有 next 但没有 last：无法确定总页数
-        return currentPage;
-    }
-
-    /**
-     * Promise 延迟工具，用于 API 速率限制保护
-     */
-    private sleep(ms: number): Promise<void> {
-        return new Promise((resolve) => setTimeout(resolve, ms));
-    }
 }
+

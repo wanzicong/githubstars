@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { useSearchParams, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import {
     Card,
     Input,
@@ -34,6 +34,7 @@ import { StarRepoView } from '../../components/stars'
 import { TranslateProgressModal } from '../../components/translate'
 import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../../types'
 import { usePolling } from '../../hooks/usePolling'
+import { useStarListParams, TIME_PRESETS } from './hooks/useStarListParams'
 import { INITIAL_TASK_PROGRESS, type TaskProgress } from '../../constants'
 
 const { Title, Text } = Typography
@@ -75,122 +76,52 @@ export default function StarList() {
     const [searchParams, setSearchParams] = useSearchParams()
     const location = useLocation()
 
-    const keyword = searchParams.get('keyword') || ''
-    const languageStr = searchParams.get('languages') || ''
-    const selectedLanguages = languageStr ? languageStr.split(',') : []
-    const sortBy = searchParams.get('sortBy') || 'stars_count'
-    const sortOrder = searchParams.get('sortOrder') || 'desc'
-    const dateField = searchParams.get('dateField') || undefined
-    const currentPage = parseInt(searchParams.get('page') || '1', 10)
-    const pageSize = parseInt(searchParams.get('size') || '36', 10)
-    const startDateStr = searchParams.get('startDate')
-    const endDateStr = searchParams.get('endDate')
-    const untranslatedOnly = searchParams.get('untranslatedOnly') === 'true'
-    const viewMode = (searchParams.get('view') || 'list') as 'grid' | 'list'
+    const params = useStarListParams()
+    const { keyword, languageStr, selectedLanguages, sortBy, sortOrder,
+        dateField, currentPage, pageSize, startDateStr, endDateStr,
+        startDate, endDate, untranslatedOnly, viewMode, timePreset,
+        setUrlParam, setUrlParams, clearFilters } = params
 
-    const startDate = useMemo(() => {
-        if (!startDateStr) return null
-        const parsed = dayjs(startDateStr, 'YYYY-MM-DD', true)
-        return parsed.isValid() ? parsed : null
-    }, [startDateStr])
+    const handleTimePreset = useCallback((value) => {
+        const normalized = value === '不' ? '' : value
+        if (!normalized) { setUrlParams({ timePreset: null, dateField: null, startDate: null, endDate: null }); return }
+        const preset = TIME_PRESETS.find((p) => p.value === normalized)
+        if (!preset) return
+        const effectiveField = dateField || 'starred_at'
+        if (preset.value === 'today') {
+            const today = dayjs().format('YYYY-MM-DD')
+            setUrlParams({ timePreset: normalized, dateField: effectiveField, startDate: today, endDate: today })
+        } else if (preset.days > 0) {
+            const start = dayjs().subtract(preset.days, 'day').format('YYYY-MM-DD')
+            const end = dayjs().format('YYYY-MM-DD')
+            setUrlParams({ timePreset: normalized, dateField: effectiveField, startDate: start, endDate: end })
+        }
+    }, [dateField, setUrlParams])
 
-    const endDate = useMemo(() => {
-        if (!endDateStr) return null
-        const parsed = dayjs(endDateStr, 'YYYY-MM-DD', true)
-        return parsed.isValid() ? parsed : null
-    }, [endDateStr])
+    const handleDateFieldChange = useCallback((val) => {
+        if (!val) { setUrlParams({ dateField: null, startDate: null, endDate: null, timePreset: null }); return }
+        setUrlParams({ dateField: val, timePreset: null })
+    }, [setUrlParams])
 
-    const timePreset = searchParams.get('timePreset') || ''
+    const handleStartDateChange = useCallback((val) => {
+        if (val && endDate && val.isAfter(endDate, 'day')) {
+            const formatted = val.format('YYYY-MM-DD')
+            setUrlParams({ startDate: formatted, endDate: formatted, timePreset: null })
+            message.warning('起')
+            return
+        }
+        setUrlParams({ startDate: val ? val.format('YYYY-MM-DD') : null, timePreset: null })
+    }, [endDate, setUrlParams])
 
-    const setUrlParam = useCallback(
-        (key: string, value: string | null | undefined, resetPage = true) => {
-            setSearchParams((prev) => {
-                const next = new URLSearchParams(prev)
-                if (value === undefined || value === null || value === '') next.delete(key)
-                else next.set(key, value)
-                if (resetPage && key !== 'page') next.delete('page')
-                return next
-            })
-        },
-        [setSearchParams],
-    )
-
-    const setUrlParams = useCallback(
-        (updates: Record<string, string | null | undefined>) => {
-            setSearchParams((prev) => {
-                const next = new URLSearchParams(prev)
-                let shouldReset = false
-                for (const [key, value] of Object.entries(updates)) {
-                    if (value === undefined || value === null || value === '') next.delete(key)
-                    else next.set(key, value)
-                    if (key !== 'page') shouldReset = true
-                }
-                if (shouldReset) next.delete('page')
-                return next
-            })
-        },
-        [setSearchParams],
-    )
-
-    const handleTimePreset = useCallback(
-        (value: string) => {
-            const normalized = value === '不限' ? '' : value
-            if (!normalized) {
-                setUrlParams({ timePreset: null, dateField: null, startDate: null, endDate: null })
-                return
-            }
-            const preset = TIME_PRESETS.find((p) => p.value === normalized)
-            if (!preset) return
-            // 保留用户已选的时间字段，不覆盖；未选时默认 starred_at
-            const effectiveField = dateField || 'starred_at'
-            if (preset.value === 'today') {
-                const today = dayjs().format('YYYY-MM-DD')
-                setUrlParams({ timePreset: normalized, dateField: effectiveField, startDate: today, endDate: today })
-            } else if (preset.days > 0) {
-                const start = dayjs().subtract(preset.days, 'day').format('YYYY-MM-DD')
-                const end = dayjs().format('YYYY-MM-DD')
-                setUrlParams({ timePreset: normalized, dateField: effectiveField, startDate: start, endDate: end })
-            }
-        },
-        [dateField, setUrlParams],
-    )
-
-    const handleDateFieldChange = useCallback(
-        (val: string | undefined) => {
-            if (!val) {
-                setUrlParams({ dateField: null, startDate: null, endDate: null, timePreset: null })
-                return
-            }
-            setUrlParams({ dateField: val, timePreset: null })
-        },
-        [setUrlParams],
-    )
-
-    const handleStartDateChange = useCallback(
-        (val: dayjs.Dayjs | null) => {
-            if (val && endDate && val.isAfter(endDate, 'day')) {
-                const formatted = val.format('YYYY-MM-DD')
-                setUrlParams({ startDate: formatted, endDate: formatted, timePreset: null })
-                message.warning('起始日期不能晚于结束日期，已自动对齐')
-                return
-            }
-            setUrlParams({ startDate: val ? val.format('YYYY-MM-DD') : null, timePreset: null })
-        },
-        [endDate, setUrlParams],
-    )
-
-    const handleEndDateChange = useCallback(
-        (val: dayjs.Dayjs | null) => {
-            if (val && startDate && val.isBefore(startDate, 'day')) {
-                const formatted = val.format('YYYY-MM-DD')
-                setUrlParams({ startDate: formatted, endDate: formatted, timePreset: null })
-                message.warning('结束日期不能早于起始日期，已自动对齐')
-                return
-            }
-            setUrlParams({ endDate: val ? val.format('YYYY-MM-DD') : null, timePreset: null })
-        },
-        [startDate, setUrlParams],
-    )
+    const handleEndDateChange = useCallback((val) => {
+        if (val && startDate && val.isBefore(startDate, 'day')) {
+            const formatted = val.format('YYYY-MM-DD')
+            setUrlParams({ startDate: formatted, endDate: formatted, timePreset: null })
+            message.warning('起')
+            return
+        }
+        setUrlParams({ endDate: val ? val.format('YYYY-MM-DD') : null, timePreset: null })
+    }, [startDate, setUrlParams])
 
     const dateFieldLabel = DATE_FIELD_OPTIONS.find((item) => item.value === dateField)?.label
     const timeFilterSummary = useMemo(() => {
@@ -284,7 +215,7 @@ export default function StarList() {
         location.pathname, // 从详情页返回列表时触发刷新
     ])
 
-    const handleClearFilters = useCallback(() => {
+    const clearFilters = useCallback(() => {
         setUrlParams({
             keyword: null,
             languages: null,
@@ -545,7 +476,7 @@ export default function StarList() {
                                             仅未翻译
                                         </Tag>
                                     )}
-                                    <Button size='small' icon={<ClearOutlined />} onClick={handleClearFilters} type='link' style={{ padding: '0 4px' }}>
+                                    <Button size='small' icon={<ClearOutlined />} onClick={clearFilters} type='link' style={{ padding: '0 4px' }}>
                                         清除全部
                                     </Button>
                                 </div>
@@ -556,7 +487,7 @@ export default function StarList() {
                         <Col span={24}>
                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                                 {hasActiveFilters && (
-                                    <Button icon={<ClearOutlined />} onClick={handleClearFilters}>
+                                    <Button icon={<ClearOutlined />} onClick={clearFilters}>
                                         清除
                                     </Button>
                                 )}
@@ -669,7 +600,7 @@ export default function StarList() {
                 hasActiveFilters={hasActiveFilters}
                 currentPage={currentPage}
                 pageSize={pageSize}
-                onClearFilters={handleClearFilters}
+                onClearFilters={clearFilters}
                 onPageChange={(page, size) => {
                     const currentSize = parseInt(searchParams.get('size') || '36', 10)
                     if (size !== currentSize) {
