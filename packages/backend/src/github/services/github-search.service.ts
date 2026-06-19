@@ -89,7 +89,8 @@ export class GithubSearchService {
                 headers: { ...(await this.buildHeaders()), 'Content-Length': '0' },
             });
             return res.status === 204 || res.status === 304;
-        } catch {
+        } catch (e) {
+            this.logger.error(`Star 仓库失败: ${owner}/${repo}`, e instanceof Error ? e : undefined);
             return false;
         }
     }
@@ -111,11 +112,12 @@ export class GithubSearchService {
                 headers: await this.buildHeaders(),
             });
             return res.status === 204;
-        } catch {
+        } catch (e) {
+            this.logger.error(`取消 Star 仓库失败: ${owner}/${repo}`, e instanceof Error ? e : undefined);
             return false;
         }
     }
-
+    
     /**
      * 检查是否已 Star 某个仓库
      *
@@ -129,7 +131,8 @@ export class GithubSearchService {
         try {
             const res = await fetch(`${GITHUB_API}/user/starred/${owner}/${repo}`, { headers: await this.buildHeaders() });
             return res.status === 204;
-        } catch {
+        } catch (e) {
+            this.logger.error(`检查 Star 状态失败: ${owner}/${repo}`, e instanceof Error ? e : undefined);
             return false;
         }
     }

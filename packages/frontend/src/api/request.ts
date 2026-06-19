@@ -1,5 +1,11 @@
 import axios, { type AxiosError } from 'axios'
 
+/**
+ * HTTP 请求客户端
+ *
+ * 基于 Axios 封装，统一配置 baseURL、超时、请求/响应拦截。
+ * 通过 Vite proxy 将所有同源 API 请求转发到后端 (:3000)。
+ */
 const api = axios.create({
     baseURL: '/',
     timeout: 300000, // 5 分钟超时

@@ -1,6 +1,20 @@
 import api from './request'
 import type { GithubRepo, StarListParams, PageResult } from '../types'
 
+/**
+ * 星标仓库 API
+ *
+ * 提供星标仓库列表查询和 URL 导出能力。
+ */
+
+/**
+ * 分页获取星标仓库列表
+ *
+ * 支持多维度筛选（关键词、语言、日期范围、未翻译）、排序和分页。
+ *
+ * @param params 查询参数
+ * @returns 分页结果，包含翻译状态标记
+ */
 export async function fetchStarList(params: StarListParams): Promise<PageResult<GithubRepo>> {
     const body: Record<string, unknown> = {}
     if (params.page) body.page = params.page
@@ -23,6 +37,12 @@ export async function fetchStarList(params: StarListParams): Promise<PageResult<
     }
 }
 
+/**
+ * 按筛选条件导出仓库 URL（返回 Blob 用于下载）
+ *
+ * @param params 筛选参数（同 fetchStarList）
+ * @returns 纯文本 Blob，每行一个 URL
+ */
 export async function exportStarsUrls(params: StarListParams): Promise<Blob> {
     const body: Record<string, unknown> = {}
     if (params.keyword) body.keyword = params.keyword
