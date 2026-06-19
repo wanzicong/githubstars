@@ -7,10 +7,6 @@ import {
     Button,
     Space,
     Typography,
-    Avatar,
-    Statistic,
-    Row,
-    Col,
     Spin,
     Empty,
     App,
@@ -22,21 +18,18 @@ import {
     ArrowLeftOutlined,
     GithubOutlined,
     LinkOutlined,
-    StarFilled,
-    ForkOutlined,
-    EyeOutlined,
-    BugOutlined,
     TranslationOutlined,
     ReadOutlined,
     ReloadOutlined,
     CheckCircleOutlined,
     CloseCircleOutlined,
-    ExpandOutlined,
 } from '@ant-design/icons'
 import * as statsApi from '../api/stats'
 import * as translateApi from '../api/translate'
-import { formatNumberCn, formatDate } from '../utils/format'
-import MarkdownRenderer from '../components/MarkdownRenderer'
+import { formatDate } from '../utils/format'
+import RepoHeader from '../components/repo/RepoHeader'
+import RepoStatsGrid from '../components/repo/RepoStatsGrid'
+import RepoReadmeCard from '../components/repo/RepoReadmeCard'
 import { usePolling } from '../hooks/usePolling'
 import type { GithubRepo, TranslateTaskProgress } from '../types'
 
@@ -282,9 +275,7 @@ export default function StarDetail() {
         }
     }
 
-    // README 全屏查看
-    const [readmeFullscreenVisible, setReadmeFullscreenVisible] = useState(false)
-
+    // README 全屏查看 - 已内置于 RepoReadmeCard 组件
 
     const handleCloseTranslateModal = () => {
         polling.stop()
@@ -328,8 +319,6 @@ export default function StarDetail() {
 
     const topics = parseTopics(repo.topics)
 
-    const statColStyle = { xs: 12 as const, sm: 12 as const, md: 6 as const }
-
     return (
         <div>
             <Button icon={<ArrowLeftOutlined />} onClick={handleBack} style={{ marginBottom: 20 }}>
@@ -337,162 +326,20 @@ export default function StarDetail() {
             </Button>
 
             <Card style={{ marginBottom: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-                    <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={64} style={{ flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <Title level={4} style={{ margin: 0, marginBottom: 4 }}>
-                            {repo.fullName}
-                        </Title>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                            <Text type='secondary' style={{ fontSize: 14 }}>
-                                {repo.ownerName}
-                            </Text>
-                            {repo.isFork && (
-                                <Tag color='orange' style={{ margin: 0 }}>
-                                    已 Fork
-                                </Tag>
-                            )}
-                            {repo.isArchived && (
-                                <Tag color='default' style={{ margin: 0 }}>
-                                    已归档
-                                </Tag>
-                            )}
-                        </div>
-                        {/* 描述：优先显示中文翻译 */}
-                        {repo.descriptionCn ? (
-                            <div>
-                                <Paragraph style={{ marginBottom: 4, color: '#333' }}>
-                                    {repo.descriptionCn}
-                                    <Text type='secondary' style={{ fontSize: 11, marginLeft: 6 }}>
-                                        🇨🇳 中文
-                                    </Text>
-                                </Paragraph>
-                                {repo.description && repo.description !== repo.descriptionCn && (
-                                    <Paragraph type='secondary' style={{ marginBottom: 0, fontSize: 12 }}>
-                                        <Text type='secondary' italic>
-                                            原文：
-                                        </Text>
-                                        {repo.description}
-                                    </Paragraph>
-                                )}
-                                <Button
-                                    size='small'
-                                    type='link'
-                                    icon={<ReloadOutlined />}
-                                    loading={translatingDesc}
-                                    onClick={handleTranslateDescription}
-                                    style={{ padding: 0, marginTop: 4 }}
-                                >
-                                    重新翻译
-                                </Button>
-                            </div>
-                        ) : repo.description ? (
-                            <div>
-                                <Paragraph type='secondary' style={{ marginBottom: 8 }}>
-                                    {repo.description}
-                                </Paragraph>
-                                <Button
-                                    size='small'
-                                    icon={<TranslationOutlined />}
-                                    loading={translatingDesc}
-                                    onClick={handleTranslateDescription}
-                                >
-                                    翻译描述
-                                </Button>
-                            </div>
-                        ) : (
-                            <Text type='secondary' style={{ marginBottom: 8 }}>
-                                暂无描述
-                            </Text>
-                        )}
-                    </div>
-                    <Space wrap>
-                        <Button
-                            type='primary'
-                            icon={<GithubOutlined />}
-                            onClick={() => window.open(repo.htmlUrl, '_blank', 'noopener,noreferrer')}
-                        >
-                            在 GitHub 上查看
-                        </Button>
-                        {repo.homepage && (
-                            <Button icon={<LinkOutlined />} onClick={() => window.open(repo.homepage!, '_blank', 'noopener,noreferrer')}>
-                                访问项目主页
-                            </Button>
-                        )}
-                    </Space>
-                </div>
+                <RepoHeader
+                    repo={repo}
+                    translatingDesc={translatingDesc}
+                    onTranslateDesc={handleTranslateDescription}
+                    onRetranslateDesc={handleTranslateDescription}
+                />
             </Card>
 
-            <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
-                <Col {...statColStyle}>
-                    <Card size='small'>
-                        <Statistic
-                            title='Stars'
-                            value={repo.starsCount}
-                            prefix={<StarFilled style={{ color: '#faad14' }} />}
-                            formatter={(value) => (
-                                <span>
-                                    {value}{' '}
-                                    <Text type='secondary' style={{ fontSize: 12 }}>
-                                        {formatNumberCn(Number(value))}
-                                    </Text>
-                                </span>
-                            )}
-                        />
-                    </Card>
-                </Col>
-                <Col {...statColStyle}>
-                    <Card size='small'>
-                        <Statistic
-                            title='Forks'
-                            value={repo.forksCount}
-                            prefix={<ForkOutlined style={{ color: '#52c41a' }} />}
-                            formatter={(value) => (
-                                <span>
-                                    {value}{' '}
-                                    <Text type='secondary' style={{ fontSize: 12 }}>
-                                        {formatNumberCn(Number(value))}
-                                    </Text>
-                                </span>
-                            )}
-                        />
-                    </Card>
-                </Col>
-                <Col {...statColStyle}>
-                    <Card size='small'>
-                        <Statistic
-                            title='Watchers'
-                            value={repo.watchersCount}
-                            prefix={<EyeOutlined style={{ color: '#1677ff' }} />}
-                            formatter={(value) => (
-                                <span>
-                                    {value}{' '}
-                                    <Text type='secondary' style={{ fontSize: 12 }}>
-                                        {formatNumberCn(Number(value))}
-                                    </Text>
-                                </span>
-                            )}
-                        />
-                    </Card>
-                </Col>
-                <Col {...statColStyle}>
-                    <Card size='small'>
-                        <Statistic
-                            title='Open Issues'
-                            value={repo.openIssuesCount}
-                            prefix={<BugOutlined style={{ color: '#ff4d4f' }} />}
-                            formatter={(value) => (
-                                <span>
-                                    {value}{' '}
-                                    <Text type='secondary' style={{ fontSize: 12 }}>
-                                        {formatNumberCn(Number(value))}
-                                    </Text>
-                                </span>
-                            )}
-                        />
-                    </Card>
-                </Col>
-            </Row>
+            <RepoStatsGrid
+                starsCount={repo.starsCount}
+                forksCount={repo.forksCount}
+                watchersCount={repo.watchersCount}
+                openIssuesCount={repo.openIssuesCount}
+            />
 
             <Card title='详细信息' style={{ marginBottom: 20 }}>
                 <Descriptions column={{ xs: 1, sm: 1, md: 2 }} bordered size='small'>
@@ -526,105 +373,14 @@ export default function StarDetail() {
             </Card>
 
             {/* README 翻译区块 */}
-            <Card
-                title={
-                    <Space>
-                        <ReadOutlined />
-                        <span>README 中文翻译</span>
-                    </Space>
-                }
-                extra={
-                    !repo.readmeFetched ? (
-                        <Button
-                            type='primary'
-                            size='small'
-                            icon={<TranslationOutlined />}
-                            loading={translatingReadme}
-                            onClick={handleTranslateReadme}
-                        >
-                            翻译 README
-                        </Button>
-                    ) : (
-                        <Space>
-                            {repo.readmeCn && (
-                                <Button size='small' icon={<ExpandOutlined />} onClick={() => setReadmeFullscreenVisible(true)}>
-                                    放大查看
-                                </Button>
-                            )}
-                            {repo.readmeCn ? (
-                                <Button
-                                    size='small'
-                                    icon={<ReloadOutlined />}
-                                    loading={translatingReadme}
-                                    onClick={handleRetranslateReadme}
-                                >
-                                    重新翻译
-                                </Button>
-                            ) : (
-                                <Button
-                                    size='small'
-                                    icon={<ReloadOutlined />}
-                                    loading={translatingReadme}
-                                    onClick={handleRetranslateReadme}
-                                >
-                                    重新获取
-                                </Button>
-                            )}
-                        </Space>
-                    )
-                }
-            >
-                {repo.readmeFetched && repo.readmeCn ? (
-                    <MarkdownRenderer
-                        content={repo.readmeCn}
-                        style={{ overflow: 'auto', maxHeight: 600, padding: '8px 16px' }}
-                    />
-                ) : repo.readmeFetched && !repo.readmeCn ? (
-                    <div style={{ textAlign: 'center', padding: 24 }}>
-                        <ReadOutlined style={{ fontSize: 32, color: '#d9d9d9', marginBottom: 8 }} />
-                        <br />
-                        <Text type='secondary'>该仓库没有 README</Text>
-                    </div>
-                ) : (
-                    <div style={{ textAlign: 'center', padding: 24 }}>
-                        <ReadOutlined style={{ fontSize: 32, color: '#d9d9d9', marginBottom: 8 }} />
-                        <br />
-                        <Text type='secondary'>README 尚未翻译</Text>
-                        <br />
-                        <Button
-                            type='primary'
-                            icon={<TranslationOutlined />}
-                            loading={translatingReadme}
-                            onClick={handleTranslateReadme}
-                            style={{ marginTop: 8 }}
-                        >
-                            翻译 README
-                        </Button>
-                    </div>
-                )}
-            </Card>
+            <RepoReadmeCard
+                repo={repo}
+                translatingReadme={translatingReadme}
+                onTranslateReadme={handleTranslateReadme}
+                onRetranslateReadme={handleRetranslateReadme}
+            />
 
-            {/* README 全屏查看弹窗 */}
-            <Modal
-                title={
-                    <Space>
-                        <ExpandOutlined />
-                        <span>README 中文翻译 - 全屏查看</span>
-                    </Space>
-                }
-                open={readmeFullscreenVisible}
-                onCancel={() => setReadmeFullscreenVisible(false)}
-                footer={
-                    <Button type='primary' onClick={() => setReadmeFullscreenVisible(false)}>
-                        关闭
-                    </Button>
-                }
-                width='95%'
-                style={{ top: 20, paddingBottom: 0 }}
-                styles={{ body: { maxHeight: 'calc(100vh - 160px)', overflow: 'auto', padding: '16px 24px' } }}
-            >
-                <MarkdownRenderer content={repo?.readmeCn || ''} style={{ padding: '8px 16px' }} />
-            </Modal>
+            {/* README 全屏查看弹窗 - 已内置于 RepoReadmeCard */}
 
             {/* 异步翻译进度弹窗 */}
             <Modal

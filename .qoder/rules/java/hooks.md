@@ -1,9 +1,5 @@
 ---
-paths:
-  - "**/*.java"
-  - "**/pom.xml"
-  - "**/build.gradle"
-  - "**/build.gradle.kts"
+trigger: always_on
 ---
 
 # Java 钩子

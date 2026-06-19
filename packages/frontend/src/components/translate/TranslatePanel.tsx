@@ -31,9 +31,9 @@ import {
     FilterOutlined,
     SyncOutlined,
 } from '@ant-design/icons'
-import * as translateApi from '../api/translate'
-import { usePolling } from '../hooks/usePolling'
-import type { TranslateTaskProgress } from '../types'
+import * as translateApi from '../../api/translate'
+import { usePolling } from '../../hooks/usePolling'
+import type { TranslateTaskProgress } from '../../types'
 
 const { Text } = Typography
 

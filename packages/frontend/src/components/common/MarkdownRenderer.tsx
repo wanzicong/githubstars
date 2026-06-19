@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import type { Components } from 'react-markdown'
 
 /** Markdown → React 的共享渲染组件映射，确保全站 README/AI 分析等 Markdown 渲染风格一致 */
@@ -106,7 +107,7 @@ const MarkdownRenderer = memo(function MarkdownRenderer({ content, components, c
 
     return (
         <div className={className} style={style}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mergedComponents}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mergedComponents}>
                 {content}
             </ReactMarkdown>
         </div>

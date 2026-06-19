@@ -9,31 +9,19 @@ import {
     Col,
     Tag,
     Typography,
-    Pagination,
-    Empty,
     Space,
-    Statistic,
     DatePicker,
     Spin,
     Collapse,
-    Modal,
-    Progress,
     App,
-    Alert,
     Segmented,
     Switch,
 } from 'antd'
 import {
-    StarFilled,
-    ForkOutlined,
     ClearOutlined,
     DownloadOutlined,
-    GithubOutlined,
-    CaretDownOutlined,
     TranslationOutlined,
-    ReloadOutlined,
-    CheckCircleOutlined,
-    CloseCircleOutlined,
+    CaretDownOutlined,
     AppstoreOutlined,
     UnorderedListOutlined,
 } from '@ant-design/icons'
@@ -41,9 +29,10 @@ import dayjs from '../setupDayjs'
 import * as statsApi from '../api/stats'
 import * as starsApi from '../api/stars'
 import * as translateApi from '../api/translate'
-import RepoCard from '../components/RepoCard'
-import RepoRow from '../components/RepoRow'
-import TranslatePanel from '../components/TranslatePanel'
+import TranslatePanel from '../components/translate/TranslatePanel'
+import StarStatsBar from '../components/stars/StarStatsBar'
+import StarRepoView from '../components/stars/StarRepoView'
+import TranslateProgressModal from '../components/translate/TranslateProgressModal'
 import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
 import { usePolling } from '../hooks/usePolling'
 import { PAGE_SIZE_OPTIONS_SMALL, INITIAL_TASK_PROGRESS, type TaskProgress } from '../constants'
@@ -379,91 +368,14 @@ export default function StarList() {
         setTranslateProgress(null)
     }, [polling])
 
-    const renderTranslateProgress = () => {
-        if (!translateProgress) return null
-        const {
-            status,
-            totalItems,
-            completedItems,
-            failedItems,
-            progress,
-            descTotal,
-            descCompleted,
-            descFailed,
-            readmeTotal,
-            readmeCompleted,
-            readmeFailed,
-        } = translateProgress
-        const isRunning = status === 'PENDING' || status === 'PROCESSING'
-        const isDone = status === 'COMPLETED' || status === 'FAILED'
-        return (
-            <Modal
-                title='翻译进度'
-                open={translateModalVisible}
-                onCancel={isRunning ? undefined : handleCloseTranslateModal}
-                footer={
-                    isDone ? (
-                        <Space>
-                            {failedItems > 0 && (
-                                <Button icon={<ReloadOutlined />} onClick={handleRetryFailed}>
-                                    重试失败 ({failedItems}项)
-                                </Button>
-                            )}
-                            <Button type='primary' onClick={handleCloseTranslateModal}>
-                                关闭
-                            </Button>
-                        </Space>
-                    ) : null
-                }
-                mask={{ closable: !isRunning }}
-                closable={!isRunning}
-            >
-                <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                    <Spin spinning={isRunning} size='large'>
-                        <div style={{ padding: 8 }}>
-                            {isDone && (
-                                <div style={{ fontSize: 48, marginBottom: 8 }}>
-                                    {failedItems > 0 ? (
-                                        <CloseCircleOutlined style={{ color: '#ff4d4f' }} />
-                                    ) : (
-                                        <CheckCircleOutlined style={{ color: '#52c41a' }} />
-                                    )}
-                                </div>
-                            )}
-                            <Progress
-                                type='circle'
-                                percent={progress}
-                                status={isRunning ? 'active' : failedItems > 0 ? 'exception' : 'success'}
-                                size={120}
-                            />
-                            <div style={{ marginTop: 16, fontSize: 14, color: '#666' }}>
-                                {isRunning ? '翻译执行中...' : status === 'COMPLETED' ? '翻译完成' : '翻译完成（部分失败）'}
-                            </div>
-                            <div style={{ marginTop: 12, fontSize: 13, color: '#999' }}>
-                                总 {totalItems} 项 | 成功 {completedItems} | 失败 {failedItems}
-                            </div>
-                        </div>
-                    </Spin>
-                </div>
-                <div style={{ padding: '8px 0' }}>
-                    <Alert
-                        type='info'
-                        showIcon
-                        message={
-                            <div style={{ fontSize: 13 }}>
-                                <div>
-                                    描述翻译：{descCompleted}/{descTotal} 完成{failedItems > 0 ? `，${descFailed} 失败` : ''}
-                                </div>
-                                <div>
-                                    README 翻译：{readmeCompleted}/{readmeTotal} 完成{failedItems > 0 ? `，${readmeFailed} 失败` : ''}
-                                </div>
-                            </div>
-                        }
-                    />
-                </div>
-            </Modal>
-        )
-    }
+    const renderTranslateProgress = () => (
+        <TranslateProgressModal
+            open={translateModalVisible}
+            progress={translateProgress}
+            onClose={handleCloseTranslateModal}
+            onRetryFailed={handleRetryFailed}
+        />
+    )
 
     // (已移除废弃的单独批量翻译入口 handleBatchTranslate)
 
@@ -559,50 +471,7 @@ export default function StarList() {
                 />
             </div>
 
-            <Spin spinning={initialLoading}>
-                <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
-                    <Col xs={12} sm={6}>
-                        <Card size='small'>
-                            <Statistic
-                                title='总仓库数'
-                                value={overview?.totalRepos ?? 0}
-                                prefix={<GithubOutlined style={{ color: '#1677ff' }} />}
-                            />
-                        </Card>
-                    </Col>
-                    <Col xs={12} sm={6}>
-                        <Card size='small'>
-                            <Statistic
-                                title='总 Star 数'
-                                value={overview?.totalStars ?? 0}
-                                prefix={<StarFilled style={{ color: '#faad14' }} />}
-                            />
-                        </Card>
-                    </Col>
-                    <Col xs={12} sm={6}>
-                        <Card size='small'>
-                            <Statistic
-                                title='总 Fork 数'
-                                value={overview?.totalForks ?? 0}
-                                prefix={<ForkOutlined style={{ color: '#52c41a' }} />}
-                            />
-                        </Card>
-                    </Col>
-                    <Col xs={12} sm={6}>
-                        <Card size='small'>
-                            <Statistic
-                                title='语言种类'
-                                value={overview?.totalLanguages ?? 0}
-                                prefix={
-                                    <Tag color='purple' style={{ marginRight: 0 }}>
-                                        #
-                                    </Tag>
-                                }
-                            />
-                        </Card>
-                    </Col>
-                </Row>
-            </Spin>
+            <StarStatsBar overview={overview} loading={initialLoading} />
 
             <Card style={{ marginBottom: 20 }}>
                 <Space orientation='vertical' size='middle' style={{ width: '100%' }}>
@@ -793,64 +662,25 @@ export default function StarList() {
                 </Space>
             </Card>
 
-            <Spin spinning={loading}>
-                {repos.length > 0 ? (
-                    viewMode === 'list' ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            {repos.map((repo) => (
-                                <RepoRow key={repo.id} repo={repo} />
-                            ))}
-                        </div>
-                    ) : (
-                        <Row gutter={[16, 16]}>
-                            {repos.map((repo) => (
-                                <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
-                                    <RepoCard repo={repo} />
-                                </Col>
-                            ))}
-                        </Row>
-                    )
-                ) : (
-                    <Card>
-                        <Empty
-                            description={
-                                loading ? '加载中...' : pageResult.total === 0 ? '暂无仓库数据，请先同步' : '筛选无结果，请尝试调整筛选条件'
-                            }
-                        >
-                            {hasActiveFilters && (
-                                <Button type='primary' onClick={handleClearFilters}>
-                                    清除所有筛选
-                                </Button>
-                            )}
-                        </Empty>
-                    </Card>
-                )}
-
-                {pageResult.total > pageSize && (
-                    <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
-                        <Pagination
-                            current={currentPage}
-                            pageSize={pageSize}
-                            total={pageResult.total}
-                            showSizeChanger
-                            pageSizeOptions={PAGE_SIZE_OPTIONS_SMALL.map(String)}
-                            showQuickJumper
-                            showTotal={(total) => `共 ${total} 条 / ${pageResult.pages} 页`}
-                            onChange={(page, size) => {
-                                const currentSize = parseInt(searchParams.get('size') || '36', 10)
-                                if (size !== currentSize) {
-                                    // size 变化时重置到第 1 页（setUrlParam 在 key !== 'page' 时自动重置 page）
-                                    setUrlParam('size', String(size), false)
-                                    // 显式重置 page 为 1（避免 currentSize 恰好等于 default 导致逻辑跳进 else 分支）
-                                    setUrlParam('page', '1', false)
-                                } else {
-                                    setUrlParam('page', String(page), false)
-                                }
-                            }}
-                        />
-                    </div>
-                )}
-            </Spin>
+            <StarRepoView
+                repos={repos}
+                pageResult={pageResult}
+                viewMode={viewMode}
+                loading={loading}
+                hasActiveFilters={hasActiveFilters}
+                currentPage={currentPage}
+                pageSize={pageSize}
+                onClearFilters={handleClearFilters}
+                onPageChange={(page, size) => {
+                    const currentSize = parseInt(searchParams.get('size') || '36', 10)
+                    if (size !== currentSize) {
+                        setUrlParam('size', String(size), false)
+                        setUrlParam('page', '1', false)
+                    } else {
+                        setUrlParam('page', String(page), false)
+                    }
+                }}
+            />
             {renderTranslateProgress()}
 
             {/* 翻译管理面板 */}

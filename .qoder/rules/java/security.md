@@ -1,6 +1,5 @@
 ---
-paths:
-  - "**/*.java"
+trigger: always_on
 ---
 
 # Java 安全
