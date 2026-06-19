@@ -24,17 +24,17 @@ import {
     AppstoreOutlined,
     UnorderedListOutlined,
 } from '@ant-design/icons'
-import dayjs from '../setupDayjs'
-import * as statsApi from '../api/stats'
-import * as starsApi from '../api/stars'
-import * as translateApi from '../api/translate'
-import TranslatePanel from '../components/translate/TranslatePanel'
-import StarStatsBar from '../components/stars/StarStatsBar'
-import StarRepoView from '../components/stars/StarRepoView'
-import TranslateProgressModal from '../components/translate/TranslateProgressModal'
-import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../types'
-import { usePolling } from '../hooks/usePolling'
-import { INITIAL_TASK_PROGRESS, type TaskProgress } from '../constants'
+import dayjs from '../../config/setupDayjs'
+import * as statsApi from '../../api'
+import * as starsApi from '../../api'
+import * as translateApi from '../../api'
+import { TranslatePanel } from '../../components/translate'
+import { StarStatsBar } from '../../components/stars'
+import { StarRepoView } from '../../components/stars'
+import { TranslateProgressModal } from '../../components/translate'
+import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../../types'
+import { usePolling } from '../../hooks/usePolling'
+import { INITIAL_TASK_PROGRESS, type TaskProgress } from '../../constants'
 
 const { Title, Text } = Typography
 
@@ -697,7 +697,7 @@ export default function StarList() {
                         })
                         setPageResult(res)
                     }
-                    fetchList().catch(console.error)
+                    fetchList().catch(() => {})
                 }}
             />
         </div>

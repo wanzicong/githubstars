@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '../../config/config.service';
+import { ConfigService } from '../config/config.service';
 
 const GITHUB_API = 'https://api.github.com';
 

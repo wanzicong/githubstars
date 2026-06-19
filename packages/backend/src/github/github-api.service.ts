@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '../../config/config.service';
-import type { MappedRepoData } from '../interfaces/repo-data.interface';
+import { ConfigService } from '../config/config.service';
+import type { MappedRepoData } from './repo-data.interface';
 
 const GITHUB_API = 'https://api.github.com';
 
-export type { MappedRepoData } from '../interfaces/repo-data.interface';
+export type { MappedRepoData } from './repo-data.interface';
 
 /** Link header 解析结果 */
 export interface PaginationLinks {

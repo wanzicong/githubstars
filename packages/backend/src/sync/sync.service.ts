@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { GithubApiService } from '../github/services/github-api.service';
-import { GithubRepoService } from '../github/services/github-repo.service';
+import { GithubApiService } from '../github/github-api.service';
+import { GithubRepoService } from '../github/github-repo.service';
 
 @Injectable()
 export class SyncService {

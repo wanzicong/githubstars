@@ -1,14 +1,14 @@
 import { Controller, Post, Body, Res, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
-import { TranslateService } from '../services/translate.service';
-import { TranslateTaskService } from '../services/translate-task.service';
-import { SseManagerService } from '../services/sse-manager.service';
-import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
-import { IdParamSchema } from '../../common/dto/id-param.dto';
-import type { IdParamDto } from '../../common/dto/id-param.dto';
-import { FilterSchema } from '../../common/dto/filter.dto';
-import type { FilterDto } from '../../common/dto/filter.dto';
+import { TranslateService } from './translate.service';
+import { TranslateTaskService } from './translate-task.service';
+import { SseManagerService } from './sse-manager.service';
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { IdParamSchema } from '../common/dto/id-param.dto';
+import type { IdParamDto } from '../common/dto/id-param.dto';
+import { FilterSchema } from '../common/dto/filter.dto';
+import type { FilterDto } from '../common/dto/filter.dto';
 
 @ApiTags('translate')
 @Controller('api/translate')

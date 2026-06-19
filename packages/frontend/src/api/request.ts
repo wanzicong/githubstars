@@ -70,7 +70,6 @@ api.interceptors.response.use(
             message = '网络已断开，请检查网络连接'
         }
 
-        console.error(`[API Error] ${url}: ${message}`, error)
         ;(error as AxiosError & { userMessage: string }).userMessage = message
         return Promise.reject(error)
     },

@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { TranslateService } from './services/translate.service';
-import { TranslateTaskService } from './services/translate-task.service';
-import { SseManagerService } from './services/sse-manager.service';
-import { TranslateController } from './controllers/translate.controller';
-import { TranslateLegacyController } from './controllers/translate-legacy.controller';
+import { TranslateService } from './translate.service';
+import { TranslateTaskService } from './translate-task.service';
+import { SseManagerService } from './sse-manager.service';
+import { TranslateController } from './translate.controller';
+import { TranslateLegacyController } from './translate-legacy.controller';
 import { GithubModule } from '../github/github.module';
 
 /**

@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Input, Select, Card, Pagination, Spin, Empty, Typography, Tag, Button, Space, Row, Col, App } from 'antd'
 import { SearchOutlined, StarFilled, StarOutlined, ForkOutlined, GithubOutlined } from '@ant-design/icons'
-import { searchRepos, starRepo, checkStarred } from '../api/github'
-import type { GithubSearchRepo } from '../types'
-import { LANGUAGE_OPTIONS } from '../constants'
-import { formatNumberShort, getRelativeTime, parseFullName } from '../utils/format'
+import { searchRepos, starRepo, checkStarred } from '../../api'
+import type { GithubSearchRepo } from '../../types'
+import { LANGUAGE_OPTIONS } from '../../constants'
+import { formatNumberShort, getRelativeTime, parseFullName } from '../../utils/format'
 
 const { Title, Text, Paragraph } = Typography
 

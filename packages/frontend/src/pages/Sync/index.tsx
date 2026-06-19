@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Card, Button, Table, Tag, Statistic, Row, Col, Alert, Typography, Spin } from 'antd'
 import { SyncOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons'
-import * as syncApi from '../api/sync'
-import type { SyncStatus, SyncLog } from '../types'
-import { formatDate } from '../utils/format'
-import { usePolling } from '../hooks/usePolling'
+import * as syncApi from '../../api'
+import type { SyncStatus, SyncLog } from '../../types'
+import { formatDate } from '../../utils/format'
+import { usePolling } from '../../hooks/usePolling'
 
 const { Title } = Typography
 

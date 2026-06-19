@@ -1,7 +1,7 @@
 import { Controller, Post, Body, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
-import { GithubSearchService } from '../github/services/github-search.service';
-import { TranslateTaskService } from '../translate/services/translate-task.service';
+import { GithubSearchService } from '../github/github-search.service';
+import { TranslateTaskService } from '../translate/translate-task.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { TrendingSchema } from '../common/dto/filter.dto';
 import type { TrendingDto } from '../common/dto/filter.dto';

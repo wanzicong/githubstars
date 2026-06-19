@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { GithubApiService } from './services/github-api.service';
-import { GithubSearchService } from './services/github-search.service';
-import { GithubRepoService } from './services/github-repo.service';
-import { StarsController } from './controllers/stars.controller';
-import { GithubSearchController } from './controllers/github-search.controller';
-import { SimilarController } from './controllers/similar.controller';
+import { GithubApiService } from './github-api.service';
+import { GithubSearchService } from './github-search.service';
+import { GithubRepoService } from './github-repo.service';
+import { StarsController } from './stars.controller';
+import { GithubSearchController } from './github-search.controller';
+import { SimilarController } from './similar.controller';
 
 /**
  * GitHub 模块

@@ -1,6 +1,6 @@
 import { Controller, Post, Body, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
-import { GithubRepoService } from '../services/github-repo.service';
+import { GithubRepoService } from './github-repo.service';
 
 @ApiTags('similar')
 @Controller('api/similar')

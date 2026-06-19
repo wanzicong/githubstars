@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Segmented, Select, Card, Spin, Empty, Typography, Tag, Space, Row, Col, App } from 'antd'
 import { StarFilled, ForkOutlined, FireOutlined } from '@ant-design/icons'
-import { fetchTrending } from '../api/trending'
-import type { GithubSearchRepo } from '../types'
-import { LANGUAGE_OPTIONS, RANK_BADGE_COLORS } from '../constants'
-import { formatNumberShort, getRelativeTime } from '../utils/format'
+import { fetchTrending } from '../../api'
+import type { GithubSearchRepo } from '../../types'
+import { LANGUAGE_OPTIONS, RANK_BADGE_COLORS } from '../../constants'
+import { formatNumberShort, getRelativeTime } from '../../utils/format'
 
 const { Title, Text, Paragraph } = Typography
 

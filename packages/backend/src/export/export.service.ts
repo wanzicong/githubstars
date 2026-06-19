@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { GithubRepoService } from '../github/services/github-repo.service';
+import { GithubRepoService } from '../github/github-repo.service';
 
 /** Markdown 导出的筛选条件描述 */
 interface MarkdownFilters {

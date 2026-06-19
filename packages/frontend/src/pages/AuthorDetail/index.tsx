@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card, Select, Button, Row, Col, Tag, Avatar, Typography, Pagination, Empty, Space, Spin, Breadcrumb, Statistic } from 'antd'
 import { StarFilled, ForkOutlined, ArrowLeftOutlined, DownloadOutlined, GithubOutlined, UserOutlined } from '@ant-design/icons'
-import * as authorsApi from '../api/authors'
-import { formatNumberShort, formatDate, daysSince, getStalenessColor } from '../utils/format'
-import type { GithubRepo, PageResult } from '../types'
+import * as authorsApi from '../../api'
+import { formatNumberShort, formatDate, daysSince, getStalenessColor } from '../../utils/format'
+import type { GithubRepo, PageResult } from '../../types'
 
 const { Title, Text, Paragraph } = Typography
 

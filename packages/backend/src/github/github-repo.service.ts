@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
-import { resolveSortField, resolveSortDir, parseLanguages, DATE_FIELD_MAP } from '../../common/utils/query-params.util';
-import { buildPaginationResult } from '../../common/utils/pagination.util';
-import type { BaseFilterParams, FilterParams, PaginatedFilterParams } from '../../common/interfaces/filter-params.interface';
-import type { UpsertRepoInput } from '../interfaces/repo-data.interface';
+import { resolveSortField, resolveSortDir, parseLanguages, DATE_FIELD_MAP } from '../common/utils/query-params.util';
+import { buildPaginationResult } from '../common/utils/pagination.util';
+import type { BaseFilterParams, FilterParams, PaginatedFilterParams } from '../common/interfaces/filter-params.interface';
+import type { UpsertRepoInput } from './repo-data.interface';
 
 @Injectable()
 export class GithubRepoService {

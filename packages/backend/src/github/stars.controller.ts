@@ -1,10 +1,10 @@
 import { Controller, Post, Logger, Body, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
-import { GithubRepoService } from '../services/github-repo.service';
-import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
-import { FilterSchema } from '../../common/dto/filter.dto';
-import type { FilterDto } from '../../common/dto/filter.dto';
+import { GithubRepoService } from './github-repo.service';
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { FilterSchema } from '../common/dto/filter.dto';
+import type { FilterDto } from '../common/dto/filter.dto';
 
 @ApiTags('stars')
 @Controller('api/stars')

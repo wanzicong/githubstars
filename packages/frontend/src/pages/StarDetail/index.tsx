@@ -19,14 +19,14 @@ import {
     CheckCircleOutlined,
     CloseCircleOutlined,
 } from '@ant-design/icons'
-import * as statsApi from '../api/stats'
-import * as translateApi from '../api/translate'
-import { formatDate } from '../utils/format'
-import RepoHeader from '../components/repo/RepoHeader'
-import RepoStatsGrid from '../components/repo/RepoStatsGrid'
-import RepoReadmeCard from '../components/repo/RepoReadmeCard'
-import { usePolling } from '../hooks/usePolling'
-import type { GithubRepo, TranslateTaskProgress } from '../types'
+import * as statsApi from '../../api'
+import * as translateApi from '../../api'
+import { formatDate } from '../../utils/format'
+import { RepoHeader } from '../../components/repo'
+import { RepoStatsGrid } from '../../components/repo'
+import { RepoReadmeCard } from '../../components/repo'
+import { usePolling } from '../../hooks/usePolling'
+import type { GithubRepo, TranslateTaskProgress } from '../../types'
 
 const { Text } = Typography
 
@@ -69,7 +69,7 @@ export default function StarDetail() {
     const [loading, setLoading] = useState(true)
     const [notFound, setNotFound] = useState(false)
 
-    // 翻译状态
+    // 翻译状�?
     const [translatingDesc, setTranslatingDesc] = useState(false)
     const [translatingReadme, setTranslatingReadme] = useState(false)
 
@@ -81,7 +81,7 @@ export default function StarDetail() {
     const repoIdRef = useRef<number | null>(null)
     const elapsedRef = useRef(0)
 
-    // 同步 repo.id 到 ref
+    // 同步 repo.id �?ref
     useEffect(() => {
         repoIdRef.current = repo?.id ?? null
     }, [repo?.id])
@@ -135,7 +135,7 @@ export default function StarDetail() {
                     return
                 }
 
-                // 详情 API 未返回数据，从 top-starred/recent-active 降级查找
+                // 详情 API 未返回数据，�?top-starred/recent-active 降级查找
                 const [topRes, recentRes] = await Promise.allSettled([
                     statsApi.fetchTopStarredRepos(100),
                     statsApi.fetchRecentActiveRepos(100),
@@ -174,12 +174,12 @@ export default function StarDetail() {
         }
     }, [id])
 
-    /** 翻译前校验 API Key 是否已配置 */
+    /** 翻译前校�?API Key 是否已配�?*/
     const ensureApiKey = async (): Promise<boolean> => {
         try {
             const config = await translateApi.getTranslateConfig()
             if (!config.apiKeyConfigured) {
-                message.warning('DeepSeek API Key 未配置，请在系统配置页面设置后重试', 5)
+                message.warning('DeepSeek API Key 未配置，请在系统配置页面设置后重�?, 5)
                 return false
             }
             return true
@@ -196,7 +196,7 @@ export default function StarDetail() {
         try {
             const result = await translateApi.translateDescription(repo.id)
             if (result.success) {
-                // 刷新详情以获取翻译后的数据
+                // 刷新详情以获取翻译后的数�?
                 const updated = await translateApi.fetchRepoDetail(repo.id)
                 if (updated && updated.id) {
                     setRepo(updated)
@@ -290,7 +290,7 @@ export default function StarDetail() {
     if (loading) {
         return (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
-                <Spin size='large' tip='加载中...' />
+                <Spin size='large' tip='加载�?..' />
             </div>
         )
     }
@@ -341,7 +341,7 @@ export default function StarDetail() {
                     <Descriptions.Item label='编程语言'>
                         {repo.language ? <Tag color='blue'>{repo.language}</Tag> : <Text type='secondary'>-</Text>}
                     </Descriptions.Item>
-                    <Descriptions.Item label='许可证'>
+                    <Descriptions.Item label='许可�?>
                         {repo.licenseName ? <Text>{repo.licenseName}</Text> : <Text type='secondary'>-</Text>}
                     </Descriptions.Item>
                     <Descriptions.Item label='主题标签' span={2}>
@@ -357,10 +357,10 @@ export default function StarDetail() {
                     </Descriptions.Item>
                     <Descriptions.Item label='Star 时间'>{formatDate(repo.starredAt)}</Descriptions.Item>
                     <Descriptions.Item label='仓库创建时间'>{formatDate(repo.repoCreatedAt)}</Descriptions.Item>
-                    <Descriptions.Item label='最后更新时间'>{formatDate(repo.repoUpdatedAt)}</Descriptions.Item>
-                    <Descriptions.Item label='最后推送时间'>{formatDate(repo.repoPushedAt)}</Descriptions.Item>
+                    <Descriptions.Item label='最后更新时�?>{formatDate(repo.repoUpdatedAt)}</Descriptions.Item>
+                    <Descriptions.Item label='最后推送时�?>{formatDate(repo.repoPushedAt)}</Descriptions.Item>
                     {repo.repoPushedAt && (
-                        <Descriptions.Item label='距上次推送'>
+                        <Descriptions.Item label='距上次推�?>
                             <DaysSinceText dateStr={repo.repoPushedAt} />
                         </Descriptions.Item>
                     )}
@@ -428,23 +428,23 @@ export default function StarDetail() {
                                 />
                                 <div style={{ marginTop: 16, fontSize: 14, color: '#666' }}>
                                     {translateProgress.status === 'PENDING' && '等待执行...'}
-                                    {translateProgress.status === 'PROCESSING' && '正在获取 GitHub README → 调用 DeepSeek 翻译...'}
-                                    {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed === 0 && '翻译完成！'}
+                                    {translateProgress.status === 'PROCESSING' && '正在获取 GitHub README �?调用 DeepSeek 翻译...'}
+                                    {translateProgress.status === 'COMPLETED' && translateProgress.readmeFailed === 0 && '翻译完成�?}
                                     {translateProgress.status === 'COMPLETED' &&
                                         translateProgress.readmeFailed > 0 &&
                                         '翻译完成（部分失败）'}
                                     {translateProgress.status === 'PARTIAL' && '部分翻译完成'}
-                                    {translateProgress.status === 'FAILED' && '翻译失败，请检查 DeepSeek API Key 是否配置正确'}
+                                    {translateProgress.status === 'FAILED' && '翻译失败，请检�?DeepSeek API Key 是否配置正确'}
                                 </div>
                             </div>
                         </Spin>
 
-                        {/* 每项执行的详细状态 */}
+                        {/* 每项执行的详细状�?*/}
                         {translateProgress.completedDetails?.length || translateProgress.failedDetails?.length ? (
                             <div style={{ marginTop: 16, textAlign: 'left' }}>
                                 {translateProgress.completedDetails?.map((item, i) => {
-                                    const isNoReadme = item.note.startsWith('该仓库没有 README 文件')
-                                    const ghBodyMatch = item.note.match(/^该仓库没有 README 文件\nGitHub 响应: (.+)$/s)
+                                    const isNoReadme = item.note.startsWith('该仓库没�?README 文件')
+                                    const ghBodyMatch = item.note.match(/^该仓库没�?README 文件\nGitHub 响应: (.+)$/s)
                                     const ghResponse = ghBodyMatch ? (() => { try { return JSON.parse(ghBodyMatch[1]) } catch { return ghBodyMatch[1] } })() : null
                                     return (
                                         <Alert
@@ -457,14 +457,14 @@ export default function StarDetail() {
                                                     <Text strong>{item.fullName}</Text>
                                                     <Text type='secondary' style={{ marginLeft: 8 }}>
                                                         {item.note === '翻译成功'
-                                                            ? '✅ 翻译成功，页面已更新'
+                                                            ? '�?翻译成功，页面已更新'
                                                             : isNoReadme
-                                                              ? '⚠️ 该仓库在 GitHub 上没有 README 文件'
+                                                              ? '⚠️ 该仓库在 GitHub 上没�?README 文件'
                                                               : '📝 ' + item.note}
                                                     </Text>
                                                     {ghResponse && (
                                                         <div style={{ marginTop: 6, padding: '6px 10px', background: '#fff7e6', borderRadius: 4, border: '1px solid #ffd591', maxHeight: 120, overflow: 'auto' }}>
-                                                            <Text type='secondary' style={{ fontSize: 11 }}>GitHub API 响应：</Text>
+                                                            <Text type='secondary' style={{ fontSize: 11 }}>GitHub API 响应�?/Text>
                                                             <pre style={{ margin: '4px 0 0', fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{JSON.stringify(ghResponse, null, 2)}</pre>
                                                         </div>
                                                     )}
@@ -483,7 +483,7 @@ export default function StarDetail() {
                                             <div style={{ fontSize: 13 }}>
                                                 <Text strong>{item.fullName}</Text>
                                                 <div>
-                                                    <Text type='danger'>❌ {item.error}</Text>
+                                                    <Text type='danger'>�?{item.error}</Text>
                                                 </div>
                                             </div>
                                         }
@@ -497,8 +497,8 @@ export default function StarDetail() {
                                 showIcon
                                 message={
                                     <div style={{ fontSize: 13 }}>
-                                        <div>正在获取 GitHub README 并调用 DeepSeek 翻译，请耐心等待...</div>
-                                        <div style={{ marginTop: 4 }}>超时时间：约 8 分钟 | 失败自动重试 3 次</div>
+                                        <div>正在获取 GitHub README 并调�?DeepSeek 翻译，请耐心等待...</div>
+                                        <div style={{ marginTop: 4 }}>超时时间：约 8 分钟 | 失败自动重试 3 �?/div>
                                     </div>
                                 }
                             />

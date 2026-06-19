@@ -1,9 +1,9 @@
 import { Controller, Post, Logger, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
-import { GithubSearchService } from '../services/github-search.service';
-import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
-import { GithubSearchSchema } from '../../common/dto/filter.dto';
-import type { GithubSearchDto } from '../../common/dto/filter.dto';
+import { GithubSearchService } from './github-search.service';
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { GithubSearchSchema } from '../common/dto/filter.dto';
+import type { GithubSearchDto } from '../common/dto/filter.dto';
 
 /**
  * GitHub 搜索与 Star 操作控制器

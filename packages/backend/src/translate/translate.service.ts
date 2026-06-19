@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { ConfigService } from '../../config/config.service';
-import { GithubApiService } from '../../github/services/github-api.service';
-import { GithubRepoService } from '../../github/services/github-repo.service';
-import { RATE_LIMITED, NO_README } from '../../common/constants/translate.constants';
+import { PrismaService } from '../prisma/prisma.service';
+import { ConfigService } from '../config/config.service';
+import { GithubApiService } from '../github/github-api.service';
+import { GithubRepoService } from '../github/github-repo.service';
+import { RATE_LIMITED, NO_README } from '../common/constants/translate.constants';
 
 @Injectable()
 export class TranslateService {

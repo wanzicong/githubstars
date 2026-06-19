@@ -14,10 +14,10 @@ import {
     LineElement,
     Filler,
 } from 'chart.js'
-import * as statsApi from '../api/stats'
-import type { OverviewStatsDTO, LanguageStatsDTO, OwnerStatsDTO, TimelineStatsDTO, GithubRepo } from '../types'
-import { formatDate, formatNumberShort } from '../utils/format'
-import { CHART_COLORS } from '../constants'
+import * as statsApi from '../../api'
+import type { OverviewStatsDTO, LanguageStatsDTO, OwnerStatsDTO, TimelineStatsDTO, GithubRepo } from '../../types'
+import { formatDate, formatNumberShort } from '../../utils/format'
+import { CHART_COLORS } from '../../constants'
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Filler)
 
