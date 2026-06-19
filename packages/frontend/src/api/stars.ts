@@ -23,11 +23,6 @@ export async function fetchStarList(params: StarListParams): Promise<PageResult<
     }
 }
 
-export async function fetchStarDetail(id: number): Promise<GithubRepo> {
-    const { data: wrapped } = await api.post<{ success: boolean; data: GithubRepo }>('/api/stars/detail', { id })
-    return wrapped.data
-}
-
 export async function exportStarsUrls(params: StarListParams): Promise<Blob> {
     const body: Record<string, unknown> = {}
     if (params.keyword) body.keyword = params.keyword

@@ -114,5 +114,4 @@ const MarkdownRenderer = memo(function MarkdownRenderer({ content, components, c
     )
 })
 
-export { SHARED_MARKDOWN_COMPONENTS }
 export default MarkdownRenderer

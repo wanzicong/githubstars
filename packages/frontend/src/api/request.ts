@@ -17,15 +17,6 @@ api.interceptors.request.use(
 // 用于避免短时间内重复请求相同 URL 的简易缓存
 const pendingRequests = new Map<string, Promise<unknown>>()
 
-/** 清除指定 URL 的缓存（数据变更后调用） */
-export function clearRequestCache(url?: string) {
-    if (url) {
-        pendingRequests.delete(url)
-    } else {
-        pendingRequests.clear()
-    }
-}
-
 // 响应拦截器
 api.interceptors.response.use(
     (response) => {
