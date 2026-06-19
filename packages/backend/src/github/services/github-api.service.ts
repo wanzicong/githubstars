@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../../config/config.service';
+import type { MappedRepoData } from '../interfaces/repo-data.interface';
 
 const GITHUB_API = 'https://api.github.com';
+
+export type { MappedRepoData } from '../interfaces/repo-data.interface';
 
 /** Link header 解析结果 */
 export interface PaginationLinks {
@@ -9,30 +12,6 @@ export interface PaginationLinks {
     prev?: string;
     next?: string;
     last?: string;
-}
-
-/** DB 映射后的仓库数据，匹配 GithubRepo 表字段 */
-export interface MappedRepoData {
-    repoName: string;
-    fullName: string;
-    description: string | null;
-    language: string | null;
-    ownerName: string;
-    ownerAvatarUrl: string;
-    htmlUrl: string;
-    homepage: string | null;
-    starsCount: number;
-    forksCount: number;
-    watchersCount: number;
-    openIssuesCount: number;
-    topics: string;
-    licenseName: string | null;
-    isFork: boolean;
-    isArchived: boolean;
-    repoCreatedAt: Date | null;
-    repoUpdatedAt: Date | null;
-    repoPushedAt: Date | null;
-    starredAt: Date | null;
 }
 
 /**
@@ -65,140 +44,122 @@ export class GithubApiService {
         const username = await this.config.getValueDefault('github.username', 'wanzicong');
         const token = await this.config.getValueDefault('github.token', '');
 
-        this.logger.log('开始全量获取星标仓库, 用户名=' + username + ', 每页大小=100');
         this.logger.log('===== 开始全量获取星标仓库 =====');
         this.logger.log(`用户名: ${username}, 每页大小: 100`);
 
         const all: MappedRepoData[] = [];
         let currentPage = 1;
         let nextUrl: string | null = `${GITHUB_API}/users/${encodeURIComponent(username)}/starred?per_page=100&page=1`;
-        let totalPagesEstimate = '?';
         const startTime = Date.now();
 
         while (nextUrl) {
-            this.logger.log(`>>>>> 正在获取第 ${currentPage} 页... URL=${nextUrl}`);
-            const pageStart = Date.now();
+            const pageResult = await this.fetchStarredPage(nextUrl, token, currentPage, all.length);
+            if (!pageResult) break;
 
-            const headers: Record<string, string> = {
-                Accept: 'application/vnd.github.v3.star+json',
-                'User-Agent': 'GithubStars-Manager',
-            };
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-
-            let response: Response;
-            try {
-                response = await fetch(nextUrl, { headers });
-            } catch (fetchErr) {
-                const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-                this.logger.error('网络请求失败! 第' + currentPage + '页, URL=' + nextUrl + ', 错误: ' + errMsg);
-                if (all.length > 0) {
-                    this.logger.log(`第${currentPage}页网络失败，但已有${all.length}条数据，停止翻页`);
-                    break;
-                }
-                throw new Error(`GitHub API 网络请求失败: ${errMsg}`);
-            }
-
-            this.logger.log(`第${currentPage}页 响应状态: ${response.status} ${response.statusText}`);
-
-            if (response.status !== 200) {
-                const errorBody = await response.text().catch(() => '(无法读取响应体)');
-                this.logger.error('API 响应异常! 第' + currentPage + '页, 状态码=' + response.status + ', 响应体: ' + errorBody.substring(0, 500));
-                if (all.length > 0) {
-                    this.logger.log(`第${currentPage}页失败(status=${response.status})，但已有${all.length}条数据，停止翻页`);
-                    break;
-                }
-                throw new Error(`GitHub API 请求失败 (HTTP ${response.status}): ${errorBody.substring(0, 200)}`);
-            }
-
-            // 先获取原始文本，便于 parse 失败时输出
-            const rawText = await response.text();
-            let pageItems: Record<string, any>[];
-
-            try {
-                pageItems = JSON.parse(rawText);
-                if (!Array.isArray(pageItems)) {
-                    throw new Error('响应体不是 JSON 数组');
-                }
-            } catch (parseErr) {
-                this.logger.error(
-                    'JSON 解析失败! 第' + currentPage + '页, 错误=' + (parseErr instanceof Error ? parseErr.message : String(parseErr)),
-                );
-                this.logger.error('原始响应内容 (前2000字符): ' + rawText.substring(0, 2000));
-                if (all.length > 0) {
-                    this.logger.log(`第${currentPage}页解析失败，但已有${all.length}条数据，停止翻页`);
-                    break;
-                }
-                throw new Error(`GitHub API 响应 JSON 解析失败: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
-            }
-
-            this.logger.log(`第${currentPage}页返回 ${pageItems.length} 条数据`);
-
-            // 逐条映射到 DB 格式
-            let mappedCount = 0;
-            for (const item of pageItems) {
-                try {
-                    const mapped = this.mapStarredItem(item);
-                    if (mapped) {
-                        all.push(mapped);
-                        mappedCount++;
-                    }
-                } catch (mapErr) {
-                    this.logger.error(`映射单条数据失败, 第${currentPage}页, 数据: ` + JSON.stringify(item).substring(0, 500));
-                    this.logger.error(`映射错误: ${mapErr instanceof Error ? mapErr.message : String(mapErr)}`);
-                }
-            }
-
-            // 解析 Link header 确定下一页
-            const linkHeader = response.headers.get('Link') || '';
-            const links = this.parseLinkHeader(linkHeader);
+            all.push(...pageResult.mapped);
+            this.logger.log(`第${currentPage}页完成: 映射${pageResult.mapped.length}条, 累计${all.length}条, 耗时${pageResult.duration}s`);
 
             // 首次获取时估算总页数
-            if (totalPagesEstimate === '?' && links.last) {
-                totalPagesEstimate = String(this.estimateTotalPages(links, currentPage));
-                this.logger.log(`估算总页数: ${totalPagesEstimate}`);
+            if (currentPage === 1 && pageResult.links.last) {
+                this.logger.log(`估算总页数: ${this.estimateTotalPages(pageResult.links, currentPage)}`);
             }
-
-            if (linkHeader) {
-                this.logger.verbose(`Link header: ${linkHeader}`);
-                this.logger.log(
-                    `解析分页链接: next=${links.next || '(无)'}, last=${links.last || '(无)'}, first=${links.first || '(无)'}, prev=${links.prev || '(无)'}`,
-                );
-            } else {
-                this.logger.verbose(`Link header: (空)`);
-            }
-
-            const pageDuration = ((Date.now() - pageStart) / 1000).toFixed(1);
-            this.logger.log(`<<<<< 第${currentPage}页完成: 映射${mappedCount}条, 累计${all.length}条, 耗时${pageDuration}s`);
 
             // 判断是否还有下一页
-            if (links.next && pageItems.length > 0) {
-                nextUrl = links.next;
+            if (pageResult.links.next && pageResult.rawCount > 0) {
+                nextUrl = pageResult.links.next;
                 currentPage++;
-                // 速率限制保护：页间短暂停顿
-                await this.delay(300);
+                await this.sleep(300);
             } else {
-                const reason = !links.next ? 'next链接不存在' : pageItems.length === 0 ? '本页无数据' : '未知';
-                this.logger.log(`翻页终止: ${reason}`);
+                this.logger.log(`翻页终止: ${!pageResult.links.next ? 'next链接不存在' : '本页无数据'}`);
                 nextUrl = null;
             }
         }
 
-        // 去重（如果 GitHub API 返回了重复数据）
+        const deduped = this.deduplicateRepos(all);
+        const totalDuration = ((Date.now() - startTime) / 1000).toFixed(1);
+        this.logger.log(`===== 全量获取完成: 共${deduped.length}个星标仓库, 共${currentPage}页, 总耗时${totalDuration}s =====`);
+        return deduped;
+    }
+
+    /**
+     * 获取单页星标仓库数据
+     *
+     * 负责网络请求、JSON 解析和字段映射。
+     * 请求失败且已有数据时返回 null（上层应停止翻页）。
+     *
+     * @param url 请求 URL
+     * @param token GitHub Token
+     * @param currentPage 当前页码（用于日志）
+     * @param existingCount 已获取数量（用于判断是否可容错）
+     * @returns 页面结果，或 null 表示应停止翻页
+     */
+    private async fetchStarredPage(
+        url: string,
+        token: string,
+        currentPage: number,
+        existingCount: number,
+    ): Promise<{ mapped: MappedRepoData[]; links: PaginationLinks; rawCount: number; duration: string } | null> {
+        const pageStart = Date.now();
+        this.logger.log(`>>>>> 正在获取第 ${currentPage} 页...`);
+
+        const headers = this.buildGithubHeaders(token, 'application/vnd.github.v3.star+json');
+        let response: Response;
+        try {
+            response = await fetch(url, { headers });
+        } catch (fetchErr) {
+            const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+            this.logger.error(`网络请求失败! 第${currentPage}页, 错误: ${errMsg}`);
+            if (existingCount > 0) return null;
+            throw new Error(`GitHub API 网络请求失败: ${errMsg}`);
+        }
+
+        if (response.status !== 200) {
+            const errorBody = await response.text().catch(() => '(无法读取响应体)');
+            this.logger.error(`API 响应异常! 第${currentPage}页, 状态码=${response.status}`);
+            if (existingCount > 0) return null;
+            throw new Error(`GitHub API 请求失败 (HTTP ${response.status}): ${errorBody.substring(0, 200)}`);
+        }
+
+        const rawText = await response.text();
+        let pageItems: Record<string, any>[];
+        try {
+            pageItems = JSON.parse(rawText);
+            if (!Array.isArray(pageItems)) throw new Error('响应体不是 JSON 数组');
+        } catch (parseErr) {
+            this.logger.error(`JSON 解析失败! 第${currentPage}页: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+            if (existingCount > 0) return null;
+            throw new Error(`GitHub API 响应 JSON 解析失败: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+        }
+
+        // 逐条映射到 DB 格式
+        const mapped: MappedRepoData[] = [];
+        for (const item of pageItems) {
+            try {
+                const result = this.mapStarredItem(item);
+                if (result) mapped.push(result);
+            } catch (mapErr) {
+                this.logger.error(`映射单条数据失败, 第${currentPage}页: ${mapErr instanceof Error ? mapErr.message : String(mapErr)}`);
+            }
+        }
+
+        const links = this.parseLinkHeader(response.headers.get('Link') || '');
+        const duration = ((Date.now() - pageStart) / 1000).toFixed(1);
+        return { mapped, links, rawCount: pageItems.length, duration };
+    }
+
+    /**
+     * 对仓库列表按 fullName 去重
+     */
+    private deduplicateRepos(repos: MappedRepoData[]): MappedRepoData[] {
         const seen = new Set<string>();
-        const deduped = all.filter((r) => {
+        const deduped = repos.filter((r) => {
             if (seen.has(r.fullName)) return false;
             seen.add(r.fullName);
             return true;
         });
-        if (deduped.length < all.length) {
-            this.logger.log(`去重: ${all.length} -> ${deduped.length} (移除${all.length - deduped.length}条重复)`);
+        if (deduped.length < repos.length) {
+            this.logger.log(`去重: ${repos.length} -> ${deduped.length} (移除${repos.length - deduped.length}条重复)`);
         }
-
-        const totalDuration = ((Date.now() - startTime) / 1000).toFixed(1);
-        this.logger.log(`===== 全量获取完成: 共${deduped.length}个星标仓库, 共${currentPage}页, 总耗时${totalDuration}s =====`);
-
         return deduped;
     }
 
@@ -210,20 +171,12 @@ export class GithubApiService {
      */
     async fetchReadmeFromGitHub(fullName: string): Promise<{ content: string | null; githubStatus: number; githubBody: string | null }> {
         const token = await this.config.getValueDefault('github.token', '');
-
         this.logger.log('获取 README: ' + fullName);
-
-        const headers: Record<string, string> = {
-            Accept: 'application/vnd.github.v3.raw',
-            'User-Agent': 'GithubStars-Manager',
-        };
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-
+    
+        const headers = this.buildGithubHeaders(token, 'application/vnd.github.v3.raw');
         const [owner, repo] = fullName.split('/');
         const url = `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`;
-
+    
         const doFetch = async (useAuth: boolean): Promise<{ status: number; body: string | null }> => {
             const controller = new AbortController();
             const readmeTimeout = setTimeout(() => controller.abort(), 30_000);
@@ -231,107 +184,102 @@ export class GithubApiService {
                 const hdrs = { ...headers };
                 if (!useAuth) delete hdrs['Authorization'];
                 const response = await fetch(url, { headers: hdrs, signal: controller.signal });
-                // 始终读取响应体（非 200 时 GitHub 返回 JSON 错误信息）
                 const body = await response.text();
                 return { status: response.status, body };
             } catch (e) {
-                if ((e as Error).name === 'AbortError') {
-                    throw new Error('GitHub API 网络超时');
-                }
+                if ((e as Error).name === 'AbortError') throw new Error('GitHub API 网络超时');
                 const msg = e instanceof Error ? e.message : String(e);
                 throw new Error(`GitHub API 网络错误: ${msg}`);
             } finally {
                 clearTimeout(readmeTimeout);
             }
         };
-
+    
         try {
             let result = await doFetch(!!token);
-
             this.logger.log(`README 响应状态: ${result.status} (${fullName})`);
-
+    
             if (result.status === 200) {
                 this.logger.log(`README 获取成功: ${fullName}, 大小=${result.body!.length} 字符`);
                 return { content: result.body, githubStatus: 200, githubBody: null };
             }
-
-            // P0-FIX: 带 Token 返回 404 时，可能是 Token 无该组织 SSO 授权，回退到无认证重试
+    
+            // 带 Token 返回 404 时，可能是 Token 无该组织 SSO 授权，回退到无认证重试
             if (result.status === 404 && token) {
                 this.logger.log(`带 Token 返回 404，回退到无认证重试: ${fullName}`);
                 result = await doFetch(false);
-                this.logger.log(`无认证重试状态: ${result.status} (${fullName})`);
                 if (result.status === 200) {
                     this.logger.log(`README 无认证获取成功: ${fullName}, 大小=${result.body!.length} 字符`);
                     return { content: result.body, githubStatus: 200, githubBody: null };
                 }
             }
-
+    
             if (result.status === 404) {
                 this.logger.log(`仓库 ${fullName} 没有 README 文件`);
                 return { content: null, githubStatus: 404, githubBody: result.body };
             }
-
-            /**
-             * P0-FIX: 403 不等于限流。GitHub 返回 403 的常见原因：
-             * 1. API rate limit exceeded（真正的限流）
-             * 2. Secondary rate limit（并发过高）
-             * 3. README > 1MB 时用 vnd.github.v3.raw 会返回 403（应回退到 json 格式）
-             * 4. 仓库被 DMCA/封锁
-             * 5. Token 无该仓库权限
-             *
-             * 这里先检查响应体是否真的是 rate limit，再决定处理方式。
-             */
+    
             if (result.status === 403) {
-                const bodyLower = (result.body || '').toLowerCase();
-                const isRealRateLimit =
-                    bodyLower.includes('rate limit') ||
-                    bodyLower.includes('api rate limit exceeded') ||
-                    bodyLower.includes('secondary rate limit');
-
-                this.logger.error(`README 403: ${fullName}, 响应体=${result.body?.substring(0, 300)}`);
-
-                if (isRealRateLimit) {
-                    this.logger.error('README API 真正限流: ' + fullName);
-                    const err = new Error('GitHub API rate limited');
-                    (err as any).githubBody = result.body;
-                    (err as any).isRateLimit = true;
-                    throw err;
-                }
-
-                // 非限流的 403 → 可能是 raw 格式不兼容大文件，回退到 json 格式
-                this.logger.log(`403 非限流，回退到 vnd.github.v3+json 格式: ${fullName}`);
-                const jsonResult = await this.fetchReadmeAsJson(fullName, token);
-                if (jsonResult.content !== null) {
-                    this.logger.log(`JSON 格式回退成功: ${fullName}, 大小=${jsonResult.content.length} 字符`);
-                    return { content: jsonResult.content, githubStatus: 200, githubBody: null };
-                }
-                if (jsonResult.status === 404) {
-                    return { content: null, githubStatus: 404, githubBody: jsonResult.githubBody };
-                }
-                // 回退也失败，抛出原始错误信息而非笼统的 "rate limited"
-                // 注意：错误消息中不能出现"限流"二字，否则 processItem 会误判为限流
-                const shortBody = (result.body || '无响应体').substring(0, 200);
-                const err = new Error(`GitHub API 403 (非速率限制/其他原因): ${shortBody}`);
-                (err as any).githubBody = result.body;
-                throw err;
+                return this.handleReadme403(fullName, token, result);
             }
-
-            this.logger.error('README 请求失败: ' + fullName + ', status=' + result.status);
-            const err2 = new Error(`GitHub API error: ${result.status}`);
-            (err2 as any).githubBody = result.body;
-            throw err2;
+    
+            this.logger.error(`README 请求失败: ${fullName}, status=${result.status}`);
+            const err = new Error(`GitHub API error: ${result.status}`);
+            (err as any).githubBody = result.body;
+            throw err;
         } catch (err) {
-            if (err instanceof Error && err.message.startsWith('GitHub API')) {
-                throw err;
-            }
+            if (err instanceof Error && err.message.startsWith('GitHub API')) throw err;
             if ((err as Error).name === 'AbortError') {
-                this.logger.error('README 请求超时 (30s): ' + fullName);
+                this.logger.error(`README 请求超时 (30s): ${fullName}`);
                 throw new Error('GitHub API 网络超时');
             }
             const msg = err instanceof Error ? err.message : String(err);
-            this.logger.error('README 请求异常: ' + fullName + ', ' + msg);
+            this.logger.error(`README 请求异常: ${fullName}, ${msg}`);
             throw new Error(`GitHub API 网络错误: ${msg}`);
         }
+    }
+    
+    /**
+     * 处理 README 403 响应
+     *
+     * 区分真正的 rate limit 和其他原因（大文件、DMCA 等），
+     * 非限流时回退到 JSON 格式获取。
+     */
+    private async handleReadme403(
+        fullName: string,
+        token: string,
+        result: { status: number; body: string | null },
+    ): Promise<{ content: string | null; githubStatus: number; githubBody: string | null }> {
+        const bodyLower = (result.body || '').toLowerCase();
+        const isRealRateLimit =
+            bodyLower.includes('rate limit') ||
+            bodyLower.includes('api rate limit exceeded') ||
+            bodyLower.includes('secondary rate limit');
+    
+        this.logger.error(`README 403: ${fullName}, 响应体=${result.body?.substring(0, 300)}`);
+    
+        if (isRealRateLimit) {
+            this.logger.error(`README API 真正限流: ${fullName}`);
+            const err = new Error('GitHub API rate limited');
+            (err as any).githubBody = result.body;
+            (err as any).isRateLimit = true;
+            throw err;
+        }
+    
+        // 非限流 → 回退到 JSON 格式
+        this.logger.log(`403 非限流，回退到 vnd.github.v3+json 格式: ${fullName}`);
+        const jsonResult = await this.fetchReadmeAsJson(fullName, token);
+        if (jsonResult.content !== null) {
+            this.logger.log(`JSON 格式回退成功: ${fullName}, 大小=${jsonResult.content.length} 字符`);
+            return { content: jsonResult.content, githubStatus: 200, githubBody: null };
+        }
+        if (jsonResult.status === 404) {
+            return { content: null, githubStatus: 404, githubBody: jsonResult.githubBody };
+        }
+        const shortBody = (result.body || '无响应体').substring(0, 200);
+        const err = new Error(`GitHub API 403 (非速率限制/其他原因): ${shortBody}`);
+        (err as any).githubBody = result.body;
+        throw err;
     }
 
     /**
@@ -348,13 +296,7 @@ export class GithubApiService {
         fullName: string,
         token: string,
     ): Promise<{ content: string | null; status: number; githubBody: string | null }> {
-        const headers: Record<string, string> = {
-            Accept: 'application/vnd.github.v3+json',
-            'User-Agent': 'GithubStars-Manager',
-        };
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
+        const headers = this.buildGithubHeaders(token);
 
         const [owner, repo] = fullName.split('/');
         const url = `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`;
@@ -397,13 +339,7 @@ export class GithubApiService {
         this.logger.log('搜索仓库: q="' + query + '", sort=' + sort + ', order=' + order);
         this.logger.log(`搜索仓库详情: q="${query}", sort=${sort}, order=${order}, perPage=${perPage}`);
 
-        const headers: Record<string, string> = {
-            Accept: 'application/vnd.github.v3+json',
-            'User-Agent': 'GithubStars-Search',
-        };
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
+        const headers = this.buildGithubHeaders(token);
 
         const params = new URLSearchParams({
             q: query,
@@ -444,6 +380,18 @@ export class GithubApiService {
     // ============================================================
     // 内部工具方法
     // ============================================================
+
+    /**
+     * 构建 GitHub API 请求头
+     *
+     * @param token GitHub Token，空则不加 Authorization
+     * @param accept Accept header 值，默认 v3+json
+     */
+    private buildGithubHeaders(token: string, accept = 'application/vnd.github.v3+json'): Record<string, string> {
+        const headers: Record<string, string> = { Accept: accept, 'User-Agent': 'GithubStars-Manager' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        return headers;
+    }
 
     /**
      * 将单条 GitHub starred API 返回数据映射为 DB 格式
@@ -585,7 +533,7 @@ export class GithubApiService {
     /**
      * Promise 延迟工具，用于 API 速率限制保护
      */
-    private delay(ms: number): Promise<void> {
+    private sleep(ms: number): Promise<void> {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
 }

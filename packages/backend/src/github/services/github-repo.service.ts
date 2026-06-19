@@ -1,21 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
-
-const SORT_MAP: Record<string, string> = {
-    stars_count: 'starsCount',
-    forks_count: 'forksCount',
-    repo_updated_at: 'repoUpdatedAt',
-    repo_created_at: 'repoCreatedAt',
-    repo_pushed_at: 'repoPushedAt',
-    starred_at: 'starredAt',
-};
-const DATE_MAP: Record<string, string> = {
-    starred_at: 'starredAt',
-    repo_created_at: 'repoCreatedAt',
-    repo_updated_at: 'repoUpdatedAt',
-    repo_pushed_at: 'repoPushedAt',
-};
+import { resolveSortField, resolveSortDir, parseLanguages, DATE_FIELD_MAP } from '../../common/utils/query-params.util';
+import { buildPaginationResult } from '../../common/utils/pagination.util';
+import type { BaseFilterParams, FilterParams, PaginatedFilterParams } from '../../common/interfaces/filter-params.interface';
+import type { UpsertRepoInput } from '../interfaces/repo-data.interface';
 
 @Injectable()
 export class GithubRepoService {
@@ -69,8 +58,8 @@ export class GithubRepoService {
         if (params.untranslatedOnly) {
             AND.push({ OR: [{ readmeCn: null }, { readmeCn: '' }] });
         }
-        if (params.dateField && DATE_MAP[params.dateField] && (params.startDate || params.endDate)) {
-            const f = DATE_MAP[params.dateField];
+        if (params.dateField && DATE_FIELD_MAP[params.dateField] && (params.startDate || params.endDate)) {
+            const f = DATE_FIELD_MAP[params.dateField];
             const cond: any = {};
             if (params.startDate) cond.gte = new Date(params.startDate + 'T00:00:00+08:00');
             if (params.endDate) cond.lte = new Date(params.endDate + 'T23:59:59+08:00');
@@ -103,27 +92,15 @@ export class GithubRepoService {
      * @depends
      *   - PrismaService.githubRepo（github_repo 表）
      */
-    async findPage(params: {
-        page?: number;
-        size?: number;
-        keyword?: string;
-        language?: string;
-        sortBy?: string;
-        sortOrder?: string;
-        dateField?: string;
-        startDate?: string;
-        endDate?: string;
-        untranslatedOnly?: boolean;
-    }) {
+    async findPage(params: PaginatedFilterParams) {
         const page = params.page || 1,
             size = params.size || 12;
         this.logger.log('分页查询仓库列表: page=' + page + ', size=' + size + ', keyword=' + (params.keyword || ''));
-        const languages = params.language ? params.language.split(',').filter(Boolean) : [];
-        const sortField = SORT_MAP[params.sortBy || 'stars_count'] || 'starredAt';
-        const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
+        const sortField = resolveSortField(params.sortBy);
+        const sortDir = resolveSortDir(params.sortOrder);
         const where = this.buildWhere({
             keyword: params.keyword,
-            languages: languages.length > 0 ? languages : undefined,
+            languages: parseLanguages(params.language),
             dateField: params.dateField,
             startDate: params.startDate,
             endDate: params.endDate,
@@ -141,7 +118,7 @@ export class GithubRepoService {
                 readme: r.readmeCn ? 'completed' : r.readmeFetched ? 'none' : 'pending',
             },
         }));
-        return { records: enriched, total, size, current: page, pages: Math.ceil(total / size) };
+        return buildPaginationResult(enriched, total, page, size);
     }
 
     /**
@@ -167,22 +144,12 @@ export class GithubRepoService {
      * @param params 筛选参数（同 findPage）
      * @returns 仓库 htmlUrl 字符串数组
      */
-    async findAllUrls(params: {
-        keyword?: string;
-        language?: string;
-        sortBy?: string;
-        sortOrder?: string;
-        dateField?: string;
-        startDate?: string;
-        endDate?: string;
-        untranslatedOnly?: boolean;
-    }) {
-        const languages = params.language ? params.language.split(',').filter(Boolean) : [];
-        const sortField = SORT_MAP[params.sortBy || 'stars_count'] || 'starredAt';
-        const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
+    async findAllUrls(params: FilterParams) {
+        const sortField = resolveSortField(params.sortBy);
+        const sortDir = resolveSortDir(params.sortOrder);
         const where = this.buildWhere({
             keyword: params.keyword,
-            languages: languages.length > 0 ? languages : undefined,
+            languages: parseLanguages(params.language),
             dateField: params.dateField,
             startDate: params.startDate,
             endDate: params.endDate,
@@ -204,11 +171,10 @@ export class GithubRepoService {
      * @param params.sortOrder 排序方向
      * @returns 仓库记录数组
      */
-    async findAll(params: { keyword?: string; language?: string; sortBy?: string; sortOrder?: string }) {
-        const languages = params.language ? params.language.split(',').filter(Boolean) : [];
-        const sortField = SORT_MAP[params.sortBy || 'stars_count'] || 'starredAt';
-        const sortDir = params.sortOrder === 'asc' ? 'asc' : 'desc';
-        const where = this.buildWhere({ keyword: params.keyword, languages: languages.length > 0 ? languages : undefined });
+    async findAll(params: BaseFilterParams) {
+        const sortField = resolveSortField(params.sortBy);
+        const sortDir = resolveSortDir(params.sortOrder);
+        const where = this.buildWhere({ keyword: params.keyword, languages: parseLanguages(params.language) });
         return this.prisma.githubRepo.findMany({ where, orderBy: { [sortField]: sortDir } });
     }
 
@@ -223,7 +189,7 @@ export class GithubRepoService {
      * @callers
      *   - SyncService 同步流程
      */
-    async upsertRepo(data: any) {
+    async upsertRepo(data: UpsertRepoInput) {
         this.logger.log('upsert 仓库: ' + (data.fullName || data.repoName || 'unknown'));
         await this.prisma.$executeRaw`
       INSERT INTO github_repo (repo_name, full_name, description, language, owner_name, owner_avatar_url, html_url, homepage,
@@ -267,18 +233,10 @@ export class GithubRepoService {
      * @callers
      *   - 翻译相关 API
      */
-    async countTranslationStatus(params: {
-        keyword?: string;
-        language?: string;
-        dateField?: string;
-        startDate?: string;
-        endDate?: string;
-        untranslatedOnly?: boolean;
-    }) {
-        const languages = params.language ? params.language.split(',').filter(Boolean) : [];
+    async countTranslationStatus(params: FilterParams) {
         const where = this.buildWhere({
             keyword: params.keyword,
-            languages: languages.length > 0 ? languages : undefined,
+            languages: parseLanguages(params.language),
             dateField: params.dateField,
             startDate: params.startDate,
             endDate: params.endDate,

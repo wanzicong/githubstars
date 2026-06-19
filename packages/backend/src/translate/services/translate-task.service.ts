@@ -52,7 +52,7 @@ export class TranslateTaskService {
      *
      * 保留最近 10 条已完成/失败/部分完成的任务，删除更早的任务及其子项。
      */
-    private async cleanOld() {
+    private async cleanOldTasks() {
         const old = await this.prisma.translationTask.findMany({
             where: { status: { in: ['COMPLETED', 'FAILED', 'PARTIAL'] } },
             orderBy: { createdAt: 'desc' },
@@ -71,89 +71,89 @@ export class TranslateTaskService {
 
     /**
      * 处理单个翻译子项，带指数退避重试 + 原子状态记录
-     *
-     * 最多重试 MAX_ATTEMPTS 次，限流时等待 60s，其余错误使用指数退避。
-     * 成功或最终失败后通过 Prisma 事务更新子项状态并递增父任务计数器。
-     *
-     * @param item 翻译子项记录（含 id、repoId、translateType、taskId 等字段）
      */
     private async processItem(item: any) {
         await this.acquire();
         try {
-            let success = false,
-                attempts = 0,
-                resultNote = '';
-
+            let success = false, attempts = 0, resultNote = '';
+    
             while (attempts < MAX_ATTEMPTS && !success) {
                 if (attempts > 0) {
-                    const noteLower = resultNote.toLowerCase();
-                    const isRateLimited =
-                        noteLower.includes('rate limit') || noteLower.includes('限流') || noteLower.includes('rate limited');
-                    const delay = isRateLimited ? RATE_LIMIT_BACKOFF_MS : Math.pow(2, attempts) * 1000;
-                    this.logger.warn(
-                        `翻译重试 item=${item.id} attempt=${attempts}/${MAX_ATTEMPTS} delay=${delay}ms rateLimit=${isRateLimited} note=${resultNote.substring(0, 100)}`,
-                    );
+                    const delay = this.calculateRetryDelay(resultNote, attempts);
+                    this.logger.warn(`翻译重试 item=${item.id} attempt=${attempts}/${MAX_ATTEMPTS} delay=${delay}ms note=${resultNote.substring(0, 100)}`);
                     await new Promise((r) => setTimeout(r, delay));
                 }
-
                 await this.prisma.translationTaskItem.update({ where: { id: item.id }, data: { status: 'PROCESSING' } });
-
-                try {
-                    const repoId = Number(item.repoId);
-                    if (item.translateType === 'description') {
-                        const r = await this.translate.translateDescription(repoId);
-                        if (r !== null && r !== RATE_LIMITED) {
-                            success = true;
-                            resultNote = '翻译成功';
-                        } else resultNote = r === RATE_LIMITED ? 'DeepSeek API 限流' : '翻译返回空结果';
-                    } else {
-                        const r = await this.translate.translateReadme(repoId);
-                        const rStr = r as string;
-                        if (rStr === NO_README) {
-                            success = true;
-                            resultNote = '该仓库没有 README 文件';
-                        } else if (typeof rStr === 'string' && rStr.startsWith(NO_README + '|')) {
-                            success = true;
-                            const ghBody = rStr.substring((NO_README + '|').length);
-                            resultNote = '该仓库没有 README 文件\nGitHub 响应: ' + ghBody;
-                        } else if (r !== null && r !== RATE_LIMITED) {
-                            success = true;
-                            resultNote = '翻译成功';
-                        } else {
-                            resultNote = r === RATE_LIMITED ? 'DeepSeek API 限流' : '翻译返回空结果';
-                        }
-                    }
-                } catch (e) {
-                    resultNote = e instanceof Error ? e.message : String(e);
-                    this.logger.error(`翻译失败 r${attempts}: ${resultNote}`);
-                }
+                const attempt = await this.executeTranslationAttempt(item);
+                success = attempt.success;
+                resultNote = attempt.resultNote;
                 if (!success) attempts++;
             }
-
-            if (success) {
-                // 成功时保存 resultNote，让前端能感知"翻译成功"还是"没有 README"
-                await this.prisma.translationTaskItem.update({
-                    where: { id: item.id },
-                    data: { status: 'SUCCESS', errorMessage: resultNote, updatedAt: new Date() },
-                });
-                // 使用 Prisma 原子 increment 避免并发竞态（read-then-write 问题）
-                const incrementData: Record<string, { increment: number }> = { completedItems: { increment: 1 } };
-                if (item.translateType === 'description') incrementData.descCompleted = { increment: 1 };
-                else incrementData.readmeCompleted = { increment: 1 };
-                await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incrementData });
-            } else {
-                await this.prisma.translationTaskItem.update({
-                    where: { id: item.id },
-                    data: { status: 'FAILED', errorMessage: resultNote, retryCount: attempts, updatedAt: new Date() },
-                });
-                // 使用 Prisma 原子 increment 避免并发竞态
-                const incrementData: Record<string, { increment: number }> = { failedItems: { increment: 1 } };
-                if (item.translateType === 'description') incrementData.descFailed = { increment: 1 };
-                else incrementData.readmeFailed = { increment: 1 };
-                await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incrementData });
-            }
+    
+            await this.recordItemResult(item, success, attempts, resultNote);
         } finally {
             this.release();
+        }
+    }
+    
+    /**
+     * 执行单次翻译尝试
+     */
+    private async executeTranslationAttempt(item: any): Promise<{ success: boolean; resultNote: string }> {
+        try {
+            const repoId = Number(item.repoId);
+            if (item.translateType === 'description') {
+                const r = await this.translate.translateDescription(repoId);
+                if (r !== null && r !== RATE_LIMITED) return { success: true, resultNote: '翻译成功' };
+                return { success: false, resultNote: r === RATE_LIMITED ? 'DeepSeek API 限流' : '翻译返回空结果' };
+            }
+            // README 翻译
+            const r = await this.translate.translateReadme(repoId);
+            const rStr = r as string;
+            if (rStr === NO_README) return { success: true, resultNote: '该仓库没有 README 文件' };
+            if (typeof rStr === 'string' && rStr.startsWith(NO_README + '|')) {
+                return { success: true, resultNote: '该仓库没有 README 文件\nGitHub 响应: ' + rStr.substring((NO_README + '|').length) };
+            }
+            if (r !== null && r !== RATE_LIMITED) return { success: true, resultNote: '翻译成功' };
+            return { success: false, resultNote: r === RATE_LIMITED ? 'DeepSeek API 限流' : '翻译返回空结果' };
+        } catch (e) {
+            const resultNote = e instanceof Error ? e.message : String(e);
+            this.logger.error(`翻译失败: ${resultNote}`);
+            return { success: false, resultNote };
+        }
+    }
+    
+    /**
+     * 计算重试延迟时间
+     */
+    private calculateRetryDelay(resultNote: string, attempts: number): number {
+        const noteLower = resultNote.toLowerCase();
+        const isRateLimited = noteLower.includes('rate limit') || noteLower.includes('限流') || noteLower.includes('rate limited');
+        return isRateLimited ? RATE_LIMIT_BACKOFF_MS : Math.pow(2, attempts) * 1000;
+    }
+    
+    /**
+     * 记录翻译子项的最终结果，并原子更新父任务计数器
+     */
+    private async recordItemResult(item: any, success: boolean, attempts: number, resultNote: string): Promise<void> {
+        if (success) {
+            await this.prisma.translationTaskItem.update({
+                where: { id: item.id },
+                data: { status: 'SUCCESS', errorMessage: resultNote, updatedAt: new Date() },
+            });
+            const incrementData: Record<string, { increment: number }> = { completedItems: { increment: 1 } };
+            if (item.translateType === 'description') incrementData.descCompleted = { increment: 1 };
+            else incrementData.readmeCompleted = { increment: 1 };
+            await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incrementData });
+        } else {
+            await this.prisma.translationTaskItem.update({
+                where: { id: item.id },
+                data: { status: 'FAILED', errorMessage: resultNote, retryCount: attempts, updatedAt: new Date() },
+            });
+            const incrementData: Record<string, { increment: number }> = { failedItems: { increment: 1 } };
+            if (item.translateType === 'description') incrementData.descFailed = { increment: 1 };
+            else incrementData.readmeFailed = { increment: 1 };
+            await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incrementData });
         }
     }
 
@@ -235,6 +235,43 @@ export class TranslateTaskService {
     }
 
     /**
+     * 创建任务及子项并启动异步执行（模板方法）
+     *
+     * 统一封装 "创建 Task → 批量创建 Items → 启动异步执行 → 日志" 流程，
+     * 消除 5 处重复的任务创建模式。
+     *
+     * @param taskData 任务创建数据（totalItems、descTotal、readmeTotal 等）
+     * @param items 子项创建数据数组
+     * @param logMessage 日志描述信息
+     * @returns 新创建的任务 ID
+     */
+    private async createTaskWithItems(
+        taskData: { totalItems: number; descTotal?: number; readmeTotal?: number },
+        items: Array<{ repoId: bigint; fullName: string | null; translateType: string }>,
+        logMessage: string,
+    ): Promise<number> {
+        const task = await this.prisma.translationTask.create({
+            data: { status: 'PENDING', createdAt: new Date(), ...taskData },
+        });
+        if (items.length > 0) {
+            await this.prisma.translationTaskItem.createMany({
+                data: items.map((item) => ({
+                    taskId: task.id,
+                    repoId: item.repoId,
+                    fullName: item.fullName,
+                    translateType: item.translateType,
+                    status: 'PENDING',
+                    retryCount: 0,
+                    createdAt: new Date(),
+                })),
+            });
+        }
+        this.startTaskAsync(task.id);
+        this.logger.log(`${logMessage}: taskId=${task.id}`);
+        return Number(task.id);
+    }
+
+    /**
      * 创建并启动单个仓库的 README 异步翻译任务
      *
      * @param repoId 仓库 ID
@@ -243,23 +280,11 @@ export class TranslateTaskService {
     async createAndStartSingleReadme(repoId: number) {
         const repo = await this.githubRepo.findById(repoId);
         if (!repo) return null;
-        const task = await this.prisma.translationTask.create({
-            data: { status: 'PENDING', totalItems: 1, readmeTotal: 1, createdAt: new Date() },
-        });
-        await this.prisma.translationTaskItem.create({
-            data: {
-                taskId: task.id,
-                repoId: BigInt(repoId),
-                fullName: repo.fullName,
-                translateType: 'readme',
-                status: 'PENDING',
-                retryCount: 0,
-                createdAt: new Date(),
-            },
-        });
-        this.startTaskAsync(task.id);
-        this.logger.log(`创建单仓库 README 翻译任务: taskId=${task.id} repoId=${repoId}`);
-        return Number(task.id);
+        return this.createTaskWithItems(
+            { totalItems: 1, readmeTotal: 1 },
+            [{ repoId: BigInt(repoId), fullName: repo.fullName, translateType: 'readme' }],
+            `创建单仓库 README 翻译任务 repoId=${repoId}`,
+        );
     }
 
     /**
@@ -287,29 +312,17 @@ export class TranslateTaskService {
      * @returns 新创建的任务 ID，无待翻译项时返回 null
      */
     async createAndStartReadmeBatch() {
-        await this.cleanOld();
+        await this.cleanOldTasks();
         const need = await this.prisma.githubRepo.findMany({
             where: { OR: [{ readmeCn: null }, { readmeCn: '' }] },
             select: { id: true, fullName: true },
         });
         if (!need.length) return null;
-        const task = await this.prisma.translationTask.create({
-            data: { status: 'PENDING', totalItems: need.length, readmeTotal: need.length, createdAt: new Date() },
-        });
-        await this.prisma.translationTaskItem.createMany({
-            data: need.map((r: any) => ({
-                taskId: task.id,
-                repoId: r.id,
-                fullName: r.fullName,
-                translateType: 'readme',
-                status: 'PENDING',
-                retryCount: 0,
-                createdAt: new Date(),
-            })),
-        });
-        this.startTaskAsync(task.id);
-        this.logger.log(`创建全量 README 批量翻译任务: taskId=${task.id} count=${need.length}`);
-        return Number(task.id);
+        return this.createTaskWithItems(
+            { totalItems: need.length, readmeTotal: need.length },
+            need.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'readme' })),
+            `创建全量 README 批量翻译任务 count=${need.length}`,
+        );
     }
 
     /**
@@ -321,7 +334,7 @@ export class TranslateTaskService {
      * @returns 新创建的任务 ID，无待翻译项时返回 null
      */
     async createAndStartFullTranslate() {
-        await this.cleanOld();
+        await this.cleanOldTasks();
         const [needDesc, needReadme] = await Promise.all([
             this.prisma.githubRepo.findMany({
                 where: {
@@ -333,37 +346,13 @@ export class TranslateTaskService {
             this.prisma.githubRepo.findMany({ where: { readmeFetched: false }, select: { id: true, fullName: true } }),
         ]);
         if (!needDesc.length && !needReadme.length) return null;
-        const task = await this.prisma.translationTask.create({
-            data: {
-                status: 'PENDING',
-                totalItems: needDesc.length + needReadme.length,
-                descTotal: needDesc.length,
-                readmeTotal: needReadme.length,
-                createdAt: new Date(),
-            },
-        });
-        const descItems = needDesc.map((r: any) => ({
-            taskId: task.id,
-            repoId: r.id,
-            fullName: r.fullName,
-            translateType: 'description',
-            status: 'PENDING',
-            retryCount: 0,
-            createdAt: new Date(),
-        }));
-        const readmeItems = needReadme.map((r: any) => ({
-            taskId: task.id,
-            repoId: r.id,
-            fullName: r.fullName,
-            translateType: 'readme',
-            status: 'PENDING',
-            retryCount: 0,
-            createdAt: new Date(),
-        }));
-        await this.prisma.translationTaskItem.createMany({ data: [...descItems, ...readmeItems] });
-        this.startTaskAsync(task.id);
-        this.logger.log(`创建全量翻译任务: taskId=${task.id} descCount=${needDesc.length} readmeCount=${needReadme.length}`);
-        return Number(task.id);
+        const descItems = needDesc.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'description' }));
+        const readmeItems = needReadme.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'readme' }));
+        return this.createTaskWithItems(
+            { totalItems: descItems.length + readmeItems.length, descTotal: descItems.length, readmeTotal: readmeItems.length },
+            [...descItems, ...readmeItems],
+            `创建全量翻译任务 descCount=${needDesc.length} readmeCount=${needReadme.length}`,
+        );
     }
 
     /**
@@ -384,28 +373,15 @@ export class TranslateTaskService {
         startDate?: string;
         endDate?: string;
     }) {
-        await this.cleanOld();
+        await this.cleanOldTasks();
         const result = await this.githubRepo.findPage({ ...params, page: 1, size: 10000, untranslatedOnly: true });
-        const repos = result.records as any[];
+        const repos = result.records as Array<{ id: bigint; fullName: string }>;
         if (!repos.length) return null;
-
-        const task = await this.prisma.translationTask.create({
-            data: { status: 'PENDING', totalItems: repos.length, readmeTotal: repos.length, descTotal: 0, createdAt: new Date() },
-        });
-        await this.prisma.translationTaskItem.createMany({
-            data: repos.map((r: any) => ({
-                taskId: task.id,
-                repoId: r.id,
-                fullName: r.fullName,
-                translateType: 'readme',
-                status: 'PENDING',
-                retryCount: 0,
-                createdAt: new Date(),
-            })),
-        });
-        this.startTaskAsync(task.id);
-        this.logger.log(`创建筛选批量翻译任务: taskId=${task.id} count=${repos.length}`);
-        return Number(task.id);
+        return this.createTaskWithItems(
+            { totalItems: repos.length, readmeTotal: repos.length, descTotal: 0 },
+            repos.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'readme' })),
+            `创建筛选批量翻译任务 count=${repos.length}`,
+        );
     }
 
     /**
@@ -466,29 +442,13 @@ export class TranslateTaskService {
     async retryFailed(taskId: number) {
         const items = await this.prisma.translationTaskItem.findMany({ where: { taskId: BigInt(taskId), status: 'FAILED' } });
         if (!items.length) return null;
-        const task = await this.prisma.translationTask.create({
-            data: {
-                status: 'PENDING',
-                totalItems: items.length,
-                descTotal: items.filter((i) => i.translateType === 'description').length,
-                readmeTotal: items.filter((i) => i.translateType === 'readme').length,
-                createdAt: new Date(),
-            },
-        });
-        await this.prisma.translationTaskItem.createMany({
-            data: items.map((i) => ({
-                taskId: task.id,
-                repoId: i.repoId,
-                fullName: i.fullName,
-                translateType: i.translateType,
-                status: 'PENDING',
-                retryCount: 0,
-                createdAt: new Date(),
-            })),
-        });
-        this.startTaskAsync(task.id);
-        this.logger.log(`创建重试翻译任务: newTaskId=${task.id} failedCount=${items.length}`);
-        return Number(task.id);
+        const descCount = items.filter((i) => i.translateType === 'description').length;
+        const readmeCount = items.filter((i) => i.translateType === 'readme').length;
+        return this.createTaskWithItems(
+            { totalItems: items.length, descTotal: descCount, readmeTotal: readmeCount },
+            items.map((i) => ({ repoId: i.repoId, fullName: i.fullName, translateType: i.translateType })),
+            `创建重试翻译任务 failedCount=${items.length}`,
+        );
     }
 
     /**

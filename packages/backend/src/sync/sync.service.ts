@@ -20,13 +20,9 @@ export class SyncService {
     /**
      * 执行同步
      * @param syncType 同步类型（手动/定时）
-     * @param replace REPLACE 模式开关：true=全量替换（删除已取消Star的仓库），false=仅增量更新（不删除本地已有仓库）
-     *
-     * 同步锁采用 check-then-set 模式：
-     * Node.js 单线程事件循环保证同步代码块原子性，避免 TOCTOU 并发问题。
+     * @param replace REPLACE 模式开关：true=全量替换，false=仅增量更新
      */
-    async doSync(syncType: string, replace: boolean = true) {
-        // 同步锁：原子检查-设置，防止并发 doSync 调用
+    async executeSync(syncType: string, replace: boolean = true) {
         if (this.syncing) {
             this.logger.warn(`同步锁已被持有，拒绝 ${syncType}`);
             return;
@@ -37,44 +33,17 @@ export class SyncService {
 
         let syncLog: any = null;
         try {
-            // P0 FIX: syncLog 创建移入 try，避免异常时锁永久卡死
             syncLog = await this.prisma.syncLog.create({
                 data: { syncType, status: '进行中', totalCount: 0, syncedCount: 0, startedAt: new Date(), createdAt: new Date() },
             });
 
-            // 从 GitHub API 拉取所有 Star 仓库
             const remoteRepos = await this.githubApi.fetchAllStarredRepos();
-            // 去重：构建远端 map
-            const remoteMap = new Map<string, any>();
-            for (const r of remoteRepos) {
-                if (r.fullName && !remoteMap.has(r.fullName)) remoteMap.set(r.fullName, r);
-            }
+            const remoteMap = this.buildRemoteMap(remoteRepos);
+            const localMap = await this.buildLocalMap();
+            const synced = await this.syncRemoteToLocal(remoteMap, localMap);
 
-            // 构建本地 map（用于对比远端，判断哪些被取消Star）
-            const localRepos = await this.prisma.githubRepo.findMany({ select: { id: true, fullName: true, createdAt: true } });
-            const localMap = new Map<string, { id: bigint; createdAt: Date | null }>();
-            for (const r of localRepos) {
-                if (r.fullName) localMap.set(r.fullName, { id: r.id, createdAt: r.createdAt });
-            }
-
-            // 遍历远端仓库，upsert 到本地
-            let synced = 0;
-            for (const [fullName, data] of remoteMap) {
-                const local = localMap.get(fullName);
-                await this.githubRepo.upsertRepo({ ...data, createdAt: local?.createdAt || new Date(), updatedAt: new Date() });
-                synced++;
-            }
-
-            // REPLACE 模式：批量删除本地存在但远端已不存在的仓库
             if (replace) {
-                const missingFullNames: string[] = [];
-                for (const [fullName] of localMap) {
-                    if (!remoteMap.has(fullName)) missingFullNames.push(fullName);
-                }
-                if (missingFullNames.length > 0) {
-                    await this.prisma.githubRepo.deleteMany({ where: { fullName: { in: missingFullNames } } });
-                    this.logger.log(`已删除 ${missingFullNames.length} 个已取消Star的仓库`);
-                }
+                await this.deleteUnstarredRepos(remoteMap, localMap);
             } else {
                 this.logger.log(`非 REPLACE 模式，跳过删除未Star仓库，本地 ${localMap.size} 个`);
             }
@@ -102,6 +71,62 @@ export class SyncService {
     }
 
     /**
+     * 构建远端仓库 Map（fullName -> data）
+     */
+    private buildRemoteMap(remoteRepos: Array<{ fullName: string; [key: string]: any }>): Map<string, any> {
+        const map = new Map<string, any>();
+        for (const r of remoteRepos) {
+            if (r.fullName && !map.has(r.fullName)) map.set(r.fullName, r);
+        }
+        return map;
+    }
+
+    /**
+     * 构建本地仓库 Map（fullName -> { id, createdAt }）
+     */
+    private async buildLocalMap(): Promise<Map<string, { id: bigint; createdAt: Date | null }>> {
+        const localRepos = await this.prisma.githubRepo.findMany({ select: { id: true, fullName: true, createdAt: true } });
+        const map = new Map<string, { id: bigint; createdAt: Date | null }>();
+        for (const r of localRepos) {
+            if (r.fullName) map.set(r.fullName, { id: r.id, createdAt: r.createdAt });
+        }
+        return map;
+    }
+
+    /**
+     * 将远端仓库数据 upsert 到本地
+     */
+    private async syncRemoteToLocal(
+        remoteMap: Map<string, any>,
+        localMap: Map<string, { id: bigint; createdAt: Date | null }>,
+    ): Promise<number> {
+        let synced = 0;
+        for (const [fullName, data] of remoteMap) {
+            const local = localMap.get(fullName);
+            await this.githubRepo.upsertRepo({ ...data, createdAt: local?.createdAt || new Date(), updatedAt: new Date() });
+            synced++;
+        }
+        return synced;
+    }
+
+    /**
+     * REPLACE 模式：删除本地存在但远端已不存在的仓库
+     */
+    private async deleteUnstarredRepos(
+        remoteMap: Map<string, any>,
+        localMap: Map<string, { id: bigint; createdAt: Date | null }>,
+    ): Promise<void> {
+        const missingFullNames: string[] = [];
+        for (const [fullName] of localMap) {
+            if (!remoteMap.has(fullName)) missingFullNames.push(fullName);
+        }
+        if (missingFullNames.length > 0) {
+            await this.prisma.githubRepo.deleteMany({ where: { fullName: { in: missingFullNames } } });
+            this.logger.log(`已删除 ${missingFullNames.length} 个已取消Star的仓库`);
+        }
+    }
+
+    /**
      * 手动同步：REPLACE 模式，全量替换
      *
      * 仅在没有正在进行的同步任务时启动新同步，避免并发冲突
@@ -112,16 +137,16 @@ export class SyncService {
             return;
         }
         this.logger.log('手动同步任务已启动');
-        this.doSync('手动同步', true).catch((e) => this.logger.error(e));
+        this.executeSync('手动同步', true).catch((e) => this.logger.error(e));
     }
     /**
      * 定时同步：REPLACE 模式，全量替换
      *
-     * 由定时调度触发，doSync 内部通过同步锁防止并发
+     * 由定时调度触发，executeSync 内部通过同步锁防止并发
      */
     startScheduledSync() {
         this.logger.log('定时同步任务已触发');
-        this.doSync('定时同步', true).catch((e) => this.logger.error(e));
+        this.executeSync('定时同步', true).catch((e) => this.logger.error(e));
     }
     /**
      * 获取当前同步锁状态

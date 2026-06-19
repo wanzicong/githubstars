@@ -143,49 +143,59 @@ export class TranslateService {
 
         // 已获取原始内容但翻译失败/未翻译 → 直接重试翻译（节省 GitHub API 调用）
         if (repo.readmeOriginal && !repo.readmeCn) {
-            this.logger.log(`重试翻译 README: ${repo.fullName} (复用已获取的原始内容)`);
-            const result = await this.callDeepSeek(repo.readmeOriginal, true);
-            if (result && result !== RATE_LIMITED) {
-                await this.prisma.githubRepo.update({
-                    where: { id: BigInt(repoId) },
-                    data: { readmeCn: result, readmeFetched: true, updatedAt: new Date() },
-                });
-            }
-            return result === RATE_LIMITED ? null : result;
+            return this.retryTranslateReadme(repo.fullName!, repo.readmeOriginal, repoId);
         }
 
         // 已确认过没有 README → 不再重试，返回哨兵让 processItem 识别为终态
         if (repo.readmeFetched && !repo.readmeOriginal && !repo.readmeCn) return NO_README;
 
-        // 首次获取 README
-        let content: string | null = null;
-        let githubBody: string | null = null;
-        try {
-            const ghResult = await this.githubApi.fetchReadmeFromGitHub(repo.fullName!);
-            content = ghResult.content;
-            githubBody = ghResult.githubBody;
-        } catch (e) {
-            // 网络/限流异常 → 抛出让上层重试
-            throw e;
-        }
+        // 首次获取 README + 翻译
+        return this.fetchAndTranslateReadme(repo, repoId);
+    }
 
-        if (content === null) {
-            // 确认无 README（带/不带 Token 均 404），哨兵值让 processItem 识别为终态
+    /**
+     * 复用已有的原始 README 内容重试翻译
+     *
+     * @param fullName       仓库全名（用于日志）
+     * @param readmeOriginal 已获取的原始 README 内容
+     * @param repoId         仓库 ID
+     */
+    private async retryTranslateReadme(fullName: string, readmeOriginal: string, repoId: number): Promise<string | null> {
+        this.logger.log(`重试翻译 README: ${fullName} (复用已获取的原始内容)`);
+        const result = await this.callDeepSeek(readmeOriginal, true);
+        if (result && result !== RATE_LIMITED) {
+            await this.prisma.githubRepo.update({
+                where: { id: BigInt(repoId) },
+                data: { readmeCn: result, readmeFetched: true, updatedAt: new Date() },
+            });
+        }
+        return result === RATE_LIMITED ? null : result;
+    }
+
+    /**
+     * 首次从 GitHub 获取 README 并翻译
+     */
+    private async fetchAndTranslateReadme(repo: { fullName: string | null }, repoId: number): Promise<string | null> {
+        const ghResult = await this.githubApi.fetchReadmeFromGitHub(repo.fullName!);
+
+        if (ghResult.content === null) {
+            // 确认无 README，标记 fetched 并返回哨兵值
             await this.prisma.githubRepo.update({
                 where: { id: BigInt(repoId) },
                 data: { readmeFetched: true, readmeCn: null, updatedAt: new Date() },
             });
             this.logger.log(`仓库 ${repo.fullName} 没有 README 文件（已确认）`);
-            const sentinel = githubBody ? `${NO_README}|${githubBody}` : NO_README;
-            return sentinel;
+            return ghResult.githubBody ? `${NO_README}|${ghResult.githubBody}` : NO_README;
         }
 
         // 保存原始内容（先不标记 fetched，等翻译成功再标记）
-        await this.prisma.githubRepo.update({ where: { id: BigInt(repoId) }, data: { readmeOriginal: content, updatedAt: new Date() } });
+        await this.prisma.githubRepo.update({
+            where: { id: BigInt(repoId) },
+            data: { readmeOriginal: ghResult.content, updatedAt: new Date() },
+        });
 
-        const result = await this.callDeepSeek(content, true);
+        const result = await this.callDeepSeek(ghResult.content, true);
         if (result && result !== RATE_LIMITED) {
-            // 翻译成功 → 保存结果 + 标记 fetched
             await this.prisma.githubRepo.update({
                 where: { id: BigInt(repoId) },
                 data: { readmeCn: result, readmeFetched: true, updatedAt: new Date() },

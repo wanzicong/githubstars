@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TranslateService } from './services/translate.service';
 import { TranslateTaskService } from './services/translate-task.service';
+import { SseManagerService } from './services/sse-manager.service';
 import { TranslateController } from './controllers/translate.controller';
+import { TranslateLegacyController } from './controllers/translate-legacy.controller';
 import { GithubModule } from '../github/github.module';
 
 /**
@@ -13,8 +15,8 @@ import { GithubModule } from '../github/github.module';
  */
 @Module({
     imports: [GithubModule],
-    controllers: [TranslateController],
-    providers: [TranslateService, TranslateTaskService],
-    exports: [TranslateService, TranslateTaskService],
+    controllers: [TranslateController, TranslateLegacyController],
+    providers: [TranslateService, TranslateTaskService, SseManagerService],
+    exports: [TranslateService, TranslateTaskService, SseManagerService],
 })
 export class TranslateModule {}
