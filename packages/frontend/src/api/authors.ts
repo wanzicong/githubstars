@@ -9,8 +9,14 @@ export async function fetchAuthorList(params: AuthorListParams): Promise<PageRes
     if (params.page) body.page = params.page
     if (params.size) body.size = params.size
     if (params.keyword) body.keyword = params.keyword
-    const { data } = await api.post<PageResult<AuthorDTO>>('/api/authors/list', body)
-    return data
+    const { data: wrapped } = await api.post<{ success: boolean; data: AuthorDTO[]; meta: { total: number; size: number; current: number; pages: number } }>('/api/authors/list', body)
+    return {
+        records: wrapped.data,
+        total: wrapped.meta.total,
+        size: wrapped.meta.size,
+        current: wrapped.meta.current,
+        pages: wrapped.meta.pages,
+    }
 }
 
 /**
@@ -22,8 +28,14 @@ export async function fetchAuthorRepos(ownerName: string, params: AuthorRepoPara
     if (params.size) body.size = params.size
     if (params.sortBy) body.sortBy = params.sortBy
     if (params.sortOrder) body.sortOrder = params.sortOrder
-    const { data } = await api.post<PageResult<GithubRepo>>('/api/authors/repos', body)
-    return data
+    const { data: wrapped } = await api.post<{ success: boolean; data: GithubRepo[]; meta: { total: number; size: number; current: number; pages: number } }>('/api/authors/repos', body)
+    return {
+        records: wrapped.data,
+        total: wrapped.meta.total,
+        size: wrapped.meta.size,
+        current: wrapped.meta.current,
+        pages: wrapped.meta.pages,
+    }
 }
 
 /**

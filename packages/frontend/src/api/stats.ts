@@ -2,31 +2,31 @@ import api from './request'
 import type { LanguageStatsDTO, OverviewStatsDTO, OwnerStatsDTO, TimelineStatsDTO, GithubRepo } from '../types'
 
 export async function fetchLanguageStats(): Promise<LanguageStatsDTO[]> {
-    const { data } = await api.post<LanguageStatsDTO[]>('/api/stats/languages')
-    return data
+    const { data: wrapped } = await api.post<{ success: boolean; data: LanguageStatsDTO[] }>('/api/stats/languages')
+    return wrapped.data
 }
 
 export async function fetchOwnerStats(topN: number = 15): Promise<OwnerStatsDTO[]> {
-    const { data } = await api.post<OwnerStatsDTO[]>('/api/stats/owners', { topN })
-    return data
+    const { data: wrapped } = await api.post<{ success: boolean; data: OwnerStatsDTO[] }>('/api/stats/owners', { topN })
+    return wrapped.data
 }
 
 export async function fetchTimelineStats(): Promise<TimelineStatsDTO[]> {
-    const { data } = await api.post<TimelineStatsDTO[]>('/api/stats/timeline')
-    return data
+    const { data: wrapped } = await api.post<{ success: boolean; data: TimelineStatsDTO[] }>('/api/stats/timeline')
+    return wrapped.data
 }
 
 export async function fetchOverviewStats(): Promise<OverviewStatsDTO> {
-    const { data } = await api.post<OverviewStatsDTO>('/api/stats/overview')
-    return data
+    const { data: wrapped } = await api.post<{ success: boolean; data: OverviewStatsDTO }>('/api/stats/overview')
+    return wrapped.data
 }
 
 export async function fetchTopStarredRepos(topN: number = 10): Promise<GithubRepo[]> {
-    const { data } = await api.post<GithubRepo[]>('/api/stats/top-starred', { topN })
-    return data
+    const { data: wrapped } = await api.post<{ success: boolean; data: GithubRepo[] }>('/api/stats/top-starred', { topN })
+    return wrapped.data
 }
 
 export async function fetchRecentActiveRepos(topN: number = 10): Promise<GithubRepo[]> {
-    const { data } = await api.post<GithubRepo[]>('/api/stats/recent-active', { topN })
-    return data
+    const { data: wrapped } = await api.post<{ success: boolean; data: GithubRepo[] }>('/api/stats/recent-active', { topN })
+    return wrapped.data
 }

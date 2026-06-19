@@ -13,13 +13,19 @@ export async function fetchStarList(params: StarListParams): Promise<PageResult<
     if (params.startDate) body.startDate = params.startDate
     if (params.endDate) body.endDate = params.endDate
     if (params.untranslatedOnly) body.untranslatedOnly = true
-    const { data } = await api.post<PageResult<GithubRepo>>('/api/stars/list', body)
-    return data
+    const { data: wrapped } = await api.post<{ success: boolean; data: GithubRepo[]; meta: { total: number; size: number; current: number; pages: number } }>('/api/stars/list', body)
+    return {
+        records: wrapped.data,
+        total: wrapped.meta.total,
+        size: wrapped.meta.size,
+        current: wrapped.meta.current,
+        pages: wrapped.meta.pages,
+    }
 }
 
-export async function fetchStarDetail(id: number): Promise<string> {
-    const { data } = await api.post<string>('/api/stars/detail', { id })
-    return data
+export async function fetchStarDetail(id: number): Promise<GithubRepo> {
+    const { data: wrapped } = await api.post<{ success: boolean; data: GithubRepo }>('/api/stars/detail', { id })
+    return wrapped.data
 }
 
 export async function exportStarsUrls(params: StarListParams): Promise<Blob> {
