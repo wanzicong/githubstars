@@ -82,9 +82,8 @@ export default function Settings() {
                                     </Text>
                                 }
                             >
-                                <Input.Password
+                                <Input
                                     placeholder={cfg.sensitive ? '输入后保存，留空则不修改' : cfg.description}
-                                    iconRender={(visible) => (visible ? <span>👁</span> : <span>🔒</span>)}
                                 />
                             </Form.Item>
                         ))}

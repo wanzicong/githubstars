@@ -19,10 +19,10 @@ export class ConfigService implements OnModuleInit {
     /** 内存缓存：配置键 → 配置值 */
     private readonly cache = new Map<string, string>();
     private readonly defaults: Array<{ key: string; value: string; description: string }> = [
-        { key: 'github.username', value: 'wanzicong', description: 'GitHub 用户名' },
-        { key: 'github.token', value: '', description: 'GitHub Personal Access Token' },
-        { key: 'deepseek.api_key', value: '', description: 'DeepSeek API Key' },
-        { key: 'deepseek.api_url', value: 'https://api.deepseek.com/v1/chat/completions', description: 'DeepSeek API 地址' },
+        { key: 'github.username', value: 'wanzicong', description: 'GitHub 用户名，用于同步 Star 仓库' },
+        { key: 'github.token', value: '', description: 'GitHub Personal Access Token，用于提高 API 限额' },
+        { key: 'deepseek.api_key', value: '', description: 'DeepSeek API Key，用于 AI 分析、翻译和分类' },
+        { key: 'deepseek.api_url', value: 'https://api.deepseek.com/v1/chat/completions', description: 'DeepSeek Chat Completions API 地址' },
         { key: 'deepseek.model', value: 'deepseek-chat', description: 'DeepSeek 模型名称' },
     ];
 

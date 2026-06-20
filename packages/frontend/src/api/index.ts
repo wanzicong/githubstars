@@ -16,6 +16,7 @@ export { searchRepos, starRepo, checkStarred } from './github'
 
 // System
 export { fetchAllConfig, saveConfig } from './config'
+export { fetchLogFiles, fetchLogContent, clearLogFile } from './logs'
 export { fetchLogFiles as fetchLogs, clearLogFile as clearLogs } from './logs'
 export { fetchOverviewStats, fetchLanguageStats, fetchOwnerStats, fetchTimelineStats, fetchTopStarredRepos, fetchRecentActiveRepos } from './stats'
 export { triggerManualSync as startSync, fetchSyncStatus as getSyncStatus } from './sync'
