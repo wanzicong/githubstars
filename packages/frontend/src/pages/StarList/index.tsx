@@ -23,6 +23,7 @@ import {
     CaretDownOutlined,
     AppstoreOutlined,
     UnorderedListOutlined,
+    CopyOutlined,
 } from '@ant-design/icons'
 import dayjs from '../../config/setupDayjs'
 import * as api from '../../api'
@@ -30,7 +31,11 @@ import { TranslatePanel } from '../../components/translate'
 import { StarStatsBar } from '../../components/stars'
 import { StarRepoView } from '../../components/stars'
 import { TranslateProgressModal } from '../../components/translate'
+import CloneWizardModal from '../../components/clone/CloneWizardModal'
+import CloneProgressModal from '../../components/clone/CloneProgressModal'
 import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../../types'
+import type { CloneTaskProgress } from '../../api/clone'
+import { getCloneTaskProgress, retryCloneFailed } from '../../api/clone'
 import { usePolling } from '../../hooks/usePolling'
 import { useStarListParams, TIME_PRESETS } from './hooks/useStarListParams'
 import { INITIAL_TASK_PROGRESS, type TaskProgress } from '../../constants'
@@ -208,6 +213,13 @@ export default function StarList() {
     const [translateTaskId, setTranslateTaskId] = useState<number | null>(null)
     const [translateProgress, setTranslateProgress] = useState<TaskProgress | null>(null)
 
+    // ── 克隆相关状态 ──
+    const [selectedRepoIds, setSelectedRepoIds] = useState<number[]>([])
+    const [cloneWizardOpen, setCloneWizardOpen] = useState(false)
+    const [cloneProgressOpen, setCloneProgressOpen] = useState(false)
+    const [cloneTaskId, setCloneTaskId] = useState<number | null>(null)
+    const [cloneProgress, setCloneProgress] = useState<CloneTaskProgress | null>(null)
+
     const translateTaskIdRef = useRef<number | null>(null)
 
     const polling = usePolling(async () => {
@@ -271,6 +283,43 @@ export default function StarList() {
         setTranslateTaskId(null)
         setTranslateProgress(null)
     }, [polling])
+
+    // ── 克隆进度轮询 ──
+    const cloneTaskIdRef = useRef<number | null>(null)
+    const clonePolling = usePolling(async () => {
+        const taskId = cloneTaskIdRef.current
+        if (!taskId) { clonePolling.stop(); return }
+        try {
+            const res = await getCloneTaskProgress(taskId)
+            if (res.success) {
+                setCloneProgress(res)
+                if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
+                    clonePolling.stop()
+                }
+            }
+        } catch { /* ignore */ }
+    }, 2000)
+
+    const handleCloneTaskCreated = useCallback((taskId: number) => {
+        setCloneTaskId(taskId)
+        setCloneProgressOpen(true)
+        cloneTaskIdRef.current = taskId
+        clonePolling.start()
+    }, [clonePolling])
+
+    const handleRetryCloneFailed = useCallback(async () => {
+        if (!cloneTaskId) return
+        try {
+            const result = await retryCloneFailed(cloneTaskId)
+            if (result.success) {
+                setCloneProgress(null)
+                cloneTaskIdRef.current = cloneTaskId
+                clonePolling.start()
+            } else {
+                message.info(result.message || '没有失败项')
+            }
+        } catch { message.error('重试失败') }
+    }, [cloneTaskId, clonePolling])
 
     const renderTranslateProgress = () => (
         <TranslateProgressModal
@@ -468,6 +517,13 @@ export default function StarList() {
                                 <Button icon={<TranslationOutlined />} onClick={() => setTranslatePanelOpen(true)}>
                                     翻译管理
                                 </Button>
+                                <Button
+                                    icon={<CopyOutlined />}
+                                    onClick={() => setCloneWizardOpen(true)}
+                                    disabled={selectedRepoIds.length === 0}
+                                >
+                                    批量克隆 {selectedRepoIds.length > 0 ? `(${selectedRepoIds.length})` : ''}
+                                </Button>
                                 <Button icon={<DownloadOutlined />} onClick={handleExportMd}>
                                     导出MD
                                 </Button>
@@ -584,8 +640,26 @@ export default function StarList() {
                         setUrlParam('page', String(page), false)
                     }
                 }}
+                selectedIds={selectedRepoIds}
+                onSelectionChange={setSelectedRepoIds}
             />
             {renderTranslateProgress()}
+
+            {/* 克隆向导 */}
+            <CloneWizardModal
+                open={cloneWizardOpen}
+                onClose={() => setCloneWizardOpen(false)}
+                selectedRepos={repos.filter((r) => selectedRepoIds.includes(r.id))}
+                onTaskCreated={handleCloneTaskCreated}
+            />
+
+            {/* 克隆进度 */}
+            <CloneProgressModal
+                open={cloneProgressOpen}
+                progress={cloneProgress}
+                onClose={() => { clonePolling.stop(); setCloneProgressOpen(false) }}
+                onRetryFailed={handleRetryCloneFailed}
+            />
 
             {/* 翻译管理面板 */}
             <TranslatePanel

@@ -17,6 +17,7 @@ const Settings = lazy(() => import('@/pages/Settings'))
 const GithubSearch = lazy(() => import('@/pages/GithubSearch'))
 const Trending = lazy(() => import('@/pages/Trending'))
 const Logs = lazy(() => import('@/pages/Logs'))
+const Clone = lazy(() => import('@/pages/Clone'))
 
 /** 所有路由（Layout 子路由） */
 export const appRoutes: RouteObject[] = [
@@ -37,6 +38,9 @@ export const appRoutes: RouteObject[] = [
   // ── 搜索 / 趋势 ──
   { path: 'search', element: <GithubSearch />, handle: { title: 'GitHub搜索' } },
   { path: 'trending', element: <Trending />, handle: { title: '趋势排行' } },
+
+  // ── 克隆 ──
+  { path: 'clone', element: <Clone />, handle: { title: '克隆管理' } },
 
   // ── 系统 ──
   { path: 'settings', element: <Settings />, handle: { title: '系统配置' } },

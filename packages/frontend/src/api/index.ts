@@ -36,3 +36,7 @@ export {
   getRecentTasks,
   getTranslationStatus as getTranslationStats,
 } from './translate'
+
+// Clone
+export { createCloneTask, getCloneTaskProgress, retryCloneFailed, getRecentCloneTasks } from './clone'
+export type { CloneTaskProgress, CloneTaskListResult } from './clone'

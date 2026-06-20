@@ -84,6 +84,18 @@ export const INITIAL_TASK_PROGRESS: TaskProgress = {
 export const STALE_THRESHOLD_WARNING_DAYS = 30
 export const STALE_THRESHOLD_DANGER_DAYS = 180
 
+// ─── 克隆 ───
+
+/** 克隆并发数选项 */
+export const CLONE_CONCURRENCY_OPTIONS = [
+    { value: 5, label: '5 个并发' },
+    { value: 10, label: '10 个并发' },
+    { value: 20, label: '20 个并发' },
+]
+
+/** 默认克隆并发数 */
+export const DEFAULT_CLONE_CONCURRENCY = 5
+
 // ─── 趋势排名 ───
 
 /** Trending 排行榜前 3 名徽章颜色 */

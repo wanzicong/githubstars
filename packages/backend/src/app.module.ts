@@ -11,6 +11,7 @@ import { AuthorModule } from './author/author.module';
 import { TranslateModule } from './translate/translate.module';
 import { TrendingModule } from './trending/trending.module';
 import { ExportModule } from './export/export.module';
+import { CloneModule } from './clone/clone.module';
 import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -35,6 +36,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
         TranslateModule,
         TrendingModule,
         ExportModule,
+        CloneModule,
     ],
     providers: [
         {

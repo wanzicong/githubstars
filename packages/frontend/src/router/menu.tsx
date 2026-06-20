@@ -8,6 +8,7 @@ import {
   SearchOutlined,
   FireOutlined,
   FileTextOutlined,
+  CopyOutlined,
 } from '@ant-design/icons'
 /**
  * 导航菜单项定义 —— 集中管理所有菜单的 key、图标、标题、排序。
@@ -30,6 +31,7 @@ export const menuItems: MenuItem[] = [
   { key: '/authors', icon: <UserOutlined />, label: '作者中心', orderNo: 30 },
   { key: '/search', icon: <SearchOutlined />, label: 'GitHub搜索', orderNo: 40 },
   { key: '/trending', icon: <FireOutlined />, label: '趋势排行', orderNo: 50 },
+  { key: '/clone', icon: <CopyOutlined />, label: '克隆管理', orderNo: 55 },
   { key: '/settings', icon: <SettingOutlined />, label: '系统配置', orderNo: 60 },
   { key: '/logs', icon: <FileTextOutlined />, label: '系统日志', orderNo: 70 },
 ]
@@ -45,6 +47,7 @@ export const Settings = lazy(() => import('@/pages/Settings'))
 export const GithubSearch = lazy(() => import('@/pages/GithubSearch'))
 export const Trending = lazy(() => import('@/pages/Trending'))
 export const Logs = lazy(() => import('@/pages/Logs'))
+export const Clone = lazy(() => import('@/pages/Clone'))
 
 /**
  * 根据当前路径获取匹配的菜单标题（用于面包屑、标签页标题）。

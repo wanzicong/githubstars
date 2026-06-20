@@ -1,4 +1,4 @@
-import { Card, Row, Col, Spin, Empty, Button, Pagination } from 'antd'
+import { Card, Row, Col, Spin, Empty, Button, Pagination, Checkbox } from 'antd'
 import type { GithubRepo, PageResult } from '../../types'
 import RepoCard from './RepoCard'
 import RepoRow from './RepoRow'
@@ -14,6 +14,10 @@ export interface StarRepoViewProps {
     pageSize: number
     onClearFilters: () => void
     onPageChange: (page: number, size: number) => void
+    /** 多选模式：选中的仓库 ID 列表 */
+    selectedIds?: number[]
+    /** 多选模式：选中变更回调 */
+    onSelectionChange?: (ids: number[]) => void
 }
 
 /**
@@ -31,22 +35,77 @@ export default function StarRepoView({
     pageSize,
     onClearFilters,
     onPageChange,
+    selectedIds,
+    onSelectionChange,
 }: StarRepoViewProps) {
+    const selectionEnabled = !!onSelectionChange
+
+    const toggleSelect = (id: number) => {
+        if (!onSelectionChange || !selectedIds) return
+        if (selectedIds.includes(id)) {
+            onSelectionChange(selectedIds.filter((i) => i !== id))
+        } else {
+            onSelectionChange([...selectedIds, id])
+        }
+    }
+
+    const allPageIds = repos.map((r) => r.id)
+    const allSelected = selectionEnabled && allPageIds.length > 0 && allPageIds.every((id) => selectedIds?.includes(id))
+
+    const toggleSelectAll = () => {
+        if (!onSelectionChange || !selectedIds) return
+        if (allSelected) {
+            onSelectionChange(selectedIds.filter((id) => !allPageIds.includes(id)))
+        } else {
+            const newIds = [...new Set([...selectedIds, ...allPageIds])]
+            onSelectionChange(newIds)
+        }
+    }
     return (
         <>
             <Spin spinning={loading}>
+                {selectionEnabled && repos.length > 0 && (
+                    <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Checkbox checked={allSelected} onChange={toggleSelectAll}>
+                            全选当页
+                        </Checkbox>
+                        {selectedIds && selectedIds.length > 0 && (
+                            <span style={{ color: '#1677ff', fontSize: 13 }}>已选 {selectedIds.length} 个</span>
+                        )}
+                    </div>
+                )}
                 {repos.length > 0 ? (
                     viewMode === 'list' ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                             {repos.map((repo) => (
-                                <RepoRow key={repo.id} repo={repo} />
+                                <div key={repo.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                    {selectionEnabled && (
+                                        <Checkbox
+                                            checked={selectedIds?.includes(repo.id)}
+                                            onChange={() => toggleSelect(repo.id)}
+                                            style={{ marginTop: 12 }}
+                                        />
+                                    )}
+                                    <div style={{ flex: 1 }}>
+                                        <RepoRow repo={repo} />
+                                    </div>
+                                </div>
                             ))}
                         </div>
                     ) : (
                         <Row gutter={[16, 16]}>
                             {repos.map((repo) => (
                                 <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
-                                    <RepoCard repo={repo} />
+                                    <div style={{ position: 'relative' }}>
+                                        {selectionEnabled && (
+                                            <Checkbox
+                                                checked={selectedIds?.includes(repo.id)}
+                                                onChange={() => toggleSelect(repo.id)}
+                                                style={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
+                                            />
+                                        )}
+                                        <RepoCard repo={repo} />
+                                    </div>
                                 </Col>
                             ))}
                         </Row>

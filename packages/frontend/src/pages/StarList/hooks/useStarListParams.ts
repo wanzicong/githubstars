@@ -3,13 +3,13 @@ import { useSearchParams } from 'react-router-dom'
 import dayjs from '../../../config/setupDayjs'
 
 export const TIME_PRESETS: { label: string; value: string; days: number }[] = [
-    { label: 'ä¸é', value: '', days: 0 },
-    { label: 'ä»å¤©', value: 'today', days: 0 },
-    { label: '7å¤©å', value: '7d', days: 7 },
-    { label: '30å¤©å', value: '30d', days: 30 },
-    { label: '90å¤©å', value: '90d', days: 90 },
-    { label: 'åå¹´å', value: '180d', days: 180 },
-    { label: 'ä¸å¹´å', value: '365d', days: 365 },
+    { label: '不限', value: '', days: 0 },
+    { label: '今天', value: 'today', days: 0 },
+    { label: '7天内', value: '7d', days: 7 },
+    { label: '30天内', value: '30d', days: 30 },
+    { label: '90天内', value: '90d', days: 90 },
+    { label: '半年内', value: '180d', days: 180 },
+    { label: '一年内', value: '365d', days: 365 },
 ]
 
 export function useStarListParams() {

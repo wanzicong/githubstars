@@ -1,0 +1,239 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Card, Table, Tag, Button, Space, Typography, Row, Col, Statistic, Progress, App } from 'antd'
+import { ReloadOutlined, CopyOutlined, DeleteOutlined, FolderOutlined } from '@ant-design/icons'
+import { getRecentCloneTasks, getCloneTaskProgress, retryCloneFailed } from '@/api/clone'
+import type { CloneTaskProgress, CloneTaskListResult } from '@/api/clone'
+import CloneProgressModal from '@/components/clone/CloneProgressModal'
+import { usePolling } from '@/hooks/usePolling'
+import dayjs from '@/config/setupDayjs'
+
+const { Title, Text } = Typography
+
+/**
+ * 克隆任务管理页面
+ *
+ * 展示所有克隆任务列表、进度、操作（重试/查看详情）
+ */
+export default function Clone() {
+    const { message } = App.useApp()
+    const [tasks, setTasks] = useState<CloneTaskListResult['tasks']>([])
+    const [loading, setLoading] = useState(true)
+    const [progressOpen, setProgressOpen] = useState(false)
+    const [activeTaskId, setActiveTaskId] = useState<number | null>(null)
+    const [progress, setProgress] = useState<CloneTaskProgress | null>(null)
+
+    const activeTaskIdRef = useRef<number | null>(null)
+
+    const loadTasks = useCallback(async () => {
+        try {
+            const res = await getRecentCloneTasks()
+            if (res.success) setTasks(res.tasks)
+        } catch {
+            message.error('加载任务列表失败')
+        } finally {
+            setLoading(false)
+        }
+    }, [])
+
+    useEffect(() => { loadTasks() }, [loadTasks])
+
+    // 轮询活跃任务进度
+    const polling = usePolling(async () => {
+        const taskId = activeTaskIdRef.current
+        if (!taskId) { polling.stop(); return }
+        try {
+            const res = await getCloneTaskProgress(taskId)
+            if (res.success) {
+                setProgress(res)
+                if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
+                    polling.stop()
+                    loadTasks()
+                }
+            }
+        } catch { /* ignore */ }
+    }, 2000)
+
+    const handleViewProgress = useCallback((taskId: number) => {
+        setActiveTaskId(taskId)
+        activeTaskIdRef.current = taskId
+        setProgressOpen(true)
+        polling.start()
+    }, [polling])
+
+    const handleRetryFailed = useCallback(async () => {
+        if (!activeTaskId) return
+        try {
+            const result = await retryCloneFailed(activeTaskId)
+            if (result.success) {
+                setProgress(null)
+                activeTaskIdRef.current = activeTaskId
+                polling.start()
+            } else {
+                message.info(result.message || '没有失败项')
+            }
+        } catch {
+            message.error('重试失败')
+        }
+    }, [activeTaskId, polling])
+
+    const handleCloseProgress = () => {
+        polling.stop()
+        setProgressOpen(false)
+        loadTasks()
+    }
+
+    const getStatusTag = (status: string) => {
+        const map: Record<string, { color: string; text: string }> = {
+            PENDING: { color: 'default', text: '等待中' },
+            PROCESSING: { color: 'processing', text: '执行中' },
+            COMPLETED: { color: 'success', text: '已完成' },
+            FAILED: { color: 'error', text: '失败' },
+            PARTIAL: { color: 'warning', text: '部分完成' },
+        }
+        const info = map[status] || { color: 'default', text: status }
+        return <Tag color={info.color}>{info.text}</Tag>
+    }
+
+    const columns = [
+        {
+            title: '任务 ID',
+            dataIndex: 'taskId',
+            key: 'taskId',
+            width: 80,
+        },
+        {
+            title: '状态',
+            dataIndex: 'status',
+            key: 'status',
+            width: 100,
+            render: (status: string) => getStatusTag(status),
+        },
+        {
+            title: '目标目录',
+            dataIndex: 'targetDir',
+            key: 'targetDir',
+            ellipsis: true,
+            render: (dir: string) => (
+                <Space>
+                    <FolderOutlined />
+                    <Text copyable={{ text: dir }}>{dir}</Text>
+                </Space>
+            ),
+        },
+        {
+            title: '进度',
+            key: 'progress',
+            width: 200,
+            render: (_: unknown, record: CloneTaskListResult['tasks'][0]) => {
+                const total = record.totalItems
+                const processed = record.completedItems + record.failedItems + record.skippedItems
+                const percent = total > 0 ? Math.round((processed * 100) / total) : 0
+                const status = record.status === 'COMPLETED' ? 'success' : record.status === 'FAILED' ? 'exception' : 'active'
+                return (
+                    <div>
+                        <Progress percent={percent} size="small" status={status as any} />
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                            {record.completedItems}/{total}
+                            {record.failedItems > 0 && <Text type="danger"> 失败{record.failedItems}</Text>}
+                            {record.skippedItems > 0 && <Text type="warning"> 跳过{record.skippedItems}</Text>}
+                        </Text>
+                    </div>
+                )
+            },
+        },
+        {
+            title: '并发数',
+            dataIndex: 'concurrency',
+            key: 'concurrency',
+            width: 80,
+        },
+        {
+            title: '创建时间',
+            dataIndex: 'createdAt',
+            key: 'createdAt',
+            width: 160,
+            render: (time: string) => time ? dayjs(time).format('MM-DD HH:mm:ss') : '-',
+        },
+        {
+            title: '操作',
+            key: 'action',
+            width: 120,
+            render: (_: unknown, record: CloneTaskListResult['tasks'][0]) => (
+                <Space>
+                    <Button size="small" icon={<CopyOutlined />} onClick={() => handleViewProgress(record.taskId)}>
+                        详情
+                    </Button>
+                    {(record.status === 'FAILED' || record.status === 'PARTIAL') && (
+                        <Button
+                            size="small"
+                            type="link"
+                            icon={<ReloadOutlined />}
+                            onClick={async () => {
+                                try {
+                                    const res = await retryCloneFailed(record.taskId)
+                                    if (res.success) {
+                                        message.success(res.message)
+                                        loadTasks()
+                                    } else {
+                                        message.info(res.message)
+                                    }
+                                } catch {
+                                    message.error('重试失败')
+                                }
+                            }}
+                        >
+                            重试
+                        </Button>
+                    )}
+                </Space>
+            ),
+        },
+    ]
+
+    // 统计
+    const totalTasks = tasks.length
+    const runningTasks = tasks.filter((t) => t.status === 'PROCESSING' || t.status === 'PENDING').length
+    const completedTasks = tasks.filter((t) => t.status === 'COMPLETED').length
+
+    return (
+        <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <Title level={3} style={{ margin: 0 }}>克隆任务管理</Title>
+                <Button icon={<ReloadOutlined />} onClick={loadTasks} loading={loading}>刷新</Button>
+            </div>
+
+            <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+                <Col xs={12} sm={8}>
+                    <Card size="small">
+                        <Statistic title="总任务数" value={totalTasks} prefix={<CopyOutlined />} />
+                    </Card>
+                </Col>
+                <Col xs={12} sm={8}>
+                    <Card size="small">
+                        <Statistic title="执行中" value={runningTasks} valueStyle={{ color: '#1677ff' }} />
+                    </Card>
+                </Col>
+                <Col xs={12} sm={8}>
+                    <Card size="small">
+                        <Statistic title="已完成" value={completedTasks} valueStyle={{ color: '#52c41a' }} />
+                    </Card>
+                </Col>
+            </Row>
+
+            <Table
+                dataSource={tasks}
+                columns={columns}
+                rowKey="taskId"
+                loading={loading}
+                pagination={{ pageSize: 10 }}
+            />
+
+            <CloneProgressModal
+                open={progressOpen}
+                progress={progress}
+                onClose={handleCloseProgress}
+                onRetryFailed={handleRetryFailed}
+            />
+        </div>
+    )
+}
