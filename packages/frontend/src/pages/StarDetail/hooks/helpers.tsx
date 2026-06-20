@@ -9,13 +9,13 @@ export function daysSince(dateStr: string | null | undefined): string | null {
     const diffMs = now.getTime() - date.getTime()
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
     if (diffDays < 0) return null
-    return diffDays === 0 ? 'ä»å¤©' : diffDays + ' å¤©'
+    return diffDays === 0 ? '今天' : diffDays + ' 天'
 }
 
 export function DaysSinceText({ dateStr }: { dateStr: string }) {
     const display = daysSince(dateStr)
     if (!display) return <Text type='secondary'>-</Text>
-    if (display === 'ä»å¤©') return <Text style={{ color: '#52c41a' }}>'ä»å¤©'</Text>
+    if (display === '今天') return <Text style={{ color: '#52c41a' }}>今天</Text>
     const num = parseInt(display)
     if (num < 90) return <Text style={{ color: '#52c41a' }}>{display}</Text>
     if (num < 365) return <Text style={{ color: '#faad14' }}>{display}</Text>

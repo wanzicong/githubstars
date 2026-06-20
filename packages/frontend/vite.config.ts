@@ -11,17 +11,17 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 10001,
     proxy: {
       // API 请求代理 — 所有 /api/* 都转发到后端
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:10002',
         changeOrigin: true,
       },
       // 以下路径的前端 SPA 页面会被 Vite 处理（Accept: text/html 不代理）
       // API 请求（Accept 非 html）会被代理到后端 /api + path
       '/sync': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:10002',
         changeOrigin: true,
         rewrite: (path) => '/api' + path,
         bypass(req) {
@@ -31,7 +31,7 @@ export default defineConfig({
         },
       },
       '/authors': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:10002',
         changeOrigin: true,
         rewrite: (path) => '/api' + path,
         bypass(req) {
@@ -41,12 +41,12 @@ export default defineConfig({
         },
       },
       '/stars/export': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:10002',
         changeOrigin: true,
         rewrite: (path) => '/api' + path,
       },
       '/export': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:10002',
         changeOrigin: true,
         rewrite: (path) => '/api' + path,
       },

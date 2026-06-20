@@ -47,6 +47,11 @@ packages/shared/dist/
 githubstars_backup.sql
 githubstars_full_export.sql
 
+# Environment files (keep .env.example for documentation)
+packages/backend/.env
+packages/backend/.env.test
+packages/backend/.env.local
+
 # Desktop (Electron app)
 githubstars-desktop/node_modules/
 githubstars-desktop/frontend/node_modules/

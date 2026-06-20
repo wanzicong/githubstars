@@ -61,7 +61,7 @@ export default function Settings() {
             <Spin spinning={loading}>
                 <Card style={{ maxWidth: 700 }}>
                     <Form form={form} layout='vertical' onFinish={handleSave}>
-                        {configs.map((cfg) => (
+                        {(configs || []).map((cfg) => (
                             <Form.Item
                                 key={cfg.configKey}
                                 name={cfg.configKey}

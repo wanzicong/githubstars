@@ -19,17 +19,22 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:unit": "jest --testPathPattern='test/unit|src/.*\\.spec\\.ts'",
-    "test:integration": "jest --config ./test/jest-e2e.json --testPathPattern='test/integration'",
+    "test:unit": "jest --testPathPatterns='test/unit|src/.*\\.spec\\.ts'",
+    "test:integration": "jest --config ./test/jest-e2e.json --testPathPatterns='test/integration'",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:all": "npm run test:unit && npm run test:integration",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
     "prisma:push": "prisma db push",
+    "db:test:push": "node test/clone-schema.js",
+    "db:test:reset": "node test/clone-schema.js",
+    "db:test:seed": "dotenv -e .env.test -- npx prisma db seed",
+    "test:db": "jest --config ./test/jest-e2e.json --testPathPatterns='test/integration'",
+    "test:all": "npm run test:unit && npm run test:db",
     "clean": "rimraf dist"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.177",
+    "@githubstars/shared": "*",
     "@nestjs/bull": "^11.0.4",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
@@ -45,8 +50,7 @@
     "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.0",
     "winston": "^3.19.0",
-    "zod": "^4.4.3",
-    "@githubstars/shared": "*"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -58,6 +62,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
     "@types/supertest": "^7.0.0",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
@@ -88,6 +93,7 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "./coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "globalSetup": "<rootDir>/test/setup-env.ts"
   }
 }

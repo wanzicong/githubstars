@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import {
     Card,
     Input,
@@ -56,16 +56,6 @@ const DATE_FIELD_OPTIONS = [
     { label: '创建时间', value: 'repo_created_at' },
     { label: '更新时间', value: 'repo_updated_at' },
     { label: '推送时间', value: 'repo_pushed_at' },
-]
-
-const TIME_PRESETS: { label: string; value: string; days: number }[] = [
-    { label: '不限', value: '', days: 0 },
-    { label: '今天', value: 'today', days: 0 },
-    { label: '7天内', value: '7d', days: 7 },
-    { label: '30天内', value: '30d', days: 30 },
-    { label: '90天内', value: '90d', days: 90 },
-    { label: '半年内', value: '180d', days: 180 },
-    { label: '一年内', value: '365d', days: 365 },
 ]
 
 
@@ -213,20 +203,6 @@ export default function StarList() {
         location.pathname, // 从详情页返回列表时触发刷新
     ])
 
-    const clearFilters = useCallback(() => {
-        setUrlParams({
-            keyword: null,
-            languages: null,
-            timePreset: null,
-            sortBy: 'stars_count',
-            sortOrder: 'desc',
-            dateField: null,
-            startDate: null,
-            endDate: null,
-            untranslatedOnly: null,
-        })
-    }, [setUrlParams])
-
     const [translatePanelOpen, setTranslatePanelOpen] = useState(false)
     const [translateModalVisible, setTranslateModalVisible] = useState(false)
     const [translateTaskId, setTranslateTaskId] = useState<number | null>(null)
@@ -361,7 +337,7 @@ export default function StarList() {
     }, [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, pageResult?.total])
 
     const languageSelectOptions = useMemo(
-        () => languageOptions.map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })),
+        () => (languageOptions || []).map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })),
         [languageOptions],
     )
     const hasActiveFilters =

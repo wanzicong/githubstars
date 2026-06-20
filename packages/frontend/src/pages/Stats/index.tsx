@@ -50,11 +50,11 @@ export default function Stats() {
                 ])
 
                 if (overviewRes.status === 'fulfilled') setOverview(overviewRes.value)
-                if (languagesRes.status === 'fulfilled') setLanguages(languagesRes.value)
-                if (ownersRes.status === 'fulfilled') setOwners(ownersRes.value)
-                if (timelineRes.status === 'fulfilled') setTimeline(timelineRes.value)
-                if (topReposRes.status === 'fulfilled') setTopRepos(topReposRes.value)
-                if (recentReposRes.status === 'fulfilled') setRecentRepos(recentReposRes.value)
+                if (languagesRes.status === 'fulfilled') setLanguages(languagesRes.value || [])
+                if (ownersRes.status === 'fulfilled') setOwners(ownersRes.value || [])
+                if (timelineRes.status === 'fulfilled') setTimeline(timelineRes.value || [])
+                if (topReposRes.status === 'fulfilled') setTopRepos(topReposRes.value || [])
+                if (recentReposRes.status === 'fulfilled') setRecentRepos(recentReposRes.value || [])
             } finally {
                 setLoading(false)
             }
@@ -62,8 +62,8 @@ export default function Stats() {
         fetchAll()
     }, [])
 
-    const langTop = languages.slice(0, TOP_N_LANGUAGES)
-    const langOthers = languages.slice(TOP_N_LANGUAGES).reduce((sum, l) => sum + l.count, 0)
+    const langTop = (languages || []).slice(0, TOP_N_LANGUAGES)
+    const langOthers = (languages || []).slice(TOP_N_LANGUAGES).reduce((sum, l) => sum + l.count, 0)
 
     const languageDoughnutData = {
         labels: langTop.map((l) => l.language).concat(langOthers > 0 ? ['其他'] : []),

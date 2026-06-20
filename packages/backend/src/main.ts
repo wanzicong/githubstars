@@ -21,7 +21,7 @@ async function bootstrap() {
     app.useLogger(app.get(LoggingService));
 
     // CORS — 允许前端开发服务器直连（SSE 流式端点需要绕过 Vite 代理缓冲）
-    const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:5174')
+    const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:10001,http://localhost:10001')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
@@ -53,7 +53,7 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup('api/docs', app, document);
 
-    const port = process.env.PORT ?? 3000;
+    const port = process.env.PORT ?? 10002;
     await app.listen(port);
     console.log(`[Bootstrap] 服务已启动: http://localhost:${port}`);
     console.log(`[Bootstrap] Swagger 文档: http://localhost:${port}/api/docs`);

@@ -76,3 +76,9 @@ api.interceptors.response.use(
 )
 
 export default api
+
+/** 动态设置 API baseURL */
+export const setBaseURL = (url: string) => { api.defaults.baseURL = url }
+
+/** 获取当前 API baseURL */
+export const getBaseURL = () => api.defaults.baseURL

@@ -21,7 +21,7 @@ export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onR
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
             <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={64} style={{ flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-                <Title level={4} style={{ margin: 0, marginBottom: 4 }}>
+                <Title level={4} style={{ margin: 0, marginBottom: 4, overflowWrap: 'break-word' }}>
                     {repo.fullName}
                 </Title>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
