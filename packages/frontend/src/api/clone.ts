@@ -1,5 +1,11 @@
 import api from './request'
 
+/** 打开系统目录选择对话框，返回用户选择的完整路径 */
+export async function selectDirectory(): Promise<{ success: boolean; path?: string; message?: string }> {
+    const { data } = await api.post('/api/clone/select-directory')
+    return data
+}
+
 /** 创建克隆任务 */
 export async function createCloneTask(params: {
     repoIds: number[]
@@ -23,10 +29,24 @@ export async function retryCloneFailed(taskId: number): Promise<{ success: boole
     return data
 }
 
+/** 重试单个克隆项 */
+export async function retryCloneItem(taskId: number, fullName: string): Promise<{ success: boolean; message?: string }> {
+    const { data } = await api.post('/api/clone/tasks/retry-item', { id: taskId, fullName })
+    return data
+}
+
 /** 获取最近克隆任务列表 */
 export async function getRecentCloneTasks(): Promise<CloneTaskListResult> {
     const { data } = await api.post<CloneTaskListResult>('/api/clone/tasks/list')
     return data
+}
+
+/** 克隆任务项类型 */
+export interface CloneTaskItem {
+    fullName: string
+    status: string
+    localPath?: string
+    errorMessage?: string | null
 }
 
 /** 克隆任务进度类型 */
@@ -46,6 +66,7 @@ export interface CloneTaskProgress {
     finishedAt: string | null
     failedDetails?: Array<{ fullName: string; error: string }>
     skippedDetails?: Array<{ fullName: string }>
+    allItems?: Array<CloneTaskItem>
 }
 
 /** 克隆任务列表结果 */

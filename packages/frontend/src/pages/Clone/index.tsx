@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, Table, Tag, Button, Space, Typography, Row, Col, Statistic, Progress, App } from 'antd'
 import { ReloadOutlined, CopyOutlined, DeleteOutlined, FolderOutlined } from '@ant-design/icons'
-import { getRecentCloneTasks, getCloneTaskProgress, retryCloneFailed } from '@/api/clone'
+import { getRecentCloneTasks, getCloneTaskProgress, retryCloneFailed, retryCloneItem } from '@/api/clone'
 import type { CloneTaskProgress, CloneTaskListResult } from '@/api/clone'
 import CloneProgressModal from '@/components/clone/CloneProgressModal'
 import { usePolling } from '@/hooks/usePolling'
@@ -75,6 +75,23 @@ export default function Clone() {
             message.error('重试失败')
         }
     }, [activeTaskId, polling])
+
+    const handleRetryItem = useCallback(async (fullName: string) => {
+        if (!activeTaskId) return
+        try {
+            const result = await retryCloneItem(activeTaskId, fullName)
+            if (result.success) {
+                message.success(result.message)
+                // 重新获取进度
+                const progressRes = await getCloneTaskProgress(activeTaskId)
+                if (progressRes.success) setProgress(progressRes)
+            } else {
+                message.info(result.message)
+            }
+        } catch {
+            message.error('重试失败')
+        }
+    }, [activeTaskId])
 
     const handleCloseProgress = () => {
         polling.stop()
@@ -233,6 +250,7 @@ export default function Clone() {
                 progress={progress}
                 onClose={handleCloseProgress}
                 onRetryFailed={handleRetryFailed}
+                onRetryItem={handleRetryItem}
             />
         </div>
     )

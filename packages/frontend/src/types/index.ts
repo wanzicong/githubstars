@@ -148,6 +148,7 @@ export interface GithubSearchRepo {
     id: number
     fullName: string
     description: string
+    descriptionCn?: string | null
     language: string
     starsCount: number
     forksCount: number

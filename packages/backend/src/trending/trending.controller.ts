@@ -2,6 +2,7 @@ import { Controller, Post, Body, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubSearchService } from '../github/github-search.service';
 import { TranslateTaskService } from '../translate/translate-task.service';
+import { TrendingService } from './trending.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { TrendingSchema } from '../common/dto/filter.dto';
 import type { TrendingDto } from '../common/dto/filter.dto';
@@ -14,6 +15,7 @@ export class TrendingController {
     constructor(
         private readonly search: GithubSearchService,
         private readonly taskService: TranslateTaskService,
+        private readonly trendingService: TrendingService,
     ) {}
 
     /**
@@ -40,12 +42,60 @@ export class TrendingController {
         this.logger.log('查询趋势仓库: since=' + since + ', language=' + (language || 'all') + ', perPage=' + perPage);
         const result = await this.search.searchRepos(query, '', 'stars', 1, perPage);
         this.logger.log('趋势查询完成: total=' + result.total);
+
+        // 补充已缓存的中文描述
+        const enrichedRepos = await this.trendingService.enrichWithCachedTranslations(result.repos);
+
         return {
             success: true,
             since,
             total: result.total,
-            repos: result.repos,
+            repos: enrichedRepos,
             dateRange: `${dateStr} ~ ${new Date().toISOString().split('T')[0]}`,
+        };
+    }
+
+    /**
+     * POST /api/trending/translate — 触发趋势仓库描述翻译
+     *
+     * 异步翻译未缓存的描述，翻译结果写入 github_repo.description_cn。
+     * 前端可在翻译完成后重新请求 /api/trending 获取更新后的中文描述。
+     *
+     * @param body { since, language, perPage }
+     * @returns { success, translated, skipped, failed, message }
+     */
+    @Post('translate')
+    @ApiOperation({ summary: '翻译趋势仓库描述', description: '异步翻译未缓存的趋势仓库描述，结果缓存到 github_repo.description_cn' })
+    @ApiBody({ schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' }, perPage: { type: 'number' } } } })
+    async translateTrending(@Body(new ZodValidationPipe(TrendingSchema)) body: TrendingDto) {
+        const since = body.since;
+        const language = body.language;
+        const perPage = body.perPage;
+        let days = 1;
+        if (since === 'weekly') days = 7;
+        else if (since === 'monthly') days = 30;
+        const sinceDate = new Date(Date.now() - days * 86400000);
+        const dateStr = sinceDate.toISOString().split('T')[0];
+        let query = `created:>=${dateStr}`;
+        if (language) query += ` language:${language}`;
+        const result = await this.search.searchRepos(query, '', 'stars', 1, perPage);
+        const enriched = await this.trendingService.enrichWithCachedTranslations(result.repos);
+        const stats = await this.trendingService.translateUncached(enriched);
+
+        // 翻译后重新查询缓存，获取最新的中文描述
+        const repos = await this.trendingService.enrichWithCachedTranslations(result.repos);
+
+        return {
+            success: true,
+            ...stats,
+            repos,
+            total: result.total,
+            dateRange: `${dateStr} ~ ${new Date().toISOString().split('T')[0]}`,
+            message: stats.translated > 0
+                ? `翻译完成: ${stats.translated} 成功, ${stats.skipped} 已缓存, ${stats.failed} 失败`
+                : stats.skipped > 0
+                    ? `所有描述已缓存 (${stats.skipped} 个)`
+                    : `翻译完成: ${stats.translated} 成功, ${stats.failed} 失败`,
         };
     }
 

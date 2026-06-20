@@ -21,3 +21,11 @@ export const CloneTaskIdSchema = z.object({
 });
 
 export type CloneTaskIdDto = z.infer<typeof CloneTaskIdSchema>;
+
+/** 重试单个任务项请求验证 */
+export const RetryItemSchema = z.object({
+    id: z.coerce.number().int().positive(),
+    fullName: z.string().min(1, '仓库全名不能为空'),
+});
+
+export type RetryItemDto = z.infer<typeof RetryItemSchema>;
