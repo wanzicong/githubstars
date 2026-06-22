@@ -18,11 +18,8 @@ export async function createAgentSession(params: {
     systemPrompt?: string
     model?: string
 }): Promise<{ sessionId: number; createdAt: string }> {
-    const { data: wrapped } = await api.post<{ sessionId: number; createdAt: string }>(
-        '/api/agent/sessions',
-        params,
-    )
-    return wrapped
+    const { data: wrapped } = await api.post<{ success: boolean; data: { sessionId: number; createdAt: string } }>('/api/agent/sessions', params)
+    return wrapped.data
 }
 
 /** 查询会话列表 */
@@ -31,11 +28,8 @@ export async function fetchAgentSessions(params?: {
     limit?: number
     offset?: number
 }): Promise<{ sessions: AgentSession[]; total: number }> {
-    const { data } = await api.get<{ sessions: AgentSession[]; total: number }>(
-        '/api/agent/sessions',
-        { params },
-    )
-    return data
+    const { data: wrapped } = await api.get<{ success: boolean; data: { sessions: AgentSession[]; total: number } }>('/api/agent/sessions', { params })
+    return wrapped.data
 }
 
 /** 获取会话详情（含消息） */
@@ -43,10 +37,8 @@ export async function fetchAgentSession(id: number): Promise<{
     session: AgentSession
     messages: AgentMessage[]
 }> {
-    const { data } = await api.get<{ session: AgentSession; messages: AgentMessage[] }>(
-        `/api/agent/sessions/${id}`,
-    )
-    return data
+    const { data: wrapped } = await api.get<{ success: boolean; data: { session: AgentSession; messages: AgentMessage[] } }>(`/api/agent/sessions/${id}`)
+    return wrapped.data
 }
 
 /** 归档/删除会话 */
@@ -82,11 +74,8 @@ export async function fetchAgentTasks(params?: {
     limit?: number
     offset?: number
 }): Promise<{ tasks: AgentTask[]; total: number }> {
-    const { data } = await api.get<{ tasks: AgentTask[]; total: number }>(
-        '/api/agent/tasks',
-        { params },
-    )
-    return data
+    const { data: wrapped } = await api.get<{ success: boolean; data: { tasks: AgentTask[]; total: number } }>('/api/agent/tasks', { params })
+    return wrapped.data
 }
 
 /** 获取任务详情 */
@@ -94,8 +83,8 @@ export async function fetchAgentTask(id: number): Promise<{
     task: AgentTask & { input: unknown; output: unknown; errorMsg: string | null; startedAt: string | null }
     invocations: Array<{ id: number; toolName: string; toolType: string; status: string; durationMs: number | null; createdAt: string }>
 }> {
-    const { data } = await api.get(`/api/agent/tasks/${id}`)
-    return data
+    const { data: wrapped } = await api.get<{ success: boolean; data: { task: AgentTask & { input: unknown; output: unknown; errorMsg: string | null; startedAt: string | null }; invocations: Array<{ id: number; toolName: string; toolType: string; status: string; durationMs: number | null; createdAt: string }> } }>(`/api/agent/tasks/${id}`)
+    return wrapped.data
 }
 
 /** 取消任务 */
@@ -107,14 +96,14 @@ export async function cancelAgentTask(id: number): Promise<void> {
 
 /** 获取已注册工具清单 */
 export async function fetchAgentTools(): Promise<{ tools: AgentTool[]; total: number }> {
-    const { data } = await api.get<{ tools: AgentTool[]; total: number }>('/api/agent/tools')
-    return data
+    const { data: wrapped } = await api.get<{ success: boolean; data: { tools: AgentTool[]; total: number } }>('/api/agent/tools')
+    return wrapped.data
 }
 
 // ── 监控状态 ──
 
 /** 获取智能体底座运行状态 */
 export async function fetchAgentStatus(): Promise<AgentStatus> {
-    const { data } = await api.get<AgentStatus>('/api/agent/status')
-    return data
+    const { data: wrapped } = await api.get<{ success: boolean; data: AgentStatus }>('/api/agent/status')
+    return wrapped.data
 }
