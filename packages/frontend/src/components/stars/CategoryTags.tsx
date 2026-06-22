@@ -17,16 +17,21 @@ interface CategoryTagsProps {
  * 2. "+分类" 按钮 → 打开分类选择器 Popover
  */
 export default function CategoryTags({ repoId, categories = [], onChange }: CategoryTagsProps) {
+    /** 阻止事件冒泡，避免触发父级卡片的 onClick 导航 */
+    const stopPropagation = (e: React.MouseEvent) => e.stopPropagation()
+
     if (categories.length === 0) {
         return (
             <CategorySelectPopover repoId={repoId} categoryIds={[]} onChange={onChange}>
-                <Tag style={{ cursor: 'pointer', borderStyle: 'dashed' }} icon={<PlusOutlined />}>分类</Tag>
+                <span style={{ cursor: 'pointer' }} onClick={stopPropagation}>
+                    <Tag style={{ borderStyle: 'dashed' }} icon={<PlusOutlined />}>分类</Tag>
+                </span>
             </CategorySelectPopover>
         )
     }
 
     return (
-        <Space size={4} wrap>
+        <Space size={4} wrap onClick={stopPropagation}>
             {categories.map((cat) => (
                 <CategorySelectPopover key={cat.id} repoId={repoId}
                     categoryIds={categories.map((c) => c.id)} onChange={onChange}>
@@ -35,7 +40,9 @@ export default function CategoryTags({ repoId, categories = [], onChange }: Cate
             ))}
             <CategorySelectPopover repoId={repoId}
                 categoryIds={categories.map((c) => c.id)} onChange={onChange}>
-                <Tag style={{ cursor: 'pointer', borderStyle: 'dashed' }} icon={<PlusOutlined />} />
+                <span style={{ cursor: 'pointer' }}>
+                    <Tag style={{ borderStyle: 'dashed' }} icon={<PlusOutlined />} />
+                </span>
             </CategorySelectPopover>
         </Space>
     )

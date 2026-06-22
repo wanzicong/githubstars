@@ -1,3 +1,7 @@
+---
+trigger: manual
+alwaysApply: false
+---
 # 规则
 
 ## 结构
@@ -7,14 +11,21 @@
 ```
 rules/
 ├── common/          # 语言无关原则（始终安装）
-│   ├── coding-style.md
-│   ├── git-workflow.md
-│   ├── testing.md
-│   ├── performance.md
-│   ├── patterns.md
-│   ├── hooks.md
 │   ├── agents.md
-│   └── security.md
+│   ├── code-review.md
+│   ├── coding-style.md
+│   ├── comments.md
+│   ├── dead-code.md
+│   ├── dependency-management.md
+│   ├── development-workflow.md
+│   ├── directory-structure.md
+│   ├── frontend-constraints.md
+│   ├── git-workflow.md
+│   ├── hooks.md
+│   ├── patterns.md
+│   ├── performance.md
+│   ├── security.md
+│   └── testing.md
 ├── typescript/      # TypeScript/JavaScript 特定
 ├── python/          # Python 特定
 ├── golang/          # Go 特定

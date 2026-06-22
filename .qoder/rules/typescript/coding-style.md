@@ -172,6 +172,39 @@ async function loadUser(userId: string): Promise<User> {
 }
 ```
 
+## 事件冒泡防护
+
+修改子组件的交互事件时，必须检查父级组件是否绑定了 `onClick` 等会冲突的事件。
+
+**规则：**
+* 子组件有独立交互（如 Popover、Modal、Tooltip）时，需添加 `e.stopPropagation()` 阻止冒泡
+* 用 `<span onClick={stopPropagation}>` 包裹可点击元素
+* 追踪事件传播链路：子组件 → 中间层 → 父组件 onClick
+
+```typescript
+// WRONG: 点击 Tag 会冒泡到 Card 的 onClick，导致页面跳转
+function CategoryTags({ repoId, categories, onChange }) {
+  return (
+    <CategorySelectPopover repoId={repoId}>
+      <Tag icon={<PlusOutlined />}>分类</Tag>
+    </CategorySelectPopover>
+  )
+}
+
+// CORRECT: 阻止事件冒泡
+function CategoryTags({ repoId, categories, onChange }) {
+  const stopPropagation = (e: React.MouseEvent) => e.stopPropagation()
+  
+  return (
+    <CategorySelectPopover repoId={repoId}>
+      <span onClick={stopPropagation}>
+        <Tag icon={<PlusOutlined />}>分类</Tag>
+      </span>
+    </CategorySelectPopover>
+  )
+}
+```
+
 ## 输入验证
 
 使用 Zod 进行基于模式的验证，并从模式推断类型：

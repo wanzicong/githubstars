@@ -4,18 +4,15 @@ import { Card, Row, Col, Tag, Typography, Avatar } from 'antd'
 import { StarFilled, ForkOutlined, ReadOutlined } from '@ant-design/icons'
 import { formatNumberCn, formatDate, daysSince, getStalenessColor } from '@/utils/format'
 import type { GithubRepo } from '@/types'
-import CategoryTags from './CategoryTags'
 
 const { Text, Paragraph } = Typography
 
 interface RepoRowProps {
     repo: GithubRepo
-    categories?: { id: number; name: string }[]
-    onCategoryChange?: () => void
 }
 
 /** 列表行视图 — 每个仓库展示为横向行卡片（React.memo 避免列表项无效重渲染） */
-const RepoRow = memo(function RepoRow({ repo, categories, onCategoryChange }: RepoRowProps) {
+const RepoRow = memo(function RepoRow({ repo }: RepoRowProps) {
     const navigate = useNavigate()
 
     return (
@@ -68,10 +65,7 @@ const RepoRow = memo(function RepoRow({ repo, categories, onCategoryChange }: Re
                                     {repo.description}
                                 </Paragraph>
                             ) : null}
-                            {/* 分类标签 */}
-                            <div style={{ marginTop: 4 }}>
-                                <CategoryTags repoId={repo.id} categories={categories} onChange={onCategoryChange} />
-                            </div>
+                            {/* 分类标签 - 已移除 */}
                         </div>
                     </div>
                 </Col>

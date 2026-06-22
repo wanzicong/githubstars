@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { Popover, Tree, Button, Space, Spin, Typography, App } from 'antd'
+import { Popover, Tree, Button, Spin, Typography, App } from 'antd'
 import { FolderOutlined } from '@ant-design/icons'
 import type { DataNode } from 'antd/es/tree'
 import type { CategoryNode } from '../../types'

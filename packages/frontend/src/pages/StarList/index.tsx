@@ -642,20 +642,6 @@ export default function StarList() {
                 }}
                 selectedIds={selectedRepoIds}
                 onSelectionChange={setSelectedRepoIds}
-                onCategoryChange={() => {
-                    const fetchList = async () => {
-                        const res = await api.fetchStarList({
-                            page: currentPage,
-                            size: pageSize,
-                            ...buildFilters(),
-                        })
-                        setPageResult(res)
-                    }
-                    fetchList().catch((err) => {
-                        console.error('刷新列表失败:', err)
-                        message.error('刷新列表失败，请稍后重试')
-                    })
-                }}
             />
             {renderTranslateProgress()}
 

@@ -1,7 +1,5 @@
 ---
-paths:
-  - "**/*.py"
-  - "**/*.pyi"
+trigger: always_on
 ---
 
 # Python 钩子
