@@ -61,10 +61,16 @@ export class ConfigService implements OnModuleInit {
         for (const cfg of this.defaults) {
             const existing = await this.prisma.systemConfig.findUnique({ where: { configKey: cfg.key } });
             if (!existing) {
-                await this.prisma.systemConfig.create({
-                    data: { configKey: cfg.key, configValue: cfg.value, description: cfg.description, createdAt: new Date() },
-                });
-                this.logger.log('默认配置已写入: key=' + cfg.key + ', value=' + cfg.value);
+                try {
+                    await this.prisma.systemConfig.create({
+                        data: { configKey: cfg.key, configValue: cfg.value, description: cfg.description, createdAt: new Date() },
+                    });
+                    this.logger.log('默认配置已写入: key=' + cfg.key + ', value=' + cfg.value);
+                } catch (e: any) {
+                    // 并发初始化时可能已被其他进程写入
+                    if (e?.code !== 'P2002') throw e;
+                    this.logger.log('默认配置已存在(并发写入): key=' + cfg.key);
+                }
             } else if (!existing.description) {
                 await this.prisma.systemConfig.update({ where: { configKey: cfg.key }, data: { description: cfg.description } });
                 this.logger.log('默认配置描述已补全: key=' + cfg.key);

@@ -75,15 +75,16 @@ export function createRepoFixture(overrides?: Partial<RepoFixture>): RepoFixture
 
 export async function insertRepo(prisma: PrismaService, overrides?: Partial<RepoFixture>) {
     const repo = createRepoFixture(overrides);
-    await prisma.githubRepo.create({
+    const created = await prisma.githubRepo.create({
         data: {
             ...repo,
             descriptionCn: repo.descriptionCn ?? undefined,
             readmeOriginal: repo.readmeOriginal ?? undefined,
             readmeCn: repo.readmeCn ?? undefined,
         },
+        select: { id: true },
     });
-    return repo;
+    return { ...repo, id: Number(created.id) };
 }
 
 

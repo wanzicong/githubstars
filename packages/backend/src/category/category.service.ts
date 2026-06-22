@@ -347,7 +347,7 @@ export class CategoryService {
 
         // 筛选条件
         const where: Record<string, unknown> = {
-            categoryRepoLinks: {
+            categories: {
                 some: { categoryId },
             },
         };
