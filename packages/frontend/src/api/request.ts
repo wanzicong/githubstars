@@ -8,7 +8,7 @@ import axios, { type AxiosError } from 'axios'
  */
 const api = axios.create({
     baseURL: '/',
-    timeout: 300000, // 5 分钟超时
+    timeout: 60000, // 60 秒超时（长任务如翻译/克隆应通过轮询获取进度）
 })
 
 // 请求拦截器：附加公共头
@@ -20,20 +20,12 @@ api.interceptors.request.use(
     (error) => Promise.reject(error),
 )
 
-// 用于避免短时间内重复请求相同 URL 的简易缓存
-const pendingRequests = new Map<string, Promise<unknown>>()
-
 // 响应拦截器
 api.interceptors.response.use(
     (response) => {
-        // 请求完成后从 pending 中移除
-        const key = response.config.url || ''
-        pendingRequests.delete(key)
         return response
     },
     (error: AxiosError) => {
-        const url = error.config?.url || ''
-
         // 标准化错误信息
         let message = '网络请求失败'
         if (error.response) {

@@ -18,7 +18,7 @@ interface CloneProgressModalProps {
  * 展示克隆任务的实时进度：圆环百分比 + 统计标签 + 任务详情列表
  */
 export default function CloneProgressModal({ open, progress, onClose, onRetryFailed, onRetryItem }: CloneProgressModalProps) {
-    const { status, totalItems, completedItems, failedItems, skippedItems, progress: percent } = progress || {}
+    const { status, totalItems = 0, completedItems = 0, failedItems = 0, skippedItems = 0, progress: percent = 0 } = progress || {}
     const isRunning = status === 'PROCESSING' || status === 'PENDING'
     const isCompleted = status === 'COMPLETED'
     const isFailed = status === 'FAILED'

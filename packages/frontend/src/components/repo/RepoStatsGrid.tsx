@@ -15,12 +15,14 @@ export interface RepoStatsGridProps {
 const STAT_COL = { xs: 12 as const, sm: 12 as const, md: 6 as const }
 
 /** 数值格式化（原始值 + 中文计数） */
-function formatStatValue(value: number) {
+function formatStatValue(value: number | string) {
+    const num = typeof value === 'string' ? Number(value) : value
+    if (isNaN(num)) return <span>-</span>
     return (
         <span>
-            {value}{' '}
+            {num}{' '}
             <Text type='secondary' style={{ fontSize: 12 }}>
-                {formatNumberCn(value)}
+                {formatNumberCn(num)}
             </Text>
         </span>
     )

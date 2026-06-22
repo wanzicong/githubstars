@@ -6,7 +6,7 @@ export { fetchStarList, exportStarsUrls } from './stars'
 export { findSimilarRepos as fetchSimilarRepos } from './similar'
 
 // Authors
-export { fetchAuthorList, fetchAuthorRepos } from './authors'
+export { fetchAuthorList, fetchAuthorRepos, exportAuthorUrls } from './authors'
 
 // Trending
 export { fetchTrending, translateTrending } from './trending'

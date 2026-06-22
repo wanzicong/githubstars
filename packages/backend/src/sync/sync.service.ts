@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GithubApiService } from '../github/github-api.service';
 import { GithubRepoService } from '../github/github-repo.service';
+import type { MappedRepoData } from '../github/repo-data.interface';
+import type { SyncLog } from '@prisma/client';
 
 @Injectable()
 export class SyncService {
@@ -31,7 +33,7 @@ export class SyncService {
         this.syncStatus = '同步中...';
         this.logger.log(`开始 ${syncType}: REPLACE=${replace}`);
 
-        let syncLog: any = null;
+        let syncLog: SyncLog | null = null;
         try {
             syncLog = await this.prisma.syncLog.create({
                 data: { syncType, status: '进行中', totalCount: 0, syncedCount: 0, startedAt: new Date(), createdAt: new Date() },
@@ -73,8 +75,8 @@ export class SyncService {
     /**
      * 构建远端仓库 Map（fullName -> data）
      */
-    private buildRemoteMap(remoteRepos: Array<{ fullName: string; [key: string]: any }>): Map<string, any> {
-        const map = new Map<string, any>();
+    private buildRemoteMap(remoteRepos: MappedRepoData[]): Map<string, MappedRepoData> {
+        const map = new Map<string, MappedRepoData>();
         for (const r of remoteRepos) {
             if (r.fullName && !map.has(r.fullName)) map.set(r.fullName, r);
         }
@@ -97,13 +99,17 @@ export class SyncService {
      * 将远端仓库数据 upsert 到本地
      */
     private async syncRemoteToLocal(
-        remoteMap: Map<string, any>,
+        remoteMap: Map<string, MappedRepoData>,
         localMap: Map<string, { id: bigint; createdAt: Date | null }>,
     ): Promise<number> {
         let synced = 0;
         for (const [fullName, data] of remoteMap) {
             const local = localMap.get(fullName);
-            await this.githubRepo.upsertRepo({ ...data, createdAt: local?.createdAt || new Date(), updatedAt: new Date() });
+            await this.githubRepo.upsertRepo({
+                ...data,
+                createdAt: local?.createdAt || new Date(),
+                updatedAt: new Date(),
+            });
             synced++;
         }
         return synced;
@@ -113,7 +119,7 @@ export class SyncService {
      * REPLACE 模式：删除本地存在但远端已不存在的仓库
      */
     private async deleteUnstarredRepos(
-        remoteMap: Map<string, any>,
+        remoteMap: Map<string, MappedRepoData>,
         localMap: Map<string, { id: bigint; createdAt: Date | null }>,
     ): Promise<void> {
         const missingFullNames: string[] = [];

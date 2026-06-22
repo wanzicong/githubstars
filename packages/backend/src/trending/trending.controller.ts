@@ -7,6 +7,23 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { TrendingSchema } from '../common/dto/filter.dto';
 import type { TrendingDto } from '../common/dto/filter.dto';
 
+/** 将 since 字符串映射为天数 */
+function sinceToDays(since: string): number {
+    if (since === 'weekly') return 7;
+    if (since === 'monthly') return 30;
+    return 1;
+}
+
+/** 构建 GitHub Search 查询字符串和日期范围 */
+function buildTrendingQuery(since: string, language?: string): { query: string; dateStr: string } {
+    const days = sinceToDays(since);
+    const sinceDate = new Date(Date.now() - days * 86400000);
+    const dateStr = sinceDate.toISOString().split('T')[0];
+    let query = `created:>=${dateStr}`;
+    if (language) query += ` language:${language}`;
+    return { query, dateStr };
+}
+
 @ApiTags('trending')
 @Controller('api/trending')
 export class TrendingController {
@@ -29,16 +46,8 @@ export class TrendingController {
     @ApiOperation({ summary: '获取 Trending 仓库', description: '通过 GitHub Search API 查询指定时间段内创建的高星仓库' })
     @ApiBody({ schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' }, perPage: { type: 'number' } } } })
     async trending(@Body(new ZodValidationPipe(TrendingSchema)) body: TrendingDto) {
-        const since = body.since;
-        const language = body.language;
-        const perPage = body.perPage;
-        let days = 1;
-        if (since === 'weekly') days = 7;
-        else if (since === 'monthly') days = 30;
-        const sinceDate = new Date(Date.now() - days * 86400000);
-        const dateStr = sinceDate.toISOString().split('T')[0];
-        let query = `created:>=${dateStr}`;
-        if (language) query += ` language:${language}`;
+        const { since, language, perPage } = body;
+        const { query, dateStr } = buildTrendingQuery(since, language);
         this.logger.log('查询趋势仓库: since=' + since + ', language=' + (language || 'all') + ', perPage=' + perPage);
         const result = await this.search.searchRepos(query, '', 'stars', 1, perPage);
         this.logger.log('趋势查询完成: total=' + result.total);
@@ -68,16 +77,8 @@ export class TrendingController {
     @ApiOperation({ summary: '翻译趋势仓库描述', description: '异步翻译未缓存的趋势仓库描述，结果缓存到 github_repo.description_cn' })
     @ApiBody({ schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' }, perPage: { type: 'number' } } } })
     async translateTrending(@Body(new ZodValidationPipe(TrendingSchema)) body: TrendingDto) {
-        const since = body.since;
-        const language = body.language;
-        const perPage = body.perPage;
-        let days = 1;
-        if (since === 'weekly') days = 7;
-        else if (since === 'monthly') days = 30;
-        const sinceDate = new Date(Date.now() - days * 86400000);
-        const dateStr = sinceDate.toISOString().split('T')[0];
-        let query = `created:>=${dateStr}`;
-        if (language) query += ` language:${language}`;
+        const { since, language, perPage } = body;
+        const { query, dateStr } = buildTrendingQuery(since, language);
         const result = await this.search.searchRepos(query, '', 'stars', 1, perPage);
         const enriched = await this.trendingService.enrichWithCachedTranslations(result.repos);
         const stats = await this.trendingService.translateUncached(enriched);

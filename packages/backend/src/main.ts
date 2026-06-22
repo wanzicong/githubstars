@@ -3,6 +3,7 @@ import { resolve } from 'path';
 config({ path: resolve(__dirname, '..', '.env') });
 
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { LoggingService } from './logging/logging.service';
@@ -20,8 +21,11 @@ async function bootstrap() {
     });
     app.useLogger(app.get(LoggingService));
 
+    // 全局验证管道：确保所有 DTO 经过白名单过滤和类型转换
+    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: false }));
+
     // CORS — 允许前端开发服务器直连（SSE 流式端点需要绕过 Vite 代理缓冲）
-    const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:10001,http://localhost:10001')
+    const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:10001')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);

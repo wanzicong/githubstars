@@ -280,8 +280,9 @@ export class TranslateService {
                     await this.prisma.githubRepo.update({ where: { id: r.id }, data: { descriptionCn: result, updatedAt: new Date() } });
                     count++;
                 }
-            } catch (e) {
-                this.logger.error(`翻译描述失败 ${r.id}`);
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                this.logger.error(`翻译描述失败 ${r.id}: ${msg}`);
             }
         }
         return count;

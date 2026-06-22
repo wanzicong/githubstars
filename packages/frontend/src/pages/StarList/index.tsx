@@ -25,7 +25,7 @@ import {
     UnorderedListOutlined,
     CopyOutlined,
 } from '@ant-design/icons'
-import dayjs from '../../config/setupDayjs'
+import dayjs, { type Dayjs } from '../../config/setupDayjs'
 import * as api from '../../api'
 import { TranslatePanel } from '../../components/translate'
 import { StarStatsBar } from '../../components/stars'
@@ -66,7 +66,7 @@ const DATE_FIELD_OPTIONS = [
 
 export default function StarList() {
     const { message } = App.useApp()
-    const [searchParams, setSearchParams] = useSearchParams()
+    const [searchParams] = useSearchParams()
     const location = useLocation()
 
     const params = useStarListParams()
@@ -75,7 +75,7 @@ export default function StarList() {
         startDate, endDate, untranslatedOnly, viewMode, timePreset,
         setUrlParam, setUrlParams, clearFilters } = params
 
-    const handleTimePreset = useCallback((value) => {
+    const handleTimePreset = useCallback((value: string) => {
         const normalized = value === '不' ? '' : value
         if (!normalized) { setUrlParams({ timePreset: null, dateField: null, startDate: null, endDate: null }); return }
         const preset = TIME_PRESETS.find((p) => p.value === normalized)
@@ -91,12 +91,12 @@ export default function StarList() {
         }
     }, [dateField, setUrlParams])
 
-    const handleDateFieldChange = useCallback((val) => {
+    const handleDateFieldChange = useCallback((val: string) => {
         if (!val) { setUrlParams({ dateField: null, startDate: null, endDate: null, timePreset: null }); return }
         setUrlParams({ dateField: val, timePreset: null })
     }, [setUrlParams])
 
-    const handleStartDateChange = useCallback((val) => {
+    const handleStartDateChange = useCallback((val: Dayjs | null) => {
         if (val && endDate && val.isAfter(endDate, 'day')) {
             const formatted = val.format('YYYY-MM-DD')
             setUrlParams({ startDate: formatted, endDate: formatted, timePreset: null })
@@ -106,7 +106,7 @@ export default function StarList() {
         setUrlParams({ startDate: val ? val.format('YYYY-MM-DD') : null, timePreset: null })
     }, [endDate, setUrlParams])
 
-    const handleEndDateChange = useCallback((val) => {
+    const handleEndDateChange = useCallback((val: Dayjs | null) => {
         if (val && startDate && val.isBefore(startDate, 'day')) {
             const formatted = val.format('YYYY-MM-DD')
             setUrlParams({ startDate: formatted, endDate: formatted, timePreset: null })

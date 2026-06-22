@@ -1,11 +1,5 @@
 import api from './request'
 
-/** 打开系统目录选择对话框，返回用户选择的完整路径 */
-export async function selectDirectory(): Promise<{ success: boolean; path?: string; message?: string }> {
-    const { data } = await api.post('/api/clone/select-directory')
-    return data
-}
-
 /** 创建克隆任务 */
 export async function createCloneTask(params: {
     repoIds: number[]

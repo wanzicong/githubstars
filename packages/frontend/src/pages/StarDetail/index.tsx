@@ -22,7 +22,7 @@ import {
 import * as statsApi from '../../api'
 import * as translateApi from '../../api'
 import { formatDate } from '../../utils/format'
-import { daysSince, DaysSinceText, parseTopics } from './hooks/helpers'
+import { DaysSinceText, parseTopics } from './hooks/helpers'
 import { RepoHeader } from '../../components/repo'
 import { RepoStatsGrid } from '../../components/repo'
 import { RepoReadmeCard } from '../../components/repo'

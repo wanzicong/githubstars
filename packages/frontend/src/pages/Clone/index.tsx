@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, Table, Tag, Button, Space, Typography, Row, Col, Statistic, Progress, App } from 'antd'
-import { ReloadOutlined, CopyOutlined, DeleteOutlined, FolderOutlined } from '@ant-design/icons'
+import { ReloadOutlined, CopyOutlined, FolderOutlined } from '@ant-design/icons'
 import { getRecentCloneTasks, getCloneTaskProgress, retryCloneFailed, retryCloneItem } from '@/api/clone'
 import type { CloneTaskProgress, CloneTaskListResult } from '@/api/clone'
 import CloneProgressModal from '@/components/clone/CloneProgressModal'

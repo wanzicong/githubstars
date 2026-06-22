@@ -35,6 +35,6 @@ export async function translateTrending(since: string, language?: string, perPag
     const body: Record<string, unknown> = { since }
     if (language) body.language = language
     if (perPage) body.perPage = perPage
-    const { data } = await api.post('/api/trending/translate', body)
+    const { data } = await api.post('/api/trending/translate', body, { timeout: 300000 })
     return data
 }

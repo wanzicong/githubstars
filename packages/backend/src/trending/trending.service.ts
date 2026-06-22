@@ -2,6 +2,31 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TranslateService } from '../translate/translate.service';
 
+/** GitHub Search API 返回的仓库数据结构 */
+export interface TrendingRepoItem {
+    fullName: string;
+    description?: string | null;
+    descriptionCn?: string | null;
+    localRepoId?: number | null;
+    language?: string | null;
+    ownerName?: string;
+    ownerAvatarUrl?: string;
+    htmlUrl?: string;
+    homepage?: string | null;
+    starsCount?: number;
+    forksCount?: number;
+    watchersCount?: number;
+    openIssuesCount?: number;
+    topics?: string[] | string;
+    licenseName?: string | null;
+    isFork?: boolean;
+    isArchived?: boolean;
+    repoCreatedAt?: string | Date | null;
+    repoUpdatedAt?: string | Date | null;
+    pushedAt?: string | Date | null;
+    [key: string]: unknown;
+}
+
 /**
  * 趋势服务 — 管理 Trending 仓库的翻译缓存
  *
@@ -29,7 +54,7 @@ export class TrendingService {
      * @param repos GitHub Search API 返回的仓库列表
      * @returns 补充了 descriptionCn 字段的仓库列表
      */
-    async enrichWithCachedTranslations(repos: any[]): Promise<any[]> {
+    async enrichWithCachedTranslations(repos: TrendingRepoItem[]): Promise<TrendingRepoItem[]> {
         if (!repos.length) return repos;
 
         const fullNames = repos.map((r) => r.fullName).filter(Boolean);
@@ -63,7 +88,7 @@ export class TrendingService {
      * @param repos 补充了 localRepoId 的仓库列表
      * @returns 翻译统计 { translated, skipped, failed }
      */
-    async translateUncached(repos: any[]): Promise<{ translated: number; skipped: number; failed: number }> {
+    async translateUncached(repos: TrendingRepoItem[]): Promise<{ translated: number; skipped: number; failed: number }> {
         const uncached = repos.filter((r) => !r.descriptionCn && r.description);
         if (!uncached.length) return { translated: 0, skipped: repos.length, failed: 0 };
 
@@ -108,7 +133,7 @@ export class TrendingService {
      *
      * @returns 仓库 ID，失败返回 null
      */
-    private async ensureRepoExists(repo: any): Promise<number | null> {
+    private async ensureRepoExists(repo: TrendingRepoItem): Promise<number | null> {
         try {
             const fullName = repo.fullName as string;
             // 先查是否已存在

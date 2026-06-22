@@ -1,4 +1,4 @@
-import { Button, Space, Tag, Typography, Avatar, App } from 'antd'
+import { Button, Space, Tag, Typography, Avatar } from 'antd'
 import { GithubOutlined, LinkOutlined, TranslationOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { GithubRepo } from '../../types'
 

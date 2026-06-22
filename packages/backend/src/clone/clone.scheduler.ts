@@ -7,6 +7,7 @@ import {
     LONG_PENDING_THRESHOLD_MS,
 } from './clone.constants';
 import { PrismaService } from '../prisma/prisma.service';
+import { existsSync } from 'fs';
 
 /**
  * 克隆任务定时调度器
@@ -21,6 +22,9 @@ import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
 export class CloneScheduler {
     private readonly logger = new Logger(CloneScheduler.name);
+
+    /** 恢复操作互斥锁，防止 detectLockTimeout 和 detectStuckTasks 同时恢复同一任务 */
+    private recovering = false;
 
     constructor(
         private readonly cloneService: CloneService,
@@ -53,6 +57,8 @@ export class CloneScheduler {
      */
     @Cron('*/10 * * * * *')
     async detectLockTimeout() {
+        if (this.recovering) return;
+
         try {
             const lockAge = this.cloneService.getLockAge();
             if (lockAge < 0) return; // 锁未被持有
@@ -122,6 +128,8 @@ export class CloneScheduler {
      */
     @Cron('0 */1 * * * *')
     async detectStuckTasks() {
+        if (this.recovering) return;
+
         try {
             const threshold = new Date(Date.now() - STUCK_TASK_THRESHOLD_MS);
 
@@ -181,14 +189,13 @@ export class CloneScheduler {
 
             if (completedItems.length === 0) return;
 
-            const fs = require('fs');
             let inconsistentCount = 0;
 
             for (const item of completedItems) {
                 if (!item.localPath) continue;
 
                 try {
-                    const exists = fs.existsSync(item.localPath);
+                    const exists = existsSync(item.localPath);
                     if (!exists) {
                         // 目录不存在，标记为不一致
                         this.logger.warn(
@@ -200,15 +207,6 @@ export class CloneScheduler {
                             data: {
                                 status: 'FAILED',
                                 errorMessage: '目录不存在，可能是外部删除',
-                            },
-                        });
-
-                        // 更新父任务计数器
-                        await this.prisma.cloneTask.update({
-                            where: { id: item.taskId },
-                            data: {
-                                completedItems: { decrement: 1 },
-                                failedItems: { increment: 1 },
                             },
                         });
 
@@ -234,6 +232,9 @@ export class CloneScheduler {
      * @param reason 失败原因
      */
     private async recoverStuckTask(taskId: bigint, reason: string) {
+        if (this.recovering) return;
+        this.recovering = true;
+
         try {
             // 将卡住的任务标记为 FAILED
             await this.prisma.cloneTask.update({
@@ -255,6 +256,8 @@ export class CloneScheduler {
             );
         } catch (e) {
             this.logger.error(`恢复卡住任务失败: taskId=${Number(taskId)}`, e);
+        } finally {
+            this.recovering = false;
         }
     }
 }

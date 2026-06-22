@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { Modal, Steps, Table, Input, Radio, Switch, Button, Space, Tag, Typography, App } from 'antd'
-import { FolderOpenOutlined, EditOutlined, SwapOutlined, FolderOutlined, ThunderboltOutlined, CheckCircleOutlined } from '@ant-design/icons'
-import { createCloneTask, selectDirectory } from '@/api/clone'
+import { FolderOpenOutlined, FolderOutlined, ThunderboltOutlined, CheckCircleOutlined } from '@ant-design/icons'
+import { createCloneTask } from '@/api/clone'
 import { CLONE_CONCURRENCY_OPTIONS, DEFAULT_CLONE_CONCURRENCY } from '@/constants'
 import type { GithubRepo } from '@/types'
 
@@ -27,30 +27,6 @@ export default function CloneWizardModal({ open, onClose, selectedRepos, onTaskC
     const [shallow, setShallow] = useState(true)
     const [selectedIds, setSelectedIds] = useState<number[]>(selectedRepos.map((r) => r.id))
     const [loading, setLoading] = useState(false)
-    const [selecting, setSelecting] = useState(false)
-
-    const repos = selectedRepos.filter((r) => selectedIds.includes(r.id))
-
-    /**
-     * 打开系统目录选择对话框
-     *
-     * 调用后端 API 打开 Windows 原生文件夹选择器，获取完整路径并填充到输入框。
-     */
-    const handleSelectDirectory = useCallback(async () => {
-        setSelecting(true)
-        try {
-            const result = await selectDirectory()
-            if (result.success && result.path) {
-                setTargetDir(result.path)
-            } else if (result.message) {
-                message.info(result.message)
-            }
-        } catch (e: any) {
-            message.error(e.message || '选择目录失败')
-        } finally {
-            setSelecting(false)
-        }
-    }, [message])
 
     const handleNext = () => {
         if (currentStep === 0 && selectedIds.length === 0) {
@@ -153,30 +129,13 @@ export default function CloneWizardModal({ open, onClose, selectedRepos, onTaskC
                                 <FolderOutlined /> 目标目录
                             </Text>
                             
-                            <Space direction="vertical" style={{ width: '100%' }}>
-                                <Input
-                                    placeholder="点击右侧按钮选择目录，或手动输入路径（例如：D:\repos\stars）"
-                                    value={targetDir}
-                                    onChange={(e) => setTargetDir(e.target.value)}
-                                    size="large"
-                                    suffix={
-                                        <Button
-                                            type="text"
-                                            icon={<FolderOpenOutlined />}
-                                            loading={selecting}
-                                            onClick={handleSelectDirectory}
-                                        />
-                                    }
-                                />
-                                <Button
-                                    icon={<FolderOpenOutlined />}
-                                    loading={selecting}
-                                    onClick={handleSelectDirectory}
-                                    block
-                                >
-                                    打开文件夹选择器
-                                </Button>
-                            </Space>
+                            <Input
+                                placeholder="请输入本地目录路径（例如：D:\repos\stars）"
+                                value={targetDir}
+                                onChange={(e) => setTargetDir(e.target.value)}
+                                size="large"
+                                prefix={<FolderOpenOutlined />}
+                            />
                             
                             <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
                                 仓库将克隆到 {'{'}目标目录{'}'}/{'{'}作者{'}'}/{'{'}仓库名{'}'} 子目录

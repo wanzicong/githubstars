@@ -2,7 +2,21 @@ import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import type { Components } from 'react-markdown'
+
+/** 自定义 sanitize schema：保留 README 中常见的安全 HTML 元素，阻止脚本注入 */
+const sanitizeSchema = {
+    ...defaultSchema,
+    attributes: {
+        ...defaultSchema.attributes,
+        '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'style'],
+        details: ['open'],
+        summary: [],
+        div: [...(defaultSchema.attributes?.['*'] || []), 'align', 'className', 'style'],
+        img: [...(defaultSchema.attributes?.['img'] || []), 'loading', 'align'],
+    },
+}
 
 /** Markdown → React 的共享渲染组件映射，确保全站 README/AI 分析等 Markdown 渲染风格一致 */
 const SHARED_MARKDOWN_COMPONENTS: Components = {
@@ -80,6 +94,7 @@ const SHARED_MARKDOWN_COMPONENTS: Components = {
         <img
             src={src}
             alt={alt || ''}
+            loading='lazy'
             style={{ maxWidth: '100%', marginBottom: 12 }}
             onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
                 ;(e.target as HTMLImageElement).style.display = 'none'
@@ -107,7 +122,7 @@ const MarkdownRenderer = memo(function MarkdownRenderer({ content, components, c
 
     return (
         <div className={className} style={style}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mergedComponents}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]} components={mergedComponents}>
                 {content}
             </ReactMarkdown>
         </div>
