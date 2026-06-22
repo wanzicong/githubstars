@@ -1,5 +1,5 @@
 // API client
-export { default as apiClient, setBaseURL, getBaseURL } from './request'
+export { default as apiClient, setBaseURL, getCurrentBaseURL } from './request'
 
 // Stars
 export { fetchStarList, exportStarsUrls } from './stars'
@@ -40,3 +40,17 @@ export {
 // Clone
 export { createCloneTask, getCloneTaskProgress, retryCloneFailed, getRecentCloneTasks } from './clone'
 export type { CloneTaskProgress, CloneTaskListResult } from './clone'
+
+// Category
+export {
+  fetchCategoryTree,
+  fetchCategoryList,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  sortCategories,
+  fetchCategoryRepos,
+  bindCategoryRepos,
+  unbindCategoryRepos,
+} from './category'
+export type { CategoryListParams, CategoryListResult, CategorySaveParams, CategoryReposParams } from './category'

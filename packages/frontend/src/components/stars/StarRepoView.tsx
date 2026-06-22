@@ -18,6 +18,8 @@ export interface StarRepoViewProps {
     selectedIds?: number[]
     /** 多选模式：选中变更回调 */
     onSelectionChange?: (ids: number[]) => void
+    /** 分类变更回调（刷新列表） */
+    onCategoryChange?: () => void
 }
 
 /**
@@ -37,6 +39,7 @@ export default function StarRepoView({
     onPageChange,
     selectedIds,
     onSelectionChange,
+    onCategoryChange,
 }: StarRepoViewProps) {
     const selectionEnabled = !!onSelectionChange
 
@@ -87,7 +90,7 @@ export default function StarRepoView({
                                         />
                                     )}
                                     <div style={{ flex: 1 }}>
-                                        <RepoRow repo={repo} />
+                                        <RepoRow repo={repo} onCategoryChange={onCategoryChange} />
                                     </div>
                                 </div>
                             ))}
@@ -104,7 +107,7 @@ export default function StarRepoView({
                                                 style={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
                                             />
                                         )}
-                                        <RepoCard repo={repo} />
+                                        <RepoCard repo={repo} onCategoryChange={onCategoryChange} />
                                     </div>
                                 </Col>
                             ))}

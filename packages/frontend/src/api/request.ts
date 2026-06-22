@@ -1,13 +1,30 @@
 import axios, { type AxiosError } from 'axios'
+import { isElectron } from '../utils/electron'
 
 /**
  * HTTP 请求客户端
  *
  * 基于 Axios 封装，统一配置 baseURL、超时、请求/响应拦截。
- * 通过 Vite proxy 将所有同源 API 请求转发到后端 (:3000)。
+ * - Web 环境：通过 Vite proxy 将所有同源 API 请求转发到后端 (:3000)
+ * - 桌面端环境：直接连接后端服务
  */
+
+/**
+ * 获取 API 基础 URL
+ * - 桌面端：直接连接后端 http://localhost:10002
+ * - Web 端：使用相对路径，通过 Vite proxy 转发
+ */
+function resolveBaseURL(): string {
+    if (isElectron()) {
+        // 桌面端直接连接后端，无需代理
+        return 'http://localhost:10002'
+    }
+    // Web 端使用相对路径，由 Vite proxy 处理
+    return '/'
+}
+
 const api = axios.create({
-    baseURL: '/',
+    baseURL: resolveBaseURL(),
     timeout: 60000, // 60 秒超时（长任务如翻译/克隆应通过轮询获取进度）
 })
 
@@ -69,8 +86,14 @@ api.interceptors.response.use(
 
 export default api
 
+/** 获取当前环境是否为桌面端 */
+export const isDesktopEnvironment = (): boolean => isElectron()
+
 /** 动态设置 API baseURL */
 export const setBaseURL = (url: string) => { api.defaults.baseURL = url }
 
 /** 获取当前 API baseURL */
-export const getBaseURL = () => api.defaults.baseURL
+export const getCurrentBaseURL = () => api.defaults.baseURL
+
+/** @deprecated 请使用 getCurrentBaseURL */
+export const getBaseURL = getCurrentBaseURL

@@ -13,5 +13,6 @@ import { GithubModule } from '../github/github.module';
     imports: [GithubModule],
     controllers: [ExportController],
     providers: [ExportService],
+    exports: [ExportService],
 })
 export class ExportModule {}

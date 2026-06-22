@@ -111,3 +111,17 @@ export const CHART_COLORS = [
     '#26A69A', '#EC407A', '#5C6BC0', '#8D6E63', '#29B6F6',
     '#66BB6A', '#EF5350',
 ]
+
+// ─── 分类管理 ───
+
+/** 分类仓库默认每页条数 */
+export const CATEGORY_REPO_PAGE_SIZE = 20
+
+/** 分类仓库每页条数选项 */
+export const CATEGORY_REPO_PAGE_SIZE_OPTIONS = ['10', '20', '50', '100']
+
+/** 分类树最大层级 */
+export const CATEGORY_MAX_DEPTH = 2
+
+/** 分类名称最大长度 */
+export const CATEGORY_NAME_MAX_LENGTH = 50

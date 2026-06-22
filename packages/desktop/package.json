@@ -1,0 +1,35 @@
+{
+  "name": "@githubstars/desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "GitHub Stars 桌面应用 - Electron",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "electron-builder --config electron-builder.config.ts",
+    "package:win": "electron-builder --win --config electron-builder.config.ts",
+    "package:mac": "electron-builder --mac --config electron-builder.config.ts",
+    "package:linux": "electron-builder --linux --config electron-builder.config.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf out dist"
+  },
+  "dependencies": {
+    "electron-log": "^5.2.0",
+    "electron-store": "^8.2.0",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "@electron-toolkit/utils": "^3.0.0",
+    "@tailwindcss/vite": "^4.3.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@types/node": "^24.12.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.12",
+    "rimraf": "^5.0.0"
+  }
+}

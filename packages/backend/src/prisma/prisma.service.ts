@@ -18,6 +18,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
      * 模块初始化时建立数据库连接
      *
      * 调用 PrismaClient.$connect() 连接 MySQL 数据库。
+     * createdAt/updatedAt 默认值在各自 Service 层处理。
      */
     async onModuleInit() {
         this.logger.log('正在连接数据库...');

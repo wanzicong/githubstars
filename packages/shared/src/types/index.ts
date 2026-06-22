@@ -70,13 +70,53 @@ export interface SyncLogBrief {
 
 // ===================== 分类 =====================
 
-/** 分类树节点 */
+/** 分类树节点（后端返回的完整分类信息） */
 export interface CategoryNode {
   id: number;
   name: string;
   parentId: number | null;
+  sortOrder: number;
+  icon: string | null;
+  description: string | null;
+  repoCount: number;
+  createdAt: string;
+  updatedAt: string;
   children: CategoryNode[];
-  repoCount?: number;
+}
+
+/** 分类下的仓库信息（简化版，用于分类仓库列表） */
+export interface CategoryRepo {
+  id: number;
+  repoName: string;
+  fullName: string;
+  description: string | null;
+  language: string | null;
+  ownerName: string;
+  ownerAvatarUrl: string;
+  htmlUrl: string;
+  starsCount: number;
+  forksCount: number;
+  isFork: boolean;
+  isArchived: boolean;
+  starredAt: string | null;
+  repoUpdatedAt: string | null;
+}
+
+/** 分类仓库列表查询参数 */
+export interface CategoryReposParams {
+  categoryId: number;
+  page?: number;
+  size?: number;
+  keyword?: string;
+  language?: string;
+  sortBy?: string;
+  sortOrder?: string;
+}
+
+/** 分类排序项 */
+export interface CategorySortItem {
+  id: number;
+  sortOrder: number;
 }
 
 // ===================== 统计 =====================

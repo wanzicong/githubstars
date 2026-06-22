@@ -3,7 +3,7 @@
  */
 import { defineConfig } from '@playwright/test'
 
-const baseURL = process.env.BASE_URL || 'http://localhost:5173'
+const baseURL = process.env.BASE_URL || 'http://localhost:10001'
 const port = new URL(baseURL).port
 
 export default defineConfig({

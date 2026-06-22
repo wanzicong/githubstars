@@ -203,6 +203,24 @@ export interface SimilarResult {
     count: number
 }
 
+// ─── 分类（从共享类型包导入）───
+export type {
+  CategoryNode,
+  CategoryRepo,
+  CategoryReposParams,
+  CategorySortItem,
+  PaginatedResponse,
+} from '@githubstars/shared'
+
+export interface CategorySaveParams {
+    id?: number
+    name: string
+    parentId?: number | null
+    sortOrder?: number
+    icon?: string
+    description?: string
+}
+
 // ─── 翻译 ───
 export interface TranslateResult {
     success: boolean

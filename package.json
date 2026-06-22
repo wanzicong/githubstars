@@ -9,9 +9,12 @@
   },
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w @githubstars/backend\" \"npm run dev -w @githubstars/frontend\"",
+    "dev:desktop": "npm run dev --workspace=@githubstars/desktop",
+    "dev:desktop:full": "concurrently -n frontend,desktop -c green,yellow \"npm run dev -w @githubstars/frontend\" \"wait-on http://localhost:10001 && npm run dev -w @githubstars/desktop\"",
     "dev:backend": "npm run dev --workspace=@githubstars/backend",
     "dev:frontend": "npm run dev --workspace=@githubstars/frontend",
     "build": "turbo run build",
+    "build:desktop": "npm run build --workspace=@githubstars/desktop",
     "build:backend": "npm run build --workspace=@githubstars/backend",
     "build:frontend": "npm run build --workspace=@githubstars/frontend",
     "lint": "turbo run lint",
@@ -20,6 +23,8 @@
     "test:unit": "npm run test:unit --workspace=@githubstars/backend",
     "test:e2e": "npm run test:e2e --workspace=@githubstars/backend",
     "clean": "turbo run clean",
+    "package:desktop": "npm run package --workspace=@githubstars/desktop",
+    "package:desktop:win": "npm run package:win --workspace=@githubstars/desktop",
     "prisma": "npm run prisma --workspace=@githubstars/backend",
     "prisma:generate": "npm run prisma:generate --workspace=@githubstars/backend",
     "prisma:studio": "npm run prisma:studio --workspace=@githubstars/backend",
@@ -31,7 +36,8 @@
   "devDependencies": {
     "concurrently": "^10.0.3",
     "turbo": "^2.5.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "wait-on": "^8.0.0"
   },
   "packageManager": "npm@10.9.2",
   "repository": {

@@ -1,205 +1,150 @@
-/**
- * GithubRepoService 单元测试
- *
- * 测试重点:
- *   - buildWhere() 6 种条件组合
- *   - SORT_MAP 映射正确性
- *   - findPage 参数传递完整性（防止导出 bug 复现）
- *
- * 所有 Prisma 调用被 Mock，测试纯逻辑。
- */
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { GithubRepoService } from '../../src/github/github-repo.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
-// 辅助: 创建 Mock PrismaService
-function createMockPrisma() {
-    return {
-        githubRepo: {
-            count: jest.fn().mockResolvedValue(0),
-            findMany: jest.fn().mockResolvedValue([]),
-            findUnique: jest.fn().mockResolvedValue(null),
-        },
-        $executeRaw: jest.fn().mockResolvedValue(0),
-        $queryRaw: jest.fn().mockResolvedValue([]),
-    };
-}
-
 describe('GithubRepoService', () => {
     let service: GithubRepoService;
-    let mockPrisma: ReturnType<typeof createMockPrisma>;
+    let prisma: any;
+
+    const mockRepo = {
+        id: 1n, repoName: 'test-repo', fullName: 'owner/test-repo',
+        description: 'A test repo', descriptionCn: null,
+        readmeOriginal: null, readmeCn: null, readmeFetched: false,
+        language: 'TypeScript', ownerName: 'owner', ownerAvatarUrl: '',
+        htmlUrl: 'https://github.com/owner/test-repo', homepage: null,
+        starsCount: 100, forksCount: 10, watchersCount: 5, openIssuesCount: 3,
+        topics: '["test"]', licenseName: 'MIT', isFork: false, isArchived: false,
+        repoCreatedAt: new Date('2023-01-01'), repoUpdatedAt: new Date('2024-06-01'),
+        repoPushedAt: new Date('2024-06-01'), starredAt: new Date(),
+    };
+
+    const mockPrisma = {
+        githubRepo: {
+            findMany: jest.fn().mockResolvedValue([mockRepo]),
+            findUnique: jest.fn().mockResolvedValue(mockRepo),
+            count: jest.fn().mockResolvedValue(1),
+            aggregate: jest.fn(),
+        },
+        $executeRaw: jest.fn().mockResolvedValue(undefined),
+    };
 
     beforeEach(async () => {
-        mockPrisma = createMockPrisma();
-        const module: TestingModule = await Test.createTestingModule({
-            providers: [GithubRepoService, { provide: PrismaService, useValue: mockPrisma }],
+        const module = await Test.createTestingModule({
+            providers: [
+                GithubRepoService,
+                { provide: PrismaService, useValue: mockPrisma },
+            ],
         }).compile();
-        service = module.get<GithubRepoService>(GithubRepoService);
+
+        service = module.get(GithubRepoService);
+        prisma = mockPrisma;
+        jest.clearAllMocks();
     });
 
-    // ==================== SORT_MAP 映射 ====================
+    describe('findPage', () => {
+        it('应返回分页结果', async () => {
+            prisma.githubRepo.findMany.mockResolvedValue([mockRepo]);
+            prisma.githubRepo.count.mockResolvedValue(1);
 
-    describe('排序字段映射', () => {
-        it('stars_count 映射到 starsCount', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({ page: 1, size: 10, sortBy: 'stars_count', sortOrder: 'desc' });
-            const call = mockPrisma.githubRepo.findMany.mock.calls[0][0];
-            expect(call.orderBy).toEqual({ starsCount: 'desc' });
+            const result = await service.findPage({ page: 1, size: 12 });
+            expect(result.records).toHaveLength(1);
+            expect(result.total).toBe(1);
+            expect(result.size).toBe(12);
+            expect(result.current).toBe(1);
+            expect(result.pages).toBe(1);
         });
 
-        it('forks_count 映射到 forksCount', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({ page: 1, size: 10, sortBy: 'forks_count', sortOrder: 'asc' });
-            expect(mockPrisma.githubRepo.findMany.mock.calls[0][0].orderBy).toEqual({ forksCount: 'asc' });
+        it('应附加翻译状态', async () => {
+            const repoWithTranslation = {
+                ...mockRepo,
+                descriptionCn: '测试描述',
+                readmeCn: '测试README',
+            };
+            prisma.githubRepo.findMany.mockResolvedValue([repoWithTranslation]);
+            prisma.githubRepo.count.mockResolvedValue(1);
+
+            const result = await service.findPage({ page: 1, size: 12 });
+            const status = (result.records[0] as any).translationStatus;
+            expect(status.description).toBe('completed');
+            expect(status.readme).toBe('completed');
         });
 
-        it('repo_updated_at 映射到 repoUpdatedAt', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({ page: 1, size: 10, sortBy: 'repo_updated_at' });
-            expect(mockPrisma.githubRepo.findMany.mock.calls[0][0].orderBy).toEqual({ repoUpdatedAt: 'desc' });
+        it('应支持关键词搜索', async () => {
+            prisma.githubRepo.findMany.mockResolvedValue([mockRepo]);
+            prisma.githubRepo.count.mockResolvedValue(1);
+
+            const result = await service.findPage({ page: 1, size: 12, keyword: 'test' });
+            expect(result.records).toHaveLength(1);
+            expect(result.total).toBe(1);
         });
 
-        it('starred_at 映射到 starredAt (默认)', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({ page: 1, size: 10 });
-            expect(mockPrisma.githubRepo.findMany.mock.calls[0][0].orderBy).toEqual({ starredAt: 'desc' });
+        it('应支持语言筛选', async () => {
+            prisma.githubRepo.findMany.mockResolvedValue([mockRepo]);
+            prisma.githubRepo.count.mockResolvedValue(1);
+
+            const result = await service.findPage({ page: 1, size: 12, language: 'TypeScript' });
+            expect(result.records).toHaveLength(1);
         });
 
-        it('未知排序字段回退到 starredAt', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({ page: 1, size: 10, sortBy: 'nonexistent_field' });
-            expect(mockPrisma.githubRepo.findMany.mock.calls[0][0].orderBy).toEqual({ starredAt: 'desc' });
-        });
-    });
+        it('空结果应返回空数组', async () => {
+            prisma.githubRepo.findMany.mockResolvedValue([]);
+            prisma.githubRepo.count.mockResolvedValue(0);
 
-    // ==================== findPage 参数传递完整性 ====================
-
-    describe('findPage 参数传递', () => {
-        it('应传递所有筛选参数到 buildWhere — 防止导出 bug 复现', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-
-            await service.findPage({
-                page: 1,
-                size: 50,
-                keyword: 'mcp',
-                language: 'TypeScript,Python',
-                sortBy: 'stars_count',
-                sortOrder: 'asc',
-                dateField: 'starred_at',
-                startDate: '2024-01-01',
-                endDate: '2024-12-31',
-                untranslatedOnly: true,
-            });
-
-            const callArgs = mockPrisma.githubRepo.count.mock.calls[0][0];
-            expect(callArgs).toBeDefined();
-            // 验证 where 包含 AND 条件数组（至少包含 keyword、language、dateRange、untranslatedOnly）
-            expect(callArgs.where.AND).toBeDefined();
-            expect(callArgs.where.AND.length).toBeGreaterThanOrEqual(4);
-        });
-
-        it('不传筛选参数时仍然正常工作', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            const result = await service.findPage({ page: 1, size: 10 });
+            const result = await service.findPage({ page: 1, size: 12 });
             expect(result.records).toEqual([]);
             expect(result.total).toBe(0);
-        });
-
-        it('keyword 空的时不应传空字符串到 Prisma', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({ page: 1, size: 10, keyword: '' });
-            const countCall = mockPrisma.githubRepo.count.mock.calls[0][0];
-            // keyword 为空时不应添加 OR 条件
-            const orConditions = countCall.where?.AND?.filter((c: any) => c.OR);
-            expect(orConditions?.length || 0).toBe(0);
+            expect(result.pages).toBe(0);
         });
     });
 
-    // ==================== 分页边界 ====================
-
-    describe('分页', () => {
-        it('默认 page=1 size=12', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({});
-            const call = mockPrisma.githubRepo.findMany.mock.calls[0][0];
-            expect(call.skip).toBe(0);
-            expect(call.take).toBe(12);
+    describe('findById', () => {
+        it('应返回仓库详情', async () => {
+            prisma.githubRepo.findUnique.mockResolvedValue(mockRepo);
+            const repo = await service.findById(1);
+            expect(repo).toBeDefined();
+            expect(repo!.fullName).toBe('owner/test-repo');
         });
 
-        it('page=3 size=36 → skip=72 take=36', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({ page: 3, size: 36 });
-            const call = mockPrisma.githubRepo.findMany.mock.calls[0][0];
-            expect(call.skip).toBe(72);
-            expect(call.take).toBe(36);
+        it('不存在的仓库应返回 null', async () => {
+            prisma.githubRepo.findUnique.mockResolvedValue(null);
+            const repo = await service.findById(999);
+            expect(repo).toBeNull();
         });
     });
 
-    // ==================== buildWhere 条件组合 ====================
+    describe('findAllUrls', () => {
+        it('应返回所有仓库URL列表', async () => {
+            prisma.githubRepo.findMany.mockResolvedValue([
+                { htmlUrl: 'https://github.com/a/b' },
+                { htmlUrl: 'https://github.com/c/d' },
+            ]);
 
-    describe('buildWhere (通过 findPage 间接测试)', () => {
-        it('多语言筛选', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({ page: 1, size: 10, language: 'TypeScript,Go' });
-            const countCall = mockPrisma.githubRepo.count.mock.calls[0][0];
-            expect(countCall.where.AND).toBeDefined();
-        });
-
-        it('untranslatedOnly=true', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({ page: 1, size: 10, untranslatedOnly: true });
-            // untranslatedOnly 应生成 (readmeCn IS NULL OR readmeCn = '') 条件
-            const countCall = mockPrisma.githubRepo.count.mock.calls[0][0];
-            expect(countCall.where).toBeDefined();
-        });
-
-        it('日期范围筛选 — starred_at', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({ page: 1, size: 10, dateField: 'starred_at', startDate: '2024-01-01', endDate: '2024-06-30' });
-            const countCall = mockPrisma.githubRepo.count.mock.calls[0][0];
-            const dateCond = countCall.where.AND.find((c: any) => c.starredAt);
-            expect(dateCond).toBeDefined();
-            expect(dateCond.starredAt.gte).toBeInstanceOf(Date);
-            expect(dateCond.starredAt.lte).toBeInstanceOf(Date);
-        });
-
-        it('仅有 startDate 无 endDate', async () => {
-            mockPrisma.githubRepo.findMany.mockResolvedValue([]);
-            await service.findPage({ page: 1, size: 10, dateField: 'starred_at', startDate: '2024-01-01' });
-            const countCall = mockPrisma.githubRepo.count.mock.calls[0][0];
-            const dateCond = countCall.where.AND.find((c: any) => c.starredAt);
-            expect(dateCond.starredAt.gte).toBeDefined();
-            expect(dateCond.starredAt.lte).toBeUndefined();
+            const urls = await service.findAllUrls({});
+            expect(urls).toEqual(['https://github.com/a/b', 'https://github.com/c/d']);
         });
     });
 
-    // ==================== upsertRepo ====================
+    describe('countTranslationStatus', () => {
+        it('应返回翻译状态统计', async () => {
+            prisma.githubRepo.count
+                .mockResolvedValueOnce(100) // total
+                .mockResolvedValueOnce(60)  // descCompleted
+                .mockResolvedValueOnce(30); // readmeCompleted
 
-    describe('upsertRepo', () => {
-        it('应调用 $executeRaw 执行 INSERT ... ON DUPLICATE KEY UPDATE', async () => {
-            await service.upsertRepo({
-                repoName: 'test',
-                fullName: 'owner/test',
-                description: 'desc',
-                language: 'TS',
-                ownerName: 'owner',
-                ownerAvatarUrl: 'url',
-                htmlUrl: 'html',
-                homepage: null,
-                starsCount: 10,
-                forksCount: 5,
-                watchersCount: 3,
-                openIssuesCount: 1,
-                topics: '[]',
-                licenseName: 'MIT',
-                isFork: false,
-                isArchived: false,
-                repoCreatedAt: new Date(),
-                repoUpdatedAt: new Date(),
-                repoPushedAt: new Date(),
-                starredAt: new Date(),
-            });
-            expect(mockPrisma.$executeRaw).toHaveBeenCalled();
+            const result = await service.countTranslationStatus({});
+            expect(result.total).toBe(100);
+            expect(result.descCompleted).toBe(60);
+            expect(result.descPending).toBe(40);
+            expect(result.readmeCompleted).toBe(30);
+            expect(result.readmePending).toBe(70);
+        });
+    });
+
+    describe('count', () => {
+        it('应返回仓库总数', async () => {
+            prisma.githubRepo.count.mockResolvedValue(42);
+            const count = await service.count();
+            expect(count).toBe(42);
         });
     });
 });

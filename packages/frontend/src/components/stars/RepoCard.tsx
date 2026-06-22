@@ -4,15 +4,18 @@ import { Card, Tag, Typography, Avatar, Space } from 'antd'
 import { StarFilled, ForkOutlined, ReadOutlined } from '@ant-design/icons'
 import { formatNumberCn, formatDate, daysSince, getStalenessColor } from '@/utils/format'
 import type { GithubRepo } from '@/types'
+import CategoryTags from './CategoryTags'
 
 const { Text, Paragraph } = Typography
 
 interface RepoCardProps {
     repo: GithubRepo
+    categories?: { id: number; name: string }[]
+    onCategoryChange?: () => void
 }
 
 /** 网格卡片视图 — 每个仓库展示为可点击卡片（React.memo 避免列表项无效重渲染） */
-const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
+const RepoCard = memo(function RepoCard({ repo, categories, onCategoryChange }: RepoCardProps) {
     const navigate = useNavigate()
 
     return (
@@ -82,6 +85,10 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
                         {formatNumberCn(repo.forksCount)}
                     </Text>
                 </Space>
+            </div>
+            {/* 分类标签 */}
+            <div style={{ marginBottom: 8 }}>
+                <CategoryTags repoId={repo.id} categories={categories} onChange={onCategoryChange} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
                 <Text type='secondary' style={{ fontSize: 13 }}>
