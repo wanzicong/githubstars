@@ -54,3 +54,17 @@ export {
   unbindCategoryRepos,
 } from './category'
 export type { CategoryListParams, CategoryListResult, CategorySaveParams, CategoryReposParams } from './category'
+
+// Agent
+export {
+  createAgentSession,
+  fetchAgentSessions,
+  fetchAgentSession,
+  archiveAgentSession,
+  chatStream,
+  fetchAgentTasks,
+  fetchAgentTask,
+  cancelAgentTask,
+  fetchAgentTools,
+  fetchAgentStatus,
+} from './agent'

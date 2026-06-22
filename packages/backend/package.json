@@ -20,7 +20,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:unit": "jest --testPathPatterns='test/unit|src/.*\\.spec\\.ts'",
-    "test:integration": "jest --config ./test/jest-e2e.json --testPathPatterns='test/integration'",
+    "test:integration": "jest --config ./test/jest-e2e.json --testPathPatterns='test/integration' --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
