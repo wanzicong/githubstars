@@ -109,4 +109,24 @@ export class StarsController {
         });
         return { success: true, ids, total: ids.length };
     }
+
+    /**
+     * 根据 ID 列表获取仓库详情
+     *
+     * 用于跨页全选后获取仓库完整信息。
+     *
+     * @param body { ids: number[] }
+     * @returns 仓库详情数组
+     */
+    @Post('by-ids')
+    @ApiOperation({ summary: '批量获取仓库详情', description: '根据 ID 列表批量获取仓库信息' })
+    @ApiBody({ schema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'number' } } }, required: ['ids'] } })
+    async getByIds(@Body() body: { ids: number[] }) {
+        if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
+            return { success: false, message: '请提供仓库 ID 列表' };
+        }
+        this.logger.log(`批量获取仓库详情: ${body.ids.length} 个`);
+        const repos = await this.service.findByIds(body.ids);
+        return { success: true, data: repos };
+    }
 }

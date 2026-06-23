@@ -27,7 +27,7 @@ import {
 } from '@ant-design/icons'
 import dayjs, { type Dayjs } from '../../config/setupDayjs'
 import * as api from '../../api'
-import { fetchAllStarIds } from '../../api/stars'
+import { fetchAllStarIds, fetchReposByIds } from '../../api/stars'
 import { TranslatePanel } from '../../components/translate'
 import { StarStatsBar } from '../../components/stars'
 import { StarRepoView } from '../../components/stars'
@@ -216,11 +216,13 @@ export default function StarList() {
 
     // ── 克隆相关状态 ──
     const [selectedRepoIds, setSelectedRepoIds] = useState<number[]>([])
+    const [selectedReposForClone, setSelectedReposForClone] = useState<GithubRepo[]>([])
     const [cloneWizardOpen, setCloneWizardOpen] = useState(false)
     const [cloneProgressOpen, setCloneProgressOpen] = useState(false)
     const [cloneTaskId, setCloneTaskId] = useState<number | null>(null)
     const [cloneProgress, setCloneProgress] = useState<CloneTaskProgress | null>(null)
     const [loadingAllIds, setLoadingAllIds] = useState(false)
+    const [loadingRepos, setLoadingRepos] = useState(false)
 
     const translateTaskIdRef = useRef<number | null>(null)
 
@@ -340,6 +342,31 @@ export default function StarList() {
     const handleDeselectAll = useCallback(() => {
         setSelectedRepoIds([])
     }, [])
+
+    // ── 打开克隆向导 ──
+    const handleOpenCloneWizard = useCallback(async () => {
+        // 检查选中的仓库是否都在当前页
+        const currentPageIds = repos.map((r) => r.id)
+        const missingIds = selectedRepoIds.filter((id) => !currentPageIds.includes(id))
+
+        if (missingIds.length > 0) {
+            // 有跨页选中的仓库，需要获取完整信息
+            setLoadingRepos(true)
+            try {
+                const allRepos = await fetchReposByIds(selectedRepoIds)
+                setSelectedReposForClone(allRepos)
+            } catch {
+                message.error('获取仓库信息失败')
+                return
+            } finally {
+                setLoadingRepos(false)
+            }
+        } else {
+            // 所有选中的仓库都在当前页
+            setSelectedReposForClone(repos.filter((r) => selectedRepoIds.includes(r.id)))
+        }
+        setCloneWizardOpen(true)
+    }, [selectedRepoIds, repos])
 
     const renderTranslateProgress = () => (
         <TranslateProgressModal
@@ -539,8 +566,9 @@ export default function StarList() {
                                 </Button>
                                 <Button
                                     icon={<CopyOutlined />}
-                                    onClick={() => setCloneWizardOpen(true)}
+                                    onClick={handleOpenCloneWizard}
                                     disabled={selectedRepoIds.length === 0}
+                                    loading={loadingRepos}
                                 >
                                     批量克隆 {selectedRepoIds.length > 0 ? `(${selectedRepoIds.length})` : ''}
                                 </Button>
@@ -672,7 +700,7 @@ export default function StarList() {
             <CloneWizardModal
                 open={cloneWizardOpen}
                 onClose={() => setCloneWizardOpen(false)}
-                selectedRepos={repos.filter((r) => selectedRepoIds.includes(r.id))}
+                selectedRepos={selectedReposForClone}
                 onTaskCreated={handleCloneTaskCreated}
             />
 

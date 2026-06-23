@@ -184,6 +184,25 @@ export class GithubRepoService {
     }
 
     /**
+     * 根据 ID 列表查询仓库信息
+     *
+     * 用于跨页全选后获取仓库详情，返回仓库记录数组。
+     *
+     * @param ids 仓库 ID 数组
+     * @returns 仓库记录数组
+     *
+     * @callers
+     *   - GithubController.getByIds()
+     */
+    async findByIds(ids: number[]) {
+        if (!ids || ids.length === 0) return [];
+        const repos = await this.prisma.githubRepo.findMany({
+            where: { id: { in: ids.map((id) => BigInt(id)) } },
+        });
+        return repos;
+    }
+
+    /**
      * 查询所有符合条件的仓库（不分页）
      *
      * 支持关键词和语言筛选，返回完整仓库记录。

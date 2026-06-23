@@ -80,3 +80,16 @@ export async function fetchAllStarIds(params: StarListParams): Promise<number[]>
     const { data } = await api.post<{ success: boolean; ids: number[]; total: number }>('/api/stars/ids', body)
     return data.ids || []
 }
+
+/**
+ * 根据 ID 列表批量获取仓库详情
+ *
+ * 用于跨页全选后获取仓库完整信息。
+ *
+ * @param ids 仓库 ID 数组
+ * @returns 仓库详情数组
+ */
+export async function fetchReposByIds(ids: number[]): Promise<GithubRepo[]> {
+    const { data } = await api.post<{ success: boolean; data: GithubRepo[] }>('/api/stars/by-ids', { ids })
+    return data.data || []
+}
