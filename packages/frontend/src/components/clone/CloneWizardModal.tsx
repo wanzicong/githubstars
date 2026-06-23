@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Modal, Steps, Table, Input, Radio, Switch, Button, Space, Tag, Typography, App } from 'antd'
-import { FolderOpenOutlined, FolderOutlined, ThunderboltOutlined, CheckCircleOutlined } from '@ant-design/icons'
+import { Modal, Steps, Table, Radio, Switch, Button, Space, Tag, Typography, App } from 'antd'
+import { FolderOutlined, ThunderboltOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import { createCloneTask } from '@/api/clone'
 import { CLONE_CONCURRENCY_OPTIONS, DEFAULT_CLONE_CONCURRENCY } from '@/constants'
+import DirectoryPicker from '@/components/common/DirectoryPicker'
 import type { GithubRepo } from '@/types'
 
 const { Text } = Typography
@@ -128,18 +129,12 @@ export default function CloneWizardModal({ open, onClose, selectedRepos, onTaskC
                             <Text strong style={{ display: 'block', marginBottom: 8 }}>
                                 <FolderOutlined /> 目标目录
                             </Text>
-                            
-                            <Input
-                                placeholder="请输入本地目录路径（例如：D:\repos\stars）"
+
+                            <DirectoryPicker
                                 value={targetDir}
-                                onChange={(e) => setTargetDir(e.target.value)}
-                                size="large"
-                                prefix={<FolderOpenOutlined />}
+                                onChange={setTargetDir}
+                                placeholder="请输入本地目录路径（如 D:\\repos\\stars）"
                             />
-                            
-                            <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
-                                仓库将克隆到 {'{'}目标目录{'}'}/{'{'}作者{'}'}/{'{'}仓库名{'}'} 子目录
-                            </Text>
                         </div>
                         <div>
                             <Text strong style={{ display: 'block', marginBottom: 8 }}>

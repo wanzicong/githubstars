@@ -30,6 +30,14 @@ export class CloneController {
     }
 
     /**
+     * 获取常用目录列表
+     */
+    @Post('directories')
+    async getRecentDirectories() {
+        return this.cloneService.getRecentDirectories();
+    }
+
+    /**
      * 查询任务进度详情
      */
     @Post('tasks/detail')
@@ -57,6 +65,21 @@ export class CloneController {
             );
         }
         return this.cloneService.retryFailed(parsed.data.id);
+    }
+
+    /**
+     * 重置整个任务
+     */
+    @Post('tasks/reset')
+    async resetTask(@Body() body: unknown) {
+        const parsed = CloneTaskIdSchema.safeParse(body);
+        if (!parsed.success) {
+            throw new HttpException(
+                { success: false, message: '任务 ID 无效' },
+                HttpStatus.BAD_REQUEST,
+            );
+        }
+        return this.cloneService.resetTask(parsed.data.id);
     }
 
     /**

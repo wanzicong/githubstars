@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, Table, Tag, Button, Space, Typography, Row, Col, Statistic, Progress, App } from 'antd'
-import { ReloadOutlined, CopyOutlined, FolderOutlined } from '@ant-design/icons'
-import { getRecentCloneTasks, getCloneTaskProgress, retryCloneFailed, retryCloneItem } from '@/api/clone'
+import { ReloadOutlined, CopyOutlined, FolderOutlined, UndoOutlined } from '@ant-design/icons'
+import { getRecentCloneTasks, getCloneTaskProgress, retryCloneFailed, retryCloneItem, resetCloneTask } from '@/api/clone'
 import type { CloneTaskProgress, CloneTaskListResult } from '@/api/clone'
 import CloneProgressModal from '@/components/clone/CloneProgressModal'
 import { usePolling } from '@/hooks/usePolling'
@@ -143,7 +143,7 @@ export default function Clone() {
             width: 200,
             render: (_: unknown, record: CloneTaskListResult['tasks'][0]) => {
                 const total = record.totalItems
-                const processed = record.completedItems + record.failedItems + record.skippedItems
+                const processed = record.completedItems + record.failedItems
                 const percent = total > 0 ? Math.round((processed * 100) / total) : 0
                 const status = record.status === 'COMPLETED' ? 'success' : record.status === 'FAILED' ? 'exception' : 'active'
                 return (
@@ -152,7 +152,6 @@ export default function Clone() {
                         <Text type="secondary" style={{ fontSize: 12 }}>
                             {record.completedItems}/{total}
                             {record.failedItems > 0 && <Text type="danger"> 失败{record.failedItems}</Text>}
-                            {record.skippedItems > 0 && <Text type="warning"> 跳过{record.skippedItems}</Text>}
                         </Text>
                     </div>
                 )
@@ -174,7 +173,7 @@ export default function Clone() {
         {
             title: '操作',
             key: 'action',
-            width: 120,
+            width: 180,
             render: (_: unknown, record: CloneTaskListResult['tasks'][0]) => (
                 <Space>
                     <Button size="small" icon={<CopyOutlined />} onClick={() => handleViewProgress(record.taskId)}>
@@ -200,6 +199,28 @@ export default function Clone() {
                             }}
                         >
                             重试
+                        </Button>
+                    )}
+                    {(record.status === 'PROCESSING' || record.status === 'COMPLETED' || record.status === 'FAILED' || record.status === 'PARTIAL') && (
+                        <Button
+                            size="small"
+                            type="link"
+                            icon={<UndoOutlined />}
+                            onClick={async () => {
+                                try {
+                                    const res = await resetCloneTask(record.taskId)
+                                    if (res.success) {
+                                        message.success(res.message)
+                                        loadTasks()
+                                    } else {
+                                        message.info(res.message)
+                                    }
+                                } catch {
+                                    message.error('重置失败')
+                                }
+                            }}
+                        >
+                            重置
                         </Button>
                     )}
                 </Space>

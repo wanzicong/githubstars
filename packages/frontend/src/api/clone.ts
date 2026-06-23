@@ -29,9 +29,21 @@ export async function retryCloneItem(taskId: number, fullName: string): Promise<
     return data
 }
 
+/** 重置整个克隆任务 */
+export async function resetCloneTask(taskId: number): Promise<{ success: boolean; taskId?: number; message?: string }> {
+    const { data } = await api.post('/api/clone/tasks/reset', { id: taskId })
+    return data
+}
+
 /** 获取最近克隆任务列表 */
 export async function getRecentCloneTasks(): Promise<CloneTaskListResult> {
     const { data } = await api.post<CloneTaskListResult>('/api/clone/tasks/list')
+    return data
+}
+
+/** 获取常用克隆目录列表 */
+export async function getRecentCloneDirectories(): Promise<{ success: boolean; directories: string[] }> {
+    const { data } = await api.post('/api/clone/directories')
     return data
 }
 

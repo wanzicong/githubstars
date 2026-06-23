@@ -136,9 +136,20 @@ export class CloneService {
      *
      * 校验仓库 ID 列表，批量创建任务明细，返回任务 ID。
      * 任务状态为 PENDING，由定时调度器 pick up 执行。
+     *
+     * @callers CloneController.createTask()
+     * @depends PrismaService.githubRepo / cloneTask / cloneTaskItem
      */
     async createTask(dto: CreateCloneTaskDto): Promise<{ success: boolean; taskId?: number; message?: string }> {
         const { repoIds, targetDir, concurrency, shallow } = dto;
+
+        // 路径校验：必须是绝对路径
+        if (!path.isAbsolute(targetDir)) {
+            return { success: false, message: '目标目录必须是绝对路径（如 D:\\repos\\stars 或 /home/user/repos）' };
+        }
+
+        // 规范化路径（去除尾部分隔符，统一斜杠方向）
+        const normalizedTargetDir = path.normalize(targetDir).replace(/[\/\\]$/, '');
 
         // 查询仓库信息
         const repos = await this.prisma.githubRepo.findMany({
@@ -154,7 +165,7 @@ export class CloneService {
         const task = await this.prisma.cloneTask.create({
             data: {
                 status: 'PENDING',
-                targetDir,
+                targetDir: normalizedTargetDir,
                 concurrency,
                 shallow,
                 totalItems: repos.length,
@@ -173,8 +184,9 @@ export class CloneService {
             // 路径安全：校验仓库名格式，防止路径遍历
             const safeOwner = owner || 'unknown';
             const safeRepoName = repoName || 'unknown';
-            const localPath = path.resolve(targetDir, safeOwner, safeRepoName);
-            if (!localPath.startsWith(path.resolve(targetDir) + path.sep) && localPath !== path.resolve(targetDir)) {
+            // 使用 path.join 而非 path.resolve，避免基于工作目录解析
+            const localPath = path.join(normalizedTargetDir, safeOwner, safeRepoName);
+            if (!localPath.startsWith(normalizedTargetDir + path.sep) && localPath !== normalizedTargetDir) {
                 this.logger.warn(`路径安全校验失败，跳过仓库: ${fullName} -> ${localPath}`);
                 return null;
             }
@@ -208,8 +220,32 @@ export class CloneService {
 
         await this.prisma.cloneTaskItem.createMany({ data: validItems });
 
-        this.logger.log(`克隆任务已创建: taskId=${Number(task.id)} repos=${validItems.length} target=${targetDir}`);
+        this.logger.log(`克隆任务已创建: taskId=${Number(task.id)} repos=${validItems.length} target=${normalizedTargetDir}`);
         return { success: true, taskId: Number(task.id), message: `已创建克隆任务，共 ${validItems.length} 个仓库` };
+    }
+
+    /**
+     * 获取常用克隆目录列表
+     *
+     * 从历史任务中提取已使用过的目录，去重后返回。
+     *
+     * @callers CloneController.getRecentDirectories()
+     * @depends PrismaService.cloneTask
+     */
+    async getRecentDirectories() {
+        const tasks = await this.prisma.cloneTask.findMany({
+            select: { targetDir: true },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+        });
+
+        // 去重并保持顺序
+        const uniqueDirs = [...new Set(tasks.map((t) => t.targetDir))];
+
+        return {
+            success: true,
+            directories: uniqueDirs.slice(0, 10),
+        };
     }
 
     /**
@@ -377,7 +413,13 @@ export class CloneService {
     }
 
     /**
-     * 执行实际的 git clone 操作
+     * 执行实际的 git clone 或 git pull 操作
+     *
+     * 逻辑（不允许跳过）：
+     * 1. cloneUrl 为空 → 删除目录并报错
+     * 2. 目录不存在 → git clone
+     * 3. 目录已存在且验证通过 → git pull 更新
+     * 4. 目录已存在但验证失败 → 删除并重新 git clone
      *
      * Token 在此处动态注入 cloneUrl，数据库中只存储不含凭据的原始 URL。
      */
@@ -389,15 +431,23 @@ export class CloneService {
             return { success: false, error: `路径安全校验失败: ${localPath} 不在目标目录内` };
         }
 
+        // cloneUrl 为空：删除目录并报错（无地址无法克隆或更新）
+        if (!item.cloneUrl) {
+            if (existsSync(localPath)) {
+                await this.removeCloneDir(localPath);
+                this.logger.warn(`cloneUrl 为空，已删除目录: ${localPath}`);
+            }
+            return { success: false, error: 'cloneUrl 为空，无法克隆或更新仓库' };
+        }
+
         try {
             // 检查目录是否已存在
             if (existsSync(localPath)) {
-                if (!item.cloneUrl) {
-                    return { success: false, error: 'cloneUrl 为空，无法验证仓库' };
-                }
                 const validation = await this.validateExistingRepo(localPath, item.cloneUrl);
-                if (validation.error === 'SKIPPED') {
-                    return { success: false, error: 'SKIPPED' };
+                if (validation.success) {
+                    // 验证通过：执行 git pull 更新
+                    this.logger.log(`目录已存在且验证通过，执行 git pull 更新: ${item.fullName}`);
+                    return await this.executeGitPull(localPath, item.fullName);
                 }
                 // 验证失败：删除损坏的目录，继续重新克隆
                 this.logger.warn(`仓库验证失败，删除并重新克隆: ${item.fullName} | ${validation.error}`);
@@ -409,7 +459,7 @@ export class CloneService {
             await mkdir(parentDir, { recursive: true });
 
             // 运行时注入 Token（不修改数据库中的 cloneUrl）
-            let cloneUrl = item.cloneUrl as string;
+            let cloneUrl = item.cloneUrl;
             const githubToken = await this.config.getValue('github.token');
             if (githubToken) {
                 cloneUrl = cloneUrl.replace(
@@ -441,12 +491,33 @@ export class CloneService {
                 // 忽略清理失败
             }
 
-            // 特殊处理：目录已存在视为跳过
-            if (errorMsg.includes('already exists') || errorMsg.includes('SKIPPED')) {
-                return { success: false, error: 'SKIPPED' };
-            }
-
             return { success: false, error: errorMsg.substring(0, 2000) };
+        }
+    }
+
+    /**
+     * 执行 git pull 更新已存在的仓库
+     *
+     * @param localPath 本地仓库路径
+     * @param fullName  仓库全名（用于日志）
+     * @returns 操作结果
+     *
+     * @callers executeClone()
+     * @depends git CLI
+     */
+    private async executeGitPull(localPath: string, fullName: string | null): Promise<{ success: boolean; error?: string }> {
+        try {
+            const { stdout } = await execFileAsync('git', ['pull', '--ff-only'], {
+                cwd: localPath,
+                timeout: CLONE_TIMEOUT_MS,
+                windowsHide: true,
+            });
+            this.logger.log(`git pull 成功: ${fullName} | ${stdout.trim()}`);
+            return { success: true };
+        } catch (e: unknown) {
+            const errorMsg = e instanceof Error ? (e as Error & { stderr?: string }).stderr || e.message : String(e);
+            this.logger.error(`git pull 失败: ${fullName}`, e);
+            return { success: false, error: `git pull 失败: ${errorMsg.substring(0, 1900)}` };
         }
     }
 
@@ -497,7 +568,8 @@ export class CloneService {
             // config 读取失败不阻塞，仍视为有效
         }
 
-        return { success: false, error: 'SKIPPED' };
+        // 所有校验通过
+        return { success: true };
     }
 
     /**
@@ -506,14 +578,13 @@ export class CloneService {
      * 不再更新父任务计数器，getTaskProgress 会根据子项状态实时计算。
      */
     private async recordItemResult(item: { id: bigint; fullName: string | null }, success: boolean, error?: string) {
-        const isSkipped = error === 'SKIPPED';
-        const status = isSkipped ? 'SKIPPED' : success ? 'COMPLETED' : 'FAILED';
+        const status = success ? 'COMPLETED' : 'FAILED';
 
         await this.prisma.cloneTaskItem.update({
             where: { id: item.id },
             data: {
                 status,
-                errorMessage: isSkipped ? '目录已存在且验证通过，已跳过' : success ? null : error,
+                errorMessage: success ? null : error,
                 updatedAt: new Date(),
             },
         });
@@ -533,13 +604,11 @@ export class CloneService {
 
         const completedCount = items.filter((i) => i.status === 'COMPLETED').length;
         const failedCount = items.filter((i) => i.status === 'FAILED').length;
-        const skippedCount = items.filter((i) => i.status === 'SKIPPED').length;
 
         let status: string;
         if (failedCount === 0) {
-            // 无失败项：全部完成或全部跳过都视为成功
             status = 'COMPLETED';
-        } else if (completedCount === 0 && skippedCount === 0) {
+        } else if (completedCount === 0) {
             status = 'FAILED';
         } else {
             status = 'PARTIAL';
@@ -550,7 +619,7 @@ export class CloneService {
             data: { status, finishedAt: new Date() },
         });
 
-        this.logger.log(`克隆任务完成: taskId=${Number(taskId)} status=${status} completed=${completedCount} failed=${failedCount} skipped=${skippedCount}`);
+        this.logger.log(`克隆任务完成: taskId=${Number(taskId)} status=${status} completed=${completedCount} failed=${failedCount}`);
 
         // 清理历史任务（隔离异常，不影响主流程）
         try {
@@ -585,16 +654,15 @@ export class CloneService {
         // 根据子项实际状态实时计算数量
         const completedItems = task.items.filter((i) => i.status === 'COMPLETED').length;
         const failedItems = task.items.filter((i) => i.status === 'FAILED').length;
-        const skippedItems = task.items.filter((i) => i.status === 'SKIPPED').length;
         const total = task.items.length;
-        const processed = completedItems + failedItems + skippedItems;
+        const processed = completedItems + failedItems;
 
         // 根据子项状态实时计算任务状态
         let status = task.status;
         if (task.status !== 'PROCESSING' && task.status !== 'PENDING') {
             if (failedItems === 0) {
                 status = 'COMPLETED';
-            } else if (completedItems === 0 && skippedItems === 0) {
+            } else if (completedItems === 0) {
                 status = 'FAILED';
             } else {
                 status = 'PARTIAL';
@@ -605,10 +673,6 @@ export class CloneService {
             .filter((i) => i.status === 'FAILED')
             .map((i) => ({ fullName: i.fullName, error: i.errorMessage }));
 
-        const skippedDetails = task.items
-            .filter((i) => i.status === 'SKIPPED')
-            .map((i) => ({ fullName: i.fullName }));
-
         return {
             success: true,
             taskId: Number(task.id),
@@ -618,36 +682,32 @@ export class CloneService {
             totalItems: total,
             completedItems,
             failedItems,
-            skippedItems,
+            skippedItems: 0,
             progress: total > 0 ? Math.round((processed * 100) / total) : 0,
             createdAt: task.createdAt?.toISOString(),
             startedAt: task.startedAt?.toISOString(),
             finishedAt: task.finishedAt?.toISOString(),
             failedDetails,
-            skippedDetails,
+            skippedDetails: [],
             allItems: task.items,
         };
     }
 
     /**
-     * 重试失败项和跳过项
+     * 重试失败项
      *
-     * 将所有 FAILED 和 SKIPPED 状态的子项重置为 PENDING，重新执行。
+     * 将所有 FAILED 状态的子项重置为 PENDING，重新执行。
      * 重试前会删除原目录。
      */
     async retryFailed(taskId: number) {
         const items = await this.prisma.cloneTaskItem.findMany({
             where: {
                 taskId: BigInt(taskId),
-                status: { in: ['FAILED', 'SKIPPED'] },
+                status: 'FAILED',
             },
         });
 
         if (!items.length) return { success: false, message: '没有需要重试的项' };
-
-        // 统计各类数量（用于日志）
-        const failedCount = items.filter((i) => i.status === 'FAILED').length;
-        const skippedCount = items.filter((i) => i.status === 'SKIPPED').length;
 
         // 先执行数据库事务（原子操作），确保状态一致性
         await this.prisma.$transaction([
@@ -655,7 +715,7 @@ export class CloneService {
             this.prisma.cloneTaskItem.updateMany({
                 where: {
                     taskId: BigInt(taskId),
-                    status: { in: ['FAILED', 'SKIPPED'] },
+                    status: 'FAILED',
                 },
                 data: { status: 'PENDING', errorMessage: null, retryCount: { increment: 1 } },
             }),
@@ -675,8 +735,67 @@ export class CloneService {
             await this.removeCloneDir(item.localPath);
         }
 
-        this.logger.log(`克隆任务重试: taskId=${taskId} failed=${failedCount} skipped=${skippedCount}`);
-        return { success: true, taskId, message: `已重置 ${items.length} 项（失败${failedCount}，跳过${skippedCount}）` };
+        this.logger.log(`克隆任务重试: taskId=${taskId} failed=${items.length}`);
+        return { success: true, taskId, message: `已重置 ${items.length} 项失败项` };
+    }
+
+    /**
+     * 重置整个克隆任务
+     *
+     * 将任务及其所有子项重置为 PENDING 状态，允许重新执行。
+     * 适用于任务失败、卡在运行中或需要重新执行的场景。
+     *
+     * 安全策略：
+     * - 允许重置任何状态的任务（包括 PROCESSING）
+     * - 如果当前有任务在执行中（running=true），会强制释放锁
+     * - 重置后调度器会重新 pick up 该任务
+     *
+     * @param taskId 任务 ID
+     * @returns 操作结果
+     *
+     * @callers CloneController.resetTask()
+     * @depends PrismaService.cloneTask / cloneTaskItem
+     */
+    async resetTask(taskId: number) {
+        const task = await this.prisma.cloneTask.findUnique({
+            where: { id: BigInt(taskId) },
+            select: { id: true, status: true },
+        });
+
+        if (!task) {
+            return { success: false, message: '任务不存在' };
+        }
+
+        // 如果当前有任务在执行中，强制释放锁
+        // 这是为了防止任务卡在 PROCESSING 状态无法恢复
+        if (this.running) {
+            this.logger.warn(`重置任务时检测到有任务正在执行，强制释放锁: currentTaskId=${this.currentTaskId}, targetTaskId=${taskId}`);
+            this.forceReleaseLock();
+        }
+
+        // 执行事务：重置任务和所有子项状态
+        await this.prisma.$transaction([
+            // 重置所有子项状态为 PENDING
+            this.prisma.cloneTaskItem.updateMany({
+                where: { taskId: BigInt(taskId) },
+                data: { status: 'PENDING', errorMessage: null, retryCount: 0 },
+            }),
+            // 重置任务状态为 PENDING
+            this.prisma.cloneTask.update({
+                where: { id: BigInt(taskId) },
+                data: {
+                    status: 'PENDING',
+                    startedAt: null,
+                    finishedAt: null,
+                    completedItems: 0,
+                    failedItems: 0,
+                    skippedItems: 0,
+                },
+            }),
+        ]);
+
+        this.logger.log(`克隆任务已重置: taskId=${taskId} previousStatus=${task.status}`);
+        return { success: true, taskId, message: '任务已重置，等待重新执行' };
     }
 
     /**
@@ -773,7 +892,6 @@ export class CloneService {
             tasks: tasks.map((t) => {
                 const completedItems = t.items.filter((i) => i.status === 'COMPLETED').length;
                 const failedItems = t.items.filter((i) => i.status === 'FAILED').length;
-                const skippedItems = t.items.filter((i) => i.status === 'SKIPPED').length;
                 const total = t.items.length;
 
                 // 根据子项状态实时计算任务状态
@@ -781,7 +899,7 @@ export class CloneService {
                 if (t.status !== 'PROCESSING' && t.status !== 'PENDING') {
                     if (failedItems === 0) {
                         status = 'COMPLETED';
-                    } else if (completedItems === 0 && skippedItems === 0) {
+                    } else if (completedItems === 0) {
                         status = 'FAILED';
                     } else {
                         status = 'PARTIAL';
@@ -796,7 +914,7 @@ export class CloneService {
                     totalItems: total,
                     completedItems,
                     failedItems,
-                    skippedItems,
+                    skippedItems: 0,
                     createdAt: t.createdAt?.toISOString(),
                     startedAt: t.startedAt?.toISOString(),
                     finishedAt: t.finishedAt?.toISOString(),

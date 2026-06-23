@@ -1,5 +1,5 @@
 import { Modal, Progress, Tag, Space, Button, Typography, Collapse, Spin, Table, Tooltip } from 'antd'
-import { ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, MinusCircleOutlined, UndoOutlined } from '@ant-design/icons'
+import { ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, UndoOutlined } from '@ant-design/icons'
 import type { CloneTaskProgress, CloneTaskItem } from '@/api/clone'
 
 const { Text } = Typography
@@ -18,7 +18,7 @@ interface CloneProgressModalProps {
  * 展示克隆任务的实时进度：圆环百分比 + 统计标签 + 任务详情列表
  */
 export default function CloneProgressModal({ open, progress, onClose, onRetryFailed, onRetryItem }: CloneProgressModalProps) {
-    const { status, totalItems = 0, completedItems = 0, failedItems = 0, skippedItems = 0, progress: percent = 0 } = progress || {}
+    const { status, totalItems = 0, completedItems = 0, failedItems = 0, progress: percent = 0 } = progress || {}
     const isRunning = status === 'PROCESSING' || status === 'PENDING'
     const isCompleted = status === 'COMPLETED'
     const isFailed = status === 'FAILED'
@@ -37,7 +37,7 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
             footer={
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                     <Button onClick={onClose}>{isRunning ? '后台运行' : '关闭'}</Button>
-                    {canReset && (failedItems > 0 || skippedItems > 0) && (
+                    {canReset && failedItems > 0 && (
                         <Button type="primary" icon={<ReloadOutlined />} onClick={onRetryFailed}>
                             重置任务
                         </Button>
@@ -46,7 +46,7 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
             }
             maskClosable={!isRunning}
         >
-            <Spin spinning={!progress || (isRunning && percent < 100)}>
+            <Spin spinning={!progress}>
                 <div style={{ textAlign: 'center', padding: '16px 0' }}>
                     <Progress
                         type="circle"
@@ -69,10 +69,6 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
                         <CloseCircleOutlined style={{ color: '#ff4d4f' }} />
                         <Text>失败: {failedItems}</Text>
                     </Space>
-                    <Space>
-                        <MinusCircleOutlined style={{ color: '#faad14' }} />
-                        <Text>跳过: {skippedItems}</Text>
-                    </Space>
                     <Text type="secondary">共 {totalItems}</Text>
                 </Space>
 
@@ -89,27 +85,6 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
                                             <Text strong>{item.fullName}</Text>
                                             <br />
                                             <Text type="danger" style={{ fontSize: 12 }}>{item.error}</Text>
-                                        </div>
-                                    ))}
-                                </div>
-                            ),
-                        }]}
-                    />
-                )}
-
-                {progress?.skippedDetails && progress.skippedDetails.length > 0 && (
-                    <Collapse
-                        size="small"
-                        style={{ marginTop: 8 }}
-                        items={[{
-                            key: 'skipped',
-                            label: `跳过详情 (${progress.skippedDetails.length})`,
-                            children: (
-                                <div style={{ maxHeight: 150, overflow: 'auto' }}>
-                                    {progress.skippedDetails.map((item, i) => (
-                                        <div key={i} style={{ marginBottom: 4 }}>
-                                            <Text type="warning">{item.fullName}</Text>
-                                            <Text type="secondary"> — 目录已存在</Text>
                                         </div>
                                     ))}
                                 </div>
@@ -148,7 +123,6 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
                                                 const map: Record<string, { color: string; text: string }> = {
                                                     COMPLETED: { color: 'success', text: '成功' },
                                                     FAILED: { color: 'error', text: '失败' },
-                                                    SKIPPED: { color: 'warning', text: '跳过' },
                                                     PENDING: { color: 'default', text: '等待' },
                                                     PROCESSING: { color: 'processing', text: '执行中' },
                                                 }

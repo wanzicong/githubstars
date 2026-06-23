@@ -151,20 +151,19 @@ describe('CloneService', () => {
                 items: [
                     { fullName: 'a/b', status: 'COMPLETED', localPath: '/tmp/clone/a/b', errorMessage: null },
                     { fullName: 'c/d', status: 'FAILED', localPath: '/tmp/clone/c/d', errorMessage: 'timeout' },
-                    { fullName: 'e/f', status: 'SKIPPED', localPath: '/tmp/clone/e/f', errorMessage: 'SKIPPED' },
                 ],
             });
 
             const result = await service.getTaskProgress(1);
             expect(result.success).toBe(true);
             expect(result.taskId).toBe(1);
-            expect(result.totalItems).toBe(3);
+            expect(result.totalItems).toBe(2);
             expect(result.completedItems).toBe(1);
             expect(result.failedItems).toBe(1);
-            expect(result.skippedItems).toBe(1);
+            expect(result.skippedItems).toBe(0);
             expect(result.progress).toBe(100);
             expect(result.failedDetails).toHaveLength(1);
-            expect(result.skippedDetails).toHaveLength(1);
+            expect(result.skippedDetails).toEqual([]);
         });
 
         it('不存在的任务应返回失败', async () => {
@@ -176,10 +175,9 @@ describe('CloneService', () => {
     });
 
     describe('retryFailed', () => {
-        it('应重置失败和跳过项为 PENDING', async () => {
+        it('应重置失败项为 PENDING', async () => {
             prisma.cloneTaskItem.findMany.mockResolvedValue([
                 { id: createBigIntId(1), status: 'FAILED', localPath: '/tmp/c/d' },
-                { id: createBigIntId(2), status: 'SKIPPED', localPath: '/tmp/e/f' },
             ]);
             prisma.$transaction.mockResolvedValue([]);
 
