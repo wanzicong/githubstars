@@ -9,6 +9,7 @@ import {
     STUCK_TASK_THRESHOLD_MS,
     MAX_HISTORY_TASKS,
     MAX_RETRY_ATTEMPTS,
+    RETRYABLE_CLONE_ERROR_PATTERNS,
 } from './clone.constants';
 import { CreateCloneTaskDto } from './clone.dto';
 import { execFile } from 'child_process';
@@ -469,7 +470,8 @@ export class CloneService {
             }
 
             // 构建 git clone 命令
-            const args = ['clone'];
+            // -c core.longpaths=true 解决 Windows 长路径限制（文件名超过 260 字符）
+            const args = ['-c', 'core.longpaths=true', 'clone'];
             if (shallow) args.push('--depth', '1');
             args.push(cloneUrl, localPath);
 
@@ -482,7 +484,7 @@ export class CloneService {
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? (e as Error & { stderr?: string }).stderr || e.message : String(e);
 
-            // 清理失败的克隆目录（异步）
+            // 清理失败的克隆目录
             try {
                 if (existsSync(localPath)) {
                     await rm(localPath, { recursive: true, force: true });
@@ -491,12 +493,44 @@ export class CloneService {
                 // 忽略清理失败
             }
 
+            // 自动重试：特定 Git 内部错误通常是瞬时性的（浅克隆竞态、refs 残留等）
+            // 删除目录后重新克隆一次即可恢复
+            if (RETRYABLE_CLONE_ERROR_PATTERNS.some((pattern) => errorMsg.includes(pattern))) {
+                this.logger.warn(`检测到可重试错误，自动重试克隆: ${item.fullName} | 错误: ${errorMsg.substring(0, 200)}`);
+                try {
+                    const retryArgs = ['-c', 'core.longpaths=true', 'clone'];
+                    if (shallow) retryArgs.push('--depth', '1');
+                    retryArgs.push(item.cloneUrl!, localPath);
+
+                    await execFileAsync('git', retryArgs, {
+                        timeout: CLONE_TIMEOUT_MS,
+                        windowsHide: true,
+                    });
+                    return { success: true };
+                } catch (retryErr: unknown) {
+                    const retryErrorMsg = retryErr instanceof Error ? (retryErr as Error & { stderr?: string }).stderr || retryErr.message : String(retryErr);
+                    // 重试也失败了，清理目录并返回错误
+                    try {
+                        if (existsSync(localPath)) {
+                            await rm(localPath, { recursive: true, force: true });
+                        }
+                    } catch {
+                        // 忽略清理失败
+                    }
+                    return { success: false, error: `重试后仍失败: ${retryErrorMsg.substring(0, 1900)}` };
+                }
+            }
+
             return { success: false, error: errorMsg.substring(0, 2000) };
         }
     }
 
     /**
      * 执行 git pull 更新已存在的仓库
+     *
+     * 先获取当前分支名，再显式指定 `git pull --ff-only origin <branch>`，
+     * 避免 "fatal: Cannot fast-forward to multiple branches" 错误。
+     * 同时添加 --no-edit 防止因合并提交消息弹出编辑器。
      *
      * @param localPath 本地仓库路径
      * @param fullName  仓库全名（用于日志）
@@ -507,7 +541,37 @@ export class CloneService {
      */
     private async executeGitPull(localPath: string, fullName: string | null): Promise<{ success: boolean; error?: string }> {
         try {
-            const { stdout } = await execFileAsync('git', ['pull', '--ff-only'], {
+            // 先获取当前分支名
+            const { stdout: branchName } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+                cwd: localPath,
+                timeout: 10_000,
+                windowsHide: true,
+            });
+            const branch = branchName.trim();
+
+            // detached HEAD 场景（如 shallow clone 后处于 tag/commit）
+            // 使用 git fetch + merge 而非 pull
+            if (branch === 'HEAD') {
+                this.logger.log(`仓库处于 detached HEAD 状态，执行 fetch + merge: ${fullName}`);
+                await execFileAsync('git', ['fetch', 'origin'], {
+                    cwd: localPath,
+                    timeout: CLONE_TIMEOUT_MS,
+                    windowsHide: true,
+                });
+                // 尝试合并到默认分支（main/master）
+                const defaultBranch = await this.detectDefaultBranch(localPath);
+                if (defaultBranch) {
+                    await execFileAsync('git', ['merge', '--ff-only', `origin/${defaultBranch}`], {
+                        cwd: localPath,
+                        timeout: CLONE_TIMEOUT_MS,
+                        windowsHide: true,
+                    });
+                }
+                return { success: true };
+            }
+
+            // 正常分支：显式指定远程和分支名
+            const { stdout } = await execFileAsync('git', ['pull', '--ff-only', '--no-edit', 'origin', branch], {
                 cwd: localPath,
                 timeout: CLONE_TIMEOUT_MS,
                 windowsHide: true,
@@ -522,12 +586,50 @@ export class CloneService {
     }
 
     /**
+     * 检测仓库的默认远程分支名（main / master / 其他）
+     *
+     * 通过 `git symbolic-ref refs/remotes/origin/HEAD` 获取，
+     * 失败时 fallback 到检查 main 和 master 是否存在。
+     */
+    private async detectDefaultBranch(localPath: string): Promise<string | null> {
+        try {
+            const { stdout } = await execFileAsync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], {
+                cwd: localPath,
+                timeout: 5_000,
+                windowsHide: true,
+            });
+            // 输出格式: refs/remotes/origin/main → 提取 main
+            const match = stdout.trim().match(/refs\/remotes\/origin\/(.+)/);
+            return match ? match[1] : null;
+        } catch {
+            // fallback：检查 main 或 master
+            for (const candidate of ['main', 'master']) {
+                try {
+                    await execFileAsync('git', ['rev-parse', `refs/remotes/origin/${candidate}`], {
+                        cwd: localPath,
+                        timeout: 5_000,
+                        windowsHide: true,
+                    });
+                    return candidate;
+                } catch {
+                    // 继续尝试下一个
+                }
+            }
+            return null;
+        }
+    }
+
+    /**
      * 验证已存在的目录是否为有效的克隆仓库
      *
      * 检查项：
      * 1. 是否为 git 仓库（.git 目录存在）
-     * 2. 目录是否非空
-     * 3. remote origin URL 是否匹配预期仓库
+     * 2. 仓库内部结构是否完整（git rev-parse --git-dir 验证）
+     * 3. 目录是否非空
+     * 4. remote origin URL 是否匹配预期仓库
+     *
+     * 第 2 项解决了"目录存在但 .git 损坏"的场景（如之前克隆中断留下的残骸），
+     * 避免验证通过后走到 git pull 路径却报 "not a git repository" 错误。
      */
     private async validateExistingRepo(localPath: string, expectedCloneUrl: string): Promise<{ success: boolean; error?: string }> {
         const gitDir = path.join(localPath, '.git');
@@ -535,6 +637,18 @@ export class CloneService {
         // 检查是否为 git 仓库
         if (!existsSync(gitDir)) {
             return { success: false, error: `目录存在但不是 git 仓库: ${localPath}` };
+        }
+
+        // 仓库完整性校验：通过 git rev-parse 确认 .git 结构可用
+        // 解决了 .git 目录存在但内部损坏（缺少 HEAD、refs 不完整等）导致 git pull 报错的问题
+        try {
+            await execFileAsync('git', ['rev-parse', '--git-dir'], {
+                cwd: localPath,
+                timeout: 10_000,
+                windowsHide: true,
+            });
+        } catch {
+            return { success: false, error: `git 仓库结构损坏（rev-parse 失败）: ${localPath}` };
         }
 
         // 检查目录是否非空（排除只有 .git 而无工作区文件的异常情况）

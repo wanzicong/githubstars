@@ -34,3 +34,17 @@ export const MAX_RETRY_ATTEMPTS = 2;
 
 /** 历史任务保留数量 */
 export const MAX_HISTORY_TASKS = 10;
+
+/**
+ * 需要自动重试的 Git 错误模式
+ *
+ * 这些错误通常是瞬时性的（网络抖动、Git 内部竞态），删除目录后重新克隆即可恢复。
+ * 在 executeClone catch 块中匹配，命中的错误会在删除目录后自动重试一次。
+ */
+export const RETRYABLE_CLONE_ERROR_PATTERNS = [
+    'shallow file has changed since we read it',      // 浅克隆过程中 shallow 文件被并发修改
+    'BUG: refs/files-backend',                         // Git for Windows ref 事务 Bug
+    'initial ref transaction called with existing refs', // 同上，refs 残留
+    'remote did not send all necessary objects',       // 传输不完整，通常是网络中断
+    'index file corrupt',                              // 索引文件损坏
+] as const;

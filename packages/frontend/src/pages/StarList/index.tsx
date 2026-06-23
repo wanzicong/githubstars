@@ -343,6 +343,8 @@ export default function StarList() {
         setSelectedRepoIds([])
     }, [])
 
+    const { records: repos } = pageResult
+
     // ── 打开克隆向导 ──
     const handleOpenCloneWizard = useCallback(async () => {
         // 检查选中的仓库是否都在当前页
@@ -436,6 +438,7 @@ export default function StarList() {
         () => (languageOptions || []).map((lang) => ({ label: `${lang.language} (${lang.count})`, value: lang.language })),
         [languageOptions],
     )
+
     const hasActiveFilters =
         keyword.trim() !== '' ||
         languageStr !== '' ||
@@ -443,8 +446,6 @@ export default function StarList() {
         !!startDateStr ||
         !!endDateStr ||
         untranslatedOnly
-
-    const { records: repos } = pageResult
 
     return (
         <div>
