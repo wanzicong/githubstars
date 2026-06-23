@@ -471,16 +471,31 @@ export class CloneService {
 
             // 构建 git clone 命令
             // -c core.longpaths=true 解决 Windows 长路径限制（文件名超过 260 字符）
-            const args = ['-c', 'core.longpaths=true', 'clone'];
+            // -c core.protectNTFS=false 允许文件名包含特殊字符（如中文书名号《》）
+            const args = ['-c', 'core.longpaths=true', '-c', 'core.protectNTFS=false', 'clone'];
             if (shallow) args.push('--depth', '1');
             args.push(cloneUrl, localPath);
 
-            await execFileAsync('git', args, {
-                timeout: CLONE_TIMEOUT_MS,
-                windowsHide: true,
-            });
-
-            return { success: true };
+            try {
+                await execFileAsync('git', args, {
+                    timeout: CLONE_TIMEOUT_MS,
+                    windowsHide: true,
+                });
+                return { success: true };
+            } catch (cloneErr: unknown) {
+                const cloneErrorMsg = cloneErr instanceof Error ? (cloneErr as Error & { stderr?: string }).stderr || cloneErr.message : String(cloneErr);
+                
+                // 检查是否是 checkout 失败（克隆成功但 checkout 失败）
+                // 这种情况通常是因为文件名包含 Windows 不支持的字符（如 ?）
+                if (cloneErrorMsg.includes('warning: Clone succeeded, but checkout failed')) {
+                    this.logger.warn(`克隆成功但 checkout 失败（可能是文件名包含特殊字符）: ${item.fullName}`);
+                    // 仓库数据已下载，标记为成功
+                    return { success: true };
+                }
+                
+                // 其他克隆错误，继续抛出
+                throw cloneErr;
+            }
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? (e as Error & { stderr?: string }).stderr || e.message : String(e);
 
@@ -498,7 +513,7 @@ export class CloneService {
             if (RETRYABLE_CLONE_ERROR_PATTERNS.some((pattern) => errorMsg.includes(pattern))) {
                 this.logger.warn(`检测到可重试错误，自动重试克隆: ${item.fullName} | 错误: ${errorMsg.substring(0, 200)}`);
                 try {
-                    const retryArgs = ['-c', 'core.longpaths=true', 'clone'];
+                    const retryArgs = ['-c', 'core.longpaths=true', '-c', 'core.protectNTFS=false', 'clone'];
                     if (shallow) retryArgs.push('--depth', '1');
                     retryArgs.push(item.cloneUrl!, localPath);
 
