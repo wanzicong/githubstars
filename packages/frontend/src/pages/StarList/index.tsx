@@ -27,6 +27,7 @@ import {
 } from '@ant-design/icons'
 import dayjs, { type Dayjs } from '../../config/setupDayjs'
 import * as api from '../../api'
+import { fetchAllStarIds } from '../../api/stars'
 import { TranslatePanel } from '../../components/translate'
 import { StarStatsBar } from '../../components/stars'
 import { StarRepoView } from '../../components/stars'
@@ -219,6 +220,7 @@ export default function StarList() {
     const [cloneProgressOpen, setCloneProgressOpen] = useState(false)
     const [cloneTaskId, setCloneTaskId] = useState<number | null>(null)
     const [cloneProgress, setCloneProgress] = useState<CloneTaskProgress | null>(null)
+    const [loadingAllIds, setLoadingAllIds] = useState(false)
 
     const translateTaskIdRef = useRef<number | null>(null)
 
@@ -320,6 +322,24 @@ export default function StarList() {
             }
         } catch { message.error('重试失败') }
     }, [cloneTaskId, clonePolling])
+
+    // ── 跨页全选 ──
+    const handleSelectAllPages = useCallback(async () => {
+        setLoadingAllIds(true)
+        try {
+            const ids = await fetchAllStarIds(buildFilters())
+            setSelectedRepoIds(ids)
+            message.success(`已选择 ${ids.length} 个仓库`)
+        } catch {
+            message.error('获取仓库列表失败')
+        } finally {
+            setLoadingAllIds(false)
+        }
+    }, [buildFilters])
+
+    const handleDeselectAll = useCallback(() => {
+        setSelectedRepoIds([])
+    }, [])
 
     const renderTranslateProgress = () => (
         <TranslateProgressModal
@@ -642,6 +662,9 @@ export default function StarList() {
                 }}
                 selectedIds={selectedRepoIds}
                 onSelectionChange={setSelectedRepoIds}
+                onSelectAllPages={handleSelectAllPages}
+                onDeselectAll={handleDeselectAll}
+                loadingAllIds={loadingAllIds}
             />
             {renderTranslateProgress()}
 

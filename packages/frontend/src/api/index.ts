@@ -2,7 +2,7 @@
 export { default as apiClient, setBaseURL, getCurrentBaseURL } from './request'
 
 // Stars
-export { fetchStarList, exportStarsUrls } from './stars'
+export { fetchStarList, exportStarsUrls, fetchAllStarIds } from './stars'
 export { findSimilarRepos as fetchSimilarRepos } from './similar'
 
 // Authors

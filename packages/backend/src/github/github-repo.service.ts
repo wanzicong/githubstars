@@ -160,6 +160,30 @@ export class GithubRepoService {
     }
 
     /**
+     * 查询所有符合条件的仓库 ID 列表
+     *
+     * 用于跨页全选功能，返回 id 数组。
+     *
+     * @param params 筛选参数（同 findPage）
+     * @returns 仓库 ID 数组
+     *
+     * @callers
+     *   - GithubController.getAllIds()
+     */
+    async findAllIds(params: FilterParams) {
+        const where = this.buildWhere({
+            keyword: params.keyword,
+            languages: parseLanguages(params.language),
+            dateField: params.dateField,
+            startDate: params.startDate,
+            endDate: params.endDate,
+            untranslatedOnly: params.untranslatedOnly,
+        });
+        const repos = await this.prisma.githubRepo.findMany({ where, select: { id: true } });
+        return repos.map((r) => Number(r.id));
+    }
+
+    /**
      * 查询所有符合条件的仓库（不分页）
      *
      * 支持关键词和语言筛选，返回完整仓库记录。

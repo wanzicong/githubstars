@@ -58,3 +58,25 @@ export async function exportStarsUrls(params: StarListParams): Promise<Blob> {
     })
     return data
 }
+
+/**
+ * 获取所有符合条件的仓库 ID 列表
+ *
+ * 用于跨页全选功能，根据筛选条件返回所有仓库 ID。
+ *
+ * @param params 筛选参数（同 fetchStarList）
+ * @returns 仓库 ID 数组
+ */
+export async function fetchAllStarIds(params: StarListParams): Promise<number[]> {
+    const body: Record<string, unknown> = {}
+    if (params.keyword) body.keyword = params.keyword
+    if (params.language) body.language = params.language
+    if (params.sortBy) body.sortBy = params.sortBy
+    if (params.sortOrder) body.sortOrder = params.sortOrder
+    if (params.dateField) body.dateField = params.dateField
+    if (params.startDate) body.startDate = params.startDate
+    if (params.endDate) body.endDate = params.endDate
+    if (params.untranslatedOnly) body.untranslatedOnly = true
+    const { data } = await api.post<{ success: boolean; ids: number[]; total: number }>('/api/stars/ids', body)
+    return data.ids || []
+}

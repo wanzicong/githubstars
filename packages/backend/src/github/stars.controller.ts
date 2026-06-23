@@ -83,4 +83,30 @@ export class StarsController {
         res.set({ 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': 'attachment; filename="stars-export.txt"' });
         res.send(urls.join('\n'));
     }
+
+    /**
+     * 获取所有符合条件的仓库 ID 列表
+     *
+     * 用于跨页全选功能，根据筛选条件返回所有仓库 ID。
+     *
+     * @param body { keyword, language, sortBy, sortOrder, dateField, startDate, endDate, untranslatedOnly }
+     * @returns { success: true, ids: number[] }
+     */
+    @Post('ids')
+    @ApiOperation({ summary: '获取仓库 ID 列表', description: '按筛选条件获取所有仓库 ID，用于跨页全选' })
+    @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'boolean' } } } })
+    async getIds(@Body(new ZodValidationPipe(FilterSchema)) body: FilterDto) {
+        this.logger.log('获取仓库 ID 列表');
+        const ids = await this.service.findAllIds({
+            keyword: body.keyword,
+            language: body.language,
+            sortBy: body.sortBy,
+            sortOrder: body.sortOrder,
+            dateField: body.dateField,
+            startDate: body.startDate,
+            endDate: body.endDate,
+            untranslatedOnly: body.untranslatedOnly,
+        });
+        return { success: true, ids, total: ids.length };
+    }
 }

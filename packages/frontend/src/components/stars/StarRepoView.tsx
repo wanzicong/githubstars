@@ -18,6 +18,12 @@ export interface StarRepoViewProps {
     selectedIds?: number[]
     /** 多选模式：选中变更回调 */
     onSelectionChange?: (ids: number[]) => void
+    /** 跨页全选：全选所有符合条件的仓库 */
+    onSelectAllPages?: () => void
+    /** 跨页全选：取消所有选择 */
+    onDeselectAll?: () => void
+    /** 跨页全选：是否正在加载所有 ID */
+    loadingAllIds?: boolean
 }
 
 /**
@@ -37,6 +43,9 @@ export default function StarRepoView({
     onPageChange,
     selectedIds,
     onSelectionChange,
+    onSelectAllPages,
+    onDeselectAll,
+    loadingAllIds,
 }: StarRepoViewProps) {
     const selectionEnabled = !!onSelectionChange
 
@@ -51,6 +60,7 @@ export default function StarRepoView({
 
     const allPageIds = repos.map((r) => r.id)
     const allSelected = selectionEnabled && allPageIds.length > 0 && allPageIds.every((id) => selectedIds?.includes(id))
+    const allPagesSelected = selectionEnabled && selectedIds && selectedIds.length > 0 && selectedIds.length === pageResult.total
 
     const toggleSelectAll = () => {
         if (!onSelectionChange || !selectedIds) return
@@ -65,10 +75,20 @@ export default function StarRepoView({
         <>
             <Spin spinning={loading}>
                 {selectionEnabled && repos.length > 0 && (
-                    <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <Checkbox checked={allSelected} onChange={toggleSelectAll}>
                             全选当页
                         </Checkbox>
+                        {onSelectAllPages && (
+                            <Button
+                                size="small"
+                                type="link"
+                                loading={loadingAllIds}
+                                onClick={allPagesSelected ? onDeselectAll : onSelectAllPages}
+                            >
+                                {allPagesSelected ? '取消全选' : `全选所有 (${pageResult.total})`}
+                            </Button>
+                        )}
                         {selectedIds && selectedIds.length > 0 && (
                             <span style={{ color: '#1677ff', fontSize: 13 }}>已选 {selectedIds.length} 个</span>
                         )}
