@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Input, Tag, Space, Typography } from 'antd'
-import { FolderOpenOutlined, HistoryOutlined } from '@ant-design/icons'
+import { Input, Tag, Space, Typography, Button } from 'antd'
+import { FolderOpenOutlined, HistoryOutlined, FolderOutlined } from '@ant-design/icons'
 import { getRecentCloneDirectories } from '@/api/clone'
+import { useDirectoryPicker } from '@/hooks/useElectron'
 
 const { Text } = Typography
 
@@ -14,12 +15,13 @@ interface DirectoryPickerProps {
 /**
  * 目录选择器组件
  *
- * 提供目录输入框 + 历史目录快捷选择。
+ * 提供目录输入框 + 历史目录快捷选择 + 本地文件夹选择（Electron 环境）。
  * 从后端获取历史任务中使用过的目录，用户可点击快速填入。
  */
 export default function DirectoryPicker({ value, onChange, placeholder }: DirectoryPickerProps) {
     const [recentDirs, setRecentDirs] = useState<string[]>([])
     const [loading, setLoading] = useState(false)
+    const { pickDirectory, isSupported: isElectronEnv } = useDirectoryPicker()
 
     useEffect(() => {
         loadRecentDirs()
@@ -43,15 +45,37 @@ export default function DirectoryPicker({ value, onChange, placeholder }: Direct
         onChange?.(dir)
     }
 
+    const handlePickDirectory = async () => {
+        const dir = await pickDirectory({
+            title: '选择克隆目标目录',
+            defaultPath: value || undefined,
+        })
+        if (dir) {
+            onChange?.(dir)
+        }
+    }
+
     return (
         <div>
-            <Input
-                placeholder={placeholder || '请输入本地目录路径（如 D:\\repos\\stars）'}
-                value={value}
-                onChange={(e) => onChange?.(e.target.value)}
-                size="large"
-                prefix={<FolderOpenOutlined />}
-            />
+            <Space.Compact style={{ width: '100%' }}>
+                <Input
+                    placeholder={placeholder || '请输入本地目录路径（如 D:\\repos\\stars）'}
+                    value={value}
+                    onChange={(e) => onChange?.(e.target.value)}
+                    size="large"
+                    prefix={<FolderOpenOutlined />}
+                    style={{ flex: 1 }}
+                />
+                {isElectronEnv && (
+                    <Button
+                        size="large"
+                        icon={<FolderOutlined />}
+                        onClick={handlePickDirectory}
+                    >
+                        选择
+                    </Button>
+                )}
+            </Space.Compact>
 
             {recentDirs.length > 0 && (
                 <div style={{ marginTop: 8 }}>
