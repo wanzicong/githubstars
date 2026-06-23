@@ -96,4 +96,19 @@ export class CloneController {
         }
         return this.cloneService.retryItem(parsed.data.id, parsed.data.fullName);
     }
+
+    /**
+     * 删除任务
+     */
+    @Post('tasks/delete')
+    async deleteTask(@Body() body: unknown) {
+        const parsed = CloneTaskIdSchema.safeParse(body);
+        if (!parsed.success) {
+            throw new HttpException(
+                { success: false, message: '任务 ID 无效' },
+                HttpStatus.BAD_REQUEST,
+            );
+        }
+        return this.cloneService.deleteTask(parsed.data.id);
+    }
 }

@@ -37,7 +37,7 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
             footer={
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                     <Button onClick={onClose}>{isRunning ? '后台运行' : '关闭'}</Button>
-                    {canReset && failedItems > 0 && (
+                    {canReset && (
                         <Button type="primary" icon={<ReloadOutlined />} onClick={onRetryFailed}>
                             重置任务
                         </Button>

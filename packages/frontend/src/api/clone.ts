@@ -47,6 +47,12 @@ export async function getRecentCloneDirectories(): Promise<{ success: boolean; d
     return data
 }
 
+/** 删除克隆任务 */
+export async function deleteCloneTask(taskId: number): Promise<{ success: boolean; taskId?: number; message?: string }> {
+    const { data } = await api.post('/api/clone/tasks/delete', { id: taskId })
+    return data
+}
+
 /** 克隆任务项类型 */
 export interface CloneTaskItem {
     fullName: string

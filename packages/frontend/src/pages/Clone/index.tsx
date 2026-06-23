@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Row, Col, Statistic, Progress, App } from 'antd'
-import { ReloadOutlined, CopyOutlined, FolderOutlined, UndoOutlined } from '@ant-design/icons'
-import { getRecentCloneTasks, getCloneTaskProgress, retryCloneFailed, retryCloneItem, resetCloneTask } from '@/api/clone'
+import { Card, Table, Tag, Button, Space, Typography, Row, Col, Statistic, Progress, App, Popconfirm } from 'antd'
+import { ReloadOutlined, CopyOutlined, FolderOutlined, UndoOutlined, DeleteOutlined } from '@ant-design/icons'
+import { getRecentCloneTasks, getCloneTaskProgress, retryCloneFailed, retryCloneItem, resetCloneTask, deleteCloneTask } from '@/api/clone'
 import type { CloneTaskProgress, CloneTaskListResult } from '@/api/clone'
 import CloneProgressModal from '@/components/clone/CloneProgressModal'
 import { usePolling } from '@/hooks/usePolling'
@@ -173,9 +173,9 @@ export default function Clone() {
         {
             title: '操作',
             key: 'action',
-            width: 180,
+            width: 260,
             render: (_: unknown, record: CloneTaskListResult['tasks'][0]) => (
-                <Space>
+                <Space size="middle" wrap>
                     <Button size="small" icon={<CopyOutlined />} onClick={() => handleViewProgress(record.taskId)}>
                         详情
                     </Button>
@@ -222,6 +222,32 @@ export default function Clone() {
                         >
                             重置
                         </Button>
+                    )}
+                    {record.status !== 'PROCESSING' && (
+                        <Popconfirm
+                            title="确定要删除此任务吗？"
+                            description="删除后不可恢复"
+                            onConfirm={async () => {
+                                try {
+                                    const res = await deleteCloneTask(record.taskId)
+                                    if (res.success) {
+                                        message.success(res.message)
+                                        loadTasks()
+                                    } else {
+                                        message.info(res.message)
+                                    }
+                                } catch {
+                                    message.error('删除失败')
+                                }
+                            }}
+                            okText="删除"
+                            cancelText="取消"
+                            okButtonProps={{ danger: true }}
+                        >
+                            <Button size="small" type="link" danger icon={<DeleteOutlined />}>
+                                删除
+                            </Button>
+                        </Popconfirm>
                     )}
                 </Space>
             ),

@@ -924,6 +924,40 @@ export class CloneService {
     }
 
     /**
+     * 删除指定克隆任务
+     *
+     * 删除任务及其所有子项记录。不允许删除正在执行的任务。
+     *
+     * @param taskId 任务 ID
+     * @returns 操作结果
+     *
+     * @callers CloneController.deleteTask()
+     * @depends PrismaService.cloneTask / cloneTaskItem
+     */
+    async deleteTask(taskId: number) {
+        const task = await this.prisma.cloneTask.findUnique({
+            where: { id: BigInt(taskId) },
+            select: { id: true, status: true },
+        });
+
+        if (!task) {
+            return { success: false, message: '任务不存在' };
+        }
+
+        // 不允许删除正在执行的任务
+        if (task.status === 'PROCESSING' && this.running && this.currentTaskId === BigInt(taskId)) {
+            return { success: false, message: '任务正在执行中，无法删除' };
+        }
+
+        // 删除子项和任务记录
+        await this.prisma.cloneTaskItem.deleteMany({ where: { taskId: BigInt(taskId) } });
+        await this.prisma.cloneTask.delete({ where: { id: BigInt(taskId) } });
+
+        this.logger.log(`克隆任务已删除: taskId=${taskId}`);
+        return { success: true, taskId, message: '任务已删除' };
+    }
+
+    /**
      * 清理历史任务（保留最近 N 条）
      */
     private async cleanOldTasks() {
