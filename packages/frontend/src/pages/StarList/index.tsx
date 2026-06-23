@@ -634,8 +634,8 @@ export default function StarList() {
                 onPageChange={(page, size) => {
                     const currentSize = parseInt(searchParams.get('size') || '36', 10)
                     if (size !== currentSize) {
-                        setUrlParam('size', String(size), false)
-                        setUrlParam('page', '1', false)
+                        // pageSize 变化时，同时更新 size 和 page，使用单次状态更新
+                        setUrlParams({ size: String(size), page: '1' })
                     } else {
                         setUrlParam('page', String(page), false)
                     }
