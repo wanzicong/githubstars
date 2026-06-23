@@ -748,6 +748,7 @@ export class CloneService {
      * 安全策略：
      * - 允许重置任何状态的任务（包括 PROCESSING）
      * - 如果当前有任务在执行中（running=true），会强制释放锁
+     * - 仅删除失败项的目录，保留成功克隆的目录
      * - 重置后调度器会重新 pick up 该任务
      *
      * @param taskId 任务 ID
@@ -759,7 +760,7 @@ export class CloneService {
     async resetTask(taskId: number) {
         const task = await this.prisma.cloneTask.findUnique({
             where: { id: BigInt(taskId) },
-            select: { id: true, status: true },
+            select: { id: true, status: true, targetDir: true },
         });
 
         if (!task) {
@@ -772,6 +773,18 @@ export class CloneService {
             this.logger.warn(`重置任务时检测到有任务正在执行，强制释放锁: currentTaskId=${this.currentTaskId}, targetTaskId=${taskId}`);
             this.forceReleaseLock();
         }
+
+        // 设置目标目录，用于路径安全校验
+        this.targetDir = task.targetDir;
+
+        // 查询失败项的目录路径（用于后续删除）
+        const failedItems = await this.prisma.cloneTaskItem.findMany({
+            where: {
+                taskId: BigInt(taskId),
+                status: 'FAILED',
+            },
+            select: { id: true, localPath: true, fullName: true },
+        });
 
         // 执行事务：重置任务和所有子项状态
         await this.prisma.$transaction([
@@ -794,8 +807,13 @@ export class CloneService {
             }),
         ]);
 
-        this.logger.log(`克隆任务已重置: taskId=${taskId} previousStatus=${task.status}`);
-        return { success: true, taskId, message: '任务已重置，等待重新执行' };
+        // 事务成功后删除失败项的目录（文件系统操作无法回滚，失败仅记录日志）
+        for (const item of failedItems) {
+            await this.removeCloneDir(item.localPath);
+        }
+
+        this.logger.log(`克隆任务已重置: taskId=${taskId} previousStatus=${task.status} deletedDirs=${failedItems.length}`);
+        return { success: true, taskId, message: `任务已重置，已清理 ${failedItems.length} 个失败目录` };
     }
 
     /**
