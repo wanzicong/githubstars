@@ -2,10 +2,9 @@
  * 通用信号量并发控制工具。
  *
  * 从 TranslateTaskService 的私有 acquire/release 模式提取为独立类，
- * 供 Agent 工具层等需要并发限制的模块复用。
+ * 供需要并发限制的模块复用。
  *
  * @callers
- *   - ToolInvokerService — 限制工具调用并发数
  *   - TranslateTaskService — 翻译并发控制（后续迁移至此）
  *   - CloneService — 克隆并发控制（后续迁移至此）
  */

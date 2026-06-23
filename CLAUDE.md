@@ -31,7 +31,7 @@ npm run prisma:generate # 重新生成 Prisma Client
 
 ```bash
 npm run dev -w @githubstars/backend     # 开发模式（watch 热重载）
-npm run start -w @githubstars/backend    # 启动（默认端口 3000，由 .env PORT 控制）
+npm run start -w @githubstars/backend    # 启动（默认端口 10002，由 .env PORT 控制）
 npm run build -w @githubstars/backend    # 编译 TypeScript
 npm run lint -w @githubstars/backend     # ESLint 检查并修复
 npm run test -w @githubstars/backend     # 运行 Jest 单元测试
@@ -42,7 +42,7 @@ npm run prisma:studio -w @githubstars/backend     # 打开 Prisma 数据浏览�
 ### 前端（`packages/frontend/`）
 
 ```bash
-npm run dev -w @githubstars/frontend     # 启动 Vite 开发服务器（端口 5173）
+npm run dev -w @githubstars/frontend     # 启动 Vite 开发服务器（端口 10001）
 npm run build -w @githubstars/frontend   # 生产构建（tsc + vite build）
 npm run lint -w @githubstars/frontend    # ESLint 检查
 npm run preview -w @githubstars/frontend # 预览生产构建
@@ -81,7 +81,7 @@ githubstars/
 │   │   │   └── export/      # Markdown 导出
 │   │   └── .env             # 环境变量（DB/GitHub/DeepSeek）
 │   ├── frontend/            # React SPA
-│   │   ├── vite.config.ts   # Vite 配置 + API 代理到 localhost:3000
+│   │   ├── vite.config.ts   # Vite 配置 + API 代理到 localhost:10002
 │   │   └── src/
 │   │       ├── App.tsx      # 路由定义
 │   │       ├── api/         # Axios API 调用层
@@ -96,10 +96,10 @@ githubstars/
 ### 请求流
 
 ```
-浏览器 (:5173)
-    │  Vite 代理转发 /api/* → :3000
+浏览器 (:10001)
+    │  Vite 代理转发 /api/* → :10002
     ▼
-NestJS (:3000)
+NestJS (:10002)
     │  Prisma Client
     ▼
 MySQL (:3307)  githubstars 库

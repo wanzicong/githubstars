@@ -95,7 +95,7 @@ cd githubstars
 
 ```env
 DATABASE_URL="mysql://root:123456@127.0.0.1:3307/githubstars?charset=utf8mb4"
-PORT=3000
+PORT=10002
 ```
 
 ### 3. 安装依赖
@@ -120,9 +120,9 @@ npm run dev
 
 | 服务 | 地址 |
 |------|------|
-| 前端 | http://localhost:5173 |
-| 后端 | http://localhost:3000 |
-| Swagger 文档 | http://localhost:3000/api/docs |
+| 前端 | http://localhost:10001 |
+| 后端 | http://localhost:10002 |
+| Swagger 文档 | http://localhost:10002/api/docs |
 
 ## 常用命令
 
@@ -169,7 +169,7 @@ npm run dev
 ## 架构说明
 
 ```
-浏览器 (:5173)  ──Vite 代理──▶  NestJS (:3000)  ──Prisma──▶  MySQL (:3307)
+浏览器 (:10001)  ──Vite 代理──▶  NestJS (:10002)  ──Prisma──▶  MySQL (:3307)
 ```
 
 - **PrismaModule 全局模块**：任意 Service 直接注入 `PrismaService` 访问数据库

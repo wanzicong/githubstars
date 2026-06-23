@@ -212,50 +212,6 @@ export type {
   PaginatedResponse,
 } from '@githubstars/shared'
 
-// ─── Agent ───
-export interface AgentSession {
-    id: number
-    title: string
-    status: string
-    model: string
-    messageCount: number
-    createdAt: string
-}
-
-export interface AgentMessage {
-    id: number
-    role: 'user' | 'assistant' | 'system'
-    content: string
-    createdAt: string
-}
-
-export interface AgentTask {
-    id: number
-    type: string
-    status: string
-    priority: number
-    progressPct: number | null
-    createdAt: string
-    finishedAt: string | null
-}
-
-export interface AgentTool {
-    name: string
-    description: string
-    category: string
-}
-
-export interface AgentStatus {
-    service: string
-    status: string
-    totalSessions: number
-    totalTasks: number
-    database: { sessions: number; tasks: number }
-    circuitBreakers: Record<string, unknown>
-    tools: { registered: number; list: string[] }
-    sseConnections: number
-}
-
 export interface CategorySaveParams {
     id?: number
     name: string

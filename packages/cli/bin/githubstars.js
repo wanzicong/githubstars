@@ -63,7 +63,7 @@ function showHelp() {
 GitHub Stars — GitHub 星标仓库管理系统
 
 用法:
-  githubstars              一键启动前端 (:5173) + 后端 (:3000)
+  githubstars              一键启动前端 (:10001) + 后端 (:10002)
   githubstars stop          停止所有服务
   githubstars status        查看服务运行状态
   githubstars backend       仅启动后端
@@ -73,9 +73,9 @@ GitHub Stars — GitHub 星标仓库管理系统
   githubstars --version     显示版本
 
 快速链接:
-  前端:  http://localhost:5173
-  后端:  http://localhost:3000
-  Swagger: http://localhost:3000/api/docs
+  前端:  http://localhost:10001
+  后端:  http://localhost:10002
+  Swagger: http://localhost:10002/api/docs
 `);
 }
 
@@ -90,8 +90,8 @@ function showVersion() {
 }
 
 const PORTS = [
-  { name: '前端 (Vite)', port: 5173 },
-  { name: '后端 (NestJS)', port: 3000 },
+  { name: '前端 (Vite)', port: 10001 },
+  { name: '后端 (NestJS)', port: 10002 },
 ];
 
 /** 查找占用指定端口的 PID */
@@ -176,9 +176,9 @@ function status() {
   }
 
   console.log('\n快速链接:');
-  console.log('  前端:  http://localhost:5173');
-  console.log('  后端:  http://localhost:3000');
-  console.log('  Swagger: http://localhost:3000/api/docs');
+  console.log('  前端:  http://localhost:10001');
+  console.log('  后端:  http://localhost:10002');
+  console.log('  Swagger: http://localhost:10002/api/docs');
 }
 
 function run(command) {

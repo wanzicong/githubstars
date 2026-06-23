@@ -12,7 +12,7 @@ import { LoggingService } from './logging/logging.service';
  * 应用启动入口函数
  *
  * 创建 NestJS 应用实例，配置自定义日志服务、Swagger API 文档，监听指定端口并输出启动日志。
- * 端口由环境变量 PORT 控制，默认 3000。
+ * 端口由环境变量 PORT 控制，默认 10002。
  * Swagger 文档可通过 /api/docs 访问。
  */
 async function bootstrap() {

@@ -13,7 +13,7 @@ import { TrendingModule } from './trending/trending.module';
 import { ExportModule } from './export/export.module';
 import { CloneModule } from './clone/clone.module';
 import { CategoryModule } from './category/category.module';
-import { AgentModule } from './agent/agent.module';
+
 import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -40,7 +40,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
         ExportModule,
         CloneModule,
         CategoryModule,
-        AgentModule,
+
     ],
     providers: [
         {

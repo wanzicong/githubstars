@@ -59,12 +59,12 @@ describe('CloneService', () => {
             prisma.githubRepo.findMany.mockResolvedValue(repoData);
             prisma.cloneTask.create.mockResolvedValue({
                 id: createBigIntId(1), status: 'PENDING', targetDir: '/tmp/clone',
-                concurrency: 3, shallow: true, totalItems: 2, createdAt: new Date(),
+                concurrency: 5, shallow: true, totalItems: 2, createdAt: new Date(),
             });
             prisma.cloneTaskItem.createMany.mockResolvedValue({ count: 2 });
 
             const result = await service.createTask({
-                repoIds: [1, 2], targetDir: '/tmp/clone', concurrency: 3, shallow: true,
+                repoIds: [1, 2], targetDir: '/tmp/clone', concurrency: 5, shallow: true,
             });
 
             expect(result.success).toBe(true);
@@ -77,7 +77,7 @@ describe('CloneService', () => {
             prisma.githubRepo.findMany.mockResolvedValue([]);
 
             const result = await service.createTask({
-                repoIds: [999], targetDir: '/tmp/clone', concurrency: 3, shallow: true,
+                repoIds: [999], targetDir: '/tmp/clone', concurrency: 5, shallow: true,
             });
 
             expect(result.success).toBe(false);
@@ -234,7 +234,7 @@ describe('CloneService', () => {
 
             const task = await service.findNextPendingTask();
             expect(task).not.toBeNull();
-            expect(task.concurrency).toBe(5);
+            expect(task!.concurrency).toBe(5);
         });
 
         it('无待执行任务时返回 null', async () => {

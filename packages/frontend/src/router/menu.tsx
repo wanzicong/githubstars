@@ -10,7 +10,6 @@ import {
   FileTextOutlined,
   CopyOutlined,
   FolderOutlined,
-  RobotOutlined,
 } from '@ant-design/icons'
 /**
  * 导航菜单项定义 —— 集中管理所有菜单的 key、图标、标题、排序。
@@ -34,7 +33,6 @@ export const menuItems: MenuItem[] = [
   { key: '/search', icon: <SearchOutlined />, label: 'GitHub搜索', orderNo: 40 },
   { key: '/trending', icon: <FireOutlined />, label: '趋势排行', orderNo: 50 },
   { key: '/categories', icon: <FolderOutlined />, label: '分类管理', orderNo: 52 },
-  { key: '/agent', icon: <RobotOutlined />, label: 'AI Agent', orderNo: 54 },
   { key: '/clone', icon: <CopyOutlined />, label: '克隆管理', orderNo: 55 },
   { key: '/settings', icon: <SettingOutlined />, label: '系统配置', orderNo: 60 },
   { key: '/logs', icon: <FileTextOutlined />, label: '系统日志', orderNo: 70 },
