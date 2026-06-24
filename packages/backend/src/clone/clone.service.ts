@@ -10,15 +10,51 @@ import {
     MAX_HISTORY_TASKS,
     MAX_RETRY_ATTEMPTS,
     RETRYABLE_CLONE_ERROR_PATTERNS,
+    NETWORK_ERROR_PATTERNS,
+    MAX_NETWORK_RETRY_ATTEMPTS,
+    RETRY_BASE_DELAY_MS,
+    RETRY_MAX_DELAY_MS,
+    GITHUB_MIRROR_SOURCES,
+    type MirrorSourceName,
 } from './clone.constants';
 import { CreateCloneTaskDto } from './clone.dto';
-import { execFile } from 'child_process';
+import { execFile, spawn, type ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { mkdir, rm } from 'fs/promises';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * 跨平台杀死进程树
+ *
+ * 在 Windows 上使用 taskkill /F /T /PID 杀死进程及其所有子进程，
+ * 在 Unix 上使用 process.kill(-pid, 'SIGTERM') 杀死进程组。
+ *
+ * @param childProcess 子进程对象
+ */
+function killProcessTree(childProcess: ChildProcess): void {
+    if (!childProcess.pid) return;
+
+    const pid = childProcess.pid;
+    const isWindows = process.platform === 'win32';
+
+    try {
+        if (isWindows) {
+            // Windows: 使用 taskkill 杀死进程树
+            // /F = 强制, /T = 杀死子进程, /PID = 指定进程 ID
+            const { execSync } = require('child_process');
+            execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
+        } else {
+            // Unix: 使用负 PID 杀死进程组
+            // 需要 spawn 时设置 detached: true
+            process.kill(-pid, 'SIGTERM');
+        }
+    } catch {
+        // 忽略杀死失败（进程可能已退出）
+    }
+}
 
 /**
  * 为 Promise 添加超时包装
@@ -36,6 +72,58 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Prom
             timer = setTimeout(() => reject(new Error(errorMsg)), ms);
         }),
     ]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * 延迟指定毫秒（用于重试间隔）
+ */
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 计算指数退避延迟时间
+ *
+ * @param attempt  当前重试次数（从 0 开始）
+ * @param baseMs   基础延迟（毫秒）
+ * @param maxMs    最大延迟（毫秒）
+ * @returns 延迟时间（毫秒），加上随机抖动防止雷鸣效应
+ */
+function calculateBackoffDelay(attempt: number, baseMs: number = RETRY_BASE_DELAY_MS, maxMs: number = RETRY_MAX_DELAY_MS): number {
+    const exponentialDelay = Math.min(baseMs * Math.pow(2, attempt), maxMs);
+    // 添加 0-50% 的随机抖动，防止多个任务同时重试
+    const jitter = exponentialDelay * Math.random() * 0.5;
+    return Math.floor(exponentialDelay + jitter);
+}
+
+/**
+ * 判断错误是否为网络错误（需要等待后重试）
+ */
+function isNetworkError(errorMsg: string): boolean {
+    return NETWORK_ERROR_PATTERNS.some((pattern) => errorMsg.includes(pattern));
+}
+
+/**
+ * 获取镜像代理 URL
+ *
+ * 将 GitHub URL 转换为镜像代理 URL，加速国内访问。
+ *
+ * @param originalUrl 原始 GitHub URL
+ * @param mirrorSource 镜像源名称
+ * @returns 转换后的 URL（如果是直连则返回原 URL）
+ */
+function getMirrorUrl(originalUrl: string, mirrorSource: MirrorSourceName = 'direct'): string {
+    if (mirrorSource === 'direct' || !mirrorSource) {
+        return originalUrl;
+    }
+
+    const source = GITHUB_MIRROR_SOURCES.find((s) => s.name === mirrorSource);
+    if (!source || !source.url) {
+        return originalUrl;
+    }
+
+    // URL 格式：{mirrorUrl}/{originalUrl}
+    return `${source.url}/${originalUrl}`;
 }
 
 @Injectable()
@@ -142,7 +230,7 @@ export class CloneService {
      * @depends PrismaService.githubRepo / cloneTask / cloneTaskItem
      */
     async createTask(dto: CreateCloneTaskDto): Promise<{ success: boolean; taskId?: number; message?: string }> {
-        const { repoIds, targetDir, concurrency, shallow } = dto;
+        const { repoIds, targetDir, concurrency, shallow, mirrorSource } = dto;
 
         // 路径校验：必须是绝对路径
         if (!path.isAbsolute(targetDir)) {
@@ -169,6 +257,7 @@ export class CloneService {
                 targetDir: normalizedTargetDir,
                 concurrency,
                 shallow,
+                mirrorSource: mirrorSource || 'direct',
                 totalItems: repos.length,
                 createdAt: new Date(),
             },
@@ -350,10 +439,14 @@ export class CloneService {
             where: { taskId, status: 'PENDING' },
         });
 
-        this.logger.log(`克隆任务开始执行: taskId=${Number(taskId)} pendingItems=${items.length} concurrency=${task.concurrency}`);
+        const mirrorSource = (task.mirrorSource as MirrorSourceName) || 'direct';
+        this.logger.log(
+            `克隆任务开始执行: taskId=${Number(taskId)} pendingItems=${items.length} ` +
+            `concurrency=${task.concurrency} mirrorSource=${mirrorSource}`
+        );
 
         // 并发执行所有 item
-        await Promise.all(items.map((item) => this.processItem(item, task.shallow ?? true)));
+        await Promise.all(items.map((item) => this.processItem(item, task.shallow ?? true, mirrorSource)));
 
         await this.finishTask(taskId);
     }
@@ -365,11 +458,15 @@ export class CloneService {
      * 超时后标记为 FAILED 并释放信号量，防止任务假死。
      */
     /** 克隆子项的关键字段接口 */
-    private async processItem(item: { id: bigint; fullName: string | null; localPath: string | null; cloneUrl: string | null }, shallow: boolean) {
+    private async processItem(
+        item: { id: bigint; fullName: string | null; localPath: string | null; cloneUrl: string | null },
+        shallow: boolean,
+        mirrorSource: MirrorSourceName = 'direct',
+    ) {
         await this.acquire();
         try {
             await withTimeout(
-                this.processItemInner(item, shallow),
+                this.processItemInner(item, shallow, mirrorSource),
                 ITEM_TIMEOUT_MS,
                 `子项处理超时: ${item.fullName}`,
             );
@@ -390,13 +487,17 @@ export class CloneService {
     /**
      * 子项处理内部逻辑
      */
-    private async processItemInner(item: { id: bigint; fullName: string | null; localPath: string | null; cloneUrl: string | null }, shallow: boolean) {
+    private async processItemInner(
+        item: { id: bigint; fullName: string | null; localPath: string | null; cloneUrl: string | null },
+        shallow: boolean,
+        mirrorSource: MirrorSourceName = 'direct',
+    ) {
         await this.prisma.cloneTaskItem.update({
             where: { id: item.id },
             data: { status: 'PROCESSING' },
         });
 
-        const result = await this.executeClone(item, shallow);
+        const result = await this.executeClone(item, shallow, mirrorSource);
         await this.recordItemResult(item, result.success, result.error);
     }
 
@@ -418,13 +519,21 @@ export class CloneService {
      *
      * 逻辑（不允许跳过）：
      * 1. cloneUrl 为空 → 删除目录并报错
-     * 2. 目录不存在 → git clone
+     * 2. 目录不存在 → git clone（带重试）
      * 3. 目录已存在且验证通过 → git pull 更新
      * 4. 目录已存在但验证失败 → 删除并重新 git clone
      *
      * Token 在此处动态注入 cloneUrl，数据库中只存储不含凭据的原始 URL。
+     *
+     * 重试策略：
+     * - Git 内部错误：删除目录后重试 1 次
+     * - 网络错误：指数退避重试最多 3 次（5s → 10s → 20s，加随机抖动）
      */
-    private async executeClone(item: { id: bigint; fullName: string | null; localPath: string | null; cloneUrl: string | null }, shallow: boolean): Promise<{ success: boolean; error?: string }> {
+    private async executeClone(
+        item: { id: bigint; fullName: string | null; localPath: string | null; cloneUrl: string | null },
+        shallow: boolean,
+        mirrorSource: MirrorSourceName = 'direct',
+    ): Promise<{ success: boolean; error?: string }> {
         const localPath = item.localPath as string;
 
         // 路径安全校验
@@ -439,6 +548,25 @@ export class CloneService {
                 this.logger.warn(`cloneUrl 为空，已删除目录: ${localPath}`);
             }
             return { success: false, error: 'cloneUrl 为空，无法克隆或更新仓库' };
+        }
+
+        // 运行时注入 Token（不修改数据库中的 cloneUrl）
+        // 注：这里提前注入，确保重试时也能使用认证后的 URL
+        let authenticatedUrl = item.cloneUrl;
+        const githubToken = await this.config.getValue('github.token');
+        if (githubToken) {
+            authenticatedUrl = authenticatedUrl.replace(
+                'https://github.com/',
+                `https://x-access-token:${githubToken}@github.com/`,
+            );
+        }
+
+        // 应用镜像代理（仅对公开仓库有效，私有仓库使用 Token 时不走代理）
+        const shouldUseMirror = mirrorSource !== 'direct' && !githubToken;
+        const finalUrl = shouldUseMirror ? getMirrorUrl(authenticatedUrl, mirrorSource) : authenticatedUrl;
+
+        if (shouldUseMirror) {
+            this.logger.log(`使用镜像代理: ${mirrorSource} | ${item.fullName}`);
         }
 
         try {
@@ -459,43 +587,9 @@ export class CloneService {
             const parentDir = path.dirname(localPath);
             await mkdir(parentDir, { recursive: true });
 
-            // 运行时注入 Token（不修改数据库中的 cloneUrl）
-            let cloneUrl = item.cloneUrl;
-            const githubToken = await this.config.getValue('github.token');
-            if (githubToken) {
-                cloneUrl = cloneUrl.replace(
-                    'https://github.com/',
-                    `https://x-access-token:${githubToken}@github.com/`,
-                );
-            }
+            // 首次克隆（带 checkout 警告处理）
+            return await this.executeGitClone(finalUrl, localPath, shallow, item.fullName);
 
-            // 构建 git clone 命令
-            // -c core.longpaths=true 解决 Windows 长路径限制（文件名超过 260 字符）
-            // -c core.protectNTFS=false 允许文件名包含特殊字符（如中文书名号《》）
-            const args = ['-c', 'core.longpaths=true', '-c', 'core.protectNTFS=false', 'clone'];
-            if (shallow) args.push('--depth', '1');
-            args.push(cloneUrl, localPath);
-
-            try {
-                await execFileAsync('git', args, {
-                    timeout: CLONE_TIMEOUT_MS,
-                    windowsHide: true,
-                });
-                return { success: true };
-            } catch (cloneErr: unknown) {
-                const cloneErrorMsg = cloneErr instanceof Error ? (cloneErr as Error & { stderr?: string }).stderr || cloneErr.message : String(cloneErr);
-                
-                // 检查是否是 checkout 失败（克隆成功但 checkout 失败）
-                // 这种情况通常是因为文件名包含 Windows 不支持的字符（如 ?）
-                if (cloneErrorMsg.includes('warning: Clone succeeded, but checkout failed')) {
-                    this.logger.warn(`克隆成功但 checkout 失败（可能是文件名包含特殊字符）: ${item.fullName}`);
-                    // 仓库数据已下载，标记为成功
-                    return { success: true };
-                }
-                
-                // 其他克隆错误，继续抛出
-                throw cloneErr;
-            }
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? (e as Error & { stderr?: string }).stderr || e.message : String(e);
 
@@ -508,36 +602,169 @@ export class CloneService {
                 // 忽略清理失败
             }
 
-            // 自动重试：特定 Git 内部错误通常是瞬时性的（浅克隆竞态、refs 残留等）
-            // 删除目录后重新克隆一次即可恢复
-            if (RETRYABLE_CLONE_ERROR_PATTERNS.some((pattern) => errorMsg.includes(pattern))) {
-                this.logger.warn(`检测到可重试错误，自动重试克隆: ${item.fullName} | 错误: ${errorMsg.substring(0, 200)}`);
-                try {
-                    const retryArgs = ['-c', 'core.longpaths=true', '-c', 'core.protectNTFS=false', 'clone'];
-                    if (shallow) retryArgs.push('--depth', '1');
-                    retryArgs.push(item.cloneUrl!, localPath);
+            // 判断是否为可重试错误
+            const isRetryable = RETRYABLE_CLONE_ERROR_PATTERNS.some((pattern) => errorMsg.includes(pattern));
+            if (!isRetryable) {
+                return { success: false, error: errorMsg.substring(0, 2000) };
+            }
 
-                    await execFileAsync('git', retryArgs, {
-                        timeout: CLONE_TIMEOUT_MS,
-                        windowsHide: true,
-                    });
-                    return { success: true };
-                } catch (retryErr: unknown) {
-                    const retryErrorMsg = retryErr instanceof Error ? (retryErr as Error & { stderr?: string }).stderr || retryErr.message : String(retryErr);
-                    // 重试也失败了，清理目录并返回错误
-                    try {
-                        if (existsSync(localPath)) {
-                            await rm(localPath, { recursive: true, force: true });
-                        }
-                    } catch {
-                        // 忽略清理失败
+            // 确定重试次数：网络错误可以重试更多次
+            const isNetwork = isNetworkError(errorMsg);
+            const maxRetries = isNetwork ? MAX_NETWORK_RETRY_ATTEMPTS : 1;
+
+            this.logger.warn(
+                `检测到${isNetwork ? '网络' : 'Git内部'}错误，准备重试: ${item.fullName} | ` +
+                `错误: ${errorMsg.substring(0, 200)} | 最大重试次数: ${maxRetries}`
+            );
+
+            // 带指数退避的重试循环
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                // 网络错误需要等待后重试（指数退避）
+                if (isNetwork && attempt > 0) {
+                    const backoffMs = calculateBackoffDelay(attempt);
+                    this.logger.log(`等待 ${backoffMs}ms 后重试 (${attempt}/${maxRetries}): ${item.fullName}`);
+                    await delay(backoffMs);
+                }
+
+                try {
+                    this.logger.log(`开始重试 (${attempt + 1}/${maxRetries}): ${item.fullName}`);
+
+                    // 清理可能残留的目录
+                    if (existsSync(localPath)) {
+                        await rm(localPath, { recursive: true, force: true });
                     }
-                    return { success: false, error: `重试后仍失败: ${retryErrorMsg.substring(0, 1900)}` };
+
+                    // 重新创建父目录
+                    const parentDir = path.dirname(localPath);
+                    await mkdir(parentDir, { recursive: true });
+
+                    // 使用认证后的 URL 重试
+                    const result = await this.executeGitClone(finalUrl, localPath, shallow, item.fullName);
+                    if (result.success) {
+                        this.logger.log(`重试成功 (${attempt + 1}/${maxRetries}): ${item.fullName}`);
+                    }
+                    return result;
+
+                } catch (retryErr: unknown) {
+                    const retryErrorMsg = retryErr instanceof Error
+                        ? (retryErr as Error & { stderr?: string }).stderr || retryErr.message
+                        : String(retryErr);
+
+                    // 最后一次重试也失败了
+                    if (attempt === maxRetries - 1) {
+                        // 清理目录
+                        try {
+                            if (existsSync(localPath)) {
+                                await rm(localPath, { recursive: true, force: true });
+                            }
+                        } catch {
+                            // 忽略清理失败
+                        }
+                        return { success: false, error: `重试 ${maxRetries} 次后仍失败: ${retryErrorMsg.substring(0, 1900)}` };
+                    }
+
+                    // 还有重试机会，继续
+                    this.logger.warn(
+                        `重试失败 (${attempt + 1}/${maxRetries}): ${item.fullName} | ` +
+                        `错误: ${retryErrorMsg.substring(0, 200)}`
+                    );
                 }
             }
 
-            return { success: false, error: errorMsg.substring(0, 2000) };
+            // 理论上不会执行到这里，但作为兜底
+            return { success: false, error: '重试逻辑异常' };
         }
+    }
+
+    /**
+     * 执行 git clone 命令
+     *
+     * 构建克隆参数并执行，处理 checkout 警告。
+     *
+     * @param authenticatedUrl 已注入 Token 的 clone URL
+     * @param localPath        本地目标路径
+     * @param shallow          是否浅克隆
+     * @param fullName         仓库全名（用于日志）
+     * @returns 操作结果
+     *
+     * @callers executeClone()
+     * @depends git CLI
+     */
+    private async executeGitClone(
+        authenticatedUrl: string,
+        localPath: string,
+        shallow: boolean,
+        fullName: string | null,
+    ): Promise<{ success: boolean; error?: string }> {
+        // 构建 git clone 命令
+        // -c core.longpaths=true 解决 Windows 长路径限制（文件名超过 260 字符）
+        // -c core.protectNTFS=false 允许文件名包含特殊字符（如中文书名号《》）
+        const args = ['-c', 'core.longpaths=true', '-c', 'core.protectNTFS=false', 'clone'];
+        if (shallow) args.push('--depth', '1');
+        args.push(authenticatedUrl, localPath);
+
+        // 使用 spawn 替代 execFile，以便在超时时杀死整个进程树
+        // spawn 返回的 ChildProcess 对象可以用于 killProcessTree
+        return new Promise<{ success: boolean; error?: string }>((resolve, reject) => {
+            let stderr = '';
+            let stdout = '';
+            let killed = false;
+
+            const child = spawn('git', args, {
+                stdio: ['ignore', 'pipe', 'pipe'],
+                // Unix: 创建新的进程组，便于杀死整个进程树
+                // Windows: detached 选项无效，但不影响功能
+                detached: process.platform !== 'win32',
+                windowsHide: true,
+            });
+
+            // 收集输出
+            child.stdout?.on('data', (data: Buffer) => {
+                stdout += data.toString();
+            });
+            child.stderr?.on('data', (data: Buffer) => {
+                stderr += data.toString();
+            });
+
+            // 设置超时，在超时时杀死整个进程树
+            const timer = setTimeout(() => {
+                killed = true;
+                killProcessTree(child);
+            }, CLONE_TIMEOUT_MS);
+
+            child.on('close', (code) => {
+                clearTimeout(timer);
+
+                // 如果是被超时杀死的
+                if (killed) {
+                    reject(new Error(`git clone 超时（${CLONE_TIMEOUT_MS / 1000}秒）: ${fullName}`));
+                    return;
+                }
+
+                const errorMsg = stderr || stdout;
+
+                // 检查是否是 checkout 失败（克隆成功但 checkout 失败）
+                // 这种情况通常是因为文件名包含 Windows 不支持的字符（如 ?）
+                if (errorMsg.includes('warning: Clone succeeded, but checkout failed')) {
+                    this.logger.warn(`克隆成功但 checkout 失败（可能是文件名包含特殊字符）: ${fullName}`);
+                    resolve({ success: true });
+                    return;
+                }
+
+                // 其他错误
+                if (code !== 0) {
+                    reject(new Error(errorMsg || `git clone 失败，退出码: ${code}`));
+                    return;
+                }
+
+                resolve({ success: true });
+            });
+
+            child.on('error', (err) => {
+                clearTimeout(timer);
+                reject(err);
+            });
+        });
     }
 
     /**
@@ -1073,7 +1300,8 @@ export class CloneService {
     /**
      * 删除指定克隆任务
      *
-     * 删除任务及其所有子项记录。不允许删除正在执行的任务。
+     * 删除任务及其所有子项记录。
+     * 如果任务正在执行中，会强制停止并释放锁。
      *
      * @param taskId 任务 ID
      * @returns 操作结果
@@ -1091,16 +1319,17 @@ export class CloneService {
             return { success: false, message: '任务不存在' };
         }
 
-        // 不允许删除正在执行的任务
+        // 如果任务正在执行中，强制停止并释放锁
         if (task.status === 'PROCESSING' && this.running && this.currentTaskId === BigInt(taskId)) {
-            return { success: false, message: '任务正在执行中，无法删除' };
+            this.logger.warn(`删除正在执行的任务，强制释放锁: taskId=${taskId}`);
+            this.forceReleaseLock();
         }
 
         // 删除子项和任务记录
         await this.prisma.cloneTaskItem.deleteMany({ where: { taskId: BigInt(taskId) } });
         await this.prisma.cloneTask.delete({ where: { id: BigInt(taskId) } });
 
-        this.logger.log(`克隆任务已删除: taskId=${taskId}`);
+        this.logger.log(`克隆任务已删除: taskId=${taskId} previousStatus=${task.status}`);
         return { success: true, taskId, message: '任务已删除' };
     }
 

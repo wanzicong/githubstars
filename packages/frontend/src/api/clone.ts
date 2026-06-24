@@ -1,11 +1,15 @@
 import api from './request'
 
+/** 镜像代理源类型 */
+export type MirrorSource = 'gh-proxy' | 'gitclone' | 'direct'
+
 /** 创建克隆任务 */
 export async function createCloneTask(params: {
     repoIds: number[]
     targetDir: string
     concurrency: 5 | 10 | 20
     shallow?: boolean
+    mirrorSource?: MirrorSource
 }): Promise<{ success: boolean; taskId?: number; message?: string }> {
     const { data } = await api.post('/api/clone', params)
     return data

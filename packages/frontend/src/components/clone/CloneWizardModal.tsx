@@ -1,12 +1,19 @@
 import { useState } from 'react'
-import { Modal, Steps, Table, Radio, Switch, Button, Space, Tag, Typography, App } from 'antd'
-import { FolderOutlined, ThunderboltOutlined, CheckCircleOutlined } from '@ant-design/icons'
-import { createCloneTask } from '@/api/clone'
+import { Modal, Steps, Table, Radio, Switch, Button, Space, Tag, Typography, App, Tooltip } from 'antd'
+import { FolderOutlined, ThunderboltOutlined, CheckCircleOutlined, CloudOutlined, QuestionCircleOutlined } from '@ant-design/icons'
+import { createCloneTask, type MirrorSource } from '@/api/clone'
 import { CLONE_CONCURRENCY_OPTIONS, DEFAULT_CLONE_CONCURRENCY } from '@/constants'
 import DirectoryPicker from '@/components/common/DirectoryPicker'
 import type { GithubRepo } from '@/types'
 
 const { Text } = Typography
+
+/** 镜像源选项 */
+const MIRROR_OPTIONS = [
+    { value: 'gh-proxy' as MirrorSource, label: 'gh-proxy.com', description: '国内快速代理，推荐' },
+    { value: 'gitclone' as MirrorSource, label: 'gitclone.com', description: '知名镜像服务' },
+    { value: 'direct' as MirrorSource, label: '不加速', description: '直连 GitHub，需要网络通畅' },
+]
 
 interface CloneWizardModalProps {
     open: boolean
@@ -26,6 +33,7 @@ export default function CloneWizardModal({ open, onClose, selectedRepos, onTaskC
     const [targetDir, setTargetDir] = useState('')
     const [concurrency, setConcurrency] = useState<5 | 10 | 20>(DEFAULT_CLONE_CONCURRENCY as 5 | 10 | 20)
     const [shallow, setShallow] = useState(true)
+    const [mirrorSource, setMirrorSource] = useState<MirrorSource>('gh-proxy')
     const [selectedIds, setSelectedIds] = useState<number[]>(selectedRepos.map((r) => r.id))
     const [loading, setLoading] = useState(false)
 
@@ -51,6 +59,7 @@ export default function CloneWizardModal({ open, onClose, selectedRepos, onTaskC
                 targetDir: targetDir.trim(),
                 concurrency,
                 shallow,
+                mirrorSource,
             })
             if (result.success && result.taskId) {
                 message.success(result.message || '克隆任务已创建')
@@ -162,6 +171,34 @@ export default function CloneWizardModal({ open, onClose, selectedRepos, onTaskC
                                 {shallow ? '仅下载最新提交，速度快' : '下载完整历史，体积大'}
                             </Text>
                         </div>
+                        <div>
+                            <Space>
+                                <Text strong>
+                                    <CloudOutlined /> 加速代理
+                                </Text>
+                                <Tooltip title="国内访问 GitHub 较慢，使用镜像代理可加速克隆。私有仓库需配置 Token，不走代理。">
+                                    <QuestionCircleOutlined style={{ color: '#999' }} />
+                                </Tooltip>
+                            </Space>
+                            <Radio.Group
+                                value={mirrorSource}
+                                onChange={(e) => setMirrorSource(e.target.value)}
+                                style={{ marginTop: 8 }}
+                            >
+                                <Space direction="vertical">
+                                    {MIRROR_OPTIONS.map((opt) => (
+                                        <Radio key={opt.value} value={opt.value}>
+                                            <Space>
+                                                <Text>{opt.label}</Text>
+                                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                                    {opt.description}
+                                                </Text>
+                                            </Space>
+                                        </Radio>
+                                    ))}
+                                </Space>
+                            </Radio.Group>
+                        </div>
                     </Space>
                 )
             case 2:
@@ -179,6 +216,7 @@ export default function CloneWizardModal({ open, onClose, selectedRepos, onTaskC
                                 { key: 'dir', label: '目标目录', value: targetDir },
                                 { key: 'concurrency', label: '并发数量', value: `${concurrency} 个` },
                                 { key: 'shallow', label: '浅克隆', value: shallow ? '是' : '否' },
+                                { key: 'mirror', label: '加速代理', value: MIRROR_OPTIONS.find((o) => o.value === mirrorSource)?.label || '不加速' },
                             ]}
                             columns={[
                                 { title: '配置项', dataIndex: 'label', key: 'label', width: 120 },

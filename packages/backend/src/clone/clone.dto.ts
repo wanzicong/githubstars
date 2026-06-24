@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { CLONE_CONCURRENCY_OPTIONS } from './clone.constants';
+import { CLONE_CONCURRENCY_OPTIONS, GITHUB_MIRROR_SOURCES } from './clone.constants';
+
+/** 镜像代理源名称列表（用于验证） */
+const MIRROR_SOURCE_NAMES = GITHUB_MIRROR_SOURCES.map((s) => s.name) as [string, ...string[]];
 
 /** 创建克隆任务请求验证 */
 export const CreateCloneTaskSchema = z.object({
@@ -11,6 +14,8 @@ export const CreateCloneTaskSchema = z.object({
         z.literal(CLONE_CONCURRENCY_OPTIONS[2]),
     ]).default(CLONE_CONCURRENCY_OPTIONS[0]),
     shallow: z.boolean().optional().default(true),
+    /** 镜像代理源名称，为空或 'direct' 表示不使用代理 */
+    mirrorSource: z.enum(MIRROR_SOURCE_NAMES).optional().default('direct'),
 });
 
 export type CreateCloneTaskDto = z.infer<typeof CreateCloneTaskSchema>;

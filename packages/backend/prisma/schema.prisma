@@ -170,6 +170,7 @@ model CloneTask {
   targetDir      String    @map("target_dir") @db.VarChar(1000)
   concurrency    Int       @default(5) @map("concurrency")
   shallow        Boolean   @default(true) @map("shallow") @db.TinyInt
+  mirrorSource   String?   @default("direct") @map("mirror_source") @db.VarChar(50)
   totalItems     Int       @default(0) @map("total_items")
   completedItems Int       @default(0) @map("completed_items")
   failedItems    Int       @default(0) @map("failed_items")

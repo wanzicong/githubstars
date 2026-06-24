@@ -93,6 +93,24 @@ export default function Clone() {
         }
     }, [activeTaskId])
 
+    const handleDeleteTask = useCallback(async () => {
+        if (!activeTaskId) return
+        try {
+            const result = await deleteCloneTask(activeTaskId)
+            if (result.success) {
+                message.success(result.message || '任务已删除')
+                polling.stop()
+                setProgressOpen(false)
+                setActiveTaskId(null)
+                loadTasks()
+            } else {
+                message.error(result.message || '删除失败')
+            }
+        } catch {
+            message.error('删除失败')
+        }
+    }, [activeTaskId, polling, loadTasks])
+
     const handleCloseProgress = () => {
         polling.stop()
         setProgressOpen(false)
@@ -180,11 +198,10 @@ export default function Clone() {
                         详情
                     </Button>
                     {(record.status === 'FAILED' || record.status === 'PARTIAL') && (
-                        <Button
-                            size="small"
-                            type="link"
-                            icon={<ReloadOutlined />}
-                            onClick={async () => {
+                        <Popconfirm
+                            title="确定要重试失败项吗？"
+                            description="将重新执行所有失败的克隆项"
+                            onConfirm={async () => {
                                 try {
                                     const res = await retryCloneFailed(record.taskId)
                                     if (res.success) {
@@ -197,16 +214,19 @@ export default function Clone() {
                                     message.error('重试失败')
                                 }
                             }}
+                            okText="重试"
+                            cancelText="取消"
                         >
-                            重试
-                        </Button>
+                            <Button size="small" type="link" icon={<ReloadOutlined />}>
+                                重试
+                            </Button>
+                        </Popconfirm>
                     )}
                     {(record.status === 'PROCESSING' || record.status === 'COMPLETED' || record.status === 'FAILED' || record.status === 'PARTIAL') && (
-                        <Button
-                            size="small"
-                            type="link"
-                            icon={<UndoOutlined />}
-                            onClick={async () => {
+                        <Popconfirm
+                            title="确定要重置此任务吗？"
+                            description={record.status === 'PROCESSING' ? '任务正在运行中，重置后将强制停止并重新执行。' : '将删除失败项目录并重置为待执行状态，是否继续？'}
+                            onConfirm={async () => {
                                 try {
                                     const res = await resetCloneTask(record.taskId)
                                     if (res.success) {
@@ -219,9 +239,13 @@ export default function Clone() {
                                     message.error('重置失败')
                                 }
                             }}
+                            okText="重置"
+                            cancelText="取消"
                         >
-                            重置
-                        </Button>
+                            <Button size="small" type="link" icon={<UndoOutlined />}>
+                                重置
+                            </Button>
+                        </Popconfirm>
                     )}
                     {record.status !== 'PROCESSING' && (
                         <Popconfirm
@@ -298,6 +322,7 @@ export default function Clone() {
                 onClose={handleCloseProgress}
                 onRetryFailed={handleRetryFailed}
                 onRetryItem={handleRetryItem}
+                onDelete={handleDeleteTask}
             />
         </div>
     )

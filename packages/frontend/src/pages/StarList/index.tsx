@@ -36,7 +36,7 @@ import CloneWizardModal from '../../components/clone/CloneWizardModal'
 import CloneProgressModal from '../../components/clone/CloneProgressModal'
 import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../../types'
 import type { CloneTaskProgress } from '../../api/clone'
-import { getCloneTaskProgress, retryCloneFailed } from '../../api/clone'
+import { getCloneTaskProgress, retryCloneFailed, retryCloneItem, deleteCloneTask } from '../../api/clone'
 import { usePolling } from '../../hooks/usePolling'
 import { useStarListParams, TIME_PRESETS } from './hooks/useStarListParams'
 import { INITIAL_TASK_PROGRESS, type TaskProgress } from '../../constants'
@@ -323,6 +323,37 @@ export default function StarList() {
                 message.info(result.message || '没有失败项')
             }
         } catch { message.error('重试失败') }
+    }, [cloneTaskId, clonePolling])
+
+    const handleRetryCloneItem = useCallback(async (fullName: string) => {
+        if (!cloneTaskId) return
+        try {
+            const result = await retryCloneItem(cloneTaskId, fullName)
+            if (result.success) {
+                message.success(result.message || '已重置')
+                // 刷新进度
+                const progress = await getCloneTaskProgress(cloneTaskId)
+                setCloneProgress(progress)
+            } else {
+                message.info(result.message || '重试失败')
+            }
+        } catch { message.error('重试失败') }
+    }, [cloneTaskId])
+
+    const handleDeleteCloneTask = useCallback(async () => {
+        if (!cloneTaskId) return
+        try {
+            const result = await deleteCloneTask(cloneTaskId)
+            if (result.success) {
+                message.success(result.message || '任务已删除')
+                clonePolling.stop()
+                setCloneProgressOpen(false)
+                setCloneProgress(null)
+                setCloneTaskId(null)
+            } else {
+                message.error(result.message || '删除失败')
+            }
+        } catch { message.error('删除失败') }
     }, [cloneTaskId, clonePolling])
 
     // ── 跨页全选 ──
@@ -711,6 +742,8 @@ export default function StarList() {
                 progress={cloneProgress}
                 onClose={() => { clonePolling.stop(); setCloneProgressOpen(false) }}
                 onRetryFailed={handleRetryCloneFailed}
+                onRetryItem={handleRetryCloneItem}
+                onDelete={handleDeleteCloneTask}
             />
 
             {/* 翻译管理面板 */}

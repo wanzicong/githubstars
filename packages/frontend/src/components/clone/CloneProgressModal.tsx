@@ -1,5 +1,5 @@
-import { Modal, Progress, Tag, Space, Button, Typography, Collapse, Spin, Table, Tooltip } from 'antd'
-import { ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, UndoOutlined } from '@ant-design/icons'
+import { Modal, Progress, Tag, Space, Button, Typography, Collapse, Spin, Table, Tooltip, Popconfirm } from 'antd'
+import { ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, UndoOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { CloneTaskProgress, CloneTaskItem } from '@/api/clone'
 
 const { Text } = Typography
@@ -10,6 +10,7 @@ interface CloneProgressModalProps {
     onClose: () => void
     onRetryFailed?: () => void
     onRetryItem?: (fullName: string) => void
+    onDelete?: () => void
 }
 
 /**
@@ -17,7 +18,7 @@ interface CloneProgressModalProps {
  *
  * 展示克隆任务的实时进度：圆环百分比 + 统计标签 + 任务详情列表
  */
-export default function CloneProgressModal({ open, progress, onClose, onRetryFailed, onRetryItem }: CloneProgressModalProps) {
+export default function CloneProgressModal({ open, progress, onClose, onRetryFailed, onRetryItem, onDelete }: CloneProgressModalProps) {
     const { status, totalItems = 0, completedItems = 0, failedItems = 0, progress: percent = 0 } = progress || {}
     const isRunning = status === 'PROCESSING' || status === 'PENDING'
     const isCompleted = status === 'COMPLETED'
@@ -35,13 +36,35 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
             onCancel={onClose}
             width={520}
             footer={
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                    <Button onClick={onClose}>{isRunning ? '后台运行' : '关闭'}</Button>
-                    {canReset && (
-                        <Button type="primary" icon={<ReloadOutlined />} onClick={onRetryFailed}>
-                            重置任务
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Popconfirm
+                        title="确定删除此任务？"
+                        description={isRunning ? '任务正在运行中，删除后将强制停止。' : '删除后无法恢复，是否继续？'}
+                        onConfirm={onDelete}
+                        okText="删除"
+                        cancelText="取消"
+                        okButtonProps={{ danger: true }}
+                    >
+                        <Button danger icon={<DeleteOutlined />}>
+                            删除任务
                         </Button>
-                    )}
+                    </Popconfirm>
+                    <Space>
+                        <Button onClick={onClose}>{isRunning ? '后台运行' : '关闭'}</Button>
+                        {canReset && (
+                            <Popconfirm
+                                title="确定重置任务？"
+                                description="将删除所有失败项的目录并重新执行，是否继续？"
+                                onConfirm={onRetryFailed}
+                                okText="重置"
+                                cancelText="取消"
+                            >
+                                <Button type="primary" icon={<ReloadOutlined />}>
+                                    重置任务
+                                </Button>
+                            </Popconfirm>
+                        )}
+                    </Space>
                 </div>
             }
             maskClosable={!isRunning}
@@ -136,16 +159,23 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
                                             width: 80,
                                             render: (_: any, record: CloneTaskItem) => (
                                                 record.status !== 'COMPLETED' && record.status !== 'PROCESSING' && (
-                                                    <Tooltip title="重试此项（会删除原目录）">
-                                                        <Button
-                                                            type="link"
-                                                            size="small"
-                                                            icon={<UndoOutlined />}
-                                                            onClick={() => onRetryItem?.(record.fullName)}
-                                                        >
-                                                            重试
-                                                        </Button>
-                                                    </Tooltip>
+                                                    <Popconfirm
+                                                        title="确定重试此项？"
+                                                        description="将删除原目录并重新克隆，是否继续？"
+                                                        onConfirm={() => onRetryItem?.(record.fullName)}
+                                                        okText="重试"
+                                                        cancelText="取消"
+                                                    >
+                                                        <Tooltip title="重试此项（会删除原目录）">
+                                                            <Button
+                                                                type="link"
+                                                                size="small"
+                                                                icon={<UndoOutlined />}
+                                                            >
+                                                                重试
+                                                            </Button>
+                                                        </Tooltip>
+                                                    </Popconfirm>
                                                 )
                                             ),
                                         },
