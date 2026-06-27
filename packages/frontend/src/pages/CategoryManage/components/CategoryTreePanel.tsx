@@ -1,12 +1,9 @@
 import { useState, useCallback } from 'react'
-import { Card, Tree, Button, Space, Dropdown, Empty, Spin, Typography } from 'antd'
+import { Card, Tree, Button, Space, Dropdown, Empty, Spin } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, ExpandOutlined, CompressOutlined } from '@ant-design/icons'
-import type { MenuInfo } from 'rc-menu/lib/interface'
 import type { TreeProps } from 'antd'
 import type { UseCategoryTreeReturn } from '../hooks/useCategoryTree'
 import CategoryFormModal from './CategoryFormModal'
-
-const { Text } = Typography
 
 interface CategoryTreePanelProps {
     tree: UseCategoryTreeReturn
@@ -32,7 +29,7 @@ export default function CategoryTreePanel({ tree }: CategoryTreePanelProps) {
         setFormOpen(false)
     }, [formMode, formParentId, editingId, handleCreateCategory, handleUpdateCategory])
 
-    const handleMenuClick = useCallback((info: MenuInfo) => {
+    const handleMenuClick = useCallback((info: { key: string }) => {
         const nodeId = contextMenuNodeId!
         switch (info.key) {
             case 'add-child':

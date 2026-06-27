@@ -20,7 +20,6 @@ interface DirectoryPickerProps {
  */
 export default function DirectoryPicker({ value, onChange, placeholder }: DirectoryPickerProps) {
     const [recentDirs, setRecentDirs] = useState<string[]>([])
-    const [loading, setLoading] = useState(false)
     const { pickDirectory, isSupported: isElectronEnv } = useDirectoryPicker()
 
     useEffect(() => {
@@ -28,7 +27,6 @@ export default function DirectoryPicker({ value, onChange, placeholder }: Direct
     }, [])
 
     const loadRecentDirs = async () => {
-        setLoading(true)
         try {
             const res = await getRecentCloneDirectories()
             if (res.success) {
@@ -36,8 +34,6 @@ export default function DirectoryPicker({ value, onChange, placeholder }: Direct
             }
         } catch {
             // 静默失败，不影响主流程
-        } finally {
-            setLoading(false)
         }
     }
 
