@@ -24,8 +24,8 @@
     "experimentalDecorators": true,
 
     // ── 构建输出 ──
+    // 注意：baseUrl 已弃用（将在 TypeScript 7.0 移除），且后端未使用 paths，故不设置
     "outDir": "./dist",
-    "baseUrl": "./",
     "incremental": true,
 
     // ── strict 检查（因现有代码量较大，暂时只启用 strictNullChecks）──
