@@ -63,8 +63,8 @@ describe('CloneService', () => {
             });
             prisma.cloneTaskItem.createMany.mockResolvedValue({ count: 2 });
 
-            const result = await service.createTask({
-                repoIds: [1, 2], targetDir: '/tmp/clone', concurrency: 5, shallow: true,
+                        const result = await service.createTask({
+                repoIds: [1, 2], targetDir: '/tmp/clone', concurrency: 5, shallow: true, mirrorSource: 'direct',
             });
 
             expect(result.success).toBe(true);
@@ -76,8 +76,8 @@ describe('CloneService', () => {
         it('无匹配仓库时应返回失败', async () => {
             prisma.githubRepo.findMany.mockResolvedValue([]);
 
-            const result = await service.createTask({
-                repoIds: [999], targetDir: '/tmp/clone', concurrency: 5, shallow: true,
+                        const result = await service.createTask({
+                repoIds: [999], targetDir: '/tmp/clone', concurrency: 5, shallow: true, mirrorSource: 'direct',
             });
 
             expect(result.success).toBe(false);

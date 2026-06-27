@@ -1,23 +1,36 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // 注意：不使用 extends 继承 tsconfig.base.json，因为 extends 会改变 TypeScript
+  // 的项目解析行为，意外暴露 undici-types 中 Response.json() 返回 Promise<unknown>
+  // 的类型错误（TS18046）。保持自包含配置，手动从 base 同步常用选项。
   "compilerOptions": {
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "resolvePackageJsonExports": true,
+    // ── 基础共享选项（与 tsconfig.base.json 保持一致）──
+    // 注意：不设置 lib 字段，使用 TypeScript 默认值（含 DOM 类型），
+    // 否则 Response.json() 会使用 undici-types 的 Promise<unknown> 签名
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "skipLibCheck": true,
     "esModuleInterop": true,
+    "resolveJsonModule": true,
     "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
     "declaration": true,
-    "removeComments": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    // ── NestJS 装饰器必需 ──
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "allowSyntheticDefaultImports": true,
-    "target": "ES2023",
-    "sourceMap": true,
+
+    // ── 构建输出 ──
     "outDir": "./dist",
     "baseUrl": "./",
     "incremental": true,
-    "skipLibCheck": true,
+
+    // ── strict 检查（因现有代码量较大，暂时只启用 strictNullChecks）──
     "strictNullChecks": true,
-    "forceConsistentCasingInFileNames": true,
+    // TODO: 逐步修复代码后，将以下三项改为 true，最终启用 "strict": true
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
