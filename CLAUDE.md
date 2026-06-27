@@ -243,6 +243,141 @@ it.skip('需要网络，跳过', () => {
 - [ ] 输出的 error 列表必须逐条确认已修复
 - [ ] 如果有 agent 并行修复，必须汇总后统一验证
 
+## 第四次复盘（2026-06-28）
+
+### 本次修复的典型问题（克隆模块）
+
+| 问题类型 | 数量 | 根因 | 修复方式 |
+|---------|------|------|---------|
+| 信号量泄漏（resetSemaphore 与运行中 processItem 冲突） | 1 处 | 共享可变状态（semaphore/waitQueue）无代际隔离，forceReleaseLock 破坏串行假设 | 引入 generation 代际计数器，旧代际 processItem 自动跳过信号量释放和 DB 写入 |
+| 超时后台操作未取消（Promise.race 不取消内部 Promise） | 1 处 | 低估 Promise.race 副作用——超时 reject 后内部 async 操作仍在运行，完成后继续写 DB | 代际变更后禁止 recordItemResult，超时与正常完成在 finally 统一处理 |
+| Git Token 命令行参数泄露 | 1 处 | 直接在 clone URL 中注入 Token，作为 spawn 参数传递（Windows 上其他进程可读） | 改用 GIT_ASKPASS 环境变量 + 临时脚本，Token 不在命令行参数中出现 |
+| 终态计算逻辑重复 | 3 处 | finishTask/getTaskProgress/getRecentTasks 各自实现一套终态判断 | 提取 `computeFinalTaskStatus()` 静态方法统一调用 |
+| TOCTOU（existsSync + rm 非原子） | 1 处 | 习惯性先检查再删除，未意识到 `rm({ force: true })` 已容错 | 去掉多余 existsSync 检查 |
+
+### 根因总结
+
+1. **共享可变状态缺乏版本隔离** — `semaphore`、`waitQueue`、`running`、`targetDir`、`currentTaskId` 全部是实例属性，多任务生命周期交叠时（forceReleaseLock + scheduler 重新 pick up）没有版本/代际机制隔离不同轮次的任务。这是最根本的架构缺陷。
+
+2. **Promise 不可取消的认知不足** — `Promise.race` 超时后误以为"结束了"，没意识到内部 async 操作仍在事件循环中运行，完成后会继续操作 DB。JavaScript 的 Promise 没有内置取消机制，必须在架构层面补偿（代际检查 / AbortController）。
+
+3. **进程创建的安全审计缺失** — `spawn('git', args)` 传递了含 Token 的 URL，没有从"命令行参数可视性"角度审查。Windows 上其他进程可通过 WMI 读取命令行参数。
+
+4. **提取公共方法意识不足** — 三处相同的终态判断逻辑各自独立实现，没有第一时间提取为静态方法。和"重复代码"问题同源。
+
+5. **Node.js fs API 容错特性了解不足** — `rm({ force: true })` 在文件不存在时静默忽略错误，无需前置 `existsSync` 检查。
+
+### 对 AI 助手的新约束
+
+#### P0: 异步生命周期隔离原则（新增）
+
+设计异步系统时，所有共享可变状态必须有生命周期隔离机制：
+
+- [ ] 是否存在跨 async 操作共享的可变状态（计数器、队列、锁）？
+- [ ] 多轮操作的生命周期是否会交叠（如：强制重置 + 后台未完成操作）？
+- [ ] 如果会交叠，是否引入了代际/版本号来隔离？
+
+```typescript
+// BAD — 共享 semaphore 无隔离，reset 后旧操作污染新任务
+private semaphore = 0;
+async processItem(item) {
+    await this.acquire();
+    try { await doWork(item); } finally { this.release(); }
+}
+reset() { this.semaphore = 0; this.waitQueue = []; }
+
+// GOOD — 代际隔离，旧代际的操作不再影响新任务
+private generation = 0;
+async processItem(item) {
+    const capturedGen = this.generation;
+    await this.acquire();
+    try {
+        await doWork(item);
+        if (this.generation !== capturedGen) return; // 代际变了，跳过
+    } finally {
+        if (this.generation === capturedGen) this.release();
+    }
+}
+forceReleaseLock() { this.generation++; ... }
+```
+
+#### P1: Promise 超时必须取消内部操作
+
+使用 `Promise.race` 做超时时，必须检查：
+
+- [ ] 超时 reject 后，内部 Promise 是否仍在运行？
+- [ ] 内部操作完成后是否会操作共享状态（DB 写入、文件系统等）？
+- [ ] 如果有副作用，是否通过代际检查 / AbortController 真正取消了操作？
+
+**反面案例：**
+```typescript
+// BAD — 超时后内部操作仍在运行，完成后继续写 DB
+await Promise.race([
+    this.processItemInner(item),   // 10分钟后才完成
+    new Promise((_, reject) => setTimeout(() => reject(new Error('超时')), 5000)),
+]); // 超时 reject 了，但 processItemInner 还在运行，5分钟后写 DB
+
+// GOOD — 代际检查阻止旧操作写 DB
+const capturedGen = this.generation;
+try {
+    await withTimeout(this.processItemInner(item, capturedGen), TIMEOUT, msg);
+} finally {
+    if (this.generation === capturedGen) this.release();
+}
+// processItemInner 中：
+if (this.generation !== capturedGen) return; // 跳过 DB 写入
+```
+
+#### P1: 进程创建安全审查（新增）
+
+所有 `spawn`/`exec`/`execFile` 调用必须检查：
+
+- [ ] 命令行参数中是否包含敏感信息（Token、密码、API Key）？
+- [ ] 是否可通过环境变量、临时文件、stdin 等方式替代命令行参数传递凭据？
+- [ ] Windows 平台上是否考虑了命令行参数可视性问题？
+
+**反面案例：**
+```typescript
+// BAD — Token 在命令行参数中，Windows 上可被其他进程读取
+const url = `https://x-access-token:${token}@github.com/owner/repo.git`;
+spawn('git', ['clone', url, localPath]);
+
+// GOOD — 通过 GIT_ASKPASS 环境变量传递，Token 不在命令行出现
+const env = { ...process.env, GIT_ASKPASS: askpassScript, GIT_TERMINAL_PROMPT: '0' };
+spawn('git', ['clone', cloneUrl, localPath], { env });
+```
+
+#### P2: 三处重复必须提取
+
+同一逻辑出现 3 次及以上，**必须**提取为公共方法：
+
+- [ ] 当前修改中是否有相同逻辑出现在 3 个以上位置？
+- [ ] 提取的方法是否有清晰命名和参数？
+- [ ] 提取后所有调用点是否已替换？
+
+**反面案例：**
+```typescript
+// BAD — 三处各自实现终态判断
+// finishTask: if (failed === 0) COMPLETED else if (completed === 0) FAILED else PARTIAL
+// getTaskProgress: 同上
+// getRecentTasks: 同上
+
+// GOOD
+static computeFinalTaskStatus(completed: number, failed: number): string {
+    if (failed === 0) return 'COMPLETED';
+    if (completed === 0) return 'FAILED';
+    return 'PARTIAL';
+}
+```
+
+#### P2: fs API 容错意识
+
+使用 Node.js `fs` 模块时，优先利用 API 自身的容错能力：
+
+- [ ] `rm({ force: true })` — 文件/目录不存在时静默忽略，无需前置 existsSync
+- [ ] `mkdir({ recursive: true })` — 目录已存在时不报错，无需前置 existsSync
+- [ ] 禁止"检查 → 操作"的 TOCTOU 模式，除非业务需要区分"不存在"和"其他错误"
+
 ### 编码约束（第三次更新）
 
 执行代码变更后，必须运行 `npm run lint` 确保以下 sonarjs 规则零 error：
