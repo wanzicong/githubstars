@@ -57,10 +57,12 @@ export function parseLinkHeader(linkHeader: string): PaginationLinks {
     const parts = linkHeader.split(',');
     for (const part of parts) {
         const trimmed = part.trim();
-        const match = /<([^>]+)>;\s*rel="([^"]+)"/.exec(trimmed);
-        if (!match) continue;
-        const url = match[1];
-        const rel = match[2].toLowerCase();
+        const urlEnd = trimmed.indexOf('>');
+        if (urlEnd === -1) continue;
+        const url = trimmed.substring(1, urlEnd);
+        const relMatch = /rel="([^"]+)"/.exec(trimmed);
+        if (!relMatch) continue;
+        const rel = relMatch[1].toLowerCase();
         switch (rel) {
             case 'first':
                 links.first = url;

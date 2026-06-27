@@ -96,7 +96,7 @@ describe('sync+config+author (e2e)', () => {
                 .send({ page: 1, size: 10, keyword: 'alice' })
                 .expect(201);
             const body = res.body;
-            expect(body.data.length).toBe(1);
+            expect(body.data).toHaveLength(1);
             expect(body.data[0].ownerName).toBe('alice');
         });
     });

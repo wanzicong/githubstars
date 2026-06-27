@@ -163,7 +163,10 @@ export default function Clone() {
                 const total = record.totalItems
                 const processed = record.completedItems + record.failedItems
                 const percent = total > 0 ? Math.round((processed * 100) / total) : 0
-                const status = record.status === 'COMPLETED' ? 'success' : record.status === 'FAILED' ? 'exception' : 'active'
+                let status: string
+                if (record.status === 'COMPLETED') status = 'success'
+                else if (record.status === 'FAILED') status = 'exception'
+                else status = 'active'
                 return (
                     <div>
                         <Progress percent={percent} size="small" status={status as any} />

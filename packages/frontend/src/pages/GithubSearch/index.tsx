@@ -170,11 +170,10 @@ export default function GithubSearch() {
             </div>
 
             <Spin spinning={loading}>
-                {!searched ? (
-                    <Empty description='输入关键词搜索 GitHub 仓库' style={{ marginTop: 80 }} />
-                ) : results.length === 0 && !loading ? (
-                    <Empty description='未找到相关仓库' style={{ marginTop: 80 }} />
-                ) : (
+                {(() => {
+                    if (!searched) return <Empty description='输入关键词搜索 GitHub 仓库' style={{ marginTop: 80 }} />
+                    if (results.length === 0 && !loading) return <Empty description='未找到相关仓库' style={{ marginTop: 80 }} />
+                    return (
                     <>
                         <div style={{ marginBottom: 16 }}>
                             <Text type='secondary'>共找到 {total} 个仓库</Text>
@@ -286,7 +285,7 @@ export default function GithubSearch() {
                             </div>
                         )}
                     </>
-                )}
+                )})()}
             </Spin>
         </div>
     )

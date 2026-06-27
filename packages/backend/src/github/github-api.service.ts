@@ -91,6 +91,55 @@ export class GithubApiService {
      * @param existingCount 已获取数量（用于判断是否可容错）
      * @returns 页面结果，或 null 表示应停止翻页
      */
+    /**
+     * 执行 GitHub API 网络请求
+     *
+     * @returns Response 对象，网络异常时根据 existingCount 决定返回 null 或抛出
+     */
+    private async executeFetch(
+        url: string,
+        headers: Record<string, string>,
+        currentPage: number,
+        existingCount: number,
+    ): Promise<Response | null> {
+        try {
+            return await fetch(url, { headers });
+        } catch (fetchErr) {
+            const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+            this.logger.error(`网络请求失败! 第${currentPage}页, 错误: ${errMsg}`);
+            if (existingCount > 0) return null;
+            throw new Error(`GitHub API 网络请求失败: ${errMsg}`);
+        }
+    }
+
+    /**
+     * 校验 API 响应状态码，非 200 时按容错策略处理
+     */
+    private async handleNonOkResponse(response: Response, currentPage: number, existingCount: number): Promise<boolean> {
+        if (response.status === 200) return true;
+        const errorBody = await response.text().catch(() => '(无法读取响应体)');
+        this.logger.error(`API 响应异常! 第${currentPage}页, 状态码=${response.status}`);
+        if (existingCount > 0) return false;
+        throw new Error(`GitHub API 请求失败 (HTTP ${response.status}): ${errorBody.substring(0, 200)}`);
+    }
+
+    /**
+     * 解析 JSON 响应体为数组
+     *
+     * @returns 解析后的数组，解析异常时根据 existingCount 决定返回 null 或抛出
+     */
+    private async parsePageItems(rawText: string, currentPage: number, existingCount: number): Promise<Record<string, any>[] | null> {
+        try {
+            const items = JSON.parse(rawText);
+            if (!Array.isArray(items)) throw new Error('响应体不是 JSON 数组');
+            return items;
+        } catch (parseErr) {
+            this.logger.error(`JSON 解析失败! 第${currentPage}页: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+            if (existingCount > 0) return null;
+            throw new Error(`GitHub API 响应 JSON 解析失败: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+        }
+    }
+
     private async fetchStarredPage(
         url: string,
         token: string,
@@ -101,33 +150,15 @@ export class GithubApiService {
         this.logger.log(`>>>>> 正在获取第 ${currentPage} 页...`);
 
         const headers = buildGithubHeaders(token, 'application/vnd.github.v3.star+json');
-        let response: Response;
-        try {
-            response = await fetch(url, { headers });
-        } catch (fetchErr) {
-            const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-            this.logger.error(`网络请求失败! 第${currentPage}页, 错误: ${errMsg}`);
-            if (existingCount > 0) return null;
-            throw new Error(`GitHub API 网络请求失败: ${errMsg}`);
-        }
+        const response = await this.executeFetch(url, headers, currentPage, existingCount);
+        if (!response) return null;
 
-        if (response.status !== 200) {
-            const errorBody = await response.text().catch(() => '(无法读取响应体)');
-            this.logger.error(`API 响应异常! 第${currentPage}页, 状态码=${response.status}`);
-            if (existingCount > 0) return null;
-            throw new Error(`GitHub API 请求失败 (HTTP ${response.status}): ${errorBody.substring(0, 200)}`);
-        }
+        const isOk = await this.handleNonOkResponse(response, currentPage, existingCount);
+        if (!isOk) return null;
 
         const rawText = await response.text();
-        let pageItems: Record<string, any>[];
-        try {
-            pageItems = JSON.parse(rawText);
-            if (!Array.isArray(pageItems)) throw new Error('响应体不是 JSON 数组');
-        } catch (parseErr) {
-            this.logger.error(`JSON 解析失败! 第${currentPage}页: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
-            if (existingCount > 0) return null;
-            throw new Error(`GitHub API 响应 JSON 解析失败: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
-        }
+        const pageItems = await this.parsePageItems(rawText, currentPage, existingCount);
+        if (!pageItems) return null;
 
         // 逐条映射到 DB 格式
         const mapped: MappedRepoData[] = [];

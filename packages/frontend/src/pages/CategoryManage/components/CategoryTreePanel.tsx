@@ -9,6 +9,63 @@ interface CategoryTreePanelProps {
     tree: UseCategoryTreeReturn
 }
 
+interface CategoryTreeToolbarProps {
+    onAdd: () => void
+    expandAll: () => void
+    collapseAll: () => void
+}
+
+function CategoryTreeToolbar({ onAdd, expandAll, collapseAll }: CategoryTreeToolbarProps) {
+    return (
+        <Space size="small">
+            <Button type="text" size="small" icon={<PlusOutlined />} onClick={onAdd}>新建</Button>
+            <Button type="text" size="small" icon={<ExpandOutlined />} onClick={expandAll} />
+            <Button type="text" size="small" icon={<CompressOutlined />} onClick={collapseAll} />
+        </Space>
+    )
+}
+
+interface CategoryTreeContentProps {
+    treeData: UseCategoryTreeReturn['treeData']
+    loading: boolean
+    contextMenuItems: { key: string; label: string; icon?: React.ReactNode; danger?: boolean; type?: 'divider' }[]
+    handleMenuClick: (info: { key: string }) => void
+    contextMenuNodeId: number | null
+    setContextMenuNodeId: (id: number | null) => void
+    expandedKeys: number[]
+    selectedKey: number | null
+    setSelectedKey: (key: number | null) => void
+    setExpandedKeys: (keys: number[]) => void
+    onDrop: TreeProps['onDrop']
+    onAddRoot: () => void
+}
+
+function CategoryTreeContent({ treeData, loading, contextMenuItems, handleMenuClick,
+    contextMenuNodeId, setContextMenuNodeId, expandedKeys, selectedKey,
+    setSelectedKey, setExpandedKeys, onDrop, onAddRoot }: CategoryTreeContentProps) {
+    if (treeData.length === 0 && !loading) {
+        return (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无分类" style={{ padding: '40px 0' }}>
+                <Button type="primary" icon={<PlusOutlined />} onClick={onAddRoot}>创建第一个分类</Button>
+            </Empty>
+        )
+    }
+
+    return (
+        <Dropdown menu={{ items: contextMenuItems, onClick: handleMenuClick }} trigger={['contextMenu']}
+            open={contextMenuNodeId !== null} onOpenChange={(open) => { if (!open) setContextMenuNodeId(null) }}>
+            <div style={{ padding: '8px 0' }}>
+                <Tree treeData={treeData} expandedKeys={expandedKeys}
+                    selectedKeys={selectedKey ? [selectedKey] : []}
+                    onSelect={(keys) => setSelectedKey(keys.length ? Number(keys[0]) : null)}
+                    onExpand={(keys) => setExpandedKeys(keys.map(Number))}
+                    onRightClick={({ event, node }) => { event.preventDefault(); setContextMenuNodeId(Number(node.key)) }}
+                    draggable onDrop={onDrop} blockNode showIcon style={{ background: 'transparent' }} />
+            </div>
+        </Dropdown>
+    )
+}
+
 export default function CategoryTreePanel({ tree }: CategoryTreePanelProps) {
     const [formOpen, setFormOpen] = useState(false)
     const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
@@ -67,39 +124,20 @@ export default function CategoryTreePanel({ tree }: CategoryTreePanelProps) {
         { key: 'delete', label: '删除', icon: <DeleteOutlined />, danger: true },
     ]
 
+    const handleAddRoot = useCallback(() => {
+        setFormMode('create'); setFormParentId(null); setFormOpen(true)
+    }, [])
+
     return (
         <Card title="分类目录" size="small" styles={{ body: { padding: 0, minHeight: 400 } }}
-            extra={
-                <Space size="small">
-                    <Button type="text" size="small" icon={<PlusOutlined />}
-                        onClick={() => { setFormMode('create'); setFormParentId(null); setFormOpen(true) }}>
-                        新建
-                    </Button>
-                    <Button type="text" size="small" icon={<ExpandOutlined />} onClick={expandAll} />
-                    <Button type="text" size="small" icon={<CompressOutlined />} onClick={collapseAll} />
-                </Space>
-            }>
+            extra={<CategoryTreeToolbar onAdd={handleAddRoot} expandAll={expandAll} collapseAll={collapseAll} />}>
             <Spin spinning={loading}>
-                {treeData.length === 0 && !loading ? (
-                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无分类" style={{ padding: '40px 0' }}>
-                        <Button type="primary" icon={<PlusOutlined />}
-                            onClick={() => { setFormMode('create'); setFormParentId(null); setFormOpen(true) }}>
-                            创建第一个分类
-                        </Button>
-                    </Empty>
-                ) : (
-                    <Dropdown menu={{ items: contextMenuItems, onClick: handleMenuClick }} trigger={['contextMenu']}
-                        open={contextMenuNodeId !== null} onOpenChange={(open) => { if (!open) setContextMenuNodeId(null) }}>
-                        <div style={{ padding: '8px 0' }}>
-                            <Tree treeData={treeData} expandedKeys={expandedKeys}
-                                selectedKeys={selectedKey ? [selectedKey] : []}
-                                onSelect={(keys) => setSelectedKey(keys.length ? Number(keys[0]) : null)}
-                                onExpand={(keys) => setExpandedKeys(keys.map(Number))}
-                                onRightClick={({ event, node }) => { event.preventDefault(); setContextMenuNodeId(Number(node.key)) }}
-                                draggable onDrop={onDrop} blockNode showIcon style={{ background: 'transparent' }} />
-                        </div>
-                    </Dropdown>
-                )}
+                <CategoryTreeContent treeData={treeData} loading={loading}
+                    contextMenuItems={contextMenuItems} handleMenuClick={handleMenuClick}
+                    contextMenuNodeId={contextMenuNodeId} setContextMenuNodeId={setContextMenuNodeId}
+                    expandedKeys={expandedKeys} selectedKey={selectedKey}
+                    setSelectedKey={setSelectedKey} setExpandedKeys={setExpandedKeys}
+                    onDrop={onDrop} onAddRoot={handleAddRoot} />
             </Spin>
             <CategoryFormModal open={formOpen} mode={formMode}
                 initialName={formMode === 'edit' ? editingName : ''}

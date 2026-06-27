@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, Tag, Typography, Avatar, Space } from 'antd'
 import { StarFilled, ForkOutlined, ReadOutlined } from '@ant-design/icons'
@@ -14,6 +14,50 @@ interface RepoCardProps {
 /** 网格卡片视图 — 每个仓库展示为可点击卡片（React.memo 避免列表项无效重渲染） */
 const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
     const navigate = useNavigate()
+
+    let descriptionContent: ReactNode
+    if (repo.descriptionCn) {
+        descriptionContent = (
+            <Paragraph
+                ellipsis={{ rows: 2 }}
+                style={{ marginBottom: 10, fontSize: 14, minHeight: 40, color: '#333', lineHeight: '1.6' }}
+            >
+                {repo.descriptionCn}
+                <Text type='secondary' style={{ fontSize: 12, marginLeft: 4 }}>
+                    🇨🇳
+                </Text>
+            </Paragraph>
+        )
+    } else if (repo.description) {
+        descriptionContent = (
+            <Paragraph
+                type='secondary'
+                ellipsis={{ rows: 2 }}
+                style={{ marginBottom: 10, fontSize: 14, minHeight: 40, lineHeight: '1.6' }}
+            >
+                {repo.description}
+            </Paragraph>
+        )
+    } else {
+        descriptionContent = null
+    }
+
+    let readmeTag: ReactNode
+    if (repo.readmeFetched && repo.readmeCn) {
+        readmeTag = (
+            <Tag color='purple' style={{ margin: 0, fontSize: 12 }}>
+                <ReadOutlined style={{ fontSize: 11 }} /> 已翻译
+            </Tag>
+        )
+    } else if (repo.readmeFetched) {
+        readmeTag = (
+            <Tag color='default' style={{ margin: 0, fontSize: 12 }}>
+                无README
+            </Tag>
+        )
+    } else {
+        readmeTag = null
+    }
 
     return (
         <Card
@@ -33,25 +77,7 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
                     </Text>
                 </div>
             </div>
-            {repo.descriptionCn ? (
-                <Paragraph
-                    ellipsis={{ rows: 2 }}
-                    style={{ marginBottom: 10, fontSize: 14, minHeight: 40, color: '#333', lineHeight: '1.6' }}
-                >
-                    {repo.descriptionCn}
-                    <Text type='secondary' style={{ fontSize: 12, marginLeft: 4 }}>
-                        🇨🇳
-                    </Text>
-                </Paragraph>
-            ) : repo.description ? (
-                <Paragraph
-                    type='secondary'
-                    ellipsis={{ rows: 2 }}
-                    style={{ marginBottom: 10, fontSize: 14, minHeight: 40, lineHeight: '1.6' }}
-                >
-                    {repo.description}
-                </Paragraph>
-            ) : null}
+            {descriptionContent}
             {/* 标签行 — 语言 + 翻译状态 */}
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                 {repo.language && (
@@ -59,15 +85,7 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
                         {repo.language}
                     </Tag>
                 )}
-                {repo.readmeFetched && repo.readmeCn ? (
-                    <Tag color='purple' style={{ margin: 0, fontSize: 12 }}>
-                        <ReadOutlined style={{ fontSize: 11 }} /> 已翻译
-                    </Tag>
-                ) : repo.readmeFetched ? (
-                    <Tag color='default' style={{ margin: 0, fontSize: 12 }}>
-                        无README
-                    </Tag>
-                ) : null}
+                {readmeTag}
                 <Space size={4}>
                     <StarFilled style={{ color: '#faad14', fontSize: 14 }} />
                     <Text style={{ fontSize: 14 }}>{repo.starsCount}</Text>

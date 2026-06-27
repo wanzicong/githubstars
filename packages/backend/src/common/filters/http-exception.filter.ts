@@ -23,12 +23,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
         if (exception instanceof HttpException) {
             status = exception.getStatus();
             const exResponse = exception.getResponse();
-            message =
-                typeof exResponse === 'string'
-                    ? exResponse
-                    : typeof exResponse === 'object' && exResponse != null && 'message' in exResponse
-                      ? String((exResponse as Record<string, unknown>).message)
-                      : exception.message;
+            if (typeof exResponse === 'string') {
+                message = exResponse;
+            } else if (typeof exResponse === 'object' && exResponse != null && 'message' in exResponse) {
+                message = String((exResponse as Record<string, unknown>).message);
+            } else {
+                message = exception.message;
+            }
         } else if (exception instanceof Error) {
             this.logger.error('未捕获异常: ' + exception.message, exception.stack);
         } else {

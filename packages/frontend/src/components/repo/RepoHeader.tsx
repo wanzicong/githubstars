@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Button, Space, Tag, Typography, Avatar } from 'antd'
 import { GithubOutlined, LinkOutlined, TranslationOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { GithubRepo } from '../../types'
@@ -17,6 +18,60 @@ export interface RepoHeaderProps {
  * 展示仓库头像、名称、拥有者、Fork/归档标签、描述（中/英）以及操作按钮。
  */
 export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onRetranslateDesc }: RepoHeaderProps) {
+    let descriptionContent: ReactNode
+    if (repo.descriptionCn) {
+        descriptionContent = (
+            <div>
+                <Paragraph style={{ marginBottom: 4, color: '#333' }}>
+                    {repo.descriptionCn}
+                    <Text type='secondary' style={{ fontSize: 11, marginLeft: 6 }}>
+                        🇨🇳 中文
+                    </Text>
+                </Paragraph>
+                {repo.description && repo.description !== repo.descriptionCn && (
+                    <Paragraph type='secondary' style={{ marginBottom: 0, fontSize: 12 }}>
+                        <Text type='secondary' italic>
+                            原文：
+                        </Text>
+                        {repo.description}
+                    </Paragraph>
+                )}
+                <Button
+                    size='small'
+                    type='link'
+                    icon={<ReloadOutlined />}
+                    loading={translatingDesc}
+                    onClick={onRetranslateDesc}
+                    style={{ padding: 0, marginTop: 4 }}
+                >
+                    重新翻译
+                </Button>
+            </div>
+        )
+    } else if (repo.description) {
+        descriptionContent = (
+            <div>
+                <Paragraph type='secondary' style={{ marginBottom: 8 }}>
+                    {repo.description}
+                </Paragraph>
+                <Button
+                    size='small'
+                    icon={<TranslationOutlined />}
+                    loading={translatingDesc}
+                    onClick={onTranslateDesc}
+                >
+                    翻译描述
+                </Button>
+            </div>
+        )
+    } else {
+        descriptionContent = (
+            <Text type='secondary' style={{ marginBottom: 8 }}>
+                暂无描述
+            </Text>
+        )
+    }
+
     return (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
             <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={64} style={{ flexShrink: 0 }} />
@@ -39,53 +94,7 @@ export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onR
                         </Tag>
                     )}
                 </div>
-                {/* 描述：优先显示中文翻译 */}
-                {repo.descriptionCn ? (
-                    <div>
-                        <Paragraph style={{ marginBottom: 4, color: '#333' }}>
-                            {repo.descriptionCn}
-                            <Text type='secondary' style={{ fontSize: 11, marginLeft: 6 }}>
-                                🇨🇳 中文
-                            </Text>
-                        </Paragraph>
-                        {repo.description && repo.description !== repo.descriptionCn && (
-                            <Paragraph type='secondary' style={{ marginBottom: 0, fontSize: 12 }}>
-                                <Text type='secondary' italic>
-                                    原文：
-                                </Text>
-                                {repo.description}
-                            </Paragraph>
-                        )}
-                        <Button
-                            size='small'
-                            type='link'
-                            icon={<ReloadOutlined />}
-                            loading={translatingDesc}
-                            onClick={onRetranslateDesc}
-                            style={{ padding: 0, marginTop: 4 }}
-                        >
-                            重新翻译
-                        </Button>
-                    </div>
-                ) : repo.description ? (
-                    <div>
-                        <Paragraph type='secondary' style={{ marginBottom: 8 }}>
-                            {repo.description}
-                        </Paragraph>
-                        <Button
-                            size='small'
-                            icon={<TranslationOutlined />}
-                            loading={translatingDesc}
-                            onClick={onTranslateDesc}
-                        >
-                            翻译描述
-                        </Button>
-                    </div>
-                ) : (
-                    <Text type='secondary' style={{ marginBottom: 8 }}>
-                        暂无描述
-                    </Text>
-                )}
+                {descriptionContent}
             </div>
             <Space wrap>
                 <Button

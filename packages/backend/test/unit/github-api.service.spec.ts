@@ -29,8 +29,9 @@ describe('GithubApiService', () => {
     });
 
     describe('fetchReadmeFromGitHub', () => {
-        it.skip('需要网络，跳过单元测试', async () => {
+        it.skip('需要网络，跳过单元测试', () => {
             // fetchReadmeFromGitHub 需要真实网络请求，在单元测试中跳过
+            expect(service.fetchReadmeFromGitHub).toBeDefined();
         });
     });
 

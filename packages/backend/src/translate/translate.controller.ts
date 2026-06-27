@@ -10,6 +10,8 @@ import type { IdParamDto } from '../common/dto/id-param.dto';
 import { FilterSchema } from '../common/dto/filter.dto';
 import type { FilterDto } from '../common/dto/filter.dto';
 
+type TranslateType = 'description' | 'readme' | 'both';
+
 @ApiTags('translate')
 @Controller('api/translate')
 export class TranslateController {
@@ -52,7 +54,7 @@ export class TranslateController {
     async createTask(
         @Body()
         body: {
-            type: 'description' | 'readme' | 'both';
+            type: TranslateType;
             scope: 'filtered' | 'all' | 'selected';
             repoIds?: number[];
             filters?: {
@@ -70,29 +72,67 @@ export class TranslateController {
         this.logger.log(`创建翻译任务: type=${type} scope=${scope} repoCount=${repoIds?.length || 0}`);
 
         if (scope === 'selected' && repoIds?.length) {
-            if (type === 'description') {
-                const count = await this.service.translateDescriptionsBatch(repoIds);
-                return { success: true, translatedCount: count };
-            }
-            let taskId: number | null = null;
-            for (const rid of repoIds) {
-                taskId = await this.taskService.createAndStartSingleReadme(rid);
-            }
-            return { success: true, taskId, message: '翻译任务已启动' };
+            return this.handleSelectedScope(repoIds, type);
         }
 
         if (scope === 'all') {
-            if (type === 'readme') {
-                const taskId = await this.taskService.createAndStartReadmeBatch();
-                if (!taskId) return { success: false, message: '没有需要翻译的项目' };
-                return { success: true, taskId, message: '全量README翻译已启动' };
-            }
-            const taskId = await this.taskService.createAndStartFullTranslate();
-            if (!taskId) return { success: false, message: '没有需要翻译的项目' };
-            return { success: true, taskId, message: '全量翻译已启动' };
+            return this.handleAllScope(type);
         }
 
-        const taskId = await this.taskService.createAndStartFilterBatch(filters || {});
+        return this.handleFilteredScope(filters, type);
+    }
+
+    /**
+     * 处理选中的仓库翻译
+     *
+     * @param repoIds 仓库 ID 列表
+     * @param type    翻译类型
+     * @returns 翻译结果
+     *
+     * @callers createTask — 当 scope=selected 时调用
+     */
+    private async handleSelectedScope(repoIds: number[], type: TranslateType) {
+        if (type === 'description') {
+            const count = await this.service.translateDescriptionsBatch(repoIds);
+            return { success: true, translatedCount: count };
+        }
+        // 修复 C2/C3: 创建单个批量任务而非 N 个独立任务；type='both' 同时翻译描述+README
+        const taskId = await this.taskService.createBatchTask(repoIds, type === 'both' ? 'both' : 'readme');
+        if (!taskId) return { success: false, message: '创建翻译任务失败' };
+        return { success: true, taskId, message: `翻译任务已启动 (${type})` };
+    }
+
+    /**
+     * 处理全量翻译
+     *
+     * @param type 翻译类型
+     * @returns 翻译结果
+     *
+     * @callers createTask — 当 scope=all 时调用
+     */
+    private async handleAllScope(type: TranslateType) {
+        if (type === 'readme') {
+            const taskId = await this.taskService.createAndStartReadmeBatch();
+            if (!taskId) return { success: false, message: '没有需要翻译的项目' };
+            return { success: true, taskId, message: '全量README翻译已启动' };
+        }
+        const taskId = await this.taskService.createAndStartFullTranslate();
+        if (!taskId) return { success: false, message: '没有需要翻译的项目' };
+        return { success: true, taskId, message: '全量翻译已启动' };
+    }
+
+    /**
+     * 处理筛选条件翻译
+     *
+     * @param filters 筛选条件
+     * @param type    翻译类型
+     * @returns 翻译结果
+     *
+     * @callers createTask — 当 scope=filtered 时调用
+     */
+    private async handleFilteredScope(filters: Record<string, string> | undefined, type: TranslateType) {
+        // 修复 C4: 将 type 参数传入 createAndStartFilterBatch，不再忽略
+        const taskId = await this.taskService.createAndStartFilterBatch(filters || {}, type);
         if (!taskId) return { success: false, message: '没有需要翻译的项目' };
         return { success: true, taskId, message: `筛选翻译已启动 (类型: ${type})` };
     }

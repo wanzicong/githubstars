@@ -54,6 +54,9 @@ export class GithubSearchController {
         schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] },
     })
     async star(@Body() body: { owner: string; repo: string }) {
+        if (!body.owner?.trim() || !body.repo?.trim()) {
+            return { success: false, message: 'owner 和 repo 不能为空' };
+        }
         this.logger.log('Star 操作: ' + body.owner + '/' + body.repo);
         const starred = await this.service.starRepo(body.owner, body.repo);
         return { success: true, starred, message: starred ? '已Star' : 'Star 失败' };
@@ -71,6 +74,9 @@ export class GithubSearchController {
         schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] },
     })
     async unstar(@Body() body: { owner: string; repo: string }) {
+        if (!body.owner?.trim() || !body.repo?.trim()) {
+            return { success: false, message: 'owner 和 repo 不能为空' };
+        }
         this.logger.log('取消 Star 操作: ' + body.owner + '/' + body.repo);
         const ok = await this.service.unstarRepo(body.owner, body.repo);
         return { success: true, message: ok ? '已取消Star' : '取消 Star 失败' };
@@ -88,6 +94,9 @@ export class GithubSearchController {
         schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] },
     })
     async checkStarred(@Body() body: { owner: string; repo: string }) {
+        if (!body.owner?.trim() || !body.repo?.trim()) {
+            return { success: false, message: 'owner 和 repo 不能为空' };
+        }
         const starred = await this.service.checkStarred(body.owner, body.repo);
         return { success: true, starred };
     }

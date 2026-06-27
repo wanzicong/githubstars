@@ -22,10 +22,6 @@ export default function DirectoryPicker({ value, onChange, placeholder }: Direct
     const [recentDirs, setRecentDirs] = useState<string[]>([])
     const { pickDirectory, isSupported: isElectronEnv } = useDirectoryPicker()
 
-    useEffect(() => {
-        loadRecentDirs()
-    }, [])
-
     const loadRecentDirs = async () => {
         try {
             const res = await getRecentCloneDirectories()
@@ -36,6 +32,10 @@ export default function DirectoryPicker({ value, onChange, placeholder }: Direct
             // 静默失败，不影响主流程
         }
     }
+
+    useEffect(() => {
+        loadRecentDirs()
+    }, [])
 
     const handleSelectRecent = (dir: string) => {
         onChange?.(dir)

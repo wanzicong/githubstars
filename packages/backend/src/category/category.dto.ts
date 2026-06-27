@@ -13,7 +13,7 @@ import { PaginationSchema } from '../common/dto/pagination.dto';
 // ── 分类树 ──
 
 /** 分类树查询参数（无额外参数） */
-export const CategoryTreeSchema = z.object({}).passthrough();
+export const CategoryTreeSchema = z.object({});
 
 export type CategoryTreeDto = z.infer<typeof CategoryTreeSchema>;
 

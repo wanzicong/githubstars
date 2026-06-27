@@ -2,6 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TranslateService } from '../translate/translate.service';
 
+/** 可为空的日期类型，用于仓库日期字段 */
+type NullableDateField = string | Date | null;
+
 /** GitHub Search API 返回的仓库数据结构 */
 export interface TrendingRepoItem {
     fullName: string;
@@ -21,9 +24,9 @@ export interface TrendingRepoItem {
     licenseName?: string | null;
     isFork?: boolean;
     isArchived?: boolean;
-    repoCreatedAt?: string | Date | null;
-    repoUpdatedAt?: string | Date | null;
-    pushedAt?: string | Date | null;
+    repoCreatedAt?: NullableDateField;
+    repoUpdatedAt?: NullableDateField;
+    pushedAt?: NullableDateField;
     [key: string]: unknown;
 }
 
@@ -45,6 +48,21 @@ export class TrendingService {
         private readonly prisma: PrismaService,
         private readonly translate: TranslateService,
     ) {}
+
+    /**
+     * 根据 fullName 列表批量查询本地仓库 ID
+     *
+     * @param fullNames GitHub 仓库全名列表（如 ["owner/repo1", "owner/repo2"]）
+     * @returns 本地数据库中的仓库 ID 数组
+     */
+    async findLocalRepoIds(fullNames: string[]): Promise<number[]> {
+        if (!fullNames.length) return [];
+        const repos = await this.prisma.githubRepo.findMany({
+            where: { fullName: { in: fullNames } },
+            select: { id: true },
+        });
+        return repos.map((r) => Number(r.id));
+    }
 
     /**
      * 为趋势仓库列表补充中文描述（从缓存读取）

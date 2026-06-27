@@ -386,15 +386,15 @@ export default function StarDetail() {
                                 <Progress
                                     type='circle'
                                     percent={translateProgress.progress}
-                                    status={
-                                        translateProgress.status === 'COMPLETED'
-                                            ? translateProgress.readmeFailed > 0
-                                                ? 'exception'
-                                                : 'success'
-                                            : translateProgress.status === 'FAILED' || translateProgress.status === 'PARTIAL'
-                                              ? 'exception'
-                                              : 'active'
-                                    }
+                                    status={(() => {
+                                        if (translateProgress.status === 'COMPLETED') {
+                                            return translateProgress.readmeFailed > 0 ? 'exception' : 'success'
+                                        }
+                                        if (translateProgress.status === 'FAILED' || translateProgress.status === 'PARTIAL') {
+                                            return 'exception'
+                                        }
+                                        return 'active'
+                                    })()}
                                     size={120}
                                 />
                                 <div style={{ marginTop: 16, fontSize: 14, color: '#666' }}>
@@ -427,11 +427,11 @@ export default function StarDetail() {
                                                 <div style={{ fontSize: 13 }}>
                                                     <Text strong>{item.fullName}</Text>
                                                     <Text type='secondary' style={{ marginLeft: 8 }}>
-                                                        {item.note === '翻译成功'
-                                                            ? '✅ 翻译成功，页面已更新'
-                                                            : isNoReadme
-                                                              ? '⚠️ 该仓库在 GitHub 上没有 README 文件'
-                                                              : '📝 ' + item.note}
+                                                        {(() => {
+                                                            if (item.note === '翻译成功') return '✅ 翻译成功，页面已更新'
+                                                            if (isNoReadme) return '⚠️ 该仓库在 GitHub 上没有 README 文件'
+                                                            return '📝 ' + item.note
+                                                        })()}
                                                     </Text>
                                                     {ghResponse && (
                                                         <div style={{ marginTop: 6, padding: '6px 10px', background: '#fff7e6', borderRadius: 4, border: '1px solid #ffd591', maxHeight: 120, overflow: 'auto' }}>

@@ -4,6 +4,22 @@ import { useRef, useCallback, useEffect, useState } from 'react'
 const CONSECUTIVE_ERROR_WARN_THRESHOLD = 5
 
 /**
+ * 执行一次轮询并处理连续错误计数
+ */
+async function executePolling(
+    callback: () => Promise<void> | void,
+    onError: (prev: number) => number,
+    onSuccess: () => void,
+): Promise<void> {
+    try {
+        await callback()
+        onSuccess()
+    } catch {
+        onError(0)
+    }
+}
+
+/**
  * 通用轮询 Hook — 管理 setInterval 生命周期，自动清理
  *
  * @param callback  每次轮询执行的回调（支持 async）
@@ -29,30 +45,34 @@ export function usePolling(callback: () => Promise<void> | void, interval = 2000
         setIsPolling(false)
     }, [])
 
+    const tick = useCallback(() => {
+        const onError = (prev: number) => {
+            setConsecutiveErrors((current) => {
+                const next = current + 1
+                if (next === CONSECUTIVE_ERROR_WARN_THRESHOLD) {
+                    // 仅在开发环境输出警告，生产环境由调用方处理 consecutiveErrors
+                    if (import.meta.env.DEV) {
+                        console.warn(`[usePolling] 连续 ${next} 次轮询失败，请检查网络连接`)
+                    }
+                }
+                return next
+            })
+            return prev
+        }
+        const onSuccess = () => {
+            setConsecutiveErrors(0)
+        }
+        executePolling(callbackRef.current, onError, onSuccess)
+    }, [])
+
     const start = useCallback(() => {
         stop()
         setIsPolling(true)
         setConsecutiveErrors(0)
         timerRef.current = setInterval(() => {
-            void (async () => {
-                try {
-                    await callbackRef.current()
-                    setConsecutiveErrors(0)
-                } catch {
-                    setConsecutiveErrors((prev) => {
-                        const next = prev + 1
-                        if (next === CONSECUTIVE_ERROR_WARN_THRESHOLD) {
-                            // 仅在开发环境输出警告，生产环境由调用方处理 consecutiveErrors
-                            if (import.meta.env.DEV) {
-                                console.warn(`[usePolling] 连续 ${next} 次轮询失败，请检查网络连接`)
-                            }
-                        }
-                        return next
-                    })
-                }
-            })()
+            tick()
         }, interval)
-    }, [interval, stop])
+    }, [interval, stop, tick])
 
     // 组件卸载时自动清理
     useEffect(() => {

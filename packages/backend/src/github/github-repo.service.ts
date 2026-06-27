@@ -6,6 +6,20 @@ import { buildPaginationResult } from '../common/utils/pagination.util';
 import type { BaseFilterParams, FilterParams, PaginatedFilterParams } from '../common/interfaces/filter-params.interface';
 import type { UpsertRepoInput } from './repo-data.interface';
 
+/** 解析描述翻译状态：已翻译 > 待翻译 > 无描述 */
+function resolveTranslationStatus(descriptionCn: string | null | undefined, description: string | null | undefined): string {
+    if (descriptionCn) return 'completed';
+    if (description) return 'pending';
+    return 'none';
+}
+
+/** 解析 README 翻译状态：已翻译 > 无 README > 待翻译 */
+function resolveReadmeStatus(readmeCn: string | null | undefined, readmeFetched: boolean | null | undefined): string {
+    if (readmeCn) return 'completed';
+    if (readmeFetched) return 'none';
+    return 'pending';
+}
+
 @Injectable()
 export class GithubRepoService {
     private readonly logger = new Logger(GithubRepoService.name);
@@ -111,13 +125,17 @@ export class GithubRepoService {
             this.prisma.githubRepo.findMany({ where, orderBy: { [sortField]: sortDir }, skip: (page - 1) * size, take: size }),
         ]);
         // 附加翻译状态（前端列表可直接展示翻译徽标）
-        const enriched = records.map((r) => ({
-            ...r,
-            translationStatus: {
-                description: r.descriptionCn ? 'completed' : r.description ? 'pending' : 'none',
-                readme: r.readmeCn ? 'completed' : r.readmeFetched ? 'none' : 'pending',
-            },
-        }));
+        const enriched = records.map((r) => {
+            const descriptionStatus = resolveTranslationStatus(r.descriptionCn, r.description);
+            const readmeStatus = resolveReadmeStatus(r.readmeCn, r.readmeFetched);
+            return {
+                ...r,
+                translationStatus: {
+                    description: descriptionStatus,
+                    readme: readmeStatus,
+                },
+            };
+        });
         return buildPaginationResult(enriched, total, page, size);
     }
 

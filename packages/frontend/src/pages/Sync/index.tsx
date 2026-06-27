@@ -110,7 +110,13 @@ export default function Sync() {
             dataIndex: 'syncType',
             key: 'syncType',
             width: 100,
-            render: (v: string) => <Tag>{v === 'manual' ? '手动' : v === 'scheduled' ? '定时' : v}</Tag>,
+            render: (v: string) => {
+                let label: string
+                if (v === 'manual') label = '手动'
+                else if (v === 'scheduled') label = '定时'
+                else label = v
+                return <Tag>{label}</Tag>
+            },
         },
         {
             title: '状态',

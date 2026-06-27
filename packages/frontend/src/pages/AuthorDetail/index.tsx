@@ -258,25 +258,33 @@ export default function AuthorDetail() {
                                                 </Text>
                                             </div>
                                         </div>
-                                        {repo.descriptionCn ? (
-                                            <Paragraph
-                                                ellipsis={{ rows: 2 }}
-                                                style={{ marginBottom: 10, fontSize: 12, minHeight: 36, color: '#333' }}
-                                            >
-                                                {repo.descriptionCn}
-                                                <Text type='secondary' style={{ fontSize: 10, marginLeft: 4 }}>
-                                                    🇨🇳
-                                                </Text>
-                                            </Paragraph>
-                                        ) : repo.description ? (
-                                            <Paragraph
-                                                type='secondary'
-                                                ellipsis={{ rows: 2 }}
-                                                style={{ marginBottom: 10, fontSize: 12, minHeight: 36 }}
-                                            >
-                                                {repo.description}
-                                            </Paragraph>
-                                        ) : null}
+                                        {(() => {
+                                            if (repo.descriptionCn) {
+                                                return (
+                                                    <Paragraph
+                                                        ellipsis={{ rows: 2 }}
+                                                        style={{ marginBottom: 10, fontSize: 12, minHeight: 36, color: '#333' }}
+                                                    >
+                                                        {repo.descriptionCn}
+                                                        <Text type='secondary' style={{ fontSize: 10, marginLeft: 4 }}>
+                                                            🇨🇳
+                                                        </Text>
+                                                    </Paragraph>
+                                                )
+                                            }
+                                            if (repo.description) {
+                                                return (
+                                                    <Paragraph
+                                                        type='secondary'
+                                                        ellipsis={{ rows: 2 }}
+                                                        style={{ marginBottom: 10, fontSize: 12, minHeight: 36 }}
+                                                    >
+                                                        {repo.description}
+                                                    </Paragraph>
+                                                )
+                                            }
+                                            return null
+                                        })()}
                                         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                                             {repo.language && (
                                                 <Tag color='blue' style={{ margin: 0 }}>

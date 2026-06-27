@@ -94,61 +94,63 @@ export default function StarRepoView({
                         )}
                     </div>
                 )}
-                {repos.length > 0 ? (
-                    viewMode === 'list' ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            {repos.map((repo) => (
-                                <div key={repo.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                                    {selectionEnabled && (
-                                        <Checkbox
-                                            checked={selectedIds?.includes(repo.id)}
-                                            onChange={() => toggleSelect(repo.id)}
-                                            style={{ marginTop: 12 }}
-                                        />
-                                    )}
-                                    <div style={{ flex: 1 }}>
-                                        <RepoRow repo={repo} />
-                                    </div>
+                {(() => {
+                    if (repos.length > 0) {
+                        if (viewMode === 'list') {
+                            return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                    {repos.map((repo) => (
+                                        <div key={repo.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                            {selectionEnabled && (
+                                                <Checkbox
+                                                    checked={selectedIds?.includes(repo.id)}
+                                                    onChange={() => toggleSelect(repo.id)}
+                                                    style={{ marginTop: 12 }}
+                                                />
+                                            )}
+                                            <div style={{ flex: 1 }}>
+                                                <RepoRow repo={repo} />
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <Row gutter={[16, 16]}>
-                            {repos.map((repo) => (
-                                <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
-                                    <div style={{ position: 'relative' }}>
-                                        {selectionEnabled && (
-                                            <Checkbox
-                                                checked={selectedIds?.includes(repo.id)}
-                                                onChange={() => toggleSelect(repo.id)}
-                                                style={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
-                                            />
-                                        )}
-                                        <RepoCard repo={repo} />
-                                    </div>
-                                </Col>
-                            ))}
-                        </Row>
+                            )
+                        }
+                        return (
+                            <Row gutter={[16, 16]}>
+                                {repos.map((repo) => (
+                                    <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
+                                        <div style={{ position: 'relative' }}>
+                                            {selectionEnabled && (
+                                                <Checkbox
+                                                    checked={selectedIds?.includes(repo.id)}
+                                                    onChange={() => toggleSelect(repo.id)}
+                                                    style={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
+                                                />
+                                            )}
+                                            <RepoCard repo={repo} />
+                                        </div>
+                                    </Col>
+                                ))}
+                            </Row>
+                        )
+                    }
+                    let emptyDescription: string
+                    if (loading) emptyDescription = '加载中...'
+                    else if (pageResult.total === 0) emptyDescription = '暂无仓库数据，请先同步'
+                    else emptyDescription = '筛选无结果，请尝试调整筛选条件'
+                    return (
+                        <Card>
+                            <Empty description={emptyDescription}>
+                                {hasActiveFilters && (
+                                    <Button type='primary' onClick={onClearFilters}>
+                                        清除所有筛选
+                                    </Button>
+                                )}
+                            </Empty>
+                        </Card>
                     )
-                ) : (
-                    <Card>
-                        <Empty
-                            description={
-                                loading
-                                    ? '加载中...'
-                                    : pageResult.total === 0
-                                      ? '暂无仓库数据，请先同步'
-                                      : '筛选无结果，请尝试调整筛选条件'
-                            }
-                        >
-                            {hasActiveFilters && (
-                                <Button type='primary' onClick={onClearFilters}>
-                                    清除所有筛选
-                                </Button>
-                            )}
-                        </Empty>
-                    </Card>
-                )}
+                })()}
 
                 {pageResult.total > pageSize && (
                     <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>

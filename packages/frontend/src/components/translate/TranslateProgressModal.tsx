@@ -34,6 +34,16 @@ export default function TranslateProgressModal({ open, progress, onClose, onRetr
     const isRunning = status === 'PENDING' || status === 'PROCESSING'
     const isDone = status === 'COMPLETED' || status === 'FAILED' || status === 'PARTIAL'
 
+    let progressStatus: 'active' | 'exception' | 'success'
+    if (isRunning) progressStatus = 'active'
+    else if (failedItems > 0) progressStatus = 'exception'
+    else progressStatus = 'success'
+
+    let statusLabel: string
+    if (isRunning) statusLabel = '翻译执行中...'
+    else if (status === 'COMPLETED') statusLabel = '翻译完成'
+    else statusLabel = '翻译完成（部分失败）'
+
     return (
         <Modal
             title='翻译进度'
@@ -71,11 +81,11 @@ export default function TranslateProgressModal({ open, progress, onClose, onRetr
                         <Progress
                             type='circle'
                             percent={percent}
-                            status={isRunning ? 'active' : failedItems > 0 ? 'exception' : 'success'}
+                            status={progressStatus}
                             size={120}
                         />
                         <div style={{ marginTop: 16, fontSize: 14, color: '#666' }}>
-                            {isRunning ? '翻译执行中...' : status === 'COMPLETED' ? '翻译完成' : '翻译完成（部分失败）'}
+                            {statusLabel}
                         </div>
                         <div style={{ marginTop: 12, fontSize: 13, color: '#999' }}>
                             总 {totalItems} 项 | 成功 {completedItems} | 失败 {failedItems}

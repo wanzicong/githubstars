@@ -7,8 +7,6 @@ import { GithubRepoService } from '../../src/github/github-repo.service';
 describe('SyncService', () => {
     let service: SyncService;
     let prisma: any;
-    let githubApi: any;
-    let githubRepo: any;
 
     const mockPrisma = {
         syncLog: {
@@ -45,7 +43,6 @@ describe('SyncService', () => {
         }).compile();
         service = module.get(SyncService);
         prisma = mockPrisma;
-        githubApi = mockGithubApi;
     });
 
     describe('isSyncing', () => {

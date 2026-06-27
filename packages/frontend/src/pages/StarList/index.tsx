@@ -121,14 +121,16 @@ export default function StarList() {
     const timeFilterSummary = useMemo(() => {
         if (!dateField && !timePreset) return ''
         const presetLabel = TIME_PRESETS.find((item) => item.value === timePreset)?.label
-        const rangeText =
-            startDate && endDate
-                ? `${startDate.format('YYYY年M月D日')} ~ ${endDate.format('YYYY年M月D日')}`
-                : startDate
-                  ? `${startDate.format('YYYY年M月D日')} 起`
-                  : endDate
-                    ? `至 ${endDate.format('YYYY年M月D日')}`
-                    : ''
+        let rangeText: string
+        if (startDate && endDate) {
+            rangeText = `${startDate.format('YYYY年M月D日')} ~ ${endDate.format('YYYY年M月D日')}`
+        } else if (startDate) {
+            rangeText = `${startDate.format('YYYY年M月D日')} 起`
+        } else if (endDate) {
+            rangeText = `至 ${endDate.format('YYYY年M月D日')}`
+        } else {
+            rangeText = ''
+        }
         if (presetLabel && presetLabel !== '不限') {
             const rangeSuffix = rangeText ? `（${rangeText}）` : ''
             return `${dateFieldLabel || 'Star 时间'} · ${presetLabel}${rangeSuffix}`

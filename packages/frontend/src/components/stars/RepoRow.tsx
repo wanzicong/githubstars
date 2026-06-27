@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, Row, Col, Tag, Typography, Avatar } from 'antd'
 import { StarFilled, ForkOutlined, ReadOutlined } from '@ant-design/icons'
@@ -14,6 +14,47 @@ interface RepoRowProps {
 /** 列表行视图 — 每个仓库展示为横向行卡片（React.memo 避免列表项无效重渲染） */
 const RepoRow = memo(function RepoRow({ repo }: RepoRowProps) {
     const navigate = useNavigate()
+
+    let readmeTag: ReactNode
+    if (repo.readmeFetched && repo.readmeCn) {
+        readmeTag = (
+            <Tag color='purple' style={{ margin: 0, fontSize: 11 }}>
+                <ReadOutlined style={{ fontSize: 10 }} /> 已翻译
+            </Tag>
+        )
+    } else if (repo.readmeFetched) {
+        readmeTag = (
+            <Tag color='default' style={{ margin: 0, fontSize: 11 }}>
+                无README
+            </Tag>
+        )
+    } else {
+        readmeTag = null
+    }
+
+    let descriptionContent: ReactNode
+    if (repo.descriptionCn) {
+        descriptionContent = (
+            <Paragraph
+                ellipsis={{ rows: 1 }}
+                style={{ margin: '4px 0 0', fontSize: 14, color: '#333', lineHeight: '1.6' }}
+            >
+                {repo.descriptionCn}
+            </Paragraph>
+        )
+    } else if (repo.description) {
+        descriptionContent = (
+            <Paragraph
+                type='secondary'
+                ellipsis={{ rows: 1 }}
+                style={{ margin: '4px 0 0', fontSize: 14, lineHeight: '1.6' }}
+            >
+                {repo.description}
+            </Paragraph>
+        )
+    } else {
+        descriptionContent = null
+    }
 
     return (
         <Card
@@ -39,32 +80,9 @@ const RepoRow = memo(function RepoRow({ repo }: RepoRowProps) {
                                         {repo.language}
                                     </Tag>
                                 )}
-                                {repo.readmeFetched && repo.readmeCn ? (
-                                    <Tag color='purple' style={{ margin: 0, fontSize: 11 }}>
-                                        <ReadOutlined style={{ fontSize: 10 }} /> 已翻译
-                                    </Tag>
-                                ) : repo.readmeFetched ? (
-                                    <Tag color='default' style={{ margin: 0, fontSize: 11 }}>
-                                        无README
-                                    </Tag>
-                                ) : null}
+                                {readmeTag}
                             </div>
-                            {repo.descriptionCn ? (
-                                <Paragraph
-                                    ellipsis={{ rows: 1 }}
-                                    style={{ margin: '4px 0 0', fontSize: 14, color: '#333', lineHeight: '1.6' }}
-                                >
-                                    {repo.descriptionCn}
-                                </Paragraph>
-                            ) : repo.description ? (
-                                <Paragraph
-                                    type='secondary'
-                                    ellipsis={{ rows: 1 }}
-                                    style={{ margin: '4px 0 0', fontSize: 14, lineHeight: '1.6' }}
-                                >
-                                    {repo.description}
-                                </Paragraph>
-                            ) : null}
+                            {descriptionContent}
                             {/* 分类标签 - 已移除 */}
                         </div>
                     </div>

@@ -19,8 +19,10 @@ import { CreateCloneTaskDto } from './clone.dto';
 import { execFile, spawn, type ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
-import { existsSync, readdirSync, readFileSync } from 'fs';
-import { mkdir, rm } from 'fs/promises';
+import { randomBytes } from 'crypto';
+import * as os from 'os';
+import { existsSync, readdirSync, readFileSync, unlinkSync } from 'fs';
+import { chmod, mkdir, rm, writeFile } from 'fs/promises';
 
 const execFileAsync = promisify(execFile);
 
@@ -90,7 +92,8 @@ function delay(ms: number): Promise<void> {
 function calculateBackoffDelay(attempt: number, baseMs: number = RETRY_BASE_DELAY_MS, maxMs: number = RETRY_MAX_DELAY_MS): number {
     const exponentialDelay = Math.min(baseMs * Math.pow(2, attempt), maxMs);
     // 添加 0-50% 的随机抖动，防止多个任务同时重试
-    const jitter = exponentialDelay * Math.random() * 0.5;
+    const randomFraction = randomBytes(4).readUInt32BE(0) / 0xffffffff;
+    const jitter = exponentialDelay * randomFraction * 0.5;
     return Math.floor(exponentialDelay + jitter);
 }
 
@@ -144,6 +147,9 @@ export class CloneService {
 
     /** 当前任务的目标目录，用于路径安全校验 */
     private targetDir: string | null = null;
+
+    /** 任务代际计数器，每 forceReleaseLock 递增，用于 processItem 判断是否应继续执行 */
+    private generation = 0;
 
     constructor(
         private readonly prisma: PrismaService,
@@ -349,6 +355,21 @@ export class CloneService {
     /**
      * 检查是否有任务正在执行
      */
+
+    /**
+     * 根据子项状态统计计算任务最终状态
+     * 统一 finishTask / getTaskProgress / getRecentTasks 三处的终态判断逻辑
+     *
+     * @param completedCount 已完成子项数
+     * @param failedCount    失败子项数
+     * @returns 任务状态字符串: COMPLETED | FAILED | PARTIAL
+     */
+    private static computeFinalTaskStatus(completedCount: number, failedCount: number): string {
+        if (failedCount === 0) return 'COMPLETED';
+        if (completedCount === 0) return 'FAILED';
+        return 'PARTIAL';
+    }
+
     isRunning(): boolean {
         return this.running;
     }
@@ -373,6 +394,7 @@ export class CloneService {
      * 强制释放锁（仅用于假死恢复）
      */
     forceReleaseLock() {
+        this.generation++;
         this.running = false;
         this.lockAcquiredAt = null;
         this.currentTaskId = null;
@@ -387,7 +409,10 @@ export class CloneService {
      * 并确保 running 锁释放，防止调度器永久阻塞。
      */
     async executeTask(taskId: bigint) {
-        if (this.running) return;
+        if (this.running) {
+            this.logger.warn(`executeTask 被跳过，因为 running 锁已被持有: taskId=${Number(taskId)}`);
+            return;
+        }
 
         this.running = true;
         this.lockAcquiredAt = new Date();
@@ -456,20 +481,31 @@ export class CloneService {
         shallow: boolean,
         mirrorSource: MirrorSourceName = 'direct',
     ) {
+        const capturedGen = this.generation;
         await this.acquire();
+        let error: string | null = null;
         try {
-            await withTimeout(this.processItemInner(item, shallow, mirrorSource), ITEM_TIMEOUT_MS, `子项处理超时: ${item.fullName}`);
+            await withTimeout(
+                this.processItemInner(item, shallow, mirrorSource, capturedGen),
+                ITEM_TIMEOUT_MS,
+                `子项处理超时: ${item.fullName}`,
+            );
         } catch (e: unknown) {
-            // 超时或其他未捕获异常，记录为失败
-            const errorMsg = e instanceof Error ? e.message : String(e);
+            error = e instanceof Error ? e.message : String(e);
             this.logger.error(`子项处理异常: ${item.fullName}`, e);
-            try {
-                await this.recordItemResult(item, false, errorMsg || '未知错误');
-            } catch (recordErr) {
-                this.logger.error('记录子项失败状态时出错', recordErr);
-            }
         } finally {
-            this.release();
+            if (this.generation === capturedGen) {
+                if (error !== null) {
+                    try {
+                        await this.recordItemResult(item, false, error || '未知错误');
+                    } catch (recordErr) {
+                        this.logger.error('记录子项失败状态时出错', recordErr);
+                    }
+                }
+                this.release();
+            } else {
+                this.logger.warn('跳过旧代际信号量释放');
+            }
         }
     }
 
@@ -480,6 +516,7 @@ export class CloneService {
         item: { id: bigint; fullName: string | null; localPath: string | null; cloneUrl: string | null },
         shallow: boolean,
         mirrorSource: MirrorSourceName = 'direct',
+        capturedGen: number,
     ) {
         await this.prisma.cloneTaskItem.update({
             where: { id: item.id },
@@ -487,6 +524,12 @@ export class CloneService {
         });
 
         const result = await this.executeClone(item, shallow, mirrorSource);
+
+        if (this.generation !== capturedGen) {
+            this.logger.warn('代际已变更，跳过状态写入: ' + item.fullName);
+            return;
+        }
+
         await this.recordItemResult(item, result.success, result.error);
     }
 
@@ -530,70 +573,36 @@ export class CloneService {
             return { success: false, error: `路径安全校验失败: ${localPath} 不在目标目录内` };
         }
 
-        // cloneUrl 为空：删除目录并报错（无地址无法克隆或更新）
-        if (!item.cloneUrl) {
-            if (existsSync(localPath)) {
-                await this.removeCloneDir(localPath);
-                this.logger.warn(`cloneUrl 为空，已删除目录: ${localPath}`);
-            }
-            return { success: false, error: 'cloneUrl 为空，无法克隆或更新仓库' };
-        }
+        const emptyUrlResult = await this.handleEmptyCloneUrl(item.cloneUrl, localPath);
+        if (emptyUrlResult) return emptyUrlResult;
 
-        // 运行时注入 Token（不修改数据库中的 cloneUrl）
-        // 注：这里提前注入，确保重试时也能使用认证后的 URL
-        let authenticatedUrl = item.cloneUrl;
-        const githubToken = await this.config.getValue('github.token');
-        if (githubToken) {
-            authenticatedUrl = authenticatedUrl.replace('https://github.com/', `https://x-access-token:${githubToken}@github.com/`);
-        }
-
-        // 应用镜像代理（仅对公开仓库有效，私有仓库使用 Token 时不走代理）
-        const shouldUseMirror = mirrorSource !== 'direct' && !githubToken;
-        const finalUrl = shouldUseMirror ? getMirrorUrl(authenticatedUrl, mirrorSource) : authenticatedUrl;
-
-        if (shouldUseMirror) {
-            this.logger.log(`使用镜像代理: ${mirrorSource} | ${item.fullName}`);
-        }
+        const { finalUrl, githubToken } = await this.prepareCloneUrl(item.cloneUrl!, mirrorSource, item.fullName);
 
         try {
             // 检查目录是否已存在
             if (existsSync(localPath)) {
-                const validation = await this.validateExistingRepo(localPath, item.cloneUrl);
+                const validation = await this.validateExistingRepo(localPath, item.cloneUrl!);
                 if (validation.success) {
-                    // 验证通过：执行 git pull 更新
                     this.logger.log(`目录已存在且验证通过，执行 git pull 更新: ${item.fullName}`);
                     return await this.executeGitPull(localPath, item.fullName);
                 }
-                // 验证失败：删除损坏的目录，继续重新克隆
                 this.logger.warn(`仓库验证失败，删除并重新克隆: ${item.fullName} | ${validation.error}`);
                 await this.removeCloneDir(localPath);
             }
 
-            // 确保父目录存在（异步操作，不阻塞事件循环）
             const parentDir = path.dirname(localPath);
             await mkdir(parentDir, { recursive: true });
 
-            // 首次克隆（带 checkout 警告处理）
-            return await this.executeGitClone(finalUrl, localPath, shallow, item.fullName);
+            return await this.executeGitClone(finalUrl, localPath, shallow, item.fullName, githubToken);
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? (e as Error & { stderr?: string }).stderr || e.message : String(e);
 
-            // 清理失败的克隆目录
-            try {
-                if (existsSync(localPath)) {
-                    await rm(localPath, { recursive: true, force: true });
-                }
-            } catch {
-                // 忽略清理失败
-            }
+            await this.cleanFailedCloneDir(localPath);
 
-            // 判断是否为可重试错误
-            const isRetryable = RETRYABLE_CLONE_ERROR_PATTERNS.some((pattern) => errorMsg.includes(pattern));
-            if (!isRetryable) {
+            if (!RETRYABLE_CLONE_ERROR_PATTERNS.some((pattern) => errorMsg.includes(pattern))) {
                 return { success: false, error: errorMsg.substring(0, 2000) };
             }
 
-            // 确定重试次数：网络错误可以重试更多次
             const isNetwork = isNetworkError(errorMsg);
             const maxRetries = isNetwork ? MAX_NETWORK_RETRY_ATTEMPTS : 1;
 
@@ -602,60 +611,123 @@ export class CloneService {
                     `错误: ${errorMsg.substring(0, 200)} | 最大重试次数: ${maxRetries}`,
             );
 
-            // 带指数退避的重试循环
-            for (let attempt = 0; attempt < maxRetries; attempt++) {
-                // 网络错误需要等待后重试（指数退避）
-                if (isNetwork && attempt > 0) {
-                    const backoffMs = calculateBackoffDelay(attempt);
-                    this.logger.log(`等待 ${backoffMs}ms 后重试 (${attempt}/${maxRetries}): ${item.fullName}`);
-                    await delay(backoffMs);
-                }
+            return await this.executeRetryLoop(finalUrl, localPath, shallow, item.fullName, isNetwork, maxRetries, githubToken);
+        }
+    }
 
-                try {
-                    this.logger.log(`开始重试 (${attempt + 1}/${maxRetries}): ${item.fullName}`);
+    /**
+     * 准备克隆 URL（注入 Token + 应用镜像代理）
+     *
+     * 运行时注入 GitHub Token（不修改数据库），然后根据是否需要镜像代理转换 URL。
+     *
+     * @param cloneUrl     原始 clone URL
+     * @param mirrorSource 镜像源名称
+     * @param fullName     仓库全名（用于日志，需要镜像时打印）
+     * @returns 包含最终 URL 和是否使用镜像的标记
+     */
+    private async prepareCloneUrl(
+        cloneUrl: string,
+        mirrorSource: MirrorSourceName,
+        fullName?: string | null,
+    ): Promise<{ finalUrl: string; shouldUseMirror: boolean; githubToken?: string }> {
+        // 不在 URL 中注入 Token（避免 Token 出现在命令行参数中），
+        // Token 通过 GIT_ASKPASS 环境变量传递给 git 命令
+        const githubToken = await this.config.getValue('github.token');
 
-                    // 清理可能残留的目录
-                    if (existsSync(localPath)) {
-                        await rm(localPath, { recursive: true, force: true });
-                    }
+        const shouldUseMirror = mirrorSource !== 'direct' && !githubToken;
+        const finalUrl = shouldUseMirror ? getMirrorUrl(cloneUrl, mirrorSource) : cloneUrl;
 
-                    // 重新创建父目录
-                    const parentDir = path.dirname(localPath);
-                    await mkdir(parentDir, { recursive: true });
+        if (shouldUseMirror && fullName) {
+            this.logger.log(`使用镜像代理: ${mirrorSource} | ${fullName}`);
+        }
 
-                    // 使用认证后的 URL 重试
-                    const result = await this.executeGitClone(finalUrl, localPath, shallow, item.fullName);
-                    if (result.success) {
-                        this.logger.log(`重试成功 (${attempt + 1}/${maxRetries}): ${item.fullName}`);
-                    }
-                    return result;
-                } catch (retryErr: unknown) {
-                    const retryErrorMsg =
-                        retryErr instanceof Error ? (retryErr as Error & { stderr?: string }).stderr || retryErr.message : String(retryErr);
+        return { finalUrl, shouldUseMirror, githubToken };
+    }
 
-                    // 最后一次重试也失败了
-                    if (attempt === maxRetries - 1) {
-                        // 清理目录
-                        try {
-                            if (existsSync(localPath)) {
-                                await rm(localPath, { recursive: true, force: true });
-                            }
-                        } catch {
-                            // 忽略清理失败
-                        }
-                        return { success: false, error: `重试 ${maxRetries} 次后仍失败: ${retryErrorMsg.substring(0, 1900)}` };
-                    }
+    /**
+     * 清理失败的克隆目录
+     */
+    private async cleanFailedCloneDir(localPath: string): Promise<void> {
+        try {
+            if (existsSync(localPath)) {
+                await rm(localPath, { recursive: true, force: true });
+            }
+        } catch {
+            // 忽略清理失败
+        }
+    }
 
-                    // 还有重试机会，继续
-                    this.logger.warn(
-                        `重试失败 (${attempt + 1}/${maxRetries}): ${item.fullName} | ` + `错误: ${retryErrorMsg.substring(0, 200)}`,
-                    );
-                }
+    /**
+     * 处理 cloneUrl 为空的情况：删除可能存在的目录并返回错误
+     *
+     * @returns 如果 cloneUrl 为空返回错误结果，否则返回 null
+     */
+    private async handleEmptyCloneUrl(cloneUrl: string | null, localPath: string): Promise<{ success: false; error: string } | null> {
+        if (cloneUrl) return null;
+        if (existsSync(localPath)) {
+            await this.removeCloneDir(localPath);
+            this.logger.warn(`cloneUrl 为空，已删除目录: ${localPath}`);
+        }
+        return { success: false, error: 'cloneUrl 为空，无法克隆或更新仓库' };
+    }
+
+    /**
+     * 执行单次重试尝试（清理目录 + 创建父目录 + git clone）
+     */
+    private async executeSingleRetry(
+        finalUrl: string,
+        localPath: string,
+        shallow: boolean,
+        fullName: string | null,
+        githubToken?: string,
+    ): Promise<{ success: boolean; error?: string }> {
+        if (existsSync(localPath)) {
+            await rm(localPath, { recursive: true, force: true });
+        }
+        const parentDir = path.dirname(localPath);
+        await mkdir(parentDir, { recursive: true });
+        return await this.executeGitClone(finalUrl, localPath, shallow, fullName, githubToken);
+    }
+
+    /**
+     * 带指数退避的重试循环
+     *
+     * 网络错误等待后重试（指数退避），Git 内部错误立即重试。
+     */
+    private async executeRetryLoop(
+        finalUrl: string,
+        localPath: string,
+        shallow: boolean,
+        fullName: string | null,
+        isNetwork: boolean,
+        maxRetries: number,
+        githubToken?: string,
+    ): Promise<{ success: boolean; error?: string }> {
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            if (isNetwork && attempt > 0) {
+                const backoffMs = calculateBackoffDelay(attempt);
+                this.logger.log(`等待 ${backoffMs}ms 后重试 (${attempt}/${maxRetries}): ${fullName}`);
+                await delay(backoffMs);
             }
 
-            // 理论上不会执行到这里，但作为兜底
-            return { success: false, error: '重试逻辑异常' };
+            try {
+                this.logger.log(`开始重试 (${attempt + 1}/${maxRetries}): ${fullName}`);
+                const result = await this.executeSingleRetry(finalUrl, localPath, shallow, fullName, githubToken);
+                if (result.success) {
+                    this.logger.log(`重试成功 (${attempt + 1}/${maxRetries}): ${fullName}`);
+                }
+                return result;
+            } catch (retryErr: unknown) {
+                const retryErrorMsg =
+                    retryErr instanceof Error ? (retryErr as Error & { stderr?: string }).stderr || retryErr.message : String(retryErr);
+                if (attempt === maxRetries - 1) {
+                    await this.cleanFailedCloneDir(localPath);
+                    return { success: false, error: `重试 ${maxRetries} 次后仍失败: ${retryErrorMsg.substring(0, 1900)}` };
+                }
+                this.logger.warn(`重试失败 (${attempt + 1}/${maxRetries}): ${fullName} | ` + `错误: ${retryErrorMsg.substring(0, 200)}`);
+            }
         }
+        return { success: false, error: '重试逻辑异常' };
     }
 
     /**
@@ -673,17 +745,32 @@ export class CloneService {
      * @depends git CLI
      */
     private async executeGitClone(
-        authenticatedUrl: string,
+        cloneUrl: string,
         localPath: string,
         shallow: boolean,
         fullName: string | null,
+        githubToken?: string,
     ): Promise<{ success: boolean; error?: string }> {
+        // 使用 GIT_ASKPASS 而非在 URL 中注入 Token，避免 Token 出现在命令行参数中
+        // （Windows 上其他进程可通过命令行参数读取 Token）
+        let askpassPath: string | undefined;
+
+        const env: NodeJS.ProcessEnv = {
+            ...process.env,
+            GIT_TERMINAL_PROMPT: '0',
+        };
+
+        if (githubToken) {
+            askpassPath = await this.writeAskpassScript(githubToken);
+            env.GIT_ASKPASS = askpassPath;
+        }
+
         // 构建 git clone 命令
         // -c core.longpaths=true 解决 Windows 长路径限制（文件名超过 260 字符）
-        // -c core.protectNTFS=false 允许文件名包含特殊字符（如中文书名号《》）
+        // -c core.protectNTFS=false 允许文件名包含特殊字符
         const args = ['-c', 'core.longpaths=true', '-c', 'core.protectNTFS=false', 'clone'];
         if (shallow) args.push('--depth', '1');
-        args.push(authenticatedUrl, localPath);
+        args.push(cloneUrl, localPath);
 
         // 使用 spawn 替代 execFile，以便在超时时杀死整个进程树
         // spawn 返回的 ChildProcess 对象可以用于 killProcessTree
@@ -692,12 +779,14 @@ export class CloneService {
             let stdout = '';
             let killed = false;
 
+            // eslint-disable-next-line sonarjs/no-os-command-from-path -- 'git' 是标准系统工具，PATH 不可用户控制，参数来自验证后的路径和 URL，安全
             const child = spawn('git', args, {
                 stdio: ['ignore', 'pipe', 'pipe'],
                 // Unix: 创建新的进程组，便于杀死整个进程树
                 // Windows: detached 选项无效，但不影响功能
                 detached: process.platform !== 'win32',
                 windowsHide: true,
+                env,
             });
 
             // 收集输出
@@ -716,6 +805,10 @@ export class CloneService {
 
             child.on('close', (code) => {
                 clearTimeout(timer);
+                // 清理 askpass 临时脚本
+                if (askpassPath) {
+                    this.cleanupAskpassScript(askpassPath);
+                }
 
                 // 如果是被超时杀死的
                 if (killed) {
@@ -726,7 +819,7 @@ export class CloneService {
                 const errorMsg = stderr || stdout;
 
                 // 检查是否是 checkout 失败（克隆成功但 checkout 失败）
-                // 这种情况通常是因为文件名包含 Windows 不支持的字符（如 ?）
+                // 这种情况通常是因为文件名包含 Windows 不支持的字符
                 if (errorMsg.includes('warning: Clone succeeded, but checkout failed')) {
                     this.logger.warn(`克隆成功但 checkout 失败（可能是文件名包含特殊字符）: ${fullName}`);
                     resolve({ success: true });
@@ -744,6 +837,10 @@ export class CloneService {
 
             child.on('error', (err) => {
                 clearTimeout(timer);
+                // 清理 askpass 临时脚本
+                if (askpassPath) {
+                    this.cleanupAskpassScript(askpassPath);
+                }
                 reject(err);
             });
         });
@@ -943,14 +1040,7 @@ export class CloneService {
         const completedCount = items.filter((i) => i.status === 'COMPLETED').length;
         const failedCount = items.filter((i) => i.status === 'FAILED').length;
 
-        let status: string;
-        if (failedCount === 0) {
-            status = 'COMPLETED';
-        } else if (completedCount === 0) {
-            status = 'FAILED';
-        } else {
-            status = 'PARTIAL';
-        }
+        const status = CloneService.computeFinalTaskStatus(completedCount, failedCount);
 
         await this.prisma.cloneTask.update({
             where: { id: taskId },
@@ -998,13 +1088,7 @@ export class CloneService {
         // 根据子项状态实时计算任务状态
         let status = task.status;
         if (task.status !== 'PROCESSING' && task.status !== 'PENDING') {
-            if (failedItems === 0) {
-                status = 'COMPLETED';
-            } else if (completedItems === 0) {
-                status = 'FAILED';
-            } else {
-                status = 'PARTIAL';
-            }
+            status = CloneService.computeFinalTaskStatus(completedItems, failedItems);
         }
 
         const failedDetails = task.items.filter((i) => i.status === 'FAILED').map((i) => ({ fullName: i.fullName, error: i.errorMessage }));
@@ -1215,13 +1299,56 @@ export class CloneService {
         }
 
         try {
-            if (existsSync(localPath)) {
-                await rm(localPath, { recursive: true, force: true });
-                this.logger.log(`已删除克隆目录: ${localPath}`);
-            }
+            await rm(localPath, { recursive: true, force: true });
+            this.logger.log(`已删除克隆目录: ${localPath}`);
         } catch (e: unknown) {
+            // rm({ force: true }) 在文件不存在时不会报错，无需额外 existsSync 检查
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.warn(`删除克隆目录失败: ${localPath} | ${msg}`);
+        }
+    }
+
+    /**
+     * 写入 GIT_ASKPASS 临时脚本
+     *
+     * git 在需要认证时会调用此脚本，脚本输出 Token 作为密码。
+     * 使用临时文件而非命令行参数传递 Token，避免 Token 被其他进程截获。
+     *
+     * @param token GitHub Token
+     * @returns 临时脚本的绝对路径，调用方需在完成后调用 cleanupAskpassScript 删除
+     */
+    private async writeAskpassScript(token: string): Promise<string> {
+        const scriptPath = path.join(
+            os.tmpdir(),
+            `githubstars-askpass-${randomBytes(8).toString('hex')}${process.platform === 'win32' ? '.bat' : '.sh'}`,
+        );
+
+        if (process.platform === 'win32') {
+            // Windows: 使用 bat 脚本
+            const content = `@echo off\r\necho ${token}\r\n`;
+            await writeFile(scriptPath, content, 'utf-8');
+        } else {
+            // Unix: 使用 sh 脚本
+            const content = `#!/bin/sh\necho "${token}"\n`;
+            await writeFile(scriptPath, content, 'utf-8');
+            await chmod(scriptPath, 0o755);
+        }
+
+        return scriptPath;
+    }
+
+    /**
+     * 清理 GIT_ASKPASS 临时脚本
+     *
+     * @param scriptPath 临时脚本的绝对路径
+     */
+    private cleanupAskpassScript(scriptPath: string): void {
+        try {
+            if (existsSync(scriptPath)) {
+                unlinkSync(scriptPath);
+            }
+        } catch {
+            // 忽略清理失败
         }
     }
 
@@ -1251,13 +1378,7 @@ export class CloneService {
                 // 根据子项状态实时计算任务状态
                 let status = t.status;
                 if (t.status !== 'PROCESSING' && t.status !== 'PENDING') {
-                    if (failedItems === 0) {
-                        status = 'COMPLETED';
-                    } else if (completedItems === 0) {
-                        status = 'FAILED';
-                    } else {
-                        status = 'PARTIAL';
-                    }
+                    status = CloneService.computeFinalTaskStatus(completedItems, failedItems);
                 }
 
                 return {

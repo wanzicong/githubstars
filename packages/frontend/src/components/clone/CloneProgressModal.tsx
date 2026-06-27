@@ -39,6 +39,11 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
     else if (status === 'PENDING') statusText = '等待中'
     else statusText = '执行中'
 
+    let progressStatus: 'success' | 'exception' | undefined
+    if (isCompleted) progressStatus = 'success'
+    else if (isFailed) progressStatus = 'exception'
+    else progressStatus = undefined
+
     return (
         <Modal
             title="克隆进度"
@@ -84,7 +89,7 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
                     <Progress
                         type="circle"
                         percent={percent}
-                        status={isCompleted ? 'success' : isFailed ? 'exception' : undefined}
+                        status={progressStatus}
                         size={120}
                     />
                 </div>
@@ -167,7 +172,7 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
                                             title: '操作',
                                             key: 'action',
                                             width: 80,
-                                            render: (_: any, record: CloneTaskItem) => (
+                                            render: (_: unknown, record: CloneTaskItem) => (
                                                 record.status !== 'COMPLETED' && record.status !== 'PROCESSING' && (
                                                     <Popconfirm
                                                         title="确定重试此项？"

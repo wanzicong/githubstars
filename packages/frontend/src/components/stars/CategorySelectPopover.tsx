@@ -31,15 +31,23 @@ export default function CategorySelectPopover({ repoId, categoryIds = [], onChan
     const [checkedKeys, setCheckedKeys] = useState<number[]>(categoryIds)
     const [submitting, setSubmitting] = useState(false)
 
+    const loadTreeData = useCallback(async () => {
+        setLoading(true)
+        try {
+            const data = await fetchCategoryTree()
+            setTreeData(data)
+        } catch {
+            message.error('加载分类树失败')
+        } finally {
+            setLoading(false)
+        }
+    }, [message])
+
     useEffect(() => {
         if (open && treeData.length === 0) {
-            setLoading(true)
-            fetchCategoryTree()
-                .then(setTreeData)
-                .catch(() => message.error('加载分类树失败'))
-                .finally(() => setLoading(false))
+            loadTreeData()
         }
-    }, [open, treeData.length, message])
+    }, [open, treeData.length, loadTreeData])
 
     useEffect(() => { setCheckedKeys(categoryIds) }, [categoryIds])
 

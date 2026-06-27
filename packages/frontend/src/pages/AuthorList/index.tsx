@@ -63,6 +63,11 @@ export default function AuthorList() {
 
     const { records: authors } = pageResult
 
+    let emptyDescription: string
+    if (loading) emptyDescription = '加载中...'
+    else if (keyword) emptyDescription = `未找到包含「${keyword}」的作者`
+    else emptyDescription = '暂无作者数据'
+
     return (
         <div>
             <Title level={3} style={{ marginBottom: 24 }}>
@@ -205,7 +210,7 @@ export default function AuthorList() {
                     </>
                 ) : (
                     <Card>
-                        <Empty description={loading ? '加载中...' : keyword ? `未找到包含「${keyword}」的作者` : '暂无作者数据'} />
+                        <Empty description={emptyDescription} />
                     </Card>
                 )}
             </Spin>

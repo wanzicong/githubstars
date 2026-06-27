@@ -46,11 +46,14 @@ export class ExportService {
      * @returns 完整的 Markdown 字符串
      */
     async generateMarkdown(filters: MarkdownFilters, maxCount: number): Promise<string> {
-        this.logger.log(`开始导出Markdown: keyword=${filters.keyword || ''}, language=${filters.language || ''}, maxCount=${maxCount}`);
+        // 修复 M2: 限制最大导出条数，防止 OOM
+        const MAX_EXPORT_LIMIT = 1000;
+        const safeMaxCount = Math.min(maxCount, MAX_EXPORT_LIMIT);
+        this.logger.log(`开始导出Markdown: keyword=${filters.keyword || ''}, language=${filters.language || ''}, maxCount=${safeMaxCount}`);
 
         const result = await this.repoService.findPage({
             page: 1,
-            size: maxCount,
+            size: safeMaxCount,
             keyword: filters.keyword,
             language: filters.language,
             sortBy: filters.sortBy,

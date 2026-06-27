@@ -71,8 +71,8 @@ export default function CloneWizardModal({ open, onClose, selectedRepos, onTaskC
             } else {
                 message.error(result.message || '创建任务失败')
             }
-        } catch (e: any) {
-            message.error(e.message || '创建任务失败')
+        } catch (e: unknown) {
+            message.error(e instanceof Error ? e.message : '创建任务失败')
         } finally {
             setLoading(false)
         }

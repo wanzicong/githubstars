@@ -56,7 +56,7 @@ describe('CloneService', () => {
             prisma.cloneTask.create.mockResolvedValue({
                 id: createBigIntId(1),
                 status: 'PENDING',
-                targetDir: '/tmp/clone',
+                targetDir: '/tmp/clone', // eslint-disable-line sonarjs/publicly-writable-directories
                 concurrency: 5,
                 shallow: true,
                 totalItems: 2,
@@ -66,7 +66,7 @@ describe('CloneService', () => {
 
             const result = await service.createTask({
                 repoIds: [1, 2],
-                targetDir: '/tmp/clone',
+                targetDir: '/tmp/clone', // eslint-disable-line sonarjs/publicly-writable-directories
                 concurrency: 5,
                 shallow: true,
                 mirrorSource: 'direct',
@@ -83,7 +83,7 @@ describe('CloneService', () => {
 
             const result = await service.createTask({
                 repoIds: [999],
-                targetDir: '/tmp/clone',
+                targetDir: '/tmp/clone', // eslint-disable-line sonarjs/publicly-writable-directories
                 concurrency: 5,
                 shallow: true,
                 mirrorSource: 'direct',
@@ -125,7 +125,7 @@ describe('CloneService', () => {
                 {
                     id: createBigIntId(1),
                     status: 'COMPLETED',
-                    targetDir: '/tmp/clone1',
+                    targetDir: '/tmp/clone1', // eslint-disable-line sonarjs/publicly-writable-directories
                     concurrency: 3,
                     shallow: true,
                     totalItems: 2,
@@ -137,7 +137,7 @@ describe('CloneService', () => {
                 {
                     id: createBigIntId(2),
                     status: 'PARTIAL',
-                    targetDir: '/tmp/clone2',
+                    targetDir: '/tmp/clone2', // eslint-disable-line sonarjs/publicly-writable-directories
                     concurrency: 2,
                     shallow: false,
                     totalItems: 3,
@@ -169,15 +169,15 @@ describe('CloneService', () => {
             prisma.cloneTask.findUnique.mockResolvedValue({
                 id: createBigIntId(1),
                 status: 'PROCESSING',
-                targetDir: '/tmp/clone',
+                targetDir: '/tmp/clone', // eslint-disable-line sonarjs/publicly-writable-directories
                 concurrency: 3,
                 shallow: true,
                 createdAt: new Date(),
                 startedAt: new Date(),
                 finishedAt: null,
                 items: [
-                    { fullName: 'a/b', status: 'COMPLETED', localPath: '/tmp/clone/a/b', errorMessage: null },
-                    { fullName: 'c/d', status: 'FAILED', localPath: '/tmp/clone/c/d', errorMessage: 'timeout' },
+                    { fullName: 'a/b', status: 'COMPLETED', localPath: '/tmp/clone/a/b', errorMessage: null }, // eslint-disable-line sonarjs/publicly-writable-directories
+                    { fullName: 'c/d', status: 'FAILED', localPath: '/tmp/clone/c/d', errorMessage: 'timeout' }, // eslint-disable-line sonarjs/publicly-writable-directories
                 ],
             });
 
@@ -203,7 +203,7 @@ describe('CloneService', () => {
 
     describe('retryFailed', () => {
         it('应重置失败项为 PENDING', async () => {
-            prisma.cloneTaskItem.findMany.mockResolvedValue([{ id: createBigIntId(1), status: 'FAILED', localPath: '/tmp/c/d' }]);
+            prisma.cloneTaskItem.findMany.mockResolvedValue([{ id: createBigIntId(1), status: 'FAILED', localPath: '/tmp/c/d' }]); // eslint-disable-line sonarjs/publicly-writable-directories
             prisma.$transaction.mockResolvedValue([]);
 
             const result = await service.retryFailed(1);
@@ -226,7 +226,7 @@ describe('CloneService', () => {
                 taskId: createBigIntId(1),
                 fullName: 'x/y',
                 status: 'FAILED',
-                localPath: '/tmp/clone/x/y',
+                localPath: '/tmp/clone/x/y', // eslint-disable-line sonarjs/publicly-writable-directories
             });
             prisma.$transaction.mockImplementation(async (fn: any) => {
                 const tx = {

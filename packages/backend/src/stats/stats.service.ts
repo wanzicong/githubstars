@@ -83,28 +83,44 @@ export class StatsService {
     async getOverviewStats() {
         this.logger.log('查询整体概览统计');
         try {
-            const [total, stars, forks, langResult, ownerResult] = await Promise.all([
+            const [total, stars, forks, langCount, ownerCount] = await Promise.all([
                 this.prisma.githubRepo.count(),
                 this.prisma.githubRepo.aggregate({ _sum: { starsCount: true } }),
                 this.prisma.githubRepo.aggregate({ _sum: { forksCount: true } }),
-                this.prisma.$queryRaw<
-                    Array<{ cnt: bigint }>
-                >`SELECT COUNT(DISTINCT language) AS cnt FROM github_repo WHERE language IS NOT NULL`,
-                this.prisma.$queryRaw<
-                    Array<{ cnt: bigint }>
-                >`SELECT COUNT(DISTINCT owner_name) AS cnt FROM github_repo WHERE owner_name IS NOT NULL`,
+                this.countDistinctLanguages(),
+                this.countDistinctOwners(),
             ]);
             return {
                 totalRepos: total,
                 totalStars: Number(stars._sum.starsCount || 0),
                 totalForks: Number(forks._sum.forksCount || 0),
-                totalLanguages: Number(langResult[0]?.cnt || 0),
-                totalOwners: Number(ownerResult[0]?.cnt || 0),
+                totalLanguages: Number(langCount),
+                totalOwners: Number(ownerCount),
             };
         } catch (e) {
             this.logger.error(`查询整体概览统计失败: ${e instanceof Error ? e.message : String(e)}`, e);
             return { totalRepos: 0, totalStars: 0, totalForks: 0, totalLanguages: 0, totalOwners: 0 };
         }
+    }
+
+    /**
+     * 统计不同编程语言的数量
+     */
+    private async countDistinctLanguages(): Promise<number> {
+        const result = await this.prisma.$queryRaw<Array<{ cnt: bigint }>>`
+            SELECT COUNT(DISTINCT language) AS cnt FROM github_repo WHERE language IS NOT NULL
+        `;
+        return Number(result[0]?.cnt || 0);
+    }
+
+    /**
+     * 统计不同所有者的数量
+     */
+    private async countDistinctOwners(): Promise<number> {
+        const result = await this.prisma.$queryRaw<Array<{ cnt: bigint }>>`
+            SELECT COUNT(DISTINCT owner_name) AS cnt FROM github_repo WHERE owner_name IS NOT NULL
+        `;
+        return Number(result[0]?.cnt || 0);
     }
 
     /**

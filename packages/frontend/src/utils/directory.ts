@@ -42,9 +42,9 @@ export function isValidDirectoryPath(path: string): boolean {
   }
 
   // Windows 路径：C:\xxx 或 D:\xxx
-  const windowsPathRegex = /^[A-Za-z]:\\(?:[^\\\/:*?"<>|\r\n]+\\)*[^\\\/:*?"<>|\r\n]*$/
+  const windowsPathRegex = /^[A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]+\\)*[^\\/:*?"<>|\r\n]*$/
   // Unix 路径：/xxx/xxx
-  const unixPathRegex = /^\/(?:[^\/\0]+\/)*[^\/\0]*$/
+  const unixPathRegex = /^\/(?:[^/\0]+\/)*[^/\0]*$/
 
   return windowsPathRegex.test(path) || unixPathRegex.test(path)
 }

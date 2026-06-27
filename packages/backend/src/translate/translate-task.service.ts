@@ -94,7 +94,11 @@ export class TranslateTaskService {
                 if (!success) attempts++;
             }
 
-            await this.recordItemResult(item, success, attempts, resultNote);
+            if (success) {
+                await this.recordItemSuccess(item, resultNote);
+            } else {
+                await this.recordItemFailure(item, attempts, resultNote);
+            }
         } finally {
             this.release();
         }
@@ -137,28 +141,31 @@ export class TranslateTaskService {
     }
 
     /**
-     * 记录翻译子项的最终结果，并原子更新父任务计数器
+     * 记录翻译子项成功结果，并原子更新父任务计数器
      */
-    private async recordItemResult(item: any, success: boolean, attempts: number, resultNote: string): Promise<void> {
-        if (success) {
-            await this.prisma.translationTaskItem.update({
-                where: { id: item.id },
-                data: { status: 'SUCCESS', errorMessage: resultNote, updatedAt: new Date() },
-            });
-            const incrementData: Record<string, { increment: number }> = { completedItems: { increment: 1 } };
-            if (item.translateType === 'description') incrementData.descCompleted = { increment: 1 };
-            else incrementData.readmeCompleted = { increment: 1 };
-            await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incrementData });
-        } else {
-            await this.prisma.translationTaskItem.update({
-                where: { id: item.id },
-                data: { status: 'FAILED', errorMessage: resultNote, retryCount: attempts, updatedAt: new Date() },
-            });
-            const incrementData: Record<string, { increment: number }> = { failedItems: { increment: 1 } };
-            if (item.translateType === 'description') incrementData.descFailed = { increment: 1 };
-            else incrementData.readmeFailed = { increment: 1 };
-            await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incrementData });
-        }
+    private async recordItemSuccess(item: any, resultNote: string): Promise<void> {
+        await this.prisma.translationTaskItem.update({
+            where: { id: item.id },
+            data: { status: 'SUCCESS', errorMessage: resultNote, updatedAt: new Date() },
+        });
+        const incrementData: Record<string, { increment: number }> = { completedItems: { increment: 1 } };
+        if (item.translateType === 'description') incrementData.descCompleted = { increment: 1 };
+        else incrementData.readmeCompleted = { increment: 1 };
+        await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incrementData });
+    }
+
+    /**
+     * 记录翻译子项失败结果，并原子更新父任务计数器
+     */
+    private async recordItemFailure(item: any, attempts: number, resultNote: string): Promise<void> {
+        await this.prisma.translationTaskItem.update({
+            where: { id: item.id },
+            data: { status: 'FAILED', errorMessage: resultNote, retryCount: attempts, updatedAt: new Date() },
+        });
+        const incrementData: Record<string, { increment: number }> = { failedItems: { increment: 1 } };
+        if (item.translateType === 'description') incrementData.descFailed = { increment: 1 };
+        else incrementData.readmeFailed = { increment: 1 };
+        await this.prisma.translationTask.update({ where: { id: item.taskId }, data: incrementData });
     }
 
     /**
@@ -354,7 +361,13 @@ export class TranslateTaskService {
                 },
                 select: { id: true, fullName: true },
             }),
-            this.prisma.githubRepo.findMany({ where: { readmeFetched: false }, select: { id: true, fullName: true } }),
+            // 修复 H3：同时包含 readmeFetched=false（未获取过）和 readmeFetched=true 但 readmeCn=null（翻译失败需重试）的仓库
+            this.prisma.githubRepo.findMany({
+                where: {
+                    OR: [{ readmeFetched: false }, { AND: [{ readmeFetched: true }, { readmeCn: null }] }],
+                },
+                select: { id: true, fullName: true },
+            }),
         ]);
         if (!needDesc.length && !needReadme.length) return null;
         const descItems = needDesc.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'description' }));
@@ -367,31 +380,91 @@ export class TranslateTaskService {
     }
 
     /**
+     * 创建并启动批量翻译任务（单次创建，非循环逐个任务）
+     *
+     * 用于 selected 模式下批量翻译指定仓库，避免为每个仓库创建独立任务。
+     *
+     * @param repoIds 仓库 ID 列表
+     * @param type 翻译类型：readme / both
+     * @returns 新创建的任务 ID，参数为空时返回 null
+     */
+    async createBatchTask(repoIds: number[], type: 'readme' | 'both'): Promise<number | null> {
+        if (!repoIds.length) return null;
+        const items: Array<{ repoId: bigint; fullName: string | null; translateType: string }> = [];
+        let descTotal = 0;
+        let readmeTotal = 0;
+
+        if (type === 'readme') {
+            for (const rid of repoIds) {
+                items.push({ repoId: BigInt(rid), fullName: null, translateType: 'readme' });
+            }
+            readmeTotal = repoIds.length;
+        } else {
+            for (const rid of repoIds) {
+                items.push({ repoId: BigInt(rid), fullName: null, translateType: 'description' });
+                items.push({ repoId: BigInt(rid), fullName: null, translateType: 'readme' });
+            }
+            descTotal = repoIds.length;
+            readmeTotal = repoIds.length;
+        }
+
+        return this.createTaskWithItems(
+            { totalItems: items.length, descTotal, readmeTotal },
+            items,
+            `创建批量翻译任务 repos=${repoIds.length} type=${type}`,
+        );
+    }
+
+    /**
      * 创建并启动筛选条件批量翻译任务
      *
-     * 根据前端传入的筛选条件（关键词、语言、分类、日期等）查询仓库并创建批量翻译子任务。
-     * 仅翻译 README 类型。
+     * 根据前端传入的筛选条件（关键词、语言、分类、日期等）查询仓库并创建批量翻译子项。
+     * 支持 description / readme / both 三种翻译类型。
      *
      * @param params 筛选条件对象
+     * @param type 翻译类型，默认 readme
      * @returns 新创建的任务 ID，无符合条件仓库时返回 null
      */
-    async createAndStartFilterBatch(params: {
-        keyword?: string;
-        language?: string;
-        sortBy?: string;
-        sortOrder?: string;
-        dateField?: string;
-        startDate?: string;
-        endDate?: string;
-    }) {
+    async createAndStartFilterBatch(
+        params: {
+            keyword?: string;
+            language?: string;
+            sortBy?: string;
+            sortOrder?: string;
+            dateField?: string;
+            startDate?: string;
+            endDate?: string;
+        },
+        type: 'description' | 'readme' | 'both' = 'readme',
+    ) {
         await this.cleanOldTasks();
-        const result = await this.githubRepo.findPage({ ...params, page: 1, size: 10000, untranslatedOnly: true });
-        const repos = result.records as Array<{ id: bigint; fullName: string }>;
+        const result = await this.githubRepo.findPage({ ...params, page: 1, size: 10000 });
+        const repos = result.records as Array<{ id: bigint; fullName: string; description?: string; descriptionCn?: string }>;
         if (!repos.length) return null;
+
+        let items: Array<{ repoId: bigint; fullName: string | null; translateType: string }> = [];
+        let descTotal = 0;
+        let readmeTotal = 0;
+
+        if (type === 'description') {
+            items = repos.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'description' }));
+            descTotal = repos.length;
+        } else if (type === 'readme') {
+            items = repos.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'readme' }));
+            readmeTotal = repos.length;
+        } else {
+            items = repos.flatMap((r) => [
+                { repoId: r.id, fullName: r.fullName, translateType: 'description' },
+                { repoId: r.id, fullName: r.fullName, translateType: 'readme' },
+            ]);
+            descTotal = repos.length;
+            readmeTotal = repos.length;
+        }
+
         return this.createTaskWithItems(
-            { totalItems: repos.length, readmeTotal: repos.length, descTotal: 0 },
-            repos.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'readme' })),
-            `创建筛选批量翻译任务 count=${repos.length}`,
+            { totalItems: items.length, readmeTotal, descTotal },
+            items,
+            `创建筛选批量翻译任务 type=${type} count=${repos.length}`,
         );
     }
 

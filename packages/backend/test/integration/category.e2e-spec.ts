@@ -86,7 +86,7 @@ describe('category (e2e)', () => {
                 .expect(201);
 
             const body = res.body;
-            expect(body.data.length).toBe(1);
+            expect(body.data).toHaveLength(1);
             expect(body.data[0].name).toBe('后端');
         });
     });
@@ -104,7 +104,8 @@ describe('category (e2e)', () => {
         it('同名分类应返回冲突错误', async () => {
             await prisma.category.create({ data: { name: '重复', sortOrder: 0, createdAt: now() } });
 
-            await request(app.getHttpServer()).post('/api/category/create').send({ name: '重复', sortOrder: 0 }).expect(409);
+            const res = await request(app.getHttpServer()).post('/api/category/create').send({ name: '重复', sortOrder: 0 }).expect(409);
+            expect(res.body.statusCode).toBe(409);
         });
     });
 
@@ -123,7 +124,8 @@ describe('category (e2e)', () => {
         });
 
         it('不存在的分类应返回 404', async () => {
-            await request(app.getHttpServer()).post('/api/category/update').send({ id: 99999, name: 'x' }).expect(404);
+            const res = await request(app.getHttpServer()).post('/api/category/update').send({ id: 99999, name: 'x' }).expect(404);
+            expect(res.body.statusCode).toBe(404);
         });
     });
 
@@ -145,10 +147,11 @@ describe('category (e2e)', () => {
             const parent = await prisma.category.create({ data: { name: '父', sortOrder: 0, createdAt: now() } });
             await prisma.category.create({ data: { name: '子', parentId: parent.id, sortOrder: 0, createdAt: now() } });
 
-            await request(app.getHttpServer())
+            const res = await request(app.getHttpServer())
                 .post('/api/category/delete')
                 .send({ id: Number(parent.id) })
                 .expect(409);
+            expect(res.body.statusCode).toBe(409);
         });
     });
 
@@ -224,7 +227,7 @@ describe('category (e2e)', () => {
 
             const body = res.body;
             expect(body.meta.total).toBe(2);
-            expect(body.data.length).toBe(2);
+            expect(body.data).toHaveLength(2);
             expect(body.data[0].starsCount).toBe(200);
         });
     });

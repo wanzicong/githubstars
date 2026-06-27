@@ -204,41 +204,16 @@ export class CategoryService {
         }
 
         // 检查循环引用
-        if (data.parentId !== undefined) {
-            if (data.parentId === data.id) {
-                throw new ConflictException('不能将分类设置为自身的父分类');
-            }
-
-            if (data.parentId !== null) {
-                const parent = await this.prisma.category.findUnique({
-                    where: { id: data.parentId },
-                });
-                if (!parent) {
-                    throw new NotFoundException(`父分类 ID ${data.parentId} 不存在`);
-                }
-
-                // 检查间接循环：如果新父分类是当前分类的子分类，则形成循环
-                // 对于两级树结构，只需检查新父分类的 parentId 是否等于当前分类 ID
-                if (parent.parentId !== null && Number(parent.parentId) === data.id) {
-                    throw new ConflictException('不能将分类设置为其子分类的子分类，这会形成循环引用');
-                }
-            }
-        }
+        await this.validateCircularReference(data.id, data.parentId);
 
         // 名称变更时检查同级别唯一性
         if (data.name !== undefined) {
-            const targetParentId = data.parentId !== undefined ? (data.parentId ?? null) : existing.parentId;
-
-            const duplicate = await this.prisma.category.findFirst({
-                where: {
-                    name: data.name,
-                    parentId: targetParentId,
-                    id: { not: data.id },
-                },
-            });
-            if (duplicate) {
-                throw new ConflictException(`分类名称 "${data.name}" 在当前级别下已存在`);
-            }
+            await this.validateCategoryNameUniqueness(
+                data.id,
+                data.name,
+                existing.parentId ? Number(existing.parentId) : null,
+                data.parentId,
+            );
         }
 
         const updateData: Record<string, unknown> = {};
@@ -263,6 +238,65 @@ export class CategoryService {
             createdAt: category.createdAt,
             updatedAt: category.updatedAt,
         };
+    }
+
+    /**
+     * 验证分类循环引用 — 检查 parentId 是否会形成循环
+     *
+     * @param id       当前分类 ID
+     * @param parentId 新的父分类 ID（可能为 undefined / null / number）
+     * @throws ConflictException 形成循环引用时抛出
+     * @throws NotFoundException 父分类不存在时抛出
+     */
+    private async validateCircularReference(id: number, parentId: number | undefined | null): Promise<void> {
+        if (parentId === undefined) return;
+
+        if (parentId === id) {
+            throw new ConflictException('不能将分类设置为自身的父分类');
+        }
+
+        if (parentId !== null) {
+            const parent = await this.prisma.category.findUnique({
+                where: { id: parentId },
+            });
+            if (!parent) {
+                throw new NotFoundException(`父分类 ID ${parentId} 不存在`);
+            }
+
+            // 检查间接循环：如果新父分类是当前分类的子分类，则形成循环
+            if (parent.parentId !== null && Number(parent.parentId) === id) {
+                throw new ConflictException('不能将分类设置为其子分类的子分类，这会形成循环引用');
+            }
+        }
+    }
+
+    /**
+     * 验证分类名称在同级别下的唯一性
+     *
+     * @param id                当前分类 ID
+     * @param name              新的分类名称
+     * @param existingParentId  当前已有的父分类 ID
+     * @param newParentId       新的父分类 ID（可选）
+     * @throws ConflictException 名称重复时抛出
+     */
+    private async validateCategoryNameUniqueness(
+        id: number,
+        name: string,
+        existingParentId: number | null,
+        newParentId?: number | null,
+    ): Promise<void> {
+        const targetParentId = newParentId !== undefined ? (newParentId ?? null) : existingParentId;
+
+        const duplicate = await this.prisma.category.findFirst({
+            where: {
+                name,
+                parentId: targetParentId,
+                id: { not: id },
+            },
+        });
+        if (duplicate) {
+            throw new ConflictException(`分类名称 "${name}" 在当前级别下已存在`);
+        }
     }
 
     /**

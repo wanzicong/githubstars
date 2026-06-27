@@ -61,7 +61,8 @@ test.describe('详情页测试', () => {
         await page.goto(`${BASE}/authors/nonexistent`, { waitUntil: 'domcontentloaded' });
         await page.waitForSelector('main', { timeout: 10000 });
         const text = await page.textContent('main');
-        expect(text).toMatch(/暂无|无.*仓库/);
+        const hasText = /暂无/.test(text) || text.includes('无') && text.includes('仓库')
+        expect(hasText).toBe(true);
     });
 });
 

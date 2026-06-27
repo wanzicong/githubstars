@@ -31,6 +31,42 @@ export function formatNumberCn(n: number): string {
 }
 
 /**
+ * 解析日期字符串/元组为 Date 对象
+ * @param dateStr 日期字符串或 [y, m, d, h, min, s] 元组
+ * @returns Date 对象，无法解析时返回 null
+ */
+function parseDateArg(dateStr: string | number[] | null | undefined): Date | null {
+    if (!dateStr) return null
+    if (Array.isArray(dateStr)) {
+        const [y, m, d, h = 0, min = 0, s = 0] = dateStr
+        const date = new Date(y, m - 1, d, h, min, s)
+        return Number.isNaN(date.getTime()) ? null : date
+    }
+    if (typeof dateStr === 'string') {
+        const date = new Date(dateStr.replace(' ', 'T'))
+        return Number.isNaN(date.getTime()) ? null : date
+    }
+    return null
+}
+
+/**
+ * 计算相对于现在的口语化时间描述（x天前/周前/月前/年前）
+ * @param date 参照日期
+ * @returns 中文时间描述，未来日期返回 '-'
+ */
+function buildRelativeTime(date: Date): string {
+    const diffMs = Date.now() - date.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    if (diffDays < 0) return '-'
+    if (diffDays === 0) return '今天'
+    if (diffDays === 1) return '昨天'
+    if (diffDays < 7) return `${diffDays}天前`
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}周前`
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)}月前`
+    return `${Math.floor(diffDays / 365)}年前`
+}
+
+/**
  * 统一日期格式化 — 替代各页面中重复的 formatDate 函数。
  *
  * @param dateStr 日期字符串、number[] 元组、或 null/undefined
@@ -40,42 +76,20 @@ export function formatDate(
     dateStr: string | number[] | null | undefined,
     format: 'date' | 'datetime' | 'relative' = 'date',
 ): string {
-    if (!dateStr) return '-'
-
-    let date: Date
-
-    if (Array.isArray(dateStr)) {
-        const [y, m, d, h = 0, min = 0, s = 0] = dateStr
-        date = new Date(y, m - 1, d, h, min, s)
-    } else if (typeof dateStr === 'string') {
-        date = new Date(dateStr.replace(' ', 'T'))
-    } else {
-        return '-'
-    }
-
-    if (isNaN(date.getTime())) return '-'
+    const date = parseDateArg(dateStr)
+    if (!date) return '-'
 
     const y = date.getFullYear()
     const mo = String(date.getMonth() + 1).padStart(2, '0')
     const d = String(date.getDate()).padStart(2, '0')
-    const hour = String(date.getHours()).padStart(2, '0')
-    const min = String(date.getMinutes()).padStart(2, '0')
-    const sec = String(date.getSeconds()).padStart(2, '0')
+
+    if (format === 'relative') return buildRelativeTime(date)
 
     if (format === 'datetime') {
+        const hour = String(date.getHours()).padStart(2, '0')
+        const min = String(date.getMinutes()).padStart(2, '0')
+        const sec = String(date.getSeconds()).padStart(2, '0')
         return `${y}-${mo}-${d} ${hour}:${min}:${sec}`
-    }
-
-    if (format === 'relative') {
-        const diffMs = Date.now() - date.getTime()
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-        if (diffDays < 0) return '-'
-        if (diffDays === 0) return '今天'
-        if (diffDays === 1) return '昨天'
-        if (diffDays < 7) return `${diffDays}天前`
-        if (diffDays < 30) return `${Math.floor(diffDays / 7)}周前`
-        if (diffDays < 365) return `${Math.floor(diffDays / 30)}月前`
-        return `${Math.floor(diffDays / 365)}年前`
     }
 
     return `${y}-${mo}-${d}`
