@@ -43,6 +43,9 @@ packages/shared/dist/
 .code-index/
 .claude/worktrees/
 
+# Serena IDE
+.serena/
+
 # Database exports
 githubstars_backup.sql
 githubstars_full_export.sql
