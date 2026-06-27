@@ -243,7 +243,85 @@ it.skip('需要网络，跳过', () => {
 - [ ] 输出的 error 列表必须逐条确认已修复
 - [ ] 如果有 agent 并行修复，必须汇总后统一验证
 
-## 第四次复盘（2026-06-28）
+## 第四次复盘（2026-06-27）
+
+### 本次修复的典型问题（SonarJS 尾扫 + 前端小修）
+
+| 问题类型 | 数量 | 根因 | 修复方式 |
+|---------|------|------|---------|
+| `as any` 逃逸（Progress status） | 1 处 | 已有 P0 禁止 any 约束，但仍习惯性用 `as any` 跳过类型检查 | 改为联合类型 `'success'\|'exception'\|'active'\|'normal'` |
+| 同名文件冲突（`helpers.ts` vs `helpers.tsx`） | 1 处 | 拆分文件时没考虑 `.ts` 和 `.tsx` 同名会导致 TS 解析异常 | 重命名 `helpers.tsx` → `DaysSinceText.tsx` |
+| 变量冗余赋值（progressStatus else 分支） | 1 处 | 初始化后又在 else 中重复赋值相同值 | 移除冗余 else 分支 |
+| 验证命令跑错目录 | 2 次 | 在根目录执行 `npx eslint .` 和 `npx tsc --noEmit`，实际未对子包生效 | 增加 `cd <子包目录>` 前置确认 |
+
+### 根因总结
+
+1. **"先跑通再说"心态** — `status as any` 明知违反 P0 约束，还是因为"这地方类型反正不会错"的侥幸心理写出来。约束写了不等于约束遵守了，需要在编码阶段就自我拦截。
+
+2. **文件命名基本功不扎实** — 创建 `helpers.ts` 时没检查目录下是否已有 `helpers.tsx`。TypeScript 的 module resolution 遇到同名 `.ts`/`.tsx` 时行为不确定，这本应是一个常识性禁忌。
+
+3. **验证闭环的形式主义** — 跑 `npx eslint .` 输出 "0 errors" 就以为通过了，没检查当前工作目录是否正确。验证不是为了"看到绿色"而是为了"确认正确"——必须证明你在测的东西确实是你想测的东西。
+
+4. **修复后未立即自我验证** — 改完 `as any` 引入了冗余赋值的新 lint error，但在用户指出之前没有跑 lint 二次确认。缺少"修改 → 验证 → 确认零新问题"的肌肉记忆。
+
+### 新增约束
+
+#### P0: 禁止同名异缀文件（新增）
+
+同一目录下**禁止**存在同名仅后缀不同的文件（如 `helpers.ts` + `helpers.tsx`）：
+
+- [ ] 拆分文件时，先检查目标目录是否有同名文件（不同后缀）
+- [ ] 新文件名必须与现有文件名字面量不同，不能仅靠后缀区分
+- [ ] 纯工具函数用 `.ts`，组件用 `.tsx`，名称不能相同
+
+```typescript
+// BAD — 同目录同名不同缀，TS 解析异常
+// hooks/helpers.ts     (纯函数)
+// hooks/helpers.tsx    (组件)
+
+// GOOD — 名称不同，清晰区分
+// hooks/helpers.ts          (纯函数)
+// hooks/DaysSinceText.tsx   (组件)
+```
+
+#### P1: 验证执行路径确认（新增）
+
+所有验证命令（lint/typecheck/test）执行前，必须确认：
+
+- [ ] 当前工作目录是否正确？`pwd` 是否在目标子包目录？
+- [ ] 是否用了正确的配置文件（`tsconfig.app.json` vs `tsconfig.json`）？
+- [ ] 输出中的 error 计数是否确实来自目标包？
+- [ ] 零 output ≠ 零 error——必须确认 exit code 为 0
+
+**反面案例：**
+```bash
+# BAD — 在根目录跑子包命令，实际不生效
+npx eslint .                       # 用的根 ESLint config，没检查子包
+npx tsc --noEmit                   # 用的根 tsconfig，不是子包的
+
+# GOOD — 先进入子包目录再验证
+cd packages/frontend
+npx eslint . --format stylish      # 正确使用前端 config
+npx tsc -p tsconfig.app.json --noEmit  # 正确使用前端 tsconfig
+```
+
+#### P1: 改后立即自我验证（新增）
+
+每次代码修改后必须：
+
+- [ ] 立即运行该包的最小验证命令（lint），确认零新 error
+- [ ] 特别关注：修了一个 error 后是否引入了新的 error
+- [ ] 如果有 agent 代修，回收结果后必须统一验证
+
+### 编码约束（第四次更新）
+
+新增约束表：
+
+| 规则类别 | 要求 | 强制级别 |
+|---------|------|---------|
+| 禁止同名异缀文件 | 同一目录不得有仅后缀不同的同名文件（`helpers.ts`+`helpers.tsx`） | P0 |
+| 验证路径确认 | 运行 lint/typecheck 前确认 `pwd` 在正确子包目录 | P1 |
+| 改后自检 | 每次修改后立即验证，确认零新 error | P1 |## 第五次复盘（2026-06-28）
 
 ### 本次修复的典型问题（克隆模块）
 
