@@ -1,4 +1,4 @@
-import { Controller, Post, Logger, Body, Res } from '@nestjs/common';
+import { Controller, Post, Body, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { AuthorService } from './author.service';
@@ -9,8 +9,6 @@ import type { AuthorListDto, AuthorReposDto, AuthorExportDto } from '../common/d
 @ApiTags('authors')
 @Controller('api/authors')
 export class AuthorController {
-    private readonly logger = new Logger(AuthorController.name);
-
     constructor(private readonly service: AuthorService) {}
 
     /**

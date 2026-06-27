@@ -1,9 +1,8 @@
-import { Controller, Post, Body, Logger } from '@nestjs/common';
+import { Controller, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CategoryService } from './category.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import {
-    CategoryTreeSchema,
     CategoryListSchema,
     CategoryCreateSchema,
     CategoryUpdateSchema,
@@ -14,7 +13,6 @@ import {
     CategoryUnbindSchema,
 } from './category.dto';
 import type {
-    CategoryTreeDto,
     CategoryListDto,
     CategoryCreateDto,
     CategoryUpdateDto,
@@ -40,8 +38,6 @@ import type {
 @ApiTags('categories')
 @Controller('api/category')
 export class CategoryController {
-    private readonly logger = new Logger(CategoryController.name);
-
     constructor(private readonly service: CategoryService) {}
 
     /**
@@ -49,7 +45,7 @@ export class CategoryController {
      */
     @Post('tree')
     @ApiOperation({ summary: '获取分类树', description: '获取完整分类树（两级树形结构），一级分类包含子分类列表' })
-    async tree(@Body(new ZodValidationPipe(CategoryTreeSchema)) body: CategoryTreeDto) {
+    async tree() {
         return this.service.getCategoryTree();
     }
 

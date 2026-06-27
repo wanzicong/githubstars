@@ -1,4 +1,4 @@
-import { Controller, Post, Logger, Body } from '@nestjs/common';
+import { Controller, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { StatsService } from './stats.service';
 
@@ -22,8 +22,6 @@ import { StatsService } from './stats.service';
  *   - StatsService.getRecentActive()    — 最近活跃仓库
  */
 export class StatsController {
-    private readonly logger = new Logger(StatsController.name);
-
     constructor(private readonly service: StatsService) {}
 
     /**

@@ -70,7 +70,6 @@ export class TrendingController {
      * 异步翻译未缓存的描述，翻译结果写入 github_repo.description_cn。
      * 前端可在翻译完成后重新请求 /api/trending 获取更新后的中文描述。
      *
-     * @param body { since, language, perPage }
      * @returns { success, translated, skipped, failed, message }
      */
     @Post('translate')
@@ -105,7 +104,6 @@ export class TrendingController {
      *
      * 获取当前趋势仓库列表并创建翻译/分析任务。
      *
-     * @param body { since, language }
      * @returns { success, taskId?, message }
      */
     @Post('analyze')

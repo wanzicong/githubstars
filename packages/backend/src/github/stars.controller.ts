@@ -89,7 +89,6 @@ export class StarsController {
      *
      * 用于跨页全选功能，根据筛选条件返回所有仓库 ID。
      *
-     * @param body { keyword, language, sortBy, sortOrder, dateField, startDate, endDate, untranslatedOnly }
      * @returns { success: true, ids: number[] }
      */
     @Post('ids')

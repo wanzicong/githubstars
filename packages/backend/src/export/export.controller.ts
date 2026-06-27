@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Res, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { ExportService } from './export.service';
@@ -9,8 +9,6 @@ import type { ExportFilterDto } from '../common/dto/filter.dto';
 @ApiTags('export')
 @Controller('api/export')
 export class ExportController {
-    private readonly logger = new Logger(ExportController.name);
-
     constructor(private readonly exportService: ExportService) {}
 
     /**

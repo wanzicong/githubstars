@@ -29,7 +29,6 @@ export class TranslateController {
      * 合并了原 start/filter-batch/readme-start/batch 等多个端点。
      * 支持三种 scope: selected（指定仓库）、all（全量）、filtered（筛选条件）。
      *
-     * @param body 请求体 { type, scope, repoIds?, filters? }
      * @returns { success, taskId?, translatedCount?, message }
      */
     @Post()
@@ -112,7 +111,6 @@ export class TranslateController {
     /**
      * POST /api/translate/status — 翻译覆盖统计
      *
-     * @param body { keyword, language, dateField, startDate, endDate, untranslatedOnly }
      * @returns 覆盖率统计对象
      */
     @Post('status')
@@ -145,7 +143,7 @@ export class TranslateController {
     /**
      * POST /api/translate/tasks/detail — 查询任务详情与进度
      *
-     * @param body { id }
+
      * @returns 任务进度详情，无效 ID 时返回 { success: false, message }
      */
     @Post('tasks/detail')
@@ -158,7 +156,7 @@ export class TranslateController {
     /**
      * POST /api/translate/tasks/retry — 重试任务中的失败项
      *
-     * @param body { id }
+
      * @returns 新任务 ID，无失败项时返回 { success: false, message }
      */
     @Post('tasks/retry')
@@ -174,7 +172,7 @@ export class TranslateController {
     /**
      * POST /api/translate/tasks/failures — 获取任务失败项列表
      *
-     * @param body { id }
+
      * @returns { success, failures, count }
      */
     @Post('tasks/failures')
@@ -190,7 +188,7 @@ export class TranslateController {
      * 建立 SSE 长连接，每 2 秒推送一次任务进度，
      * 任务完成（COMPLETED/FAILED/PARTIAL）或客户端断开时自动关闭。
      *
-     * @param body { id }
+
      * @param res   Express Response 对象
      */
     @Post('tasks/stream')

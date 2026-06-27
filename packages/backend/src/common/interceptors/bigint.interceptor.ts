@@ -24,7 +24,7 @@ export class BigIntInterceptor implements NestInterceptor {
      * @param next 调用处理链的下一环节
      * @returns Observable 流，其中的数据已完成 BigInt 转换
      */
-    intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    intercept(_context: ExecutionContext, next: CallHandler): Observable<any> {
         return next.handle().pipe(map((data) => this.convertBigInt(data)));
     }
 
