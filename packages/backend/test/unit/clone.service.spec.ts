@@ -44,11 +44,7 @@ describe('CloneService', () => {
     beforeEach(async () => {
         jest.clearAllMocks();
         const module = await Test.createTestingModule({
-            providers: [
-                CloneService,
-                { provide: PrismaService, useValue: mockPrisma },
-                { provide: ConfigService, useValue: mockConfig },
-            ],
+            providers: [CloneService, { provide: PrismaService, useValue: mockPrisma }, { provide: ConfigService, useValue: mockConfig }],
         }).compile();
         service = module.get(CloneService);
         prisma = mockPrisma;
@@ -58,13 +54,22 @@ describe('CloneService', () => {
         it('应成功创建克隆任务', async () => {
             prisma.githubRepo.findMany.mockResolvedValue(repoData);
             prisma.cloneTask.create.mockResolvedValue({
-                id: createBigIntId(1), status: 'PENDING', targetDir: '/tmp/clone',
-                concurrency: 5, shallow: true, totalItems: 2, createdAt: new Date(),
+                id: createBigIntId(1),
+                status: 'PENDING',
+                targetDir: '/tmp/clone',
+                concurrency: 5,
+                shallow: true,
+                totalItems: 2,
+                createdAt: new Date(),
             });
             prisma.cloneTaskItem.createMany.mockResolvedValue({ count: 2 });
 
-                        const result = await service.createTask({
-                repoIds: [1, 2], targetDir: '/tmp/clone', concurrency: 5, shallow: true, mirrorSource: 'direct',
+            const result = await service.createTask({
+                repoIds: [1, 2],
+                targetDir: '/tmp/clone',
+                concurrency: 5,
+                shallow: true,
+                mirrorSource: 'direct',
             });
 
             expect(result.success).toBe(true);
@@ -76,8 +81,12 @@ describe('CloneService', () => {
         it('无匹配仓库时应返回失败', async () => {
             prisma.githubRepo.findMany.mockResolvedValue([]);
 
-                        const result = await service.createTask({
-                repoIds: [999], targetDir: '/tmp/clone', concurrency: 5, shallow: true, mirrorSource: 'direct',
+            const result = await service.createTask({
+                repoIds: [999],
+                targetDir: '/tmp/clone',
+                concurrency: 5,
+                shallow: true,
+                mirrorSource: 'direct',
             });
 
             expect(result.success).toBe(false);
@@ -114,15 +123,27 @@ describe('CloneService', () => {
         it('应返回最近任务列表', async () => {
             prisma.cloneTask.findMany.mockResolvedValue([
                 {
-                    id: createBigIntId(1), status: 'COMPLETED', targetDir: '/tmp/clone1',
-                    concurrency: 3, shallow: true, totalItems: 2,
-                    createdAt: new Date(), startedAt: new Date(), finishedAt: new Date(),
+                    id: createBigIntId(1),
+                    status: 'COMPLETED',
+                    targetDir: '/tmp/clone1',
+                    concurrency: 3,
+                    shallow: true,
+                    totalItems: 2,
+                    createdAt: new Date(),
+                    startedAt: new Date(),
+                    finishedAt: new Date(),
                     items: [{ status: 'COMPLETED' }, { status: 'COMPLETED' }],
                 },
                 {
-                    id: createBigIntId(2), status: 'PARTIAL', targetDir: '/tmp/clone2',
-                    concurrency: 2, shallow: false, totalItems: 3,
-                    createdAt: new Date(), startedAt: new Date(), finishedAt: new Date(),
+                    id: createBigIntId(2),
+                    status: 'PARTIAL',
+                    targetDir: '/tmp/clone2',
+                    concurrency: 2,
+                    shallow: false,
+                    totalItems: 3,
+                    createdAt: new Date(),
+                    startedAt: new Date(),
+                    finishedAt: new Date(),
                     items: [{ status: 'COMPLETED' }, { status: 'FAILED' }, { status: 'FAILED' }],
                 },
             ]);
@@ -146,8 +167,14 @@ describe('CloneService', () => {
     describe('getTaskProgress', () => {
         it('应返回任务进度详情', async () => {
             prisma.cloneTask.findUnique.mockResolvedValue({
-                id: createBigIntId(1), status: 'PROCESSING', targetDir: '/tmp/clone',
-                concurrency: 3, shallow: true, createdAt: new Date(), startedAt: new Date(), finishedAt: null,
+                id: createBigIntId(1),
+                status: 'PROCESSING',
+                targetDir: '/tmp/clone',
+                concurrency: 3,
+                shallow: true,
+                createdAt: new Date(),
+                startedAt: new Date(),
+                finishedAt: null,
                 items: [
                     { fullName: 'a/b', status: 'COMPLETED', localPath: '/tmp/clone/a/b', errorMessage: null },
                     { fullName: 'c/d', status: 'FAILED', localPath: '/tmp/clone/c/d', errorMessage: 'timeout' },
@@ -176,9 +203,7 @@ describe('CloneService', () => {
 
     describe('retryFailed', () => {
         it('应重置失败项为 PENDING', async () => {
-            prisma.cloneTaskItem.findMany.mockResolvedValue([
-                { id: createBigIntId(1), status: 'FAILED', localPath: '/tmp/c/d' },
-            ]);
+            prisma.cloneTaskItem.findMany.mockResolvedValue([{ id: createBigIntId(1), status: 'FAILED', localPath: '/tmp/c/d' }]);
             prisma.$transaction.mockResolvedValue([]);
 
             const result = await service.retryFailed(1);
@@ -197,8 +222,11 @@ describe('CloneService', () => {
     describe('retryItem', () => {
         it('应重试单个克隆项', async () => {
             prisma.cloneTaskItem.findFirst.mockResolvedValue({
-                id: createBigIntId(1), taskId: createBigIntId(1), fullName: 'x/y',
-                status: 'FAILED', localPath: '/tmp/clone/x/y',
+                id: createBigIntId(1),
+                taskId: createBigIntId(1),
+                fullName: 'x/y',
+                status: 'FAILED',
+                localPath: '/tmp/clone/x/y',
             });
             prisma.$transaction.mockImplementation(async (fn: any) => {
                 const tx = {
@@ -214,8 +242,11 @@ describe('CloneService', () => {
 
         it('正在执行的项应拒绝重试', async () => {
             prisma.cloneTaskItem.findFirst.mockResolvedValue({
-                id: createBigIntId(1), taskId: createBigIntId(1), fullName: 'x/y',
-                status: 'PROCESSING', localPath: null,
+                id: createBigIntId(1),
+                taskId: createBigIntId(1),
+                fullName: 'x/y',
+                status: 'PROCESSING',
+                localPath: null,
             });
 
             const result = await service.retryItem(1, 'x/y');
@@ -227,7 +258,8 @@ describe('CloneService', () => {
     describe('findNextPendingTask', () => {
         it('应返回下一个 PENDING 任务', async () => {
             prisma.cloneTask.findFirst.mockResolvedValue({
-                id: createBigIntId(3), concurrency: 5,
+                id: createBigIntId(3),
+                concurrency: 5,
             });
 
             const task = await service.findNextPendingTask();

@@ -25,16 +25,17 @@ export class AuthorService {
         const offset = (page - 1) * size;
 
         try {
+            const likePattern = `%${keyword}%`;
             const countResult: Array<{ cnt: bigint }> = keyword
                 ? await this.prisma
-                      .$queryRaw`SELECT COUNT(DISTINCT owner_name) AS cnt FROM github_repo WHERE owner_name IS NOT NULL AND owner_name != '' AND owner_name LIKE ${`%${keyword}%`}`
+                      .$queryRaw`SELECT COUNT(DISTINCT owner_name) AS cnt FROM github_repo WHERE owner_name IS NOT NULL AND owner_name != '' AND owner_name LIKE ${likePattern}`
                 : await this.prisma
                       .$queryRaw`SELECT COUNT(DISTINCT owner_name) AS cnt FROM github_repo WHERE owner_name IS NOT NULL AND owner_name != ''`;
             const total = Number(countResult[0]?.cnt || 0n);
 
             const rows: any[] = keyword
                 ? await this.prisma
-                      .$queryRaw`SELECT owner_name, MAX(owner_avatar_url) AS owner_avatar_url, COUNT(*) AS repo_count, SUM(stars_count) AS total_stars, (SELECT language FROM github_repo r2 WHERE r2.owner_name = r1.owner_name AND r2.language IS NOT NULL AND r2.language != '' GROUP BY language ORDER BY COUNT(*) DESC LIMIT 1) AS top_language, MAX(starred_at) AS last_starred_at FROM github_repo r1 WHERE owner_name IS NOT NULL AND owner_name != '' AND owner_name LIKE ${`%${keyword}%`} GROUP BY owner_name ORDER BY total_stars DESC LIMIT ${size} OFFSET ${offset}`
+                      .$queryRaw`SELECT owner_name, MAX(owner_avatar_url) AS owner_avatar_url, COUNT(*) AS repo_count, SUM(stars_count) AS total_stars, (SELECT language FROM github_repo r2 WHERE r2.owner_name = r1.owner_name AND r2.language IS NOT NULL AND r2.language != '' GROUP BY language ORDER BY COUNT(*) DESC LIMIT 1) AS top_language, MAX(starred_at) AS last_starred_at FROM github_repo r1 WHERE owner_name IS NOT NULL AND owner_name != '' AND owner_name LIKE ${likePattern} GROUP BY owner_name ORDER BY total_stars DESC LIMIT ${size} OFFSET ${offset}`
                 : await this.prisma
                       .$queryRaw`SELECT owner_name, MAX(owner_avatar_url) AS owner_avatar_url, COUNT(*) AS repo_count, SUM(stars_count) AS total_stars, (SELECT language FROM github_repo r2 WHERE r2.owner_name = r1.owner_name AND r2.language IS NOT NULL AND r2.language != '' GROUP BY language ORDER BY COUNT(*) DESC LIMIT 1) AS top_language, MAX(starred_at) AS last_starred_at FROM github_repo r1 WHERE owner_name IS NOT NULL AND owner_name != '' GROUP BY owner_name ORDER BY total_stars DESC LIMIT ${size} OFFSET ${offset}`;
 
@@ -72,7 +73,9 @@ export class AuthorService {
      */
     async findAuthorRepos(params: { ownerName: string; page: number; size: number; sortBy?: string; sortOrder?: string }) {
         const { ownerName, page, size } = params;
-        this.logger.log(`查询作者仓库: ownerName=${ownerName}, page=${page}, size=${size}, sortBy=${params.sortBy}, sortOrder=${params.sortOrder}`);
+        this.logger.log(
+            `查询作者仓库: ownerName=${ownerName}, page=${page}, size=${size}, sortBy=${params.sortBy}, sortOrder=${params.sortOrder}`,
+        );
         const sortField = resolveSortField(params.sortBy);
         const sortDir = resolveSortDir(params.sortOrder);
         const where = { ownerName };
@@ -98,7 +101,11 @@ export class AuthorService {
         this.logger.log(`导出作者仓库URL: ownerName=${ownerName}, sortBy=${params.sortBy}, sortOrder=${params.sortOrder}`);
         const sortField = resolveSortField(params.sortBy);
         const sortDir = resolveSortDir(params.sortOrder);
-        const repos = await this.prisma.githubRepo.findMany({ where: { ownerName }, select: { htmlUrl: true }, orderBy: { [sortField]: sortDir } });
+        const repos = await this.prisma.githubRepo.findMany({
+            where: { ownerName },
+            select: { htmlUrl: true },
+            orderBy: { [sortField]: sortDir },
+        });
         return repos.map((r) => r.htmlUrl).filter(Boolean);
     }
 }

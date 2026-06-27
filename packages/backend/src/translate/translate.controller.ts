@@ -115,7 +115,19 @@ export class TranslateController {
      */
     @Post('status')
     @ApiOperation({ summary: '翻译覆盖统计', description: '返回符合条件的仓库总数及描述/README 的翻译覆盖情况' })
-    @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'boolean' } } } })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                keyword: { type: 'string' },
+                language: { type: 'string' },
+                dateField: { type: 'string' },
+                startDate: { type: 'string' },
+                endDate: { type: 'string' },
+                untranslatedOnly: { type: 'boolean' },
+            },
+        },
+    })
     async translationStatus(@Body(new ZodValidationPipe(FilterSchema)) body: FilterDto) {
         return this.service.getTranslationSummary({
             keyword: body.keyword,

@@ -4,13 +4,15 @@ describe('ConfigService', () => {
     function makePrisma(findManyResult?: any[]) {
         return {
             systemConfig: {
-                findMany: jest.fn().mockResolvedValue(findManyResult ?? [
-                    { configKey: 'github.username', configValue: 'testuser' },
-                    { configKey: 'github.token', configValue: 'ghp_test12345678' },
-                    { configKey: 'deepseek.api_key', configValue: 'sk-testkey1234' },
-                    { configKey: 'deepseek.api_url', configValue: 'https://api.deepseek.com/v1/chat/completions' },
-                    { configKey: 'deepseek.model', configValue: 'deepseek-chat' },
-                ]),
+                findMany: jest.fn().mockResolvedValue(
+                    findManyResult ?? [
+                        { configKey: 'github.username', configValue: 'testuser' },
+                        { configKey: 'github.token', configValue: 'ghp_test12345678' },
+                        { configKey: 'deepseek.api_key', configValue: 'sk-testkey1234' },
+                        { configKey: 'deepseek.api_url', configValue: 'https://api.deepseek.com/v1/chat/completions' },
+                        { configKey: 'deepseek.model', configValue: 'deepseek-chat' },
+                    ],
+                ),
                 findUnique: jest.fn().mockImplementation((args: any) => {
                     const key = args?.where?.configKey || 'exists';
                     // 返回带 description 的记录，让 ensureDefaults 跳过补全

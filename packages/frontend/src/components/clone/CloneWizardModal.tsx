@@ -6,6 +6,9 @@ import { CLONE_CONCURRENCY_OPTIONS, DEFAULT_CLONE_CONCURRENCY } from '@/constant
 import DirectoryPicker from '@/components/common/DirectoryPicker'
 import type { GithubRepo } from '@/types'
 
+/** 克隆并发数可选值 */
+type CloneConcurrency = 5 | 10 | 20
+
 const { Text } = Typography
 
 /** 镜像源选项 */
@@ -31,7 +34,7 @@ export default function CloneWizardModal({ open, onClose, selectedRepos, onTaskC
     const { message } = App.useApp()
     const [currentStep, setCurrentStep] = useState(0)
     const [targetDir, setTargetDir] = useState('')
-    const [concurrency, setConcurrency] = useState<5 | 10 | 20>(DEFAULT_CLONE_CONCURRENCY as 5 | 10 | 20)
+    const [concurrency, setConcurrency] = useState<CloneConcurrency>(DEFAULT_CLONE_CONCURRENCY as CloneConcurrency)
     const [shallow, setShallow] = useState(true)
     const [mirrorSource, setMirrorSource] = useState<MirrorSource>('gh-proxy')
     const [selectedIds, setSelectedIds] = useState<number[]>(selectedRepos.map((r) => r.id))

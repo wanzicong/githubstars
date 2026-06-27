@@ -7,14 +7,27 @@ describe('ExportService', () => {
     let repoService: any;
 
     const mockRepo = {
-        id: 1, repoName: 'test-repo', fullName: 'owner/test-repo',
-        description: 'A test repository', descriptionCn: '测试仓库',
-        readmeOriginal: '# README', readmeCn: '# 中文README',
-        readmeFetched: true, language: 'TypeScript',
-        ownerName: 'owner', ownerAvatarUrl: 'url',
-        htmlUrl: 'https://github.com/owner/test-repo', homepage: 'https://example.com',
-        starsCount: 100, forksCount: 10, watchersCount: 5, openIssuesCount: 3,
-        topics: '["test"]', licenseName: 'MIT', isFork: false, isArchived: false,
+        id: 1,
+        repoName: 'test-repo',
+        fullName: 'owner/test-repo',
+        description: 'A test repository',
+        descriptionCn: '测试仓库',
+        readmeOriginal: '# README',
+        readmeCn: '# 中文README',
+        readmeFetched: true,
+        language: 'TypeScript',
+        ownerName: 'owner',
+        ownerAvatarUrl: 'url',
+        htmlUrl: 'https://github.com/owner/test-repo',
+        homepage: 'https://example.com',
+        starsCount: 100,
+        forksCount: 10,
+        watchersCount: 5,
+        openIssuesCount: 3,
+        topics: '["test"]',
+        licenseName: 'MIT',
+        isFork: false,
+        isArchived: false,
     };
 
     beforeEach(async () => {
@@ -23,10 +36,7 @@ describe('ExportService', () => {
         };
 
         const module = await Test.createTestingModule({
-            providers: [
-                ExportService,
-                { provide: GithubRepoService, useValue: mockGithubRepoService },
-            ],
+            providers: [ExportService, { provide: GithubRepoService, useValue: mockGithubRepoService }],
         }).compile();
 
         service = module.get(ExportService);
@@ -55,13 +65,20 @@ describe('ExportService', () => {
 
         it('应包含筛选条件信息', async () => {
             repoService.findPage.mockResolvedValue({
-                records: [mockRepo], total: 1, size: 10, current: 1, pages: 1,
+                records: [mockRepo],
+                total: 1,
+                size: 10,
+                current: 1,
+                pages: 1,
             });
 
-            const md = await service.generateMarkdown({
-                keyword: 'react',
-                language: 'TypeScript',
-            }, 10);
+            const md = await service.generateMarkdown(
+                {
+                    keyword: 'react',
+                    language: 'TypeScript',
+                },
+                10,
+            );
 
             expect(md).toContain('react');
             expect(md).toContain('TypeScript');
@@ -69,7 +86,11 @@ describe('ExportService', () => {
 
         it('应优先使用中文描述', async () => {
             repoService.findPage.mockResolvedValue({
-                records: [mockRepo], total: 1, size: 10, current: 1, pages: 1,
+                records: [mockRepo],
+                total: 1,
+                size: 10,
+                current: 1,
+                pages: 1,
             });
 
             const md = await service.generateMarkdown({}, 10);
@@ -79,7 +100,11 @@ describe('ExportService', () => {
 
         it('空仓库列表应生成基本文档', async () => {
             repoService.findPage.mockResolvedValue({
-                records: [], total: 0, size: 10, current: 1, pages: 0,
+                records: [],
+                total: 0,
+                size: 10,
+                current: 1,
+                pages: 0,
             });
 
             const md = await service.generateMarkdown({}, 10);
@@ -90,12 +115,19 @@ describe('ExportService', () => {
 
         it('untranslatedOnly筛选应体现在文档中', async () => {
             repoService.findPage.mockResolvedValue({
-                records: [mockRepo], total: 1, size: 10, current: 1, pages: 1,
+                records: [mockRepo],
+                total: 1,
+                size: 10,
+                current: 1,
+                pages: 1,
             });
 
-            const md = await service.generateMarkdown({
-                untranslatedOnly: true,
-            }, 10);
+            const md = await service.generateMarkdown(
+                {
+                    untranslatedOnly: true,
+                },
+                10,
+            );
 
             expect(md).toContain('仅未翻译');
         });

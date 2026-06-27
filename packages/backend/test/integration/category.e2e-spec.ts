@@ -39,10 +39,7 @@ describe('category (e2e)', () => {
     // ==================== POST /api/category/tree ====================
     describe('POST /api/category/tree', () => {
         it('空分类时应返回空数组', async () => {
-            const res = await request(app.getHttpServer())
-                .post('/api/category/tree')
-                .send({})
-                .expect(201);
+            const res = await request(app.getHttpServer()).post('/api/category/tree').send({}).expect(201);
 
             const body = res.body.data ?? res.body;
             expect(body).toEqual([]);
@@ -56,10 +53,7 @@ describe('category (e2e)', () => {
             await prisma.categoryRepoLink.create({ data: { categoryId: c1.id, repoId: BigInt(repo1.id), createdAt: now() } });
             await prisma.categoryRepoLink.create({ data: { categoryId: c2.id, repoId: BigInt(repo2.id), createdAt: now() } });
 
-            const res = await request(app.getHttpServer())
-                .post('/api/category/tree')
-                .send({})
-                .expect(201);
+            const res = await request(app.getHttpServer()).post('/api/category/tree').send({}).expect(201);
 
             const tree = res.body.data ?? res.body;
             expect(tree.length).toBeGreaterThanOrEqual(1);
@@ -75,10 +69,7 @@ describe('category (e2e)', () => {
         it('应返回分页的分类列表', async () => {
             await prisma.category.create({ data: { name: '前端', sortOrder: 0, createdAt: now() } });
 
-            const res = await request(app.getHttpServer())
-                .post('/api/category/list')
-                .send({ page: 1, size: 10 })
-                .expect(201);
+            const res = await request(app.getHttpServer()).post('/api/category/list').send({ page: 1, size: 10 }).expect(201);
 
             const body = res.body;
             expect(body.data.length).toBeGreaterThanOrEqual(1);
@@ -103,10 +94,7 @@ describe('category (e2e)', () => {
     // ==================== POST /api/category/create ====================
     describe('POST /api/category/create', () => {
         it('应创建新分类', async () => {
-            const res = await request(app.getHttpServer())
-                .post('/api/category/create')
-                .send({ name: '新分类', sortOrder: 0 })
-                .expect(201);
+            const res = await request(app.getHttpServer()).post('/api/category/create').send({ name: '新分类', sortOrder: 0 }).expect(201);
 
             const body = res.body.data ?? res.body;
             expect(body.name).toBe('新分类');
@@ -116,10 +104,7 @@ describe('category (e2e)', () => {
         it('同名分类应返回冲突错误', async () => {
             await prisma.category.create({ data: { name: '重复', sortOrder: 0, createdAt: now() } });
 
-            await request(app.getHttpServer())
-                .post('/api/category/create')
-                .send({ name: '重复', sortOrder: 0 })
-                .expect(409);
+            await request(app.getHttpServer()).post('/api/category/create').send({ name: '重复', sortOrder: 0 }).expect(409);
         });
     });
 
@@ -138,10 +123,7 @@ describe('category (e2e)', () => {
         });
 
         it('不存在的分类应返回 404', async () => {
-            await request(app.getHttpServer())
-                .post('/api/category/update')
-                .send({ id: 99999, name: 'x' })
-                .expect(404);
+            await request(app.getHttpServer()).post('/api/category/update').send({ id: 99999, name: 'x' }).expect(404);
         });
     });
 
@@ -178,7 +160,12 @@ describe('category (e2e)', () => {
 
             const res = await request(app.getHttpServer())
                 .post('/api/category/sort')
-                .send({ items: [{ id: Number(c1.id), sortOrder: 1 }, { id: Number(c2.id), sortOrder: 0 }] })
+                .send({
+                    items: [
+                        { id: Number(c1.id), sortOrder: 1 },
+                        { id: Number(c2.id), sortOrder: 0 },
+                    ],
+                })
                 .expect(201);
 
             const body = res.body.data ?? res.body;

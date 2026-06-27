@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
-import type { MappedRepoData } from './repo-data.interface'
+import type { MappedRepoData } from './repo-data.interface';
 import {
-    buildGithubHeaders, mapStarredItem, parseLinkHeader,
-    estimateTotalPages, sleep, type PaginationLinks,
-} from '../common/utils/github-api.util'
+    buildGithubHeaders,
+    mapStarredItem,
+    parseLinkHeader,
+    estimateTotalPages,
+    sleep,
+    type PaginationLinks,
+} from '../common/utils/github-api.util';
 
-const GITHUB_API = 'https://api.github.com'
+const GITHUB_API = 'https://api.github.com';
 
 /**
  * GitHub REST API 服务
@@ -166,11 +170,11 @@ export class GithubApiService {
     async fetchReadmeFromGitHub(fullName: string): Promise<{ content: string | null; githubStatus: number; githubBody: string | null }> {
         const token = await this.config.getValueDefault('github.token', '');
         this.logger.log('获取 README: ' + fullName);
-    
+
         const headers = buildGithubHeaders(token, 'application/vnd.github.v3.raw');
         const [owner, repo] = fullName.split('/');
         const url = `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`;
-    
+
         const doFetch = async (useAuth: boolean): Promise<{ status: number; body: string | null }> => {
             const controller = new AbortController();
             const readmeTimeout = setTimeout(() => controller.abort(), 30_000);
@@ -188,16 +192,16 @@ export class GithubApiService {
                 clearTimeout(readmeTimeout);
             }
         };
-    
+
         try {
             let result = await doFetch(!!token);
             this.logger.log(`README 响应状态: ${result.status} (${fullName})`);
-    
+
             if (result.status === 200) {
                 this.logger.log(`README 获取成功: ${fullName}, 大小=${result.body!.length} 字符`);
                 return { content: result.body, githubStatus: 200, githubBody: null };
             }
-    
+
             // 带 Token 返回 404 时，可能是 Token 无该组织 SSO 授权，回退到无认证重试
             if (result.status === 404 && token) {
                 this.logger.log(`带 Token 返回 404，回退到无认证重试: ${fullName}`);
@@ -207,16 +211,16 @@ export class GithubApiService {
                     return { content: result.body, githubStatus: 200, githubBody: null };
                 }
             }
-    
+
             if (result.status === 404) {
                 this.logger.log(`仓库 ${fullName} 没有 README 文件`);
                 return { content: null, githubStatus: 404, githubBody: result.body };
             }
-    
+
             if (result.status === 403) {
                 return this.handleReadme403(fullName, token, result);
             }
-    
+
             this.logger.error(`README 请求失败: ${fullName}, status=${result.status}`);
             const err = new Error(`GitHub API error: ${result.status}`);
             (err as any).githubBody = result.body;
@@ -232,7 +236,7 @@ export class GithubApiService {
             throw new Error(`GitHub API 网络错误: ${msg}`);
         }
     }
-    
+
     /**
      * 处理 README 403 响应
      *
@@ -246,12 +250,10 @@ export class GithubApiService {
     ): Promise<{ content: string | null; githubStatus: number; githubBody: string | null }> {
         const bodyLower = (result.body || '').toLowerCase();
         const isRealRateLimit =
-            bodyLower.includes('rate limit') ||
-            bodyLower.includes('api rate limit exceeded') ||
-            bodyLower.includes('secondary rate limit');
-    
+            bodyLower.includes('rate limit') || bodyLower.includes('api rate limit exceeded') || bodyLower.includes('secondary rate limit');
+
         this.logger.error(`README 403: ${fullName}, 响应体=${result.body?.substring(0, 300)}`);
-    
+
         if (isRealRateLimit) {
             this.logger.error(`README API 真正限流: ${fullName}`);
             const err = new Error('GitHub API rate limited');
@@ -259,7 +261,7 @@ export class GithubApiService {
             (err as any).isRateLimit = true;
             throw err;
         }
-    
+
         // 非限流 → 回退到 JSON 格式
         this.logger.log(`403 非限流，回退到 vnd.github.v3+json 格式: ${fullName}`);
         const jsonResult = await this.fetchReadmeAsJson(fullName, token);
@@ -370,6 +372,4 @@ export class GithubApiService {
             return [];
         }
     }
-
 }
-

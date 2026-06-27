@@ -18,8 +18,8 @@ export default async function setup() {
     if (result.error) {
         console.error(
             `\n[ERROR] 无法加载 .env.test 文件: ${envTestPath}\n` +
-            '请确认 packages/backend/.env.test 存在。\n' +
-            '可从 .env.example 复制: cp .env.example .env.test\n',
+                '请确认 packages/backend/.env.test 存在。\n' +
+                '可从 .env.example 复制: cp .env.example .env.test\n',
         );
         throw result.error;
     }
@@ -29,6 +29,6 @@ export default async function setup() {
 
     console.log(
         `[Test Setup] 测试环境已加载 — DATABASE: ${process.env.DATABASE_URL?.match(/\/([^?]+)/)?.[1] ?? 'unknown'}, ` +
-        `PORT: ${process.env.PORT}`,
+            `PORT: ${process.env.PORT}`,
     );
 }

@@ -130,7 +130,8 @@ export default function StarList() {
                     ? `至 ${endDate.format('YYYY年M月D日')}`
                     : ''
         if (presetLabel && presetLabel !== '不限') {
-            return `${dateFieldLabel || 'Star 时间'} · ${presetLabel}${rangeText ? `（${rangeText}）` : ''}`
+            const rangeSuffix = rangeText ? `（${rangeText}）` : ''
+            return `${dateFieldLabel || 'Star 时间'} · ${presetLabel}${rangeSuffix}`
         }
         if (dateFieldLabel && rangeText) return `${dateFieldLabel} · ${rangeText}`
         if (dateFieldLabel) return dateFieldLabel

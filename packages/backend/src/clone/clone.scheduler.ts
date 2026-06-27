@@ -1,11 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CloneService } from './clone.service';
-import {
-    STUCK_TASK_THRESHOLD_MS,
-    LOCK_TIMEOUT_MS,
-    LONG_PENDING_THRESHOLD_MS,
-} from './clone.constants';
+import { STUCK_TASK_THRESHOLD_MS, LOCK_TIMEOUT_MS, LONG_PENDING_THRESHOLD_MS } from './clone.constants';
 import { PrismaService } from '../prisma/prisma.service';
 import { existsSync } from 'fs';
 
@@ -108,9 +104,7 @@ export class CloneScheduler {
             if (longPendingTasks.length > 0) {
                 const task = longPendingTasks[0];
                 const waitTime = Math.round((Date.now() - (task.createdAt?.getTime() || 0)) / 1000);
-                this.logger.warn(
-                    `检测到长时间 PENDING 任务: taskId=${Number(task.id)} waitTime=${waitTime}s`,
-                );
+                this.logger.warn(`检测到长时间 PENDING 任务: taskId=${Number(task.id)} waitTime=${waitTime}s`);
 
                 // 尝试执行该任务
                 await this.cloneService.executeTask(task.id);
@@ -144,9 +138,7 @@ export class CloneScheduler {
             if (stuckTasks.length === 0) return;
 
             for (const task of stuckTasks) {
-                this.logger.warn(
-                    `检测到卡住的任务: taskId=${Number(task.id)} startedAt=${task.startedAt?.toISOString()}`,
-                );
+                this.logger.warn(`检测到卡住的任务: taskId=${Number(task.id)} startedAt=${task.startedAt?.toISOString()}`);
 
                 await this.recoverStuckTask(task.id, '任务超时，自动标记为失败');
             }
@@ -198,9 +190,7 @@ export class CloneScheduler {
                     const exists = existsSync(item.localPath);
                     if (!exists) {
                         // 目录不存在，标记为不一致
-                        this.logger.warn(
-                            `目录不一致: ${item.fullName} 目录不存在: ${item.localPath}`,
-                        );
+                        this.logger.warn(`目录不一致: ${item.fullName} 目录不存在: ${item.localPath}`);
 
                         await this.prisma.cloneTaskItem.update({
                             where: { id: item.id },
@@ -251,9 +241,7 @@ export class CloneScheduler {
                 },
             });
 
-            this.logger.warn(
-                `卡住任务已恢复: taskId=${Number(taskId)} 失败子项=${updatedItems.count} reason=${reason}`,
-            );
+            this.logger.warn(`卡住任务已恢复: taskId=${Number(taskId)} 失败子项=${updatedItems.count} reason=${reason}`);
         } catch (e) {
             this.logger.error(`恢复卡住任务失败: taskId=${Number(taskId)}`, e);
         } finally {

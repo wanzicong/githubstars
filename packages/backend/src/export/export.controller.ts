@@ -20,7 +20,22 @@ export class ExportController {
      */
     @Post('md')
     @ApiOperation({ summary: '导出 Markdown', description: '按筛选条件将仓库列表导出为 Markdown 文件下载' })
-    @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'string' }, maxCount: { type: 'number' } } } })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                keyword: { type: 'string' },
+                language: { type: 'string' },
+                sortBy: { type: 'string' },
+                sortOrder: { type: 'string' },
+                dateField: { type: 'string' },
+                startDate: { type: 'string' },
+                endDate: { type: 'string' },
+                untranslatedOnly: { type: 'string' },
+                maxCount: { type: 'number' },
+            },
+        },
+    })
     async exportMd(@Body(new ZodValidationPipe(ExportFilterSchema)) body: ExportFilterDto, @Res() res: Response) {
         const md = await this.exportService.generateMarkdown(body, body.maxCount);
         res.set({

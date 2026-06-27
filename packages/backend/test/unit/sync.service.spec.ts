@@ -46,7 +46,6 @@ describe('SyncService', () => {
         service = module.get(SyncService);
         prisma = mockPrisma;
         githubApi = mockGithubApi;
-        githubRepo = mockGithubRepo;
     });
 
     describe('isSyncing', () => {
@@ -84,8 +83,28 @@ describe('SyncService', () => {
         it('应返回分页的同步日志', async () => {
             prisma.syncLog.count.mockResolvedValue(2);
             prisma.syncLog.findMany.mockResolvedValue([
-                { id: 1n, syncType: '手动同步', status: '成功', totalCount: 100, syncedCount: 100, errorMessage: null, startedAt: new Date(), finishedAt: new Date(), createdAt: new Date() },
-                { id: 2n, syncType: '定时同步', status: '失败', totalCount: 100, syncedCount: 50, errorMessage: '网络错误', startedAt: new Date(), finishedAt: new Date(), createdAt: new Date() },
+                {
+                    id: 1n,
+                    syncType: '手动同步',
+                    status: '成功',
+                    totalCount: 100,
+                    syncedCount: 100,
+                    errorMessage: null,
+                    startedAt: new Date(),
+                    finishedAt: new Date(),
+                    createdAt: new Date(),
+                },
+                {
+                    id: 2n,
+                    syncType: '定时同步',
+                    status: '失败',
+                    totalCount: 100,
+                    syncedCount: 50,
+                    errorMessage: '网络错误',
+                    startedAt: new Date(),
+                    finishedAt: new Date(),
+                    createdAt: new Date(),
+                },
             ]);
 
             const result = await service.getSyncLogs(1, 10);

@@ -63,7 +63,7 @@ export const GITHUB_MIRROR_SOURCES = [
 ] as const;
 
 /** 镜像代理源类型 */
-export type MirrorSourceName = typeof GITHUB_MIRROR_SOURCES[number]['name'];
+export type MirrorSourceName = (typeof GITHUB_MIRROR_SOURCES)[number]['name'];
 
 /**
  * 需要自动重试的 Git 错误模式
@@ -73,23 +73,23 @@ export type MirrorSourceName = typeof GITHUB_MIRROR_SOURCES[number]['name'];
  */
 export const RETRYABLE_CLONE_ERROR_PATTERNS = [
     // Git 内部错误
-    'shallow file has changed since we read it',      // 浅克隆过程中 shallow 文件被并发修改
-    'BUG: refs/files-backend',                         // Git for Windows ref 事务 Bug
+    'shallow file has changed since we read it', // 浅克隆过程中 shallow 文件被并发修改
+    'BUG: refs/files-backend', // Git for Windows ref 事务 Bug
     'initial ref transaction called with existing refs', // 同上，refs 残留
-    'remote did not send all necessary objects',       // 传输不完整，通常是网络中断
-    'index file corrupt',                              // 索引文件损坏
+    'remote did not send all necessary objects', // 传输不完整，通常是网络中断
+    'index file corrupt', // 索引文件损坏
 
     // 网络连接错误（最常见的失败原因）
-    'Failed to connect to github.com',                 // GitHub 连接失败
-    'Could not connect to server',                     // 无法连接到服务器
-    'Connection timed out',                            // 连接超时
-    'SSL_ERROR_SYSCALL',                               // SSL 底层错误（通常是网络中断）
-    'OpenSSL SSL_read: Connection was reset',          // 连接被重置
-    'The requested URL returned error: 429',           // GitHub API 速率限制
-    'The requested URL returned error: 503',           // GitHub 服务暂时不可用
-    'Network is unreachable',                          // 网络不可达
-    'No route to host',                                // 无法路由到主机
-    'Connection refused',                              // 连接被拒绝
+    'Failed to connect to github.com', // GitHub 连接失败
+    'Could not connect to server', // 无法连接到服务器
+    'Connection timed out', // 连接超时
+    'SSL_ERROR_SYSCALL', // SSL 底层错误（通常是网络中断）
+    'OpenSSL SSL_read: Connection was reset', // 连接被重置
+    'The requested URL returned error: 429', // GitHub API 速率限制
+    'The requested URL returned error: 503', // GitHub 服务暂时不可用
+    'Network is unreachable', // 网络不可达
+    'No route to host', // 无法路由到主机
+    'Connection refused', // 连接被拒绝
 ] as const;
 
 /** 网络错误模式（用于判断是否需要等待后重试） */

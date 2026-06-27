@@ -98,7 +98,7 @@ export class TrendingService {
         let failed = 0;
 
         for (const repo of uncached) {
-            const fullName = repo.fullName as string;
+            const fullName = repo.fullName;
             if (this.translatingSet.has(fullName)) continue;
             this.translatingSet.add(fullName);
 
@@ -107,7 +107,10 @@ export class TrendingService {
                 let repoId = repo.localRepoId as number | null;
                 if (!repoId) {
                     repoId = await this.ensureRepoExists(repo);
-                    if (!repoId) { failed++; continue; }
+                    if (!repoId) {
+                        failed++;
+                        continue;
+                    }
                 }
 
                 // 调用翻译（幂等：已有 description_cn 则跳过）
@@ -135,7 +138,7 @@ export class TrendingService {
      */
     private async ensureRepoExists(repo: TrendingRepoItem): Promise<number | null> {
         try {
-            const fullName = repo.fullName as string;
+            const fullName = repo.fullName;
             // 先查是否已存在
             const existing = await this.prisma.githubRepo.findFirst({
                 where: { fullName },
@@ -159,9 +162,9 @@ export class TrendingService {
                     watchersCount: repo.watchersCount || 0,
                     openIssuesCount: repo.openIssuesCount || 0,
                     topics: (() => {
-                        if (!repo.topics) return '[]'
-                        if (typeof repo.topics === 'string') return repo.topics
-                        return JSON.stringify(repo.topics)
+                        if (!repo.topics) return '[]';
+                        if (typeof repo.topics === 'string') return repo.topics;
+                        return JSON.stringify(repo.topics);
                     })(),
                     licenseName: repo.licenseName || null,
                     isFork: repo.isFork || false,

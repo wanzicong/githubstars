@@ -14,10 +14,7 @@ describe('GithubApiService', () => {
     beforeEach(async () => {
         jest.clearAllMocks();
         const module = await Test.createTestingModule({
-            providers: [
-                GithubApiService,
-                { provide: ConfigService, useValue: mockConfig },
-            ],
+            providers: [GithubApiService, { provide: ConfigService, useValue: mockConfig }],
         }).compile();
         service = module.get(GithubApiService);
         config = mockConfig;

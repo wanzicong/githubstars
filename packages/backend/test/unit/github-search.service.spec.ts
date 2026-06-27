@@ -4,7 +4,6 @@ import { ConfigService } from '../../src/config/config.service';
 
 describe('GithubSearchService', () => {
     let service: GithubSearchService;
-    let config: any;
 
     const mockConfig = {
         getValue: jest.fn(),
@@ -14,13 +13,9 @@ describe('GithubSearchService', () => {
     beforeEach(async () => {
         jest.clearAllMocks();
         const module = await Test.createTestingModule({
-            providers: [
-                GithubSearchService,
-                { provide: ConfigService, useValue: mockConfig },
-            ],
+            providers: [GithubSearchService, { provide: ConfigService, useValue: mockConfig }],
         }).compile();
         service = module.get(GithubSearchService);
-        config = mockConfig;
     });
 
     describe('searchRepos', () => {

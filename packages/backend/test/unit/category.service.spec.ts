@@ -30,10 +30,7 @@ describe('CategoryService', () => {
 
     beforeEach(async () => {
         const module = await Test.createTestingModule({
-            providers: [
-                CategoryService,
-                { provide: PrismaService, useValue: mockPrisma },
-            ],
+            providers: [CategoryService, { provide: PrismaService, useValue: mockPrisma }],
         }).compile();
 
         service = module.get(CategoryService);
@@ -45,14 +42,25 @@ describe('CategoryService', () => {
         it('应返回两级树形结构', async () => {
             prisma.category.findMany.mockResolvedValue([
                 {
-                    id: 1n, name: '后端', parentId: null, sortOrder: 0,
-                    icon: null, description: null,
-                    createdAt: new Date(), updatedAt: new Date(),
+                    id: 1n,
+                    name: '后端',
+                    parentId: null,
+                    sortOrder: 0,
+                    icon: null,
+                    description: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
                     _count: { categoryRepoLinks: 3 },
                     children: [
                         {
-                            id: 2n, name: 'NestJS', parentId: 1n, sortOrder: 0, icon: null, description: null,
-                            createdAt: new Date(), updatedAt: new Date(),
+                            id: 2n,
+                            name: 'NestJS',
+                            parentId: 1n,
+                            sortOrder: 0,
+                            icon: null,
+                            description: null,
+                            createdAt: new Date(),
+                            updatedAt: new Date(),
                             _count: { categoryRepoLinks: 1 },
                         },
                     ],
@@ -80,9 +88,14 @@ describe('CategoryService', () => {
             prisma.category.count.mockResolvedValue(1);
             prisma.category.findMany.mockResolvedValue([
                 {
-                    id: 1n, name: '后端', parentId: null, sortOrder: 0,
-                    icon: null, description: null,
-                    createdAt: new Date(), updatedAt: new Date(),
+                    id: 1n,
+                    name: '后端',
+                    parentId: null,
+                    sortOrder: 0,
+                    icon: null,
+                    description: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
                     _count: { categoryRepoLinks: 5 },
                     children: [],
                 },
@@ -99,9 +112,14 @@ describe('CategoryService', () => {
             prisma.category.count.mockResolvedValue(1);
             prisma.category.findMany.mockResolvedValue([
                 {
-                    id: 1n, name: '前端', parentId: null, sortOrder: 0,
-                    icon: null, description: null,
-                    createdAt: new Date(), updatedAt: new Date(),
+                    id: 1n,
+                    name: '前端',
+                    parentId: null,
+                    sortOrder: 0,
+                    icon: null,
+                    description: null,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
                     _count: { categoryRepoLinks: 2 },
                     children: [],
                 },
@@ -117,9 +135,14 @@ describe('CategoryService', () => {
         it('应创建新分类', async () => {
             prisma.category.findFirst.mockResolvedValue(null);
             prisma.category.create.mockResolvedValue({
-                id: 1n, name: '新分类', parentId: null, sortOrder: 0,
-                icon: null, description: null,
-                createdAt: new Date(), updatedAt: new Date(),
+                id: 1n,
+                name: '新分类',
+                parentId: null,
+                sortOrder: 0,
+                icon: null,
+                description: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
             });
 
             const result = await service.createCategory({
@@ -147,9 +170,14 @@ describe('CategoryService', () => {
             prisma.category.findUnique.mockResolvedValue({ id: 1n, name: '旧名', parentId: null });
             prisma.category.findFirst.mockResolvedValue(null);
             prisma.category.update.mockResolvedValue({
-                id: 1n, name: '新名', parentId: null, sortOrder: 0,
-                icon: null, description: null,
-                createdAt: new Date(), updatedAt: new Date(),
+                id: 1n,
+                name: '新名',
+                parentId: null,
+                sortOrder: 0,
+                icon: null,
+                description: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
             });
 
             const result = await service.updateCategory({ id: 1, name: '新名' });
@@ -158,14 +186,12 @@ describe('CategoryService', () => {
 
         it('更新不存在的分类应抛出 NotFoundException', async () => {
             prisma.category.findUnique.mockResolvedValue(null);
-            await expect(service.updateCategory({ id: 999, name: 'x' }))
-                .rejects.toThrow(NotFoundException);
+            await expect(service.updateCategory({ id: 999, name: 'x' })).rejects.toThrow(NotFoundException);
         });
 
         it('不能将分类设为自身的父分类', async () => {
             prisma.category.findUnique.mockResolvedValue({ id: 1n, name: '测试', parentId: null });
-            await expect(service.updateCategory({ id: 1, parentId: 1 }))
-                .rejects.toThrow(ConflictException);
+            await expect(service.updateCategory({ id: 1, parentId: 1 })).rejects.toThrow(ConflictException);
         });
     });
 
@@ -193,7 +219,10 @@ describe('CategoryService', () => {
         it('应批量更新排序', async () => {
             prisma.$transaction.mockResolvedValue([]);
             const result = await service.sortCategories({
-                items: [{ id: 1, sortOrder: 0 }, { id: 2, sortOrder: 1 }],
+                items: [
+                    { id: 1, sortOrder: 0 },
+                    { id: 2, sortOrder: 1 },
+                ],
             });
             expect(result.success).toBe(true);
             expect(prisma.$transaction).toHaveBeenCalled();
@@ -207,7 +236,8 @@ describe('CategoryService', () => {
             prisma.$transaction.mockResolvedValue([{}, {}]);
 
             const result = await service.bindReposToCategory({
-                categoryId: 1, repoIds: [1, 2],
+                categoryId: 1,
+                repoIds: [1, 2],
             });
             expect(result.success).toBe(true);
             expect(result.count).toBe(2);
@@ -217,9 +247,7 @@ describe('CategoryService', () => {
             prisma.category.findUnique.mockResolvedValue({ id: 1n });
             prisma.githubRepo.findMany.mockResolvedValue([{ id: BigInt(1) }]);
 
-            await expect(
-                service.bindReposToCategory({ categoryId: 1, repoIds: [1, 999] }),
-            ).rejects.toThrow(NotFoundException);
+            await expect(service.bindReposToCategory({ categoryId: 1, repoIds: [1, 999] })).rejects.toThrow(NotFoundException);
         });
     });
 
@@ -229,7 +257,8 @@ describe('CategoryService', () => {
             prisma.categoryRepoLink.deleteMany.mockResolvedValue({ count: 2 });
 
             const result = await service.unbindReposFromCategory({
-                categoryId: 1, repoIds: [1, 2],
+                categoryId: 1,
+                repoIds: [1, 2],
             });
             expect(result.success).toBe(true);
             expect(result.count).toBe(2);
@@ -242,30 +271,61 @@ describe('CategoryService', () => {
             prisma.githubRepo.count.mockResolvedValue(2);
             prisma.githubRepo.findMany.mockResolvedValue([
                 {
-                    id: 1n, repoName: 'repo1', fullName: 'user/repo1',
-                    description: 'desc', descriptionCn: null,
-                    language: 'TS', ownerName: 'user', ownerAvatarUrl: '',
-                    htmlUrl: 'url', starsCount: 10, forksCount: 5,
-                    watchersCount: 3, openIssuesCount: 1, topics: '[]',
-                    licenseName: 'MIT', isFork: false, isArchived: false,
-                    repoCreatedAt: new Date(), repoUpdatedAt: new Date(),
-                    repoPushedAt: new Date(), starredAt: new Date(),
+                    id: 1n,
+                    repoName: 'repo1',
+                    fullName: 'user/repo1',
+                    description: 'desc',
+                    descriptionCn: null,
+                    language: 'TS',
+                    ownerName: 'user',
+                    ownerAvatarUrl: '',
+                    htmlUrl: 'url',
+                    starsCount: 10,
+                    forksCount: 5,
+                    watchersCount: 3,
+                    openIssuesCount: 1,
+                    topics: '[]',
+                    licenseName: 'MIT',
+                    isFork: false,
+                    isArchived: false,
+                    repoCreatedAt: new Date(),
+                    repoUpdatedAt: new Date(),
+                    repoPushedAt: new Date(),
+                    starredAt: new Date(),
                 },
                 {
-                    id: 2n, repoName: 'repo2', fullName: 'user/repo2',
-                    description: 'desc2', descriptionCn: null,
-                    language: 'JS', ownerName: 'user', ownerAvatarUrl: '',
-                    htmlUrl: 'url2', starsCount: 20, forksCount: 3,
-                    watchersCount: 2, openIssuesCount: 0, topics: '[]',
-                    licenseName: null, isFork: false, isArchived: false,
-                    repoCreatedAt: new Date(), repoUpdatedAt: new Date(),
-                    repoPushedAt: new Date(), starredAt: new Date(),
+                    id: 2n,
+                    repoName: 'repo2',
+                    fullName: 'user/repo2',
+                    description: 'desc2',
+                    descriptionCn: null,
+                    language: 'JS',
+                    ownerName: 'user',
+                    ownerAvatarUrl: '',
+                    htmlUrl: 'url2',
+                    starsCount: 20,
+                    forksCount: 3,
+                    watchersCount: 2,
+                    openIssuesCount: 0,
+                    topics: '[]',
+                    licenseName: null,
+                    isFork: false,
+                    isArchived: false,
+                    repoCreatedAt: new Date(),
+                    repoUpdatedAt: new Date(),
+                    repoPushedAt: new Date(),
+                    starredAt: new Date(),
                 },
             ]);
 
             const result = await service.getCategoryRepos({
-                categoryId: 1, page: 1, size: 10,
-                keyword: '', language: '', sortBy: 'stars_count', sortOrder: 'desc',
+                categoryId: 1,
+                page: 1,
+                size: 10,
+                keyword: '',
+                language: '',
+                sortBy: 'stars_count',
+                sortOrder: 'desc',
             });
             expect(result.total).toBe(2);
             expect(result.records).toHaveLength(2);

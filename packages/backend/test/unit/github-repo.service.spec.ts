@@ -7,15 +7,31 @@ describe('GithubRepoService', () => {
     let prisma: any;
 
     const mockRepo = {
-        id: 1n, repoName: 'test-repo', fullName: 'owner/test-repo',
-        description: 'A test repo', descriptionCn: null,
-        readmeOriginal: null, readmeCn: null, readmeFetched: false,
-        language: 'TypeScript', ownerName: 'owner', ownerAvatarUrl: '',
-        htmlUrl: 'https://github.com/owner/test-repo', homepage: null,
-        starsCount: 100, forksCount: 10, watchersCount: 5, openIssuesCount: 3,
-        topics: '["test"]', licenseName: 'MIT', isFork: false, isArchived: false,
-        repoCreatedAt: new Date('2023-01-01'), repoUpdatedAt: new Date('2024-06-01'),
-        repoPushedAt: new Date('2024-06-01'), starredAt: new Date(),
+        id: 1n,
+        repoName: 'test-repo',
+        fullName: 'owner/test-repo',
+        description: 'A test repo',
+        descriptionCn: null,
+        readmeOriginal: null,
+        readmeCn: null,
+        readmeFetched: false,
+        language: 'TypeScript',
+        ownerName: 'owner',
+        ownerAvatarUrl: '',
+        htmlUrl: 'https://github.com/owner/test-repo',
+        homepage: null,
+        starsCount: 100,
+        forksCount: 10,
+        watchersCount: 5,
+        openIssuesCount: 3,
+        topics: '["test"]',
+        licenseName: 'MIT',
+        isFork: false,
+        isArchived: false,
+        repoCreatedAt: new Date('2023-01-01'),
+        repoUpdatedAt: new Date('2024-06-01'),
+        repoPushedAt: new Date('2024-06-01'),
+        starredAt: new Date(),
     };
 
     const mockPrisma = {
@@ -30,10 +46,7 @@ describe('GithubRepoService', () => {
 
     beforeEach(async () => {
         const module = await Test.createTestingModule({
-            providers: [
-                GithubRepoService,
-                { provide: PrismaService, useValue: mockPrisma },
-            ],
+            providers: [GithubRepoService, { provide: PrismaService, useValue: mockPrisma }],
         }).compile();
 
         service = module.get(GithubRepoService);
@@ -114,10 +127,7 @@ describe('GithubRepoService', () => {
 
     describe('findAllUrls', () => {
         it('应返回所有仓库URL列表', async () => {
-            prisma.githubRepo.findMany.mockResolvedValue([
-                { htmlUrl: 'https://github.com/a/b' },
-                { htmlUrl: 'https://github.com/c/d' },
-            ]);
+            prisma.githubRepo.findMany.mockResolvedValue([{ htmlUrl: 'https://github.com/a/b' }, { htmlUrl: 'https://github.com/c/d' }]);
 
             const urls = await service.findAllUrls({});
             expect(urls).toEqual(['https://github.com/a/b', 'https://github.com/c/d']);
@@ -128,7 +138,7 @@ describe('GithubRepoService', () => {
         it('应返回翻译状态统计', async () => {
             prisma.githubRepo.count
                 .mockResolvedValueOnce(100) // total
-                .mockResolvedValueOnce(60)  // descCompleted
+                .mockResolvedValueOnce(60) // descCompleted
                 .mockResolvedValueOnce(30); // readmeCompleted
 
             const result = await service.countTranslationStatus({});

@@ -40,7 +40,6 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
         ExportModule,
         CloneModule,
         CategoryModule,
-
     ],
     providers: [
         {

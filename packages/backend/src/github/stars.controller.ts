@@ -23,7 +23,23 @@ export class StarsController {
      */
     @Post('list')
     @ApiOperation({ summary: '获取星标仓库列表', description: '分页获取 Star 仓库，支持多维度筛选、排序和分页' })
-    @ApiBody({ schema: { type: 'object', properties: { page: { type: 'number' }, size: { type: 'number' }, keyword: { type: 'string' }, language: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'boolean' } } } })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                page: { type: 'number' },
+                size: { type: 'number' },
+                keyword: { type: 'string' },
+                language: { type: 'string' },
+                sortBy: { type: 'string' },
+                sortOrder: { type: 'string' },
+                dateField: { type: 'string' },
+                startDate: { type: 'string' },
+                endDate: { type: 'string' },
+                untranslatedOnly: { type: 'boolean' },
+            },
+        },
+    })
     async list(@Body(new ZodValidationPipe(FilterSchema)) body: FilterDto) {
         this.logger.log('获取星标仓库列表: page=' + body.page + ', size=' + body.size);
         return this.service.findPage({
@@ -67,7 +83,21 @@ export class StarsController {
      */
     @Post('export')
     @ApiOperation({ summary: '导出仓库 URL', description: '按筛选条件导出仓库 GitHub URL 列表（纯文本下载）' })
-    @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'boolean' } } } })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                keyword: { type: 'string' },
+                language: { type: 'string' },
+                sortBy: { type: 'string' },
+                sortOrder: { type: 'string' },
+                dateField: { type: 'string' },
+                startDate: { type: 'string' },
+                endDate: { type: 'string' },
+                untranslatedOnly: { type: 'boolean' },
+            },
+        },
+    })
     async exportApi(@Body(new ZodValidationPipe(FilterSchema)) body: FilterDto, @Res() res: Response) {
         this.logger.log('导出仓库 URL 列表');
         const urls = await this.service.findAllUrls({
@@ -93,7 +123,21 @@ export class StarsController {
      */
     @Post('ids')
     @ApiOperation({ summary: '获取仓库 ID 列表', description: '按筛选条件获取所有仓库 ID，用于跨页全选' })
-    @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, sortBy: { type: 'string' }, sortOrder: { type: 'string' }, dateField: { type: 'string' }, startDate: { type: 'string' }, endDate: { type: 'string' }, untranslatedOnly: { type: 'boolean' } } } })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                keyword: { type: 'string' },
+                language: { type: 'string' },
+                sortBy: { type: 'string' },
+                sortOrder: { type: 'string' },
+                dateField: { type: 'string' },
+                startDate: { type: 'string' },
+                endDate: { type: 'string' },
+                untranslatedOnly: { type: 'boolean' },
+            },
+        },
+    })
     async getIds(@Body(new ZodValidationPipe(FilterSchema)) body: FilterDto) {
         this.logger.log('获取仓库 ID 列表');
         const ids = await this.service.findAllIds({

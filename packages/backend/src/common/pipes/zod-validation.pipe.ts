@@ -23,9 +23,7 @@ export class ZodValidationPipe<T extends z.ZodType = z.ZodType> implements PipeT
         }
         const result = this.schema.safeParse(value);
         if (!result.success) {
-            const errors = result.error.issues
-                .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-                .join('; ');
+            const errors = result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
             throw new BadRequestException(`输入验证失败: ${errors}`);
         }
         return result.data;

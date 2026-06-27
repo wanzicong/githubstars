@@ -1,7 +1,5 @@
 import { Test } from '@nestjs/testing';
 import { LoggingService } from '../../src/logging/logging.service';
-import * as fs from 'fs';
-import * as path from 'path';
 
 describe('LoggingService', () => {
     let service: LoggingService;

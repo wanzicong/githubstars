@@ -126,7 +126,7 @@ export default function StarDetail() {
                 } else {
                     setNotFound(true)
                 }
-            } catch (e) {
+            } catch {
                 message.error('获取仓库详情失败')
                 if (!cancelled) {
                     setNotFound(true)

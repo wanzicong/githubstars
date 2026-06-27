@@ -75,12 +75,16 @@ export class TranslateTaskService {
     private async processItem(item: any) {
         await this.acquire();
         try {
-            let success = false, attempts = 0, resultNote = '';
-    
+            let success = false,
+                attempts = 0,
+                resultNote = '';
+
             while (attempts < MAX_ATTEMPTS && !success) {
                 if (attempts > 0) {
                     const delay = this.calculateRetryDelay(resultNote, attempts);
-                    this.logger.error(`翻译重试 item=${item.id} attempt=${attempts}/${MAX_ATTEMPTS} delay=${delay}ms note=${resultNote.substring(0, 100)}`);
+                    this.logger.error(
+                        `翻译重试 item=${item.id} attempt=${attempts}/${MAX_ATTEMPTS} delay=${delay}ms note=${resultNote.substring(0, 100)}`,
+                    );
                     await new Promise((r) => setTimeout(r, delay));
                 }
                 await this.prisma.translationTaskItem.update({ where: { id: item.id }, data: { status: 'PROCESSING' } });
@@ -89,13 +93,13 @@ export class TranslateTaskService {
                 resultNote = attempt.resultNote;
                 if (!success) attempts++;
             }
-    
+
             await this.recordItemResult(item, success, attempts, resultNote);
         } finally {
             this.release();
         }
     }
-    
+
     /**
      * 执行单次翻译尝试
      */
@@ -122,7 +126,7 @@ export class TranslateTaskService {
             return { success: false, resultNote };
         }
     }
-    
+
     /**
      * 计算重试延迟时间
      */
@@ -131,7 +135,7 @@ export class TranslateTaskService {
         const isRateLimited = noteLower.includes('rate limit') || noteLower.includes('限流') || noteLower.includes('rate limited');
         return isRateLimited ? RATE_LIMIT_BACKOFF_MS : Math.pow(2, attempts) * 1000;
     }
-    
+
     /**
      * 记录翻译子项的最终结果，并原子更新父任务计数器
      */

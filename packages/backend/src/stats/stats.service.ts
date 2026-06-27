@@ -87,8 +87,12 @@ export class StatsService {
                 this.prisma.githubRepo.count(),
                 this.prisma.githubRepo.aggregate({ _sum: { starsCount: true } }),
                 this.prisma.githubRepo.aggregate({ _sum: { forksCount: true } }),
-                this.prisma.$queryRaw<Array<{ cnt: bigint }>>`SELECT COUNT(DISTINCT language) AS cnt FROM github_repo WHERE language IS NOT NULL`,
-                this.prisma.$queryRaw<Array<{ cnt: bigint }>>`SELECT COUNT(DISTINCT owner_name) AS cnt FROM github_repo WHERE owner_name IS NOT NULL`,
+                this.prisma.$queryRaw<
+                    Array<{ cnt: bigint }>
+                >`SELECT COUNT(DISTINCT language) AS cnt FROM github_repo WHERE language IS NOT NULL`,
+                this.prisma.$queryRaw<
+                    Array<{ cnt: bigint }>
+                >`SELECT COUNT(DISTINCT owner_name) AS cnt FROM github_repo WHERE owner_name IS NOT NULL`,
             ]);
             return {
                 totalRepos: total,

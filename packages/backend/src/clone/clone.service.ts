@@ -266,8 +266,7 @@ export class CloneService {
             const fullName = repo.fullName || '';
             const slashIdx = fullName.indexOf('/');
             const owner = slashIdx > 0 ? fullName.substring(0, slashIdx) : '';
-            const repoName = slashIdx > 0 && slashIdx < fullName.length - 1
-                ? fullName.substring(slashIdx + 1) : '';
+            const repoName = slashIdx > 0 && slashIdx < fullName.length - 1 ? fullName.substring(slashIdx + 1) : '';
 
             // 路径安全：校验仓库名格式，防止路径遍历
             const safeOwner = owner || 'unknown';
@@ -394,11 +393,7 @@ export class CloneService {
         this.lockAcquiredAt = new Date();
         this.currentTaskId = taskId;
         try {
-            await withTimeout(
-                this.executeTaskInner(taskId),
-                TASK_TIMEOUT_MS,
-                `任务整体超时: taskId=${Number(taskId)}`,
-            );
+            await withTimeout(this.executeTaskInner(taskId), TASK_TIMEOUT_MS, `任务整体超时: taskId=${Number(taskId)}`);
         } catch (e: unknown) {
             this.logger.error(`克隆任务执行异常: taskId=${Number(taskId)}`, e);
             try {
@@ -440,7 +435,7 @@ export class CloneService {
         const mirrorSource = (task.mirrorSource as MirrorSourceName) || 'direct';
         this.logger.log(
             `克隆任务开始执行: taskId=${Number(taskId)} pendingItems=${items.length} ` +
-            `concurrency=${task.concurrency} mirrorSource=${mirrorSource}`
+                `concurrency=${task.concurrency} mirrorSource=${mirrorSource}`,
         );
 
         // 并发执行所有 item
@@ -463,11 +458,7 @@ export class CloneService {
     ) {
         await this.acquire();
         try {
-            await withTimeout(
-                this.processItemInner(item, shallow, mirrorSource),
-                ITEM_TIMEOUT_MS,
-                `子项处理超时: ${item.fullName}`,
-            );
+            await withTimeout(this.processItemInner(item, shallow, mirrorSource), ITEM_TIMEOUT_MS, `子项处理超时: ${item.fullName}`);
         } catch (e: unknown) {
             // 超时或其他未捕获异常，记录为失败
             const errorMsg = e instanceof Error ? e.message : String(e);
@@ -553,10 +544,7 @@ export class CloneService {
         let authenticatedUrl = item.cloneUrl;
         const githubToken = await this.config.getValue('github.token');
         if (githubToken) {
-            authenticatedUrl = authenticatedUrl.replace(
-                'https://github.com/',
-                `https://x-access-token:${githubToken}@github.com/`,
-            );
+            authenticatedUrl = authenticatedUrl.replace('https://github.com/', `https://x-access-token:${githubToken}@github.com/`);
         }
 
         // 应用镜像代理（仅对公开仓库有效，私有仓库使用 Token 时不走代理）
@@ -587,7 +575,6 @@ export class CloneService {
 
             // 首次克隆（带 checkout 警告处理）
             return await this.executeGitClone(finalUrl, localPath, shallow, item.fullName);
-
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? (e as Error & { stderr?: string }).stderr || e.message : String(e);
 
@@ -612,7 +599,7 @@ export class CloneService {
 
             this.logger.warn(
                 `检测到${isNetwork ? '网络' : 'Git内部'}错误，准备重试: ${item.fullName} | ` +
-                `错误: ${errorMsg.substring(0, 200)} | 最大重试次数: ${maxRetries}`
+                    `错误: ${errorMsg.substring(0, 200)} | 最大重试次数: ${maxRetries}`,
             );
 
             // 带指数退避的重试循环
@@ -642,11 +629,9 @@ export class CloneService {
                         this.logger.log(`重试成功 (${attempt + 1}/${maxRetries}): ${item.fullName}`);
                     }
                     return result;
-
                 } catch (retryErr: unknown) {
-                    const retryErrorMsg = retryErr instanceof Error
-                        ? (retryErr as Error & { stderr?: string }).stderr || retryErr.message
-                        : String(retryErr);
+                    const retryErrorMsg =
+                        retryErr instanceof Error ? (retryErr as Error & { stderr?: string }).stderr || retryErr.message : String(retryErr);
 
                     // 最后一次重试也失败了
                     if (attempt === maxRetries - 1) {
@@ -663,8 +648,7 @@ export class CloneService {
 
                     // 还有重试机会，继续
                     this.logger.warn(
-                        `重试失败 (${attempt + 1}/${maxRetries}): ${item.fullName} | ` +
-                        `错误: ${retryErrorMsg.substring(0, 200)}`
+                        `重试失败 (${attempt + 1}/${maxRetries}): ${item.fullName} | ` + `错误: ${retryErrorMsg.substring(0, 200)}`,
                     );
                 }
             }
@@ -839,7 +823,7 @@ export class CloneService {
                 windowsHide: true,
             });
             // 输出格式: refs/remotes/origin/main → 提取 main
-            const match = stdout.trim().match(/refs\/remotes\/origin\/(.+)/);
+            const match = /refs\/remotes\/origin\/(.+)/.exec(stdout.trim());
             return match ? match[1] : null;
         } catch {
             // fallback：检查 main 或 master
@@ -908,7 +892,7 @@ export class CloneService {
             if (existsSync(configPath)) {
                 const config = readFileSync(configPath, 'utf-8');
                 // 从 git config 中提取 remote "origin" 的 url
-                const urlMatch = config.match(/\[remote\s+"origin"\][^[]*url\s*=\s*(.+)/);
+                const urlMatch = /\[remote\s+"origin"\][^[]*url\s*=\s*(.+)/.exec(config);
                 if (urlMatch) {
                     const remoteUrl = urlMatch[1].trim();
                     // 规范化比较：去掉 token 和 .git 后缀差异
@@ -1023,9 +1007,7 @@ export class CloneService {
             }
         }
 
-        const failedDetails = task.items
-            .filter((i) => i.status === 'FAILED')
-            .map((i) => ({ fullName: i.fullName, error: i.errorMessage }));
+        const failedDetails = task.items.filter((i) => i.status === 'FAILED').map((i) => ({ fullName: i.fullName, error: i.errorMessage }));
 
         return {
             success: true,

@@ -61,7 +61,11 @@ describe('Semaphore', () => {
 
         it('异常时也应释放许可', async () => {
             const s = new Semaphore(2);
-            await expect(s.run(async () => { throw new Error('fail'); })).rejects.toThrow('fail');
+            await expect(
+                s.run(async () => {
+                    throw new Error('fail');
+                }),
+            ).rejects.toThrow('fail');
             expect(s.currentCount).toBe(0);
         });
 

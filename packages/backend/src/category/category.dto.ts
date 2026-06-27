@@ -62,10 +62,14 @@ export type CategoryDeleteDto = z.infer<typeof CategoryDeleteSchema>;
 
 /** 分类排序参数 */
 export const CategorySortSchema = z.object({
-    items: z.array(z.object({
-        id: z.coerce.number().int().positive('分类ID必须为正整数'),
-        sortOrder: z.coerce.number().int().min(0),
-    })).min(1, '至少需要一个分类项'),
+    items: z
+        .array(
+            z.object({
+                id: z.coerce.number().int().positive('分类ID必须为正整数'),
+                sortOrder: z.coerce.number().int().min(0),
+            }),
+        )
+        .min(1, '至少需要一个分类项'),
 });
 
 export type CategorySortDto = z.infer<typeof CategorySortSchema>;

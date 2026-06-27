@@ -25,16 +25,21 @@ export class GithubSearchController {
      */
     @Post('search')
     @ApiOperation({ summary: '搜索 GitHub 仓库', description: '通过 GitHub Search API 搜索仓库' })
-    @ApiBody({ schema: { type: 'object', properties: { keyword: { type: 'string' }, language: { type: 'string' }, sort: { type: 'string' }, page: { type: 'number' }, perPage: { type: 'number' } } } })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                keyword: { type: 'string' },
+                language: { type: 'string' },
+                sort: { type: 'string' },
+                page: { type: 'number' },
+                perPage: { type: 'number' },
+            },
+        },
+    })
     async search(@Body(new ZodValidationPipe(GithubSearchSchema)) body: GithubSearchDto) {
         this.logger.log('GitHub 搜索: keyword=' + body.keyword + ', language=' + body.language);
-        return this.service.searchRepos(
-            body.keyword,
-            body.language,
-            body.sort,
-            body.page,
-            body.perPage,
-        );
+        return this.service.searchRepos(body.keyword, body.language, body.sort, body.page, body.perPage);
     }
 
     /**
@@ -45,7 +50,9 @@ export class GithubSearchController {
      */
     @Post('star')
     @ApiOperation({ summary: 'Star 仓库', description: '通过 GitHub API 给指定仓库添加 Star' })
-    @ApiBody({ schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] } })
+    @ApiBody({
+        schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] },
+    })
     async star(@Body() body: { owner: string; repo: string }) {
         this.logger.log('Star 操作: ' + body.owner + '/' + body.repo);
         const starred = await this.service.starRepo(body.owner, body.repo);
@@ -60,7 +67,9 @@ export class GithubSearchController {
      */
     @Post('unstar')
     @ApiOperation({ summary: '取消 Star', description: '通过 GitHub API 取消对指定仓库的 Star' })
-    @ApiBody({ schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] } })
+    @ApiBody({
+        schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] },
+    })
     async unstar(@Body() body: { owner: string; repo: string }) {
         this.logger.log('取消 Star 操作: ' + body.owner + '/' + body.repo);
         const ok = await this.service.unstarRepo(body.owner, body.repo);
@@ -75,7 +84,9 @@ export class GithubSearchController {
      */
     @Post('starred')
     @ApiOperation({ summary: '检查 Star 状态', description: '检查当前用户是否已 Star 指定仓库' })
-    @ApiBody({ schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] } })
+    @ApiBody({
+        schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] },
+    })
     async checkStarred(@Body() body: { owner: string; repo: string }) {
         const starred = await this.service.checkStarred(body.owner, body.repo);
         return { success: true, starred };

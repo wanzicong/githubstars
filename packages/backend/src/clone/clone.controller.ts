@@ -13,10 +13,7 @@ export class CloneController {
     async createTask(@Body() body: unknown) {
         const parsed = CreateCloneTaskSchema.safeParse(body);
         if (!parsed.success) {
-            throw new HttpException(
-                { success: false, message: parsed.error.issues[0]?.message || '参数错误' },
-                HttpStatus.BAD_REQUEST,
-            );
+            throw new HttpException({ success: false, message: parsed.error.issues[0]?.message || '参数错误' }, HttpStatus.BAD_REQUEST);
         }
         return this.cloneService.createTask(parsed.data);
     }
@@ -44,10 +41,7 @@ export class CloneController {
     async getTaskProgress(@Body() body: unknown) {
         const parsed = CloneTaskIdSchema.safeParse(body);
         if (!parsed.success) {
-            throw new HttpException(
-                { success: false, message: '任务 ID 无效' },
-                HttpStatus.BAD_REQUEST,
-            );
+            throw new HttpException({ success: false, message: '任务 ID 无效' }, HttpStatus.BAD_REQUEST);
         }
         return this.cloneService.getTaskProgress(parsed.data.id);
     }
@@ -59,10 +53,7 @@ export class CloneController {
     async retryFailed(@Body() body: unknown) {
         const parsed = CloneTaskIdSchema.safeParse(body);
         if (!parsed.success) {
-            throw new HttpException(
-                { success: false, message: '任务 ID 无效' },
-                HttpStatus.BAD_REQUEST,
-            );
+            throw new HttpException({ success: false, message: '任务 ID 无效' }, HttpStatus.BAD_REQUEST);
         }
         return this.cloneService.retryFailed(parsed.data.id);
     }
@@ -74,10 +65,7 @@ export class CloneController {
     async resetTask(@Body() body: unknown) {
         const parsed = CloneTaskIdSchema.safeParse(body);
         if (!parsed.success) {
-            throw new HttpException(
-                { success: false, message: '任务 ID 无效' },
-                HttpStatus.BAD_REQUEST,
-            );
+            throw new HttpException({ success: false, message: '任务 ID 无效' }, HttpStatus.BAD_REQUEST);
         }
         return this.cloneService.resetTask(parsed.data.id);
     }
@@ -89,10 +77,7 @@ export class CloneController {
     async retryItem(@Body() body: unknown) {
         const parsed = RetryItemSchema.safeParse(body);
         if (!parsed.success) {
-            throw new HttpException(
-                { success: false, message: parsed.error.issues[0]?.message || '参数错误' },
-                HttpStatus.BAD_REQUEST,
-            );
+            throw new HttpException({ success: false, message: parsed.error.issues[0]?.message || '参数错误' }, HttpStatus.BAD_REQUEST);
         }
         return this.cloneService.retryItem(parsed.data.id, parsed.data.fullName);
     }
@@ -104,10 +89,7 @@ export class CloneController {
     async deleteTask(@Body() body: unknown) {
         const parsed = CloneTaskIdSchema.safeParse(body);
         if (!parsed.success) {
-            throw new HttpException(
-                { success: false, message: '任务 ID 无效' },
-                HttpStatus.BAD_REQUEST,
-            );
+            throw new HttpException({ success: false, message: '任务 ID 无效' }, HttpStatus.BAD_REQUEST);
         }
         return this.cloneService.deleteTask(parsed.data.id);
     }

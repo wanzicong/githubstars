@@ -44,7 +44,9 @@ export class TrendingController {
      */
     @Post()
     @ApiOperation({ summary: '获取 Trending 仓库', description: '通过 GitHub Search API 查询指定时间段内创建的高星仓库' })
-    @ApiBody({ schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' }, perPage: { type: 'number' } } } })
+    @ApiBody({
+        schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' }, perPage: { type: 'number' } } },
+    })
     async trending(@Body(new ZodValidationPipe(TrendingSchema)) body: TrendingDto) {
         const { since, language, perPage } = body;
         const { query, dateStr } = buildTrendingQuery(since, language);
@@ -74,7 +76,9 @@ export class TrendingController {
      */
     @Post('translate')
     @ApiOperation({ summary: '翻译趋势仓库描述', description: '异步翻译未缓存的趋势仓库描述，结果缓存到 github_repo.description_cn' })
-    @ApiBody({ schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' }, perPage: { type: 'number' } } } })
+    @ApiBody({
+        schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' }, perPage: { type: 'number' } } },
+    })
     async translateTrending(@Body(new ZodValidationPipe(TrendingSchema)) body: TrendingDto) {
         const { since, language, perPage } = body;
         const { query, dateStr } = buildTrendingQuery(since, language);
@@ -91,11 +95,12 @@ export class TrendingController {
             repos,
             total: result.total,
             dateRange: `${dateStr} ~ ${new Date().toISOString().split('T')[0]}`,
-            message: stats.translated > 0
-                ? `翻译完成: ${stats.translated} 成功, ${stats.skipped} 已缓存, ${stats.failed} 失败`
-                : stats.skipped > 0
-                    ? `所有描述已缓存 (${stats.skipped} 个)`
-                    : `翻译完成: ${stats.translated} 成功, ${stats.failed} 失败`,
+            message:
+                stats.translated > 0
+                    ? `翻译完成: ${stats.translated} 成功, ${stats.skipped} 已缓存, ${stats.failed} 失败`
+                    : stats.skipped > 0
+                      ? `所有描述已缓存 (${stats.skipped} 个)`
+                      : `翻译完成: ${stats.translated} 成功, ${stats.failed} 失败`,
         };
     }
 
@@ -114,7 +119,7 @@ export class TrendingController {
         const language = body.language || '';
         this.logger.log('分析趋势仓库: since=' + since + ', language=' + (language || 'all'));
         const taskId = await this.taskService.createAndStartFullTranslate();
-        if (!taskId) return { success: false, message: '没有需要分析的项目' }; 
-        return { success: true, taskId: String(taskId), message: '趋势分析任务已启动' }; 
+        if (!taskId) return { success: false, message: '没有需要分析的项目' };
+        return { success: true, taskId: String(taskId), message: '趋势分析任务已启动' };
     }
 }

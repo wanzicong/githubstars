@@ -86,4 +86,3 @@ export const TrendingSchema = z.object({
 });
 
 export type TrendingDto = z.infer<typeof TrendingSchema>;
-

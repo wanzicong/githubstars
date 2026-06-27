@@ -227,9 +227,7 @@ export class CategoryService {
 
         // 名称变更时检查同级别唯一性
         if (data.name !== undefined) {
-            const targetParentId = data.parentId !== undefined
-                ? (data.parentId ?? null)
-                : existing.parentId;
+            const targetParentId = data.parentId !== undefined ? (data.parentId ?? null) : existing.parentId;
 
             const duplicate = await this.prisma.category.findFirst({
                 where: {
@@ -353,11 +351,7 @@ export class CategoryService {
         };
 
         if (keyword) {
-            where.OR = [
-                { repoName: { contains: keyword } },
-                { fullName: { contains: keyword } },
-                { description: { contains: keyword } },
-            ];
+            where.OR = [{ repoName: { contains: keyword } }, { fullName: { contains: keyword } }, { description: { contains: keyword } }];
         }
 
         if (language) {

@@ -24,20 +24,26 @@ describe('TrendingService', () => {
         {
             fullName: 'trending/repo1',
             description: 'A trending repo',
-            descriptionCn: null, localRepoId: null,
+            descriptionCn: null,
+            localRepoId: null,
             language: 'TypeScript',
-            ownerName: 'trending', ownerAvatarUrl: 'https://avatar.url',
+            ownerName: 'trending',
+            ownerAvatarUrl: 'https://avatar.url',
             htmlUrl: 'https://github.com/trending/repo1',
-            starsCount: 5000, forksCount: 300,
+            starsCount: 5000,
+            forksCount: 300,
         },
         {
             fullName: 'trending/repo2',
             description: 'Already cached',
-            descriptionCn: null, localRepoId: null,
+            descriptionCn: null,
+            localRepoId: null,
             language: 'Python',
-            ownerName: 'trending', ownerAvatarUrl: 'https://avatar2.url',
+            ownerName: 'trending',
+            ownerAvatarUrl: 'https://avatar2.url',
             htmlUrl: 'https://github.com/trending/repo2',
-            starsCount: 3000, forksCount: 100,
+            starsCount: 3000,
+            forksCount: 100,
         },
     ];
 
@@ -61,9 +67,7 @@ describe('TrendingService', () => {
         });
 
         it('应为仓库补充本地缓存的中文描述', async () => {
-            prisma.githubRepo.findMany.mockResolvedValue([
-                { fullName: 'trending/repo1', descriptionCn: '这是一个趋势仓库', id: 1n },
-            ]);
+            prisma.githubRepo.findMany.mockResolvedValue([{ fullName: 'trending/repo1', descriptionCn: '这是一个趋势仓库', id: 1n }]);
 
             const result = await service.enrichWithCachedTranslations(sampleRepos);
             expect(result).toHaveLength(2);
@@ -88,9 +92,14 @@ describe('TrendingService', () => {
                 {
                     fullName: 'trending/repo1',
                     description: 'desc',
-                    descriptionCn: '已翻译', localRepoId: 1,
-                    language: 'TS', ownerName: 'a', ownerAvatarUrl: '',
-                    htmlUrl: '', starsCount: 1, forksCount: 0,
+                    descriptionCn: '已翻译',
+                    localRepoId: 1,
+                    language: 'TS',
+                    ownerName: 'a',
+                    ownerAvatarUrl: '',
+                    htmlUrl: '',
+                    starsCount: 1,
+                    forksCount: 0,
                 },
             ];
 

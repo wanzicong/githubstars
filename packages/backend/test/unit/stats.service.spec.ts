@@ -7,15 +7,31 @@ describe('StatsService', () => {
     let prisma: any;
 
     const mockRepo = {
-        id: 1n, repoName: 'test-repo', fullName: 'owner/test-repo',
-        description: 'desc', descriptionCn: null, readmeOriginal: null,
-        readmeCn: null, readmeFetched: false, language: 'TypeScript',
-        ownerName: 'owner', ownerAvatarUrl: 'https://avatar.url',
-        htmlUrl: 'url', homepage: null, starsCount: 100, forksCount: 10,
-        watchersCount: 5, openIssuesCount: 3, topics: '[]', licenseName: 'MIT',
-        isFork: false, isArchived: false,
-        repoCreatedAt: new Date('2023-01-01'), repoUpdatedAt: new Date('2024-06-01'),
-        repoPushedAt: new Date('2024-06-01'), starredAt: new Date(),
+        id: 1n,
+        repoName: 'test-repo',
+        fullName: 'owner/test-repo',
+        description: 'desc',
+        descriptionCn: null,
+        readmeOriginal: null,
+        readmeCn: null,
+        readmeFetched: false,
+        language: 'TypeScript',
+        ownerName: 'owner',
+        ownerAvatarUrl: 'https://avatar.url',
+        htmlUrl: 'url',
+        homepage: null,
+        starsCount: 100,
+        forksCount: 10,
+        watchersCount: 5,
+        openIssuesCount: 3,
+        topics: '[]',
+        licenseName: 'MIT',
+        isFork: false,
+        isArchived: false,
+        repoCreatedAt: new Date('2023-01-01'),
+        repoUpdatedAt: new Date('2024-06-01'),
+        repoPushedAt: new Date('2024-06-01'),
+        starredAt: new Date(),
     };
 
     const mockPrisma = {
@@ -30,10 +46,7 @@ describe('StatsService', () => {
 
     beforeEach(async () => {
         const module = await Test.createTestingModule({
-            providers: [
-                StatsService,
-                { provide: PrismaService, useValue: mockPrisma },
-            ],
+            providers: [StatsService, { provide: PrismaService, useValue: mockPrisma }],
         }).compile();
 
         service = module.get(StatsService);
@@ -48,7 +61,7 @@ describe('StatsService', () => {
                 .mockResolvedValueOnce({ _sum: { starsCount: 5000 } })
                 .mockResolvedValueOnce({ _sum: { forksCount: 1200 } });
             prisma.$queryRaw
-                .mockResolvedValueOnce([{ cnt: BigInt(15) }])  // languages
+                .mockResolvedValueOnce([{ cnt: BigInt(15) }]) // languages
                 .mockResolvedValueOnce([{ cnt: BigInt(30) }]); // owners
 
             const stats = await service.getOverviewStats();

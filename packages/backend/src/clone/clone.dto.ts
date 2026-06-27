@@ -8,11 +8,9 @@ const MIRROR_SOURCE_NAMES = GITHUB_MIRROR_SOURCES.map((s) => s.name) as [string,
 export const CreateCloneTaskSchema = z.object({
     repoIds: z.array(z.coerce.number().int().positive()).min(1, '至少选择一个仓库'),
     targetDir: z.string().min(1, '目标目录不能为空').max(1000),
-    concurrency: z.union([
-        z.literal(CLONE_CONCURRENCY_OPTIONS[0]),
-        z.literal(CLONE_CONCURRENCY_OPTIONS[1]),
-        z.literal(CLONE_CONCURRENCY_OPTIONS[2]),
-    ]).default(CLONE_CONCURRENCY_OPTIONS[0]),
+    concurrency: z
+        .union([z.literal(CLONE_CONCURRENCY_OPTIONS[0]), z.literal(CLONE_CONCURRENCY_OPTIONS[1]), z.literal(CLONE_CONCURRENCY_OPTIONS[2])])
+        .default(CLONE_CONCURRENCY_OPTIONS[0]),
     shallow: z.boolean().optional().default(true),
     /** 镜像代理源名称，为空或 'direct' 表示不使用代理 */
     mirrorSource: z.enum(MIRROR_SOURCE_NAMES).optional().default('direct'),

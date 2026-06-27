@@ -46,9 +46,7 @@ export class ExportService {
      * @returns 完整的 Markdown 字符串
      */
     async generateMarkdown(filters: MarkdownFilters, maxCount: number): Promise<string> {
-        this.logger.log(
-            `开始导出Markdown: keyword=${filters.keyword || ''}, language=${filters.language || ''}, maxCount=${maxCount}`,
-        );
+        this.logger.log(`开始导出Markdown: keyword=${filters.keyword || ''}, language=${filters.language || ''}, maxCount=${maxCount}`);
 
         const result = await this.repoService.findPage({
             page: 1,

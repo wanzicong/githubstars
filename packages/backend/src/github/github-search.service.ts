@@ -117,7 +117,7 @@ export class GithubSearchService {
             return false;
         }
     }
-    
+
     /**
      * 检查是否已 Star 某个仓库
      *

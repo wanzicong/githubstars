@@ -16,10 +16,7 @@ describe('AuthorService', () => {
 
     beforeEach(async () => {
         const module = await Test.createTestingModule({
-            providers: [
-                AuthorService,
-                { provide: PrismaService, useValue: mockPrisma },
-            ],
+            providers: [AuthorService, { provide: PrismaService, useValue: mockPrisma }],
         }).compile();
 
         service = module.get(AuthorService);
@@ -30,8 +27,9 @@ describe('AuthorService', () => {
     describe('findAuthorPage', () => {
         it('应返回分页作者列表', async () => {
             prisma.$queryRaw
-                .mockResolvedValueOnce([{ cnt: BigInt(2) }])  // count
-                .mockResolvedValueOnce([                       // rows
+                .mockResolvedValueOnce([{ cnt: BigInt(2) }]) // count
+                .mockResolvedValueOnce([
+                    // rows
                     {
                         owner_name: 'alice',
                         owner_avatar_url: 'https://avatar.alice',
@@ -61,16 +59,16 @@ describe('AuthorService', () => {
         });
 
         it('应支持关键字搜索', async () => {
-            prisma.$queryRaw
-                .mockResolvedValueOnce([{ cnt: BigInt(1) }])
-                .mockResolvedValueOnce([{
+            prisma.$queryRaw.mockResolvedValueOnce([{ cnt: BigInt(1) }]).mockResolvedValueOnce([
+                {
                     owner_name: 'alice',
                     owner_avatar_url: 'url',
                     repo_count: BigInt(3),
                     total_stars: BigInt(100),
                     top_language: 'JavaScript',
                     last_starred_at: new Date(),
-                }]);
+                },
+            ]);
 
             const result = await service.findAuthorPage(1, 10, 'alice');
             expect(result.records).toHaveLength(1);
@@ -78,9 +76,7 @@ describe('AuthorService', () => {
         });
 
         it('空结果应返回空数组', async () => {
-            prisma.$queryRaw
-                .mockResolvedValueOnce([{ cnt: BigInt(0) }])
-                .mockResolvedValueOnce([]);
+            prisma.$queryRaw.mockResolvedValueOnce([{ cnt: BigInt(0) }]).mockResolvedValueOnce([]);
 
             const result = await service.findAuthorPage(1, 10, '');
             expect(result.records).toEqual([]);
@@ -100,31 +96,65 @@ describe('AuthorService', () => {
             prisma.githubRepo.count.mockResolvedValue(2);
             prisma.githubRepo.findMany.mockResolvedValue([
                 {
-                    id: 1n, repoName: 'repo1', fullName: 'alice/repo1',
-                    description: 'desc', descriptionCn: null, readmeOriginal: null,
-                    readmeCn: null, readmeFetched: false, language: 'TS',
-                    ownerName: 'alice', ownerAvatarUrl: 'url', htmlUrl: 'url1',
-                    homepage: null, starsCount: 100, forksCount: 10,
-                    watchersCount: 5, openIssuesCount: 3, topics: '[]',
-                    licenseName: 'MIT', isFork: false, isArchived: false,
-                    repoCreatedAt: new Date(), repoUpdatedAt: new Date(),
-                    repoPushedAt: new Date(), starredAt: new Date(),
+                    id: 1n,
+                    repoName: 'repo1',
+                    fullName: 'alice/repo1',
+                    description: 'desc',
+                    descriptionCn: null,
+                    readmeOriginal: null,
+                    readmeCn: null,
+                    readmeFetched: false,
+                    language: 'TS',
+                    ownerName: 'alice',
+                    ownerAvatarUrl: 'url',
+                    htmlUrl: 'url1',
+                    homepage: null,
+                    starsCount: 100,
+                    forksCount: 10,
+                    watchersCount: 5,
+                    openIssuesCount: 3,
+                    topics: '[]',
+                    licenseName: 'MIT',
+                    isFork: false,
+                    isArchived: false,
+                    repoCreatedAt: new Date(),
+                    repoUpdatedAt: new Date(),
+                    repoPushedAt: new Date(),
+                    starredAt: new Date(),
                 },
                 {
-                    id: 2n, repoName: 'repo2', fullName: 'alice/repo2',
-                    description: 'desc2', descriptionCn: null, readmeOriginal: null,
-                    readmeCn: null, readmeFetched: false, language: 'JS',
-                    ownerName: 'alice', ownerAvatarUrl: 'url', htmlUrl: 'url2',
-                    homepage: null, starsCount: 50, forksCount: 3,
-                    watchersCount: 2, openIssuesCount: 0, topics: '[]',
-                    licenseName: null, isFork: false, isArchived: false,
-                    repoCreatedAt: new Date(), repoUpdatedAt: new Date(),
-                    repoPushedAt: new Date(), starredAt: new Date(),
+                    id: 2n,
+                    repoName: 'repo2',
+                    fullName: 'alice/repo2',
+                    description: 'desc2',
+                    descriptionCn: null,
+                    readmeOriginal: null,
+                    readmeCn: null,
+                    readmeFetched: false,
+                    language: 'JS',
+                    ownerName: 'alice',
+                    ownerAvatarUrl: 'url',
+                    htmlUrl: 'url2',
+                    homepage: null,
+                    starsCount: 50,
+                    forksCount: 3,
+                    watchersCount: 2,
+                    openIssuesCount: 0,
+                    topics: '[]',
+                    licenseName: null,
+                    isFork: false,
+                    isArchived: false,
+                    repoCreatedAt: new Date(),
+                    repoUpdatedAt: new Date(),
+                    repoPushedAt: new Date(),
+                    starredAt: new Date(),
                 },
             ]);
 
             const result = await service.findAuthorRepos({
-                ownerName: 'alice', page: 1, size: 10,
+                ownerName: 'alice',
+                page: 1,
+                size: 10,
             });
             expect(result.records).toHaveLength(2);
             expect(result.total).toBe(2);
@@ -135,7 +165,9 @@ describe('AuthorService', () => {
             prisma.githubRepo.findMany.mockResolvedValue([]);
 
             const result = await service.findAuthorRepos({
-                ownerName: 'nonexistent', page: 1, size: 10,
+                ownerName: 'nonexistent',
+                page: 1,
+                size: 10,
             });
             expect(result.records).toEqual([]);
             expect(result.total).toBe(0);
@@ -152,10 +184,7 @@ describe('AuthorService', () => {
             const urls = await service.findAllAuthorRepoUrls({
                 ownerName: 'alice',
             });
-            expect(urls).toEqual([
-                'https://github.com/alice/repo1',
-                'https://github.com/alice/repo2',
-            ]);
+            expect(urls).toEqual(['https://github.com/alice/repo1', 'https://github.com/alice/repo2']);
         });
     });
 });

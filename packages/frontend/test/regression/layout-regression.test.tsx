@@ -13,11 +13,7 @@
  *   - Firefox ellipsis 兼容
  */
 
-import { describe, it, expect, beforeEach } from 'vitest'
-import { render } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { http, HttpResponse } from 'msw'
-import { server } from '../mocks/server'
+import { describe, it, expect } from 'vitest'
 
 // ================================================================
 // 辅助工具
@@ -85,7 +81,7 @@ describe('全局 CSS — 响应式布局规则', () => {
         }
       })
       // 由于 jsdom 可能不完全支持 CSS 解析，至少验证全局样式文件已加载
-      expect(hasCssRules || styleSheets.length >= 0).toBeTruthy()
+      expect(hasCssRules || styleSheets.length > 0).toBeTruthy()
     } finally {
       window.matchMedia = originalMatchMedia
       document.body.removeChild(div)
@@ -105,17 +101,8 @@ describe('全局 CSS — 响应式布局规则', () => {
 
   it('应包含 Firefox ellipsis 兼容规则', () => {
     const styleSheets = Array.from(document.styleSheets)
-    const hasMozRule = styleSheets.some((sheet) => {
-      try {
-        return Array.from(sheet.cssRules || []).some(
-          (rule) => rule.cssText.includes('@-moz-document') || rule.cssText.includes('ant-typography-ellipsis'),
-        )
-      } catch {
-        return false
-      }
-    })
     // jsdom 中可能不解析 @-moz-document，验证样式表加载即可
-    expect(styleSheets.length >= 0).toBeTruthy()
+    expect(styleSheets.length > 0).toBeTruthy()
   })
 })
 
@@ -160,7 +147,6 @@ describe('LayoutIndex — Content & Footer CSS 类名', () => {
 describe('响应式断点逻辑', () => {
   it('移动端断点 (max-width: 768px) 应存在', () => {
     // 验证 index.css 中定义了 @media (max-width: 768px) 规则
-    const styleSheets = Array.from(document.styleSheets)
     // 此测试验证概念层面：项目中使用了 768px 断点
     expect(true).toBe(true) // CSS 规则在 jsdom 中可能不完整解析
   })
@@ -225,21 +211,8 @@ describe('Chart.js — chart-container 类名', () => {
 
   it('chart-container CSS 类应包含 position: relative', () => {
     // 验证概念：CSS 规则定义了 position: relative 用于 Chart.js
-    const styleSheets = Array.from(document.styleSheets)
-    const hasChartRule = styleSheets.some((sheet) => {
-      try {
-        return Array.from(sheet.cssRules || []).some(
-          (rule) =>
-            rule instanceof CSSStyleRule &&
-            rule.selectorText === '.chart-container' &&
-            rule.style.position === 'relative',
-        )
-      } catch {
-        return false
-      }
-    })
     // jsdom 限制，验证至少样式表已加载
-    expect(styleSheets.length >= 0).toBeTruthy()
+    expect(document.styleSheets.length > 0).toBeTruthy()
   })
 })
 
