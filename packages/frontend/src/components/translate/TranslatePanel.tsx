@@ -225,8 +225,13 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
         }
     }
 
-    const descPercent = coverage ? (coverage.total > 0 ? Math.round((coverage.descCompleted * 100) / coverage.total) : 100) : 0
-    const readmePercent = coverage ? (coverage.total > 0 ? Math.round((coverage.readmeCompleted * 100) / coverage.total) : 100) : 0
+    const calcPercent = (completed: number) => {
+        if (!coverage) return 0
+        if (coverage.total <= 0) return 100
+        return Math.round((completed * 100) / coverage.total)
+    }
+    const descPercent = calcPercent(coverage?.descCompleted ?? 0)
+    const readmePercent = calcPercent(coverage?.readmeCompleted ?? 0)
     const isRunning = !!taskProgress && (taskProgress.status === 'PENDING' || taskProgress.status === 'PROCESSING')
 
     return (

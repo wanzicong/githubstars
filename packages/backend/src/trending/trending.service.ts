@@ -158,7 +158,11 @@ export class TrendingService {
                     forksCount: repo.forksCount || 0,
                     watchersCount: repo.watchersCount || 0,
                     openIssuesCount: repo.openIssuesCount || 0,
-                    topics: repo.topics ? (typeof repo.topics === 'string' ? repo.topics : JSON.stringify(repo.topics)) : '[]',
+                    topics: (() => {
+                        if (!repo.topics) return '[]'
+                        if (typeof repo.topics === 'string') return repo.topics
+                        return JSON.stringify(repo.topics)
+                    })(),
                     licenseName: repo.licenseName || null,
                     isFork: repo.isFork || false,
                     isArchived: repo.isArchived || false,

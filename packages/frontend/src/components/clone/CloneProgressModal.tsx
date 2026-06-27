@@ -26,8 +26,18 @@ export default function CloneProgressModal({ open, progress, onClose, onRetryFai
     const isPartial = status === 'PARTIAL'
     const canReset = !isRunning && completedItems !== totalItems
 
-    const statusColor = isCompleted ? 'success' : isFailed ? 'error' : isPartial ? 'warning' : 'processing'
-    const statusText = isCompleted ? '已完成' : isFailed ? '全部失败' : isPartial ? '部分完成' : status === 'PENDING' ? '等待中' : '执行中'
+    let statusColor: string
+    if (isCompleted) statusColor = 'success'
+    else if (isFailed) statusColor = 'error'
+    else if (isPartial) statusColor = 'warning'
+    else statusColor = 'processing'
+
+    let statusText: string
+    if (isCompleted) statusText = '已完成'
+    else if (isFailed) statusText = '全部失败'
+    else if (isPartial) statusText = '部分完成'
+    else if (status === 'PENDING') statusText = '等待中'
+    else statusText = '执行中'
 
     return (
         <Modal

@@ -170,7 +170,12 @@ export class TranslateTaskService {
     private async finishTask(taskId: bigint) {
         const task = await this.prisma.translationTask.findUnique({ where: { id: taskId } });
         if (!task) return;
-        const status = task.failedItems > 0 ? (task.completedItems > 0 ? 'PARTIAL' : 'FAILED') : 'COMPLETED';
+        let status: string;
+        if (task.failedItems > 0) {
+            status = task.completedItems > 0 ? 'PARTIAL' : 'FAILED';
+        } else {
+            status = 'COMPLETED';
+        }
         await this.prisma.translationTask.update({
             where: { id: taskId },
             data: { status, finishedAt: new Date() },
