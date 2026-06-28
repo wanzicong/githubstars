@@ -24,28 +24,21 @@ const CategoryManage = lazy(() => import('@/pages/CategoryManage'))
 export const appRoutes: RouteObject[] = [
   // ── 首页 ──
   { index: true, element: <StarList />, handle: { title: 'Star列表' } },
-
   // ── Star ──
   { path: 'stars/:id', element: <StarDetail />, handle: { title: 'Star详情' } },
-
+  // ── 搜索 / 趋势 ──
+  { path: 'trending', element: <Trending />, handle: { title: '趋势排行' } },
+  { path: 'search', element: <GithubSearch />, handle: { title: 'GitHub搜索' } },
+  // ── 克隆 ──
+  { path: 'clone', element: <Clone />, handle: { title: '克隆管理' } },
+  // ── 分类 ──
+  { path: 'categories', element: <CategoryManage />, handle: { title: '分类管理' } },
   // ── 同步 / 统计 ──
   { path: 'sync', element: <Sync />, handle: { title: '同步管理' } },
   { path: 'stats', element: <Stats />, handle: { title: '数据统计' } },
-
   // ── 作者 ──
   { path: 'authors', element: <AuthorList />, handle: { title: '作者中心' } },
   { path: 'authors/:ownerName', element: <AuthorDetail />, handle: { title: '作者详情' } },
-
-  // ── 搜索 / 趋势 ──
-  { path: 'search', element: <GithubSearch />, handle: { title: 'GitHub搜索' } },
-  { path: 'trending', element: <Trending />, handle: { title: '趋势排行' } },
-
-  // ── 克隆 ──
-  { path: 'clone', element: <Clone />, handle: { title: '克隆管理' } },
-
-  // ── 分类 ──
-  { path: 'categories', element: <CategoryManage />, handle: { title: '分类管理' } },
-
   // ── 系统 ──
   { path: 'settings', element: <Settings />, handle: { title: '系统配置' } },
   { path: 'logs', element: <Logs />, handle: { title: '系统日志' } },

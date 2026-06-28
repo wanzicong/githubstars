@@ -2,7 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+
+
 ## 项目概述
+
 
 GitHub Stars 管理系统 — 用户对自己 Star 过的 GitHub 仓库进行管理、分类、翻译、统计、AI 分析和批量克隆。
 
@@ -11,19 +14,51 @@ GitHub Stars 管理系统 — 用户对自己 Star 过的 GitHub 仓库进行管
 - 前端：[React 19](packages/frontend/) + Vite 8 + Ant Design 6 + Tailwind CSS 4
 - 共享库：[packages/shared/](packages/shared/) — 前后端共享 TypeScript 类型
 
+## 工具使用指引
+如果项目中serena 这个mcp可以用的话，尽量使用 这个mcp 工具对代码进行操作
+🔍 代码搜索与分析
+工具	说明
+find_symbol 🔥	根据名称路径模式查找符号（类、方法等），支持深度展开子级
+find_declaration	查找符号的声明位置（通过正则匹配调用点）
+find_implementations	查找接口/方法的所有实现
+find_referencing_symbols	查找引用某个符号的所有地方
+get_symbols_overview	获取文件内符号的高层级概览（按种类分组）
+get_diagnostics_for_file	获取文件的 LSP 诊断信息（Error/Warning 等）
+✏️ 代码编辑
+工具	说明
+insert_before_symbol	在指定符号定义前插入代码（如添加 import、类/函数）
+insert_after_symbol	在指定符号定义后插入代码
+replace_symbol_body	替换符号的整个主体（包括签名行）
+replace_content 🔥	用正则/字面量匹配替换文件内容（编辑的主力工具）
+rename_symbol	全局重命名符号
+safe_delete_symbol	安全删除符号（无引用时）
+🧠 记忆系统
+工具	说明
+write_memory	写入项目记忆信息（Markdown 格式）
+read_memory	读取指定记忆
+edit_memory	编辑记忆内容（正则/字面量替换）
+delete_memory	删除记忆
+rename_memory	重命名/移动记忆（支持 / 组织主题）
+list_memories	列出所有记忆，可按主题过滤
+
+可以对这些代码进行搜索
+以及接口调用全链路的追踪
+以及代码修改范围的评估
+
+
 ## 复盘记录（2026-06-27）
 
 ### 本次修复的典型问题
 
-| 问题类型 | 数量 | 根因 | 修复方式 |
-|---------|------|------|---------|
-| 未使用的 Logger/导入/变量 | 12 处 | 编码后未清理，Lint 未强制执行 | 删除无用声明 |
-| 嵌套三元表达式（S3358） | 28 处 | 贪图一行写完，可读性差 | 拆分为 if-else 或 IIFE |
-| 死代码（死存储） | 5 处 | 变量赋值后未使用 | 删除赋值/变量 |
-| 嵌套模板字面量 | 3 处 | 模板中嵌模板，难维护 | 提取中间变量 |
-| Ant Design 废弃 API | 13 处 | 从 v5 升级到 v6 未同步更新 | 改用新版 API |
-| `.match()` 应使用 `.exec()` | 3 处 | 对正则方法选择缺乏认知 | 改为 `.exec()` |
-| `length >= 0` 恒真 | 3 处 | 数组长度永远 ≥ 0 | 改为 `> 0` |
+| 问题类型                    | 数量  | 根因                          | 修复方式               |
+| --------------------------- | ----- | ----------------------------- | ---------------------- |
+| 未使用的 Logger/导入/变量   | 12 处 | 编码后未清理，Lint 未强制执行 | 删除无用声明           |
+| 嵌套三元表达式（S3358）     | 28 处 | 贪图一行写完，可读性差        | 拆分为 if-else 或 IIFE |
+| 死代码（死存储）            | 5 处  | 变量赋值后未使用              | 删除赋值/变量          |
+| 嵌套模板字面量              | 3 处  | 模板中嵌模板，难维护          | 提取中间变量           |
+| Ant Design 废弃 API         | 13 处 | 从 v5 升级到 v6 未同步更新    | 改用新版 API           |
+| `.match()` 应使用 `.exec()` | 3 处  | 对正则方法选择缺乏认知        | 改为 `.exec()`         |
+| `length >= 0` 恒真          | 3 处  | 数组长度永远 ≥ 0              | 改为 `> 0`             |
 
 ### 根因总结
 
@@ -38,14 +73,14 @@ GitHub Stars 管理系统 — 用户对自己 Star 过的 GitHub 仓库进行管
 
 ### 本次修复的典型问题
 
-| 问题类型 | 数量 | 根因 | 修复方式 |
-|---------|------|------|---------|
-| 参数被接收但忽略（参数黑洞） | 3 处 | Controller 写了参数签名但未传入底层方法 | 将 type 透传到 Service 层 |
-| Controller 循环创建 N 个任务 | 1 处 | 缺乏批量操作抽象，被迫在 Controller 中手写循环 | 抽取 `createBatchTask()` 方法 |
-| 调用错误的全量方法 | 1 处 | 相似逻辑复制粘贴忘了替换调用目标 | 改为先查趋势仓库再创建任务 |
-| 缺失输入校验 | 3 处 | `star/unstar/starred` 没有用 ZodValidationPipe | 增加空值校验 |
-| 查询条件覆盖不全 | 1 处 | `WHERE readmeFetched=false` 漏掉了翻译失败需重试的仓库 | 增加 `OR readmeFetched=true AND readmeCn=null` |
-| 导出无上限保护 | 1 处 | 未考虑 maxCount 未被限制时的 OOM 风险 | 增加 1000 条硬上限 |
+| 问题类型                     | 数量 | 根因                                                   | 修复方式                                       |
+| ---------------------------- | ---- | ------------------------------------------------------ | ---------------------------------------------- |
+| 参数被接收但忽略（参数黑洞） | 3 处 | Controller 写了参数签名但未传入底层方法                | 将 type 透传到 Service 层                      |
+| Controller 循环创建 N 个任务 | 1 处 | 缺乏批量操作抽象，被迫在 Controller 中手写循环         | 抽取 `createBatchTask()` 方法                  |
+| 调用错误的全量方法           | 1 处 | 相似逻辑复制粘贴忘了替换调用目标                       | 改为先查趋势仓库再创建任务                     |
+| 缺失输入校验                 | 3 处 | `star/unstar/starred` 没有用 ZodValidationPipe         | 增加空值校验                                   |
+| 查询条件覆盖不全             | 1 处 | `WHERE readmeFetched=false` 漏掉了翻译失败需重试的仓库 | 增加 `OR readmeFetched=true AND readmeCn=null` |
+| 导出无上限保护               | 1 处 | 未考虑 maxCount 未被限制时的 OOM 风险                  | 增加 1000 条硬上限                             |
 
 ### 根因总结
 
@@ -129,17 +164,17 @@ return { taskId }; // 一个任务包含所有子项
 
 ### 本次修复的典型问题
 
-| 问题类型 | 数量 | 根因 | 修复方式 |
-|---------|------|------|---------|
-| Cognitive Complexity 超标 | 5 个函数 | 组件/函数长期扩展未拆分，缺乏抽象提取意识 | 提取子组件/辅助方法，每函数降至 ≤15 |
-| Nested Ternary（第二轮） | 25+ 处 | 首次修复只修了部分文件，前端大量残留 | 全部拆分为 if-else/IIFE/提取变量 |
-| Controller 单函数过重 | 1 处 | createTask 内联 3 种 scope 逻辑，未做早期抽象 | 提取 3 个私有方法 |
-| 测试占位无意义断言 | 11 处 | `expect(true).toBe(true)` 留作占位，后续忘了替换 | 替换为有意义的 `toBeDefined` 等断言 |
-| `any` 逃逸 | 3 处 | catch 参数/回调参数使用 any 绕过类型检查 | 改为 `unknown` + `instanceof Error` 收窄 |
-| 联合类型未提取别名 | 2 处 | 重复出现的内联联合类型 | 提取 `TranslateType` 类型别名 |
-| 嵌套函数过深 | 1 处 | setInterval 内嵌 IIFE 再嵌套 setState 回调 | 提取独立 `tick` 函数 |
-| ZodObject passthrough 废弃 | 2 处 | `.passthrough()` 与空对象组合被 Zod 标记为废弃 | 移除 `.passthrough()` |
-| 测试中公开可写目录 | 10 处 | 测试硬编码 `/tmp/clone` 路径 | 添加 eslint-disable 注释 |
+| 问题类型                   | 数量     | 根因                                             | 修复方式                                 |
+| -------------------------- | -------- | ------------------------------------------------ | ---------------------------------------- |
+| Cognitive Complexity 超标  | 5 个函数 | 组件/函数长期扩展未拆分，缺乏抽象提取意识        | 提取子组件/辅助方法，每函数降至 ≤15      |
+| Nested Ternary（第二轮）   | 25+ 处   | 首次修复只修了部分文件，前端大量残留             | 全部拆分为 if-else/IIFE/提取变量         |
+| Controller 单函数过重      | 1 处     | createTask 内联 3 种 scope 逻辑，未做早期抽象    | 提取 3 个私有方法                        |
+| 测试占位无意义断言         | 11 处    | `expect(true).toBe(true)` 留作占位，后续忘了替换 | 替换为有意义的 `toBeDefined` 等断言      |
+| `any` 逃逸                 | 3 处     | catch 参数/回调参数使用 any 绕过类型检查         | 改为 `unknown` + `instanceof Error` 收窄 |
+| 联合类型未提取别名         | 2 处     | 重复出现的内联联合类型                           | 提取 `TranslateType` 类型别名            |
+| 嵌套函数过深               | 1 处     | setInterval 内嵌 IIFE 再嵌套 setState 回调       | 提取独立 `tick` 函数                     |
+| ZodObject passthrough 废弃 | 2 处     | `.passthrough()` 与空对象组合被 Zod 标记为废弃   | 移除 `.passthrough()`                    |
+| 测试中公开可写目录         | 10 处    | 测试硬编码 `/tmp/clone` 路径                     | 添加 eslint-disable 注释                 |
 
 ### 根因总结
 
@@ -247,12 +282,12 @@ it.skip('需要网络，跳过', () => {
 
 ### 本次修复的典型问题（SonarJS 尾扫 + 前端小修）
 
-| 问题类型 | 数量 | 根因 | 修复方式 |
-|---------|------|------|---------|
-| `as any` 逃逸（Progress status） | 1 处 | 已有 P0 禁止 any 约束，但仍习惯性用 `as any` 跳过类型检查 | 改为联合类型 `'success'\|'exception'\|'active'\|'normal'` |
-| 同名文件冲突（`helpers.ts` vs `helpers.tsx`） | 1 处 | 拆分文件时没考虑 `.ts` 和 `.tsx` 同名会导致 TS 解析异常 | 重命名 `helpers.tsx` → `DaysSinceText.tsx` |
-| 变量冗余赋值（progressStatus else 分支） | 1 处 | 初始化后又在 else 中重复赋值相同值 | 移除冗余 else 分支 |
-| 验证命令跑错目录 | 2 次 | 在根目录执行 `npx eslint .` 和 `npx tsc --noEmit`，实际未对子包生效 | 增加 `cd <子包目录>` 前置确认 |
+| 问题类型                                      | 数量 | 根因                                                                | 修复方式                                                  |
+| --------------------------------------------- | ---- | ------------------------------------------------------------------- | --------------------------------------------------------- |
+| `as any` 逃逸（Progress status）              | 1 处 | 已有 P0 禁止 any 约束，但仍习惯性用 `as any` 跳过类型检查           | 改为联合类型 `'success'\|'exception'\|'active'\|'normal'` |
+| 同名文件冲突（`helpers.ts` vs `helpers.tsx`） | 1 处 | 拆分文件时没考虑 `.ts` 和 `.tsx` 同名会导致 TS 解析异常             | 重命名 `helpers.tsx` → `DaysSinceText.tsx`                |
+| 变量冗余赋值（progressStatus else 分支）      | 1 处 | 初始化后又在 else 中重复赋值相同值                                  | 移除冗余 else 分支                                        |
+| 验证命令跑错目录                              | 2 次 | 在根目录执行 `npx eslint .` 和 `npx tsc --noEmit`，实际未对子包生效 | 增加 `cd <子包目录>` 前置确认                             |
 
 ### 根因总结
 
@@ -317,21 +352,21 @@ npx tsc -p tsconfig.app.json --noEmit  # 正确使用前端 tsconfig
 
 新增约束表：
 
-| 规则类别 | 要求 | 强制级别 |
-|---------|------|---------|
-| 禁止同名异缀文件 | 同一目录不得有仅后缀不同的同名文件（`helpers.ts`+`helpers.tsx`） | P0 |
-| 验证路径确认 | 运行 lint/typecheck 前确认 `pwd` 在正确子包目录 | P1 |
-| 改后自检 | 每次修改后立即验证，确认零新 error | P1 |## 第五次复盘（2026-06-28）
+| 规则类别         | 要求                                                             | 强制级别 |
+| ---------------- | ---------------------------------------------------------------- | -------- |
+| 禁止同名异缀文件 | 同一目录不得有仅后缀不同的同名文件（`helpers.ts`+`helpers.tsx`） | P0       |
+| 验证路径确认     | 运行 lint/typecheck 前确认 `pwd` 在正确子包目录                  | P1       |
+| 改后自检         | 每次修改后立即验证，确认零新 error                               | P1       | ## 第五次复盘（2026-06-28） |
 
 ### 本次修复的典型问题（克隆模块）
 
-| 问题类型 | 数量 | 根因 | 修复方式 |
-|---------|------|------|---------|
-| 信号量泄漏（resetSemaphore 与运行中 processItem 冲突） | 1 处 | 共享可变状态（semaphore/waitQueue）无代际隔离，forceReleaseLock 破坏串行假设 | 引入 generation 代际计数器，旧代际 processItem 自动跳过信号量释放和 DB 写入 |
-| 超时后台操作未取消（Promise.race 不取消内部 Promise） | 1 处 | 低估 Promise.race 副作用——超时 reject 后内部 async 操作仍在运行，完成后继续写 DB | 代际变更后禁止 recordItemResult，超时与正常完成在 finally 统一处理 |
-| Git Token 命令行参数泄露 | 1 处 | 直接在 clone URL 中注入 Token，作为 spawn 参数传递（Windows 上其他进程可读） | 改用 GIT_ASKPASS 环境变量 + 临时脚本，Token 不在命令行参数中出现 |
-| 终态计算逻辑重复 | 3 处 | finishTask/getTaskProgress/getRecentTasks 各自实现一套终态判断 | 提取 `computeFinalTaskStatus()` 静态方法统一调用 |
-| TOCTOU（existsSync + rm 非原子） | 1 处 | 习惯性先检查再删除，未意识到 `rm({ force: true })` 已容错 | 去掉多余 existsSync 检查 |
+| 问题类型                                               | 数量 | 根因                                                                             | 修复方式                                                                    |
+| ------------------------------------------------------ | ---- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 信号量泄漏（resetSemaphore 与运行中 processItem 冲突） | 1 处 | 共享可变状态（semaphore/waitQueue）无代际隔离，forceReleaseLock 破坏串行假设     | 引入 generation 代际计数器，旧代际 processItem 自动跳过信号量释放和 DB 写入 |
+| 超时后台操作未取消（Promise.race 不取消内部 Promise）  | 1 处 | 低估 Promise.race 副作用——超时 reject 后内部 async 操作仍在运行，完成后继续写 DB | 代际变更后禁止 recordItemResult，超时与正常完成在 finally 统一处理          |
+| Git Token 命令行参数泄露                               | 1 处 | 直接在 clone URL 中注入 Token，作为 spawn 参数传递（Windows 上其他进程可读）     | 改用 GIT_ASKPASS 环境变量 + 临时脚本，Token 不在命令行参数中出现            |
+| 终态计算逻辑重复                                       | 3 处 | finishTask/getTaskProgress/getRecentTasks 各自实现一套终态判断                   | 提取 `computeFinalTaskStatus()` 静态方法统一调用                            |
+| TOCTOU（existsSync + rm 非原子）                       | 1 处 | 习惯性先检查再删除，未意识到 `rm({ force: true })` 已容错                        | 去掉多余 existsSync 检查                                                    |
 
 ### 根因总结
 
@@ -460,12 +495,12 @@ static computeFinalTaskStatus(completed: number, failed: number): string {
 
 ### 本次暴露的典型问题
 
-| 问题类型 | 数量 | 根因 | 修复方式 |
-|---------|------|------|---------|
-| `string \| null` 未做兜底直接传给 `string` 类型 | 3 处 | 从对象取值时没审视类型是否匹配，缺少 `??` 肌肉记忆 | 加 `?? ''` 空值合并 |
-| 同分支 `extraContent` 产生重复 JSX（S1871） | 1 处 | 写完没做目视审查，没发现两个 else 分支渲染相同按钮 | 合并分支为单一 else |
-| Alert `message` 废弃属性再次使用（S1874） | 1 处 | 已是第三次犯 Ant Design 废弃 API 错误 | 改为 `description` |
-| 验证命令不完整 | 1 次 | 只跑了 `eslint .` + `tsc --noEmit`，没跑 `npm run build`（`tsc -b` 检查更严） | 补跑 `npm run build` 后暴露 3 个 TS error |
+| 问题类型                                        | 数量 | 根因                                                                          | 修复方式                                  |
+| ----------------------------------------------- | ---- | ----------------------------------------------------------------------------- | ----------------------------------------- |
+| `string \| null` 未做兜底直接传给 `string` 类型 | 3 处 | 从对象取值时没审视类型是否匹配，缺少 `??` 肌肉记忆                            | 加 `?? ''` 空值合并                       |
+| 同分支 `extraContent` 产生重复 JSX（S1871）     | 1 处 | 写完没做目视审查，没发现两个 else 分支渲染相同按钮                            | 合并分支为单一 else                       |
+| Alert `message` 废弃属性再次使用（S1874）       | 1 处 | 已是第三次犯 Ant Design 废弃 API 错误                                         | 改为 `description`                        |
+| 验证命令不完整                                  | 1 次 | 只跑了 `eslint .` + `tsc --noEmit`，没跑 `npm run build`（`tsc -b` 检查更严） | 补跑 `npm run build` 后暴露 3 个 TS error |
 
 ### 根因总结
 
@@ -546,12 +581,12 @@ npm run lint 2>&1 | grep "sonarjs/"
 
 新增/更新约束表：
 
-| 规则类别 | 要求 | 强制级别 |
-|---------|------|---------|
-| null 安全检查 | 对象属性赋值给非空类型前，用 `?? ''` 做兜底 | P0 |
-| 构建验证命令 | 必须用 `npm run build` 而非 `tsc --noEmit` | P0 |
-| 改后 sonarjs 扫描 | `npm run lint 2>&1 \| grep "sonarjs/"` 必须零输出 | P1 |
-| Ant Design API 预检 | 使用 Ant Design 组件前查当前版本 API 签名 | P2 |
+| 规则类别            | 要求                                              | 强制级别 |
+| ------------------- | ------------------------------------------------- | -------- |
+| null 安全检查       | 对象属性赋值给非空类型前，用 `?? ''` 做兜底       | P0       |
+| 构建验证命令        | 必须用 `npm run build` 而非 `tsc --noEmit`        | P0       |
+| 改后 sonarjs 扫描   | `npm run lint 2>&1 \| grep "sonarjs/"` 必须零输出 | P1       |
+| Ant Design API 预检 | 使用 Ant Design 组件前查当前版本 API 签名         | P2       |
 
 ### 强制流程（第六次更新）
 
@@ -573,23 +608,23 @@ npm run build 2>&1 | grep -E "$(basename $(pwd))" || echo "构建零 error"
 
 执行代码变更后，必须运行 `npm run lint` 确保以下 sonarjs 规则零 error：
 
-| 规则 ID | 要求 | 禁止写法 | 正确写法 |
-|---------|------|---------|---------|
-| `no-nested-conditional` | 禁止嵌套三元 | `a ? (b ? 1 : 2) : 3` | 拆分为 if-else 链或 IIFE |
-| `no-nested-template-literals` | 禁止模板嵌套 | `` `${a ? `${b}` : ''}` `` | 提取内层模板为变量 |
-| `prefer-regexp-exec` | 正则用 exec | `str.match(/pattern/)` | `/pattern/.exec(str)` |
-| `unused-import` | 删除未使用导入 | `import { unused } from 'x'` | 删除 |
-| `no-unused-vars` | 删除未使用变量 | `const x = ...` （x 未读） | 删除 |
-| `no-collection-size-mischeck` | 数组判空用 > 0 | `arr.length >= 0` | `arr.length > 0` |
-| `no-ignored-exceptions` | catch 参数必须使用 | `catch (e) {}` | `catch { }` 或使用 e |
-| `cognitive-complexity` | 复杂度 ≤ 15 | 210+ 行组件 + 4 个 Card | 提取子组件 ≤ 200 行 |
-| `use-type-alias` | 重复联合类型提别名 | `'a'\|'b'` 在多个方法签名出现 | `type MyType = 'a'\|'b'` |
-| `no-selector-parameter` | 禁止布尔参数选择行为 | `recordResult(success, ...)` | `recordSuccess()` / `recordFailure()` 两个方法 |
-| `no-nested-functions` | 禁止嵌套函数 > 4 层 | `setInterval(() => { (async () => { setState(() => {}) })() })` | 提取为独立函数 |
-| `no-trivial-assertions` | 禁止无意义断言 | `expect(true).toBe(true)` | `expect(func).toBeDefined()` |
-| `prefer-specific-assertions` | 使用具体断言 | `expect(arr.length).toBe(1)` | `expect(arr).toHaveLength(1)` |
-| `assertions-in-tests` | 测试必须有断言 | `it('test', async () => { await call() })` | `expect(result).toBe(xxx)` |
-| `no-explicit-any` | 禁止显式 any | `catch (e: any)` / `\_: any` | `catch (e: unknown)` + instanceof 收窄 |
+| 规则 ID                       | 要求                 | 禁止写法                                                        | 正确写法                                       |
+| ----------------------------- | -------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
+| `no-nested-conditional`       | 禁止嵌套三元         | `a ? (b ? 1 : 2) : 3`                                           | 拆分为 if-else 链或 IIFE                       |
+| `no-nested-template-literals` | 禁止模板嵌套         | `` `${a ? `${b}` : ''}` ``                                      | 提取内层模板为变量                             |
+| `prefer-regexp-exec`          | 正则用 exec          | `str.match(/pattern/)`                                          | `/pattern/.exec(str)`                          |
+| `unused-import`               | 删除未使用导入       | `import { unused } from 'x'`                                    | 删除                                           |
+| `no-unused-vars`              | 删除未使用变量       | `const x = ...` （x 未读）                                      | 删除                                           |
+| `no-collection-size-mischeck` | 数组判空用 > 0       | `arr.length >= 0`                                               | `arr.length > 0`                               |
+| `no-ignored-exceptions`       | catch 参数必须使用   | `catch (e) {}`                                                  | `catch { }` 或使用 e                           |
+| `cognitive-complexity`        | 复杂度 ≤ 15          | 210+ 行组件 + 4 个 Card                                         | 提取子组件 ≤ 200 行                            |
+| `use-type-alias`              | 重复联合类型提别名   | `'a'\|'b'` 在多个方法签名出现                                   | `type MyType = 'a'\|'b'`                       |
+| `no-selector-parameter`       | 禁止布尔参数选择行为 | `recordResult(success, ...)`                                    | `recordSuccess()` / `recordFailure()` 两个方法 |
+| `no-nested-functions`         | 禁止嵌套函数 > 4 层  | `setInterval(() => { (async () => { setState(() => {}) })() })` | 提取为独立函数                                 |
+| `no-trivial-assertions`       | 禁止无意义断言       | `expect(true).toBe(true)`                                       | `expect(func).toBeDefined()`                   |
+| `prefer-specific-assertions`  | 使用具体断言         | `expect(arr.length).toBe(1)`                                    | `expect(arr).toHaveLength(1)`                  |
+| `assertions-in-tests`         | 测试必须有断言       | `it('test', async () => { await call() })`                      | `expect(result).toBe(xxx)`                     |
+| `no-explicit-any`             | 禁止显式 any         | `catch (e: any)` / `\_: any`                                    | `catch (e: unknown)` + instanceof 收窄         |
 
 **强制流程：**
 1. 写完代码后必须运行 `npm run lint && npm run typecheck`
@@ -709,13 +744,13 @@ MySQL (:3307)  githubstars 库
 
 核心表：[schema.prisma](packages/backend/prisma/schema.prisma)
 
-| 表 | 用途 | 关键关系 |
-|---|------|---------|
-| `github_repo` | 星标仓库主表 | `full_name` 唯一索引 |
-| `category` | 分类（树形，`parent_id` 自引用） | 通过 `repo_category` 多对多关联仓库 |
-| `repo_category` | 仓库-分类关联表 | 级联删除 |
-| `sync_log` | 同步操作日志 | |
-| `system_config` | KV 配置表 | `config_key` 唯一 |
-| `clone_task` / `clone_task_item` | 克隆任务/子项 | `task_id`（UUID 格式）关联 |
-| `translation_task` / `translation_task_item` | 翻译任务/子项 | 关联 `github_repo` |
-| `ai_analyze_task` | AI 分析任务结果 | |
+| 表                                           | 用途                             | 关键关系                            |
+| -------------------------------------------- | -------------------------------- | ----------------------------------- |
+| `github_repo`                                | 星标仓库主表                     | `full_name` 唯一索引                |
+| `category`                                   | 分类（树形，`parent_id` 自引用） | 通过 `repo_category` 多对多关联仓库 |
+| `repo_category`                              | 仓库-分类关联表                  | 级联删除                            |
+| `sync_log`                                   | 同步操作日志                     |                                     |
+| `system_config`                              | KV 配置表                        | `config_key` 唯一                   |
+| `clone_task` / `clone_task_item`             | 克隆任务/子项                    | `task_id`（UUID 格式）关联          |
+| `translation_task` / `translation_task_item` | 翻译任务/子项                    | 关联 `github_repo`                  |
+| `ai_analyze_task`                            | AI 分析任务结果                  |                                     |

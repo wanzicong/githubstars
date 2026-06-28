@@ -27,13 +27,13 @@ export interface MenuItem {
 
 export const menuItems: MenuItem[] = [
   { key: '/', icon: <StarOutlined />, label: 'Star列表', orderNo: 0 },
-  { key: '/sync', icon: <SyncOutlined />, label: '同步管理', orderNo: 10 },
-  { key: '/stats', icon: <BarChartOutlined />, label: '数据统计', orderNo: 20 },
-  { key: '/authors', icon: <UserOutlined />, label: '作者中心', orderNo: 30 },
-  { key: '/search', icon: <SearchOutlined />, label: 'GitHub搜索', orderNo: 40 },
   { key: '/trending', icon: <FireOutlined />, label: '趋势排行', orderNo: 50 },
+  { key: '/search', icon: <SearchOutlined />, label: 'GitHub搜索', orderNo: 40 },
   { key: '/categories', icon: <FolderOutlined />, label: '分类管理', orderNo: 52 },
   { key: '/clone', icon: <CopyOutlined />, label: '克隆管理', orderNo: 55 },
+  { key: '/sync', icon: <SyncOutlined />, label: '同步管理', orderNo: 10 },
+  { key: '/authors', icon: <UserOutlined />, label: '作者中心', orderNo: 30 },
+  { key: '/stats', icon: <BarChartOutlined />, label: '数据统计', orderNo: 20 },
   { key: '/settings', icon: <SettingOutlined />, label: '系统配置', orderNo: 60 },
   { key: '/logs', icon: <FileTextOutlined />, label: '系统日志', orderNo: 70 },
 ]

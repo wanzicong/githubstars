@@ -43,6 +43,9 @@ packages/shared/dist/
 .code-index/
 .claude/worktrees/
 
+# Playwright MCP debug artifacts
+.playwright-mcp/
+
 # Serena IDE
 .serena/
 
