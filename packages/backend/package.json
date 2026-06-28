@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:cov": "jest --coverage",
+    "test:cov": "jest --coverage --collectCoverageFrom='src/**/*.ts' --coveragePathIgnorePatterns='src/main.ts|src/prisma/prisma.service.ts'",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:unit": "jest --testPathPatterns='test/unit|src/.*\\.spec\\.ts'",
     "test:integration": "jest --config ./test/jest-e2e.json --testPathPatterns='test/integration' --runInBand",
@@ -32,12 +32,10 @@
     "db:test:setup": "npm run db:test:up && npx wait-on tcp:3308 && npm run db:test:push",
     "db:test:seed": "dotenv -e .env.test -- npx prisma db seed",
     "test:db": "jest --config ./test/jest-e2e.json --testPathPatterns='test/integration'",
-    "test:cov": "jest --coverage --collectCoverageFrom='src/**/*.ts' --coveragePathIgnorePatterns='src/main.ts|src/prisma/prisma.service.ts'",
     "test:all": "npm run test:cov",
     "clean": "rimraf dist"
   },
   "dependencies": {
-    
     "@githubstars/shared": "*",
     "@nestjs/bull": "^11.0.4",
     "@nestjs/common": "^11.0.1",
@@ -53,6 +51,7 @@
     "prisma": "^6.19.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "simple-git": "^3.36.0",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.0",
     "winston": "^3.19.0",
@@ -103,7 +102,6 @@
     "coveragePathIgnorePatterns": [
       "node_modules",
       "test/",
-      
       "src/main.ts",
       "src/prisma/prisma.service.ts",
       "src/common/dto/"

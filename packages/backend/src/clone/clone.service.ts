@@ -3,8 +3,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '../config/config.service';
 import {
     CLONE_TIMEOUT_MS,
-    ITEM_TIMEOUT_MS,
-    TASK_TIMEOUT_MS,
     SEMAPHORE_TIMEOUT_MS,
     MAX_HISTORY_TASKS,
     RETRYABLE_CLONE_ERROR_PATTERNS,
@@ -16,15 +14,12 @@ import {
     type MirrorSourceName,
 } from './clone.constants';
 import { CreateCloneTaskDto } from './clone.dto';
-import { execFile, spawn, type ChildProcess } from 'child_process';
-import { promisify } from 'util';
+import { simpleGit, type SimpleGit } from 'simple-git';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
 import * as os from 'os';
 import { existsSync, readdirSync, readFileSync, unlinkSync } from 'fs';
 import { chmod, mkdir, rm, writeFile } from 'fs/promises';
-
-const execFileAsync = promisify(execFile);
 
 /**
  * 跨平台杀死进程树
@@ -34,27 +29,6 @@ const execFileAsync = promisify(execFile);
  *
  * @param childProcess 子进程对象
  */
-function killProcessTree(childProcess: ChildProcess): void {
-    if (!childProcess.pid) return;
-
-    const pid = childProcess.pid;
-    const isWindows = process.platform === 'win32';
-
-    try {
-        if (isWindows) {
-            // Windows: 使用 taskkill 杀死进程树
-            // /F = 强制, /T = 杀死子进程, /PID = 指定进程 ID
-            const { execSync } = require('child_process');
-            execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
-        } else {
-            // Unix: 使用负 PID 杀死进程组
-            // 需要 spawn 时设置 detached: true
-            process.kill(-pid, 'SIGTERM');
-        }
-    } catch {
-        // 忽略杀死失败（进程可能已退出）
-    }
-}
 
 /**
  * 为 Promise 添加超时包装
@@ -64,15 +38,6 @@ function killProcessTree(childProcess: ChildProcess): void {
  * @param errorMsg  超时错误消息
  * @returns 原始 Promise 的结果，或超时后抛出错误
  */
-function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Promise<T> {
-    let timer: ReturnType<typeof setTimeout>;
-    return Promise.race([
-        promise,
-        new Promise<T>((_, reject) => {
-            timer = setTimeout(() => reject(new Error(errorMsg)), ms);
-        }),
-    ]).finally(() => clearTimeout(timer));
-}
 
 /**
  * 延迟指定毫秒（用于重试间隔）
@@ -197,6 +162,43 @@ export class CloneService {
      *
      * 使用循环跳过已超时的 waiter，确保释放的信号量不会被浪费。
      */
+
+    /**
+     * 创建配置好的 simple-git 实例
+     *
+     * @param options.baseDir       git 工作目录
+     * @param options.timeoutMs      命令超时（毫秒），默认 CLONE_TIMEOUT_MS
+     * @param options.githubToken    GitHub Token（用于 GIT_ASKPASS 认证）
+     * @returns { git, cleanup }     git 实例 + 清理函数（删除临时 askpass 脚本）
+     */
+    private async createGit(options: {
+        baseDir?: string;
+        timeoutMs?: number;
+        githubToken?: string;
+    }): Promise<{ git: SimpleGit; cleanup: () => void }> {
+        let askpassPath: string | undefined;
+
+        const git = simpleGit({
+            baseDir: options.baseDir ?? process.cwd(),
+            config: ['core.longpaths=true', 'core.protectNTFS=false'],
+            timeout: { block: options.timeoutMs ?? CLONE_TIMEOUT_MS },
+        });
+
+        git.env('GIT_TERMINAL_PROMPT', '0');
+        if (options.githubToken) {
+            askpassPath = await this.writeAskpassScript(options.githubToken);
+            git.env('GIT_ASKPASS', askpassPath);
+        }
+
+        return {
+            git,
+            cleanup: () => {
+                if (askpassPath) {
+                    this.cleanupAskpassScript(askpassPath);
+                }
+            },
+        };
+    }
     private release() {
         this.semaphore = Math.max(0, this.semaphore - 1);
         this.drainWaitQueue();
@@ -442,7 +444,7 @@ export class CloneService {
         this.lockAcquiredAt = new Date();
         this.currentTaskId = taskId;
         try {
-            await withTimeout(this.executeTaskInner(taskId), TASK_TIMEOUT_MS, `任务整体超时: taskId=${Number(taskId)}`);
+            await this.executeTaskInner(taskId);
         } catch (e: unknown) {
             this.logger.error(`克隆任务执行异常: taskId=${Number(taskId)}`, e);
             try {
@@ -520,11 +522,7 @@ export class CloneService {
         await this.acquire();
         let error: string | null = null;
         try {
-            await withTimeout(
-                this.processItemInner(item, shallow, mirrorSource, capturedGen),
-                ITEM_TIMEOUT_MS,
-                `子项处理超时: ${item.fullName}`,
-            );
+            await this.processItemInner(item, shallow, mirrorSource, capturedGen);
         } catch (e: unknown) {
             error = e instanceof Error ? e.message : String(e);
             this.logger.error(`子项处理异常: ${item.fullName}`, e);
@@ -812,109 +810,35 @@ export class CloneService {
         fullName: string | null,
         githubToken?: string,
     ): Promise<{ success: boolean; error?: string }> {
-        // 使用 GIT_ASKPASS 而非在 URL 中注入 Token，避免 Token 出现在命令行参数中
-        // （Windows 上其他进程可通过命令行参数读取 Token）
-        let askpassPath: string | undefined;
-
-        const env: NodeJS.ProcessEnv = {
-            ...process.env,
-            GIT_TERMINAL_PROMPT: '0',
-        };
-
-        if (githubToken) {
-            askpassPath = await this.writeAskpassScript(githubToken);
-            env.GIT_ASKPASS = askpassPath;
-        }
-
-        // 构建 git clone 命令
-        // -c core.longpaths=true 解决 Windows 长路径限制（文件名超过 260 字符）
-        // -c core.protectNTFS=false 允许文件名包含特殊字符
-        const args = ['-c', 'core.longpaths=true', '-c', 'core.protectNTFS=false', 'clone'];
-        if (shallow) args.push('--depth', '1');
-        args.push(cloneUrl, localPath);
-
-        // 使用 spawn 替代 execFile，以便在超时时杀死整个进程树
-        // spawn 返回的 ChildProcess 对象可以用于 killProcessTree
-        return new Promise<{ success: boolean; error?: string }>((resolve, reject) => {
-            let stderr = '';
-            let stdout = '';
-            let killed = false;
-
-            // eslint-disable-next-line sonarjs/no-os-command-from-path -- 'git' 是标准系统工具，PATH 不可用户控制，参数来自验证后的路径和 URL，安全
-            const child = spawn('git', args, {
-                stdio: ['ignore', 'pipe', 'pipe'],
-                // Unix: 创建新的进程组，便于杀死整个进程树
-                // Windows: detached 选项无效，但不影响功能
-                detached: process.platform !== 'win32',
-                windowsHide: true,
-                env,
-            });
-
-            // 收集输出
-            child.stdout?.on('data', (data: Buffer) => {
-                stdout += data.toString();
-            });
-            child.stderr?.on('data', (data: Buffer) => {
-                stderr += data.toString();
-            });
-
-            // 设置超时，在超时时杀死整个进程树
-            const timer = setTimeout(() => {
-                killed = true;
-                killProcessTree(child);
-            }, CLONE_TIMEOUT_MS);
-
-            child.on('close', (code) => {
-                clearTimeout(timer);
-                // 清理 askpass 临时脚本
-                if (askpassPath) {
-                    this.cleanupAskpassScript(askpassPath);
-                }
-
-                // 如果是被超时杀死的
-                if (killed) {
-                    reject(new Error(`git clone 超时（${CLONE_TIMEOUT_MS / 1000}秒）: ${fullName}`));
-                    return;
-                }
-
-                const errorMsg = stderr || stdout;
-
-                // 检查是否是 checkout 失败（克隆成功但 checkout 失败）
-                // 这种情况通常是因为文件名包含 Windows 不支持的字符
-                if (errorMsg.includes('warning: Clone succeeded, but checkout failed')) {
-                    this.logger.warn(`克隆成功但 checkout 失败（可能是文件名包含特殊字符）: ${fullName}`);
-                    resolve({ success: true });
-                    return;
-                }
-
-                // 其他错误
-                if (code !== 0) {
-                    reject(new Error(errorMsg || `git clone 失败，退出码: ${code}`));
-                    return;
-                }
-
-                resolve({ success: true });
-            });
-
-            child.on('error', (err) => {
-                clearTimeout(timer);
-                // 清理 askpass 临时脚本
-                if (askpassPath) {
-                    this.cleanupAskpassScript(askpassPath);
-                }
-                reject(err);
-            });
+        const parentDir = path.dirname(localPath);
+        const { git, cleanup } = await this.createGit({
+            baseDir: parentDir,
+            timeoutMs: CLONE_TIMEOUT_MS,
+            githubToken,
         });
+
+        // -c core.longpaths=true 解决 Windows 长路径限制
+        // -c core.protectNTFS=false 允许文件名包含特殊字符
+        const args = shallow ? ['--depth', '1'] : [];
+
+        try {
+            await git.clone(cloneUrl, localPath, args);
+            this.logger.log(`git clone 成功: ${fullName}`);
+            return { success: true };
+        } catch (e: unknown) {
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            // checkout 警告（Windows 文件名字符问题）视为成功
+            if (errorMsg.includes('warning: Clone succeeded, but checkout failed')) {
+                this.logger.warn(`克隆成功但 checkout 失败（可能是文件名包含特殊字符）: ${fullName}`);
+                return { success: true };
+            }
+            return { success: false, error: errorMsg.substring(0, 2000) };
+        } finally {
+            cleanup();
+        }
     }
 
     /**
-     * 执行 git pull 更新已存在的仓库
-     *
-     * 先获取当前分支名，再显式指定 `git pull --ff-only origin <branch>`，
-     * 避免 "fatal: Cannot fast-forward to multiple branches" 错误。
-     * 同时添加 --no-edit 防止因合并提交消息弹出编辑器。
-     *
-     * @param localPath 本地仓库路径
      * @param fullName  仓库全名（用于日志）
      * @returns 操作结果
      *
@@ -926,66 +850,37 @@ export class CloneService {
         fullName: string | null,
         githubToken?: string,
     ): Promise<{ success: boolean; error?: string }> {
-        let askpassPath: string | undefined;
-        const env: NodeJS.ProcessEnv = {
-            ...process.env,
-            GIT_TERMINAL_PROMPT: '0',
-        };
-        if (githubToken) {
-            askpassPath = await this.writeAskpassScript(githubToken);
-            env.GIT_ASKPASS = askpassPath;
-        }
+        const { git, cleanup } = await this.createGit({
+            baseDir: localPath,
+            timeoutMs: CLONE_TIMEOUT_MS,
+            githubToken,
+        });
 
         try {
             // 先获取当前分支名
-            const { stdout: branchName } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-                cwd: localPath,
-                timeout: 10_000,
-                windowsHide: true,
-                env,
-            });
-            const branch = branchName.trim();
+            const branchName = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
 
             // detached HEAD 场景（如 shallow clone 后处于 tag/commit）
-            // 使用 git fetch + merge 而非 pull
-            if (branch === 'HEAD') {
+            if (branchName === 'HEAD') {
                 this.logger.log(`仓库处于 detached HEAD 状态，执行 fetch + merge: ${fullName}`);
-                await execFileAsync('git', ['fetch', 'origin'], {
-                    cwd: localPath,
-                    timeout: CLONE_TIMEOUT_MS,
-                    windowsHide: true,
-                    env,
-                });
-                // 尝试合并到默认分支（main/master）
+                await git.fetch(['origin']);
                 const defaultBranch = await this.detectDefaultBranch(localPath);
                 if (defaultBranch) {
-                    await execFileAsync('git', ['merge', '--ff-only', `origin/${defaultBranch}`], {
-                        cwd: localPath,
-                        timeout: CLONE_TIMEOUT_MS,
-                        windowsHide: true,
-                        env,
-                    });
+                    await git.merge(['--ff-only', `origin/${defaultBranch}`]);
                 }
                 return { success: true };
             }
 
             // 正常分支：显式指定远程和分支名
-            const { stdout } = await execFileAsync('git', ['pull', '--ff-only', '--no-edit', 'origin', branch], {
-                cwd: localPath,
-                timeout: CLONE_TIMEOUT_MS,
-                windowsHide: true,
-                env,
-            });
-            this.logger.log(`git pull 成功: ${fullName} | ${stdout.trim()}`);
+            await git.pull(['--ff-only', '--no-edit', 'origin', branchName]);
+            this.logger.log(`git pull 成功: ${fullName}`);
             return { success: true };
         } catch (e: unknown) {
-            const errorMsg = e instanceof Error ? (e as Error & { stderr?: string }).stderr || e.message : String(e);
+            const errorMsg = e instanceof Error ? e.message : String(e);
             this.logger.error(`git pull 失败: ${fullName}`, e);
             return { success: false, error: `git pull 失败: ${errorMsg.substring(0, 1900)}` };
         } finally {
-            if (askpassPath) {
-                this.cleanupAskpassScript(askpassPath);
-            }
+            cleanup();
         }
     }
 
@@ -996,30 +891,29 @@ export class CloneService {
      * 失败时 fallback 到检查 main 和 master 是否存在。
      */
     private async detectDefaultBranch(localPath: string): Promise<string | null> {
+        const { git, cleanup } = await this.createGit({
+            baseDir: localPath,
+            timeoutMs: 10_000,
+        });
+
         try {
-            const { stdout } = await execFileAsync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], {
-                cwd: localPath,
-                timeout: 5_000,
-                windowsHide: true,
-            });
-            // 输出格式: refs/remotes/origin/main → 提取 main
+            // 通过 git symbolic-ref 获取默认分支
+            const stdout = await git.raw(['symbolic-ref', 'refs/remotes/origin/HEAD']);
             const match = /refs\/remotes\/origin\/(.+)/.exec(stdout.trim());
             return match ? match[1] : null;
         } catch {
             // fallback：检查 main 或 master
             for (const candidate of ['main', 'master']) {
                 try {
-                    await execFileAsync('git', ['rev-parse', `refs/remotes/origin/${candidate}`], {
-                        cwd: localPath,
-                        timeout: 5_000,
-                        windowsHide: true,
-                    });
+                    await git.raw(['rev-parse', `refs/remotes/origin/${candidate}`]);
                     return candidate;
                 } catch {
                     // 继续尝试下一个
                 }
             }
             return null;
+        } finally {
+            cleanup();
         }
     }
 
@@ -1044,14 +938,15 @@ export class CloneService {
         }
 
         // 仓库完整性校验：通过 git rev-parse 确认 .git 结构可用
-        // 解决了 .git 目录存在但内部损坏（缺少 HEAD、refs 不完整等）导致 git pull 报错的问题
+        const { git, cleanup } = await this.createGit({
+            baseDir: localPath,
+            timeoutMs: 10_000,
+        });
+
         try {
-            await execFileAsync('git', ['rev-parse', '--git-dir'], {
-                cwd: localPath,
-                timeout: 10_000,
-                windowsHide: true,
-            });
+            await git.revparse(['--git-dir']);
         } catch {
+            cleanup();
             return { success: false, error: `git 仓库结构损坏（rev-parse 失败）: ${localPath}` };
         }
 
@@ -1060,9 +955,11 @@ export class CloneService {
             const entries = readdirSync(localPath);
             const nonGitEntries = entries.filter((e) => e !== '.git');
             if (nonGitEntries.length === 0) {
+                cleanup();
                 return { success: false, error: `git 仓库工作区为空: ${localPath}` };
             }
         } catch {
+            cleanup();
             return { success: false, error: `无法读取目录内容: ${localPath}` };
         }
 
@@ -1071,13 +968,12 @@ export class CloneService {
             const configPath = path.join(gitDir, 'config');
             if (existsSync(configPath)) {
                 const config = readFileSync(configPath, 'utf-8');
-                // 从 git config 中提取 remote "origin" 的 url
                 const urlMatch = /\[remote\s+"origin"\][^[]*url\s*=\s*(.+)/.exec(config);
                 if (urlMatch) {
                     const remoteUrl = urlMatch[1].trim();
-                    // 规范化比较：去掉 token 和 .git 后缀差异
                     const normalizeUrl = (u: string) => u.replace(/https:\/\/[^@]+@/, 'https://').replace(/\.git$/, '');
                     if (normalizeUrl(remoteUrl) !== normalizeUrl(expectedCloneUrl || '')) {
+                        cleanup();
                         return { success: false, error: `remote URL 不匹配: 期望 ${expectedCloneUrl}, 实际 ${remoteUrl}` };
                     }
                 }
@@ -1086,6 +982,7 @@ export class CloneService {
             // config 读取失败不阻塞，仍视为有效
         }
 
+        cleanup();
         // 所有校验通过
         return { success: true };
     }
@@ -1129,18 +1026,18 @@ export class CloneService {
             this.repairLockFile(gitDir, fullName);
 
             // Step 2: 如果 .git 缺失，用 git init 重建
-            const initError = await this.repairGitInit(localPath, gitDir, fullName, env);
+            const initError = await this.repairGitInit(localPath, gitDir, fullName);
             if (initError) return { success: false, error: initError };
 
             // Step 3: 修正 remote origin URL（镜像源/直连切换可能导致 URL 不匹配）
-            await this.repairRemoteUrl(localPath, expectedCloneUrl, fullName, env);
+            await this.repairRemoteUrl(localPath, expectedCloneUrl, fullName);
 
             // Step 4: 重新验证仓库完整性
             const revalidation = await this.validateExistingRepo(localPath, expectedCloneUrl);
             if (!revalidation.success) return revalidation;
 
             // Step 5: 用 git fetch --prune 验证远程可达并更新 refs
-            await this.repairFetchOrigin(localPath, fullName, env);
+            await this.repairFetchOrigin(localPath, fullName);
 
             return { success: true };
         } finally {
@@ -1168,20 +1065,21 @@ export class CloneService {
      *
      * @returns 错误消息，无错误返回 null
      */
-    private async repairGitInit(
-        localPath: string,
-        gitDir: string,
-        fullName: string | null,
-        env: NodeJS.ProcessEnv,
-    ): Promise<string | null> {
+    private async repairGitInit(localPath: string, gitDir: string, fullName: string | null): Promise<string | null> {
         if (existsSync(gitDir)) return null;
+        const { git, cleanup } = await this.createGit({
+            baseDir: localPath,
+            timeoutMs: 10_000,
+        });
         try {
-            await execFileAsync('git', ['init'], { cwd: localPath, timeout: 10_000, windowsHide: true, env });
+            await git.init();
             this.logger.log(`修复: git init 重建 .git 目录成功 | ${fullName}`);
             return null;
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             return `仓库修复失败（git init 出错）: ${msg}`;
+        } finally {
+            cleanup();
         }
     }
 
@@ -1189,44 +1087,31 @@ export class CloneService {
      * 修复子步骤 3：修正 remote origin URL
      * 镜像源和直连模式切换后，git config 中的 URL 可能不匹配，需要修正。
      */
-    private async repairRemoteUrl(
-        localPath: string,
-        expectedCloneUrl: string,
-        fullName: string | null,
-        env: NodeJS.ProcessEnv,
-    ): Promise<void> {
+    private async repairRemoteUrl(localPath: string, expectedCloneUrl: string, fullName: string | null): Promise<void> {
+        const { git, cleanup } = await this.createGit({
+            baseDir: localPath,
+            timeoutMs: 10_000,
+        });
+
         try {
-            const { stdout: currentUrl } = await execFileAsync('git', ['remote', 'get-url', 'origin'], {
-                cwd: localPath,
-                timeout: 10_000,
-                windowsHide: true,
-                env,
-            }).catch(() => ({ stdout: '' }));
+            const currentUrl = await git.raw(['remote', 'get-url', 'origin']).catch(() => '');
 
             const normalizeUrl = (u: string) => u.replace(/\.git$/, '').trim();
             const current = normalizeUrl(currentUrl);
             const expected = normalizeUrl(expectedCloneUrl);
 
             if (!current) {
-                await execFileAsync('git', ['remote', 'add', 'origin', expectedCloneUrl], {
-                    cwd: localPath,
-                    timeout: 10_000,
-                    windowsHide: true,
-                    env,
-                });
+                await git.raw(['remote', 'add', 'origin', expectedCloneUrl]);
                 this.logger.log(`修复: 已添加 remote origin | ${fullName}`);
             } else if (current !== expected) {
-                await execFileAsync('git', ['remote', 'set-url', 'origin', expectedCloneUrl], {
-                    cwd: localPath,
-                    timeout: 10_000,
-                    windowsHide: true,
-                    env,
-                });
+                await git.raw(['remote', 'set-url', 'origin', expectedCloneUrl]);
                 this.logger.log(`修复: 已修正 remote origin: ${current} -> ${expected} | ${fullName}`);
             }
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.warn(`修复: remote origin 操作失败（跳过）: ${msg} | ${fullName}`);
+        } finally {
+            cleanup();
         }
     }
 
@@ -1234,20 +1119,22 @@ export class CloneService {
      * 修复子步骤 4：git fetch --prune 验证远程可达并更新 refs
      * fetch 失败不阻塞，pull 阶段会带上完整认证重试。
      */
-    private async repairFetchOrigin(localPath: string, fullName: string | null, env: NodeJS.ProcessEnv): Promise<void> {
+    private async repairFetchOrigin(localPath: string, fullName: string | null): Promise<void> {
+        const { git, cleanup } = await this.createGit({
+            baseDir: localPath,
+            timeoutMs: CLONE_TIMEOUT_MS,
+        });
+
         try {
-            await execFileAsync('git', ['fetch', '--prune', 'origin'], {
-                cwd: localPath,
-                timeout: CLONE_TIMEOUT_MS,
-                windowsHide: true,
-                env,
-            });
+            await git.fetch(['--prune', 'origin']);
             this.logger.log(`修复: git fetch 成功，仓库可用 | ${fullName}`);
         } catch (e: unknown) {
-            const errorMsg = e instanceof Error ? (e as Error & { stderr?: string }).stderr || e.message : String(e);
+            const errorMsg = e instanceof Error ? e.message : String(e);
             this.logger.warn(
                 `修复: git fetch 失败，但仓库结构已验证通过，后续走 git pull 重试: ${errorMsg.substring(0, 200)} | ${fullName}`,
             );
+        } finally {
+            cleanup();
         }
     }
 
