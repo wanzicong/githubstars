@@ -1,0 +1,57 @@
+# ============================================================
+# GitHub Stars — Docker 构建忽略文件
+# ============================================================
+# 用于 Dockerfile 的 COPY . . 阶段，排除不必要的文件
+# 加快构建速度并减小上下文体积
+# ============================================================
+
+# ─── 依赖 ───
+node_modules
+.pnp
+.pnp.js
+
+# ─── 构建产物 ───
+dist
+build
+.next
+coverage
+.turbo
+
+# ─── 本地环境 ───
+.env
+.env.*.local
+.env.production
+.env.test
+
+# ─── 版本控制 ───
+.git
+.gitattributes
+.gitignore
+.gitmodules
+
+# ─── IDE ───
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# ─── 系统 ───
+.DS_Store
+Thumbs.db
+
+# ─── 日志 ───
+*.log
+npm-debug.log*
+
+# ─── 测试 ───
+test-results
+playwright-report
+
+# ─── 临时 ───
+tmp
+temp
+
+# ─── 桌面端 ───
+packages/desktop/out
+packages/despoint/release

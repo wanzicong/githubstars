@@ -58,6 +58,9 @@ packages/backend/.env
 packages/backend/.env.test
 packages/backend/.env.local
 
+# Docker deployment
+.env.production
+
 # Desktop (Electron app)
 githubstars-desktop/node_modules/
 githubstars-desktop/frontend/node_modules/

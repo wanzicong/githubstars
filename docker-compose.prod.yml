@@ -1,0 +1,136 @@
+# ============================================================
+# GitHub Stars — 生产环境 Docker Compose 配置
+# ============================================================
+# 使用方式:
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml down
+#   docker compose -f docker-compose.prod.yml logs -f
+# ============================================================
+# 前置条件:
+#   1. 在项目根目录执行:
+#      docker build -t githubstars-backend -f Dockerfile.backend .
+#      docker build -t githubstars-frontend -f Dockerfile.frontend .
+#   2. 创建 .env.production 并填写配置
+#   3. 准备 nginx/ 和 docker/ 目录（本仓库已有）
+# ============================================================
+
+name: githubstars
+
+services:
+  # ─── MySQL 8.0 数据库 ────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: githubstars-db
+    restart: unless-stopped
+
+    # 仅需内部网络，不暴露端口到宿主机（生产安全）
+    expose:
+      - "3306"
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-githubstars}
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --max-allowed-packet=64M
+      - --innodb-log-file-size=256M
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+    networks:
+      - githubstars-network
+
+  # ─── NestJS 后端 ─────────────────────────────────────────
+  backend:
+    image: githubstars-backend
+    container_name: githubstars-backend
+    restart: unless-stopped
+
+    # 后端端口（仅在容器间通信，不公开到宿主机）
+    expose:
+      - "10002"
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+    env_file:
+      - .env.production
+
+    environment:
+      # 容器内 DATABASE_URL 指向 mysql 容器名
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: 10002
+      NODE_ENV: production
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:10002/api/docs-json"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+    networks:
+      - githubstars-network
+
+    # CPU/内存限制（根据实际情况调整）
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  # ─── Nginx 前端（反向代理 + 静态文件）─────────────────
+  frontend:
+    image: githubstars-frontend
+    container_name: githubstars-frontend
+    restart: unless-stopped
+
+    # 前端端口映射到宿主机（避开本地开发 10001）
+    ports:
+      - "${HTTP_PORT:-10003}:80"
+      # 如需 HTTPS，取消注释并配置 SSL
+      # - "443:443"
+
+    depends_on:
+      backend:
+        condition: service_started
+
+    networks:
+      - githubstars-network
+
+    # CPU/内存限制
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+
+# ─── 持久化卷 ──────────────────────────────────────────────
+volumes:
+  mysql_data:
+    name: githubstars_mysql_data
+
+
+# ─── 网络 ───────────────────────────────────────────────────
+networks:
+  githubstars-network:
+    name: githubstars-network
+    driver: bridge

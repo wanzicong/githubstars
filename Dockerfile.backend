@@ -1,0 +1,83 @@
+# ============================================================
+# GitHub Stars — 后端 Docker 多阶段构建 (NestJS + Prisma)
+# ============================================================
+# 构建方式:
+#   docker build -t githubstars-backend -f Dockerfile.backend .
+# ============================================================
+#
+# 构建策略（Turborepo 标准 Docker 模式）:
+#   1. pruner — COPY . . 后 turbo prune，裁剪出 backend 所需的最小文件集
+#   2. installer — 先装依赖（利用 Docker layer cache），再复制源码
+#   3. builder — 编译 + Prisma Client 生成 + 生产依赖裁剪
+#   4. runner — 最小运行时镜像
+# ============================================================
+
+# ─── Stage 1: Turborepo Prune ──────────────────────────────
+# 分析 monorepo 依赖图，裁剪出 backend 及其 workspace 依赖
+FROM node:22-alpine AS pruner
+WORKDIR /app
+
+RUN npm install -g turbo@^2.5.0
+
+# 复制整个 monorepo（.dockerignore 过滤 node_modules/dist 等）
+COPY . .
+
+# 裁剪：只保留 @githubstars/backend 及其依赖
+RUN turbo prune @githubstars/backend --docker
+
+
+# ─── Stage 2: 安装依赖 ─────────────────────────────────────
+# 先装 package.json（Docker layer caching 优化），再复制源码
+FROM node:22-alpine AS installer
+WORKDIR /app
+
+# 1️⃣ 先复制裁剪后的 package.json 层（命中缓存的概率高）
+COPY --from=pruner /app/out/json/ .
+COPY --from=pruner /app/out/package-lock.json ./package-lock.json
+
+# 安装依赖（--ignore-scripts 避免因 Prisma schema 未就位而报错）
+RUN npm ci --ignore-scripts
+
+# 2️⃣ 再复制完整的裁剪后源码（变化频繁，放后面）
+COPY --from=pruner /app/out/full/ .
+
+# 生成 Prisma Client
+RUN npx prisma generate --schema=packages/backend/prisma/schema.prisma
+
+
+# ─── Stage 3: 编译 ─────────────────────────────────────────
+FROM installer AS builder
+
+# Turborepo 编译 backend（自动先编译 @githubstars/shared）
+RUN npx turbo run build --filter=@githubstars/backend
+
+# 保留生产依赖（Prisma 运行时 + 业务代码）
+RUN npm prune --omit=dev
+
+# 验证 Prisma Client
+RUN node -e "require('@prisma/client')" && echo "Prisma Client OK"
+
+
+# ─── Stage 4: 运行 ─────────────────────────────────────────
+FROM node:22-alpine AS runner
+
+# tini — 轻量级 init，正确处理 PID 1 和信号转发
+RUN apk add --no-cache tini
+
+WORKDIR /app
+
+# 复制编译产物
+COPY --from=builder /app/packages/backend/dist ./dist
+COPY --from=builder /app/packages/backend/prisma ./prisma
+COPY --from=builder /app/package.json ./package.json
+
+# 复制生产依赖（npm prune 后的 node_modules）
+COPY --from=builder /app/node_modules ./node_modules
+
+# 复制入口脚本
+COPY docker/scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+EXPOSE 10002
+
+ENTRYPOINT ["/sbin/tini", "--", "entrypoint.sh"]

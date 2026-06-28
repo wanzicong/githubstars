@@ -1,0 +1,74 @@
+# ============================================================
+# GitHub Stars — 前端 Docker 多阶段构建 (React + Vite + Nginx)
+# ============================================================
+# 构建方式:
+#   docker build -t githubstars-frontend -f Dockerfile.frontend .
+# ============================================================
+#
+# 构建策略:
+#   1. pruner — turbo prune 裁剪出 frontend 所需的最小文件集
+#   2. installer — 安装依赖
+#   3. builder — tsc -b + vite build 生产构建
+#   4. runner — Nginx Alpine 服务静态文件 + 反向代理
+# ============================================================
+
+# ─── Stage 1: Turborepo Prune ──────────────────────────────
+FROM node:22-alpine AS pruner
+WORKDIR /app
+
+RUN npm install -g turbo@^2.5.0
+
+# 复制整个 monorepo（.dockerignore 过滤无用文件）
+COPY . .
+
+# 裁剪：只保留 @githubstars/frontend 及其依赖
+RUN turbo prune @githubstars/frontend --docker
+
+
+# ─── Stage 2: 安装依赖 ─────────────────────────────────────
+FROM node:22-alpine AS installer
+WORKDIR /app
+
+COPY --from=pruner /app/out/json/ .
+COPY --from=pruner /app/out/package-lock.json ./package-lock.json
+RUN npm ci
+
+COPY --from=pruner /app/out/full/ .
+
+
+# ─── Stage 3: 构建 ─────────────────────────────────────────
+FROM installer AS builder
+
+# 生产模式
+ENV NODE_ENV=production
+
+# Turborepo 编译 frontend
+# 内部执行: tsc -b (类型检查) → vite build (打包)
+RUN npx turbo run build --filter=@githubstars/frontend
+
+# 验证构建产物
+RUN test -d packages/frontend/dist && \
+    ls -la packages/frontend/dist/ && \
+    echo "✅ Frontend build artifact exists"
+
+
+# ─── Stage 4: Nginx 运行 ───────────────────────────────────
+FROM nginx:stable-alpine AS runner
+
+RUN apk add --no-cache curl
+
+# 复制前端构建产物到 Nginx 服务目录
+COPY --from=builder /app/packages/frontend/dist /usr/share/nginx/html
+
+# 复制 Nginx 配置
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+
+# 验证 Nginx 配置合法性
+RUN nginx -t
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]
