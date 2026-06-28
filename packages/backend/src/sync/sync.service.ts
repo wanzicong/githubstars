@@ -5,6 +5,9 @@ import { GithubRepoService } from '../github/github-repo.service';
 import type { MappedRepoData } from '../github/repo-data.interface';
 import type { SyncLog } from '@prisma/client';
 
+/** README 批量拉取并发数上限 */
+const README_SYNC_CONCURRENCY = 5;
+
 @Injectable()
 export class SyncService {
     private readonly logger = new Logger(SyncService.name);
@@ -58,6 +61,9 @@ export class SyncService {
             this.lastSyncCount = remoteMap.size;
             this.syncStatus = `同步完成，共 ${remoteMap.size} 个仓库`;
             this.logger.log(`${syncType} 完成: ${synced} 个仓库`);
+
+            // 同步完成后，在后台批量拉取缺失的 README
+            this.fetchMissingReadmes().catch((e) => this.logger.error('后台拉取 README 异常', e));
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             if (syncLog) {
@@ -195,5 +201,99 @@ export class SyncService {
             this.prisma.syncLog.findMany({ orderBy: { createdAt: 'desc' }, skip: (pageNum - 1) * pageSize, take: pageSize }),
         ]);
         return { records: records.map((r) => ({ ...r, id: Number(r.id) })), total, pages: Math.ceil(total / pageSize), current: pageNum };
+    }
+
+    // ============================================================
+    // README 批量同步
+    // ============================================================
+
+    /**
+     * 后台批量拉取缺失的 README 内容
+     *
+     * 在同步完仓库元数据后，逐一从 GitHub 获取 README 原文并持久化。
+     * 使用并发控制（上限 5）避免触发 GitHub API 限流。
+     * 单个仓库的拉取失败不会影响其他仓库的拉取。
+     */
+    private async fetchMissingReadmes(): Promise<void> {
+        try {
+            const missingRepos = await this.prisma.githubRepo.findMany({
+                where: { readmeFetched: false },
+                select: { id: true, fullName: true },
+            });
+
+            if (missingRepos.length === 0) {
+                this.logger.log('README 同步：所有仓库均已获取过 README，跳过');
+                return;
+            }
+
+            this.logger.log(`README 同步：开始批量拉取 ${missingRepos.length} 个仓库的 README（并发 ${README_SYNC_CONCURRENCY}）`);
+            const startTime = Date.now();
+            let successCount = 0;
+            let skipCount = 0;
+            let errorCount = 0;
+
+            // 使用并发池逐个处理
+            const pool = new Set<Promise<void>>();
+            for (const repo of missingRepos) {
+                const task = this.fetchSingleReadme(repo)
+                    .then((result) => {
+                        if (result === 'success') successCount++;
+                        else if (result === 'skip') skipCount++;
+                        else errorCount++;
+                    })
+                    .catch(() => {
+                        errorCount++;
+                    });
+
+                pool.add(task);
+                task.finally(() => pool.delete(task));
+
+                if (pool.size >= README_SYNC_CONCURRENCY) {
+                    await Promise.race(pool);
+                }
+            }
+            // 等待剩余任务完成
+            await Promise.all(pool);
+
+            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+            this.logger.log(
+                `README 同步完成：总计=${missingRepos.length}，成功=${successCount}，跳过=${skipCount}，失败=${errorCount}，耗时=${duration}s`,
+            );
+        } catch (e) {
+            this.logger.error('README 批量拉取出错', e);
+        }
+    }
+
+    /**
+     * 获取单个仓库的 README 并保存
+     *
+     * @returns 'success' 获取并保存成功 | 'skip' 该仓库无 README 文件无需保存 | 'error' 获取失败
+     */
+    private async fetchSingleReadme(repo: { id: bigint; fullName: string | null }): Promise<'success' | 'skip' | 'error'> {
+        if (!repo.fullName) return 'skip';
+        try {
+            const ghResult = await this.githubApi.fetchReadmeFromGitHub(repo.fullName);
+
+            if (ghResult.content === null) {
+                // GitHub 上确实没有 README → 标记已获取（避免重复请求），不填 readmeOriginal
+                await this.prisma.githubRepo.update({
+                    where: { id: repo.id },
+                    data: { readmeFetched: true, updatedAt: new Date() },
+                });
+                this.logger.log(`README 同步：${repo.fullName} 无 README 文件，已标记`);
+                return 'skip';
+            }
+
+            // 保存原文并标记已获取
+            await this.prisma.githubRepo.update({
+                where: { id: repo.id },
+                data: { readmeOriginal: ghResult.content, readmeFetched: true, updatedAt: new Date() },
+            });
+            return 'success';
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.error(`README 同步失败：${repo.fullName} — ${msg}`);
+            return 'error';
+        }
     }
 }

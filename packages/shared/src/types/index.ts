@@ -140,4 +140,5 @@ export interface TranslationStatus {
   readmeTranslated: boolean;
   descriptionCn: string | null;
   readmeCn: string | null;
+  readmeOriginal: string | null;
 }

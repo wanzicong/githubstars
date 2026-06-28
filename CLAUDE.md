@@ -456,7 +456,120 @@ static computeFinalTaskStatus(completed: number, failed: number): string {
 - [ ] `mkdir({ recursive: true })` — 目录已存在时不报错，无需前置 existsSync
 - [ ] 禁止"检查 → 操作"的 TOCTOU 模式，除非业务需要区分"不存在"和"其他错误"
 
-### 编码约束（第三次更新）
+## 第六次复盘（2026-06-28）
+
+### 本次暴露的典型问题
+
+| 问题类型 | 数量 | 根因 | 修复方式 |
+|---------|------|------|---------|
+| `string \| null` 未做兜底直接传给 `string` 类型 | 3 处 | 从对象取值时没审视类型是否匹配，缺少 `??` 肌肉记忆 | 加 `?? ''` 空值合并 |
+| 同分支 `extraContent` 产生重复 JSX（S1871） | 1 处 | 写完没做目视审查，没发现两个 else 分支渲染相同按钮 | 合并分支为单一 else |
+| Alert `message` 废弃属性再次使用（S1874） | 1 处 | 已是第三次犯 Ant Design 废弃 API 错误 | 改为 `description` |
+| 验证命令不完整 | 1 次 | 只跑了 `eslint .` + `tsc --noEmit`，没跑 `npm run build`（`tsc -b` 检查更严） | 补跑 `npm run build` 后暴露 3 个 TS error |
+
+### 根因总结
+
+1. **非空校验肌肉记忆缺失** — `GithubRepo.readmeCn` 的类型定义明明白白写着 `string \| null`，但赋值给 `MarkdownRenderer` 的 `content: string` 时，大脑自动忽略了 `null` 的可能性。这不是不知道要处理 null，而是编码时**没有"每写一行赋值都审视类型兼容性"的习惯**。
+
+2. **验证命令的"最小努力偏差"** — 跑 `npx eslint .` 看到 0 error 就安心了，跑 `npm run typecheck` 看到 0 error 也觉得够了。但前端的 `tsc -b`（project references 模式）比 `tsc --noEmit` 严格——`tsc -b` 会检查引用项目的 .d.ts 声明文件的正确性，而 `--noEmit` 不会。**验证不是为了"看到绿字"，而是为了覆盖所有可能出错的路径。**
+
+3. **Ant Design 废弃 API 反复踩坑** — 第一次复盘（v5→v6 升级遗留 13 处）、第三次复盘（ZodObject.passthrough 废弃 2 处）、这次（Alert.message 废弃 1 处）。这是一个**重复犯错模式**——每次遇到 Ant Design 组件的新写法，就默认按老方式写，没有先查文档的意识。
+
+4. **写完不自审的惯性** — 写完 `RepoReadmeCard.tsx` 的 `extraContent` 分支后，如果停下一秒看一下代码，就会注意到两个 else 分支生成的都是 `<Button>翻译 README</Button>`。但在"写完 → 跑验证 → 过"的流程中，**目视审查被跳过了**。
+
+### 对 AI 助手的新约束
+
+#### P0: 属性赋值前必须审视 null 安全（新增）
+
+**每次从对象取值赋给非空类型变量时，必须检查 null/undefined 的可能性：**
+
+- [ ] 源值的类型签名中是否有 `\| null` 或 `\| undefined`？
+- [ ] 目标变量/参数的类型是否允许 null？
+- [ ] 如果不允许，是否用 `?? ''` 做了兜底？
+
+**反面案例：**
+```typescript
+// BAD — readmeCn: string | null → content: string，null 没处理
+<MarkdownRenderer content={repo.readmeCn} />
+
+// GOOD — 用 ?? 做兜底
+<MarkdownRenderer content={repo.readmeCn ?? ''} />
+```
+
+**检查清单（写入代码后逐条过）：**
+```typescript
+// 每写一行类似代码，问自己：
+// 1. 这个值的类型签名是什么？      → `string | null`
+// 2. 目标位置接受 null 吗？        → `content: string` → 不接受
+// 3. 我加 `?? ''` 了吗？           → 加了 ✅
+```
+
+#### P0: 构建验证必须用生产命令（新增）
+
+修改前端代码后，验证命令**必须**用 `npm run build`（即 `tsc -b && vite build`），**不能**只用 `tsc --noEmit`：
+
+- [ ] `tsc -b`（project references）比 `tsc --noEmit` 检查更严格
+- [ ] 如果 `npm run build` 因预存 error 失败，至少要确保**新修改的文件**在 `npm run build 2>&1 | grep <文件名>` 中零命中
+- [ ] 不得以"tsc --noEmit 过了"作为"编译通过"的依据
+
+**反面案例：**
+```bash
+# BAD — 只跑了 lint 和 typecheck，没跑 build
+npx eslint .                              # 0 errors，以为没问题
+npx tsc --noEmit                           # 0 errors，以为没问题
+# → 实际 npm run build 报 3 个 TS error（因为 tsc -b 更严格）
+
+# GOOD — 必须跑完整的生产构建命令
+cd packages/frontend
+npm run build 2>&1 | grep -E "RepoReadmeCard|src/components"  # 确认新增/修改的文件零 error
+```
+
+#### P1: 改后立即跑 sonarjs 全量扫描（新增）
+
+每次写完代码后，必须在目标包目录执行：
+
+```bash
+npm run lint 2>&1 | grep "sonarjs/"
+```
+
+确认零输出。如果现有代码有预存 sonarjs 警告，用 `grep -v <预存规则>` 排除后确认**新增的修改**没有引入新警告。
+
+#### P2: Ant Design 组件 API 使用前检查（重申）
+
+使用 Ant Design 组件时，**先确认当前版本的 API 签名**再写代码（Ant Design v6 API 与 v5 不完全兼容）：
+
+- [ ] 组件 props 是否在当前版本已废弃？
+- [ ] 是否有替代 props 名称？（如 `message` → `description`）
+- [ ] 是否有返回类型变更？（如 `ItemType` 联合类型）
+
+### 编码约束（第四次更新）
+
+新增/更新约束表：
+
+| 规则类别 | 要求 | 强制级别 |
+|---------|------|---------|
+| null 安全检查 | 对象属性赋值给非空类型前，用 `?? ''` 做兜底 | P0 |
+| 构建验证命令 | 必须用 `npm run build` 而非 `tsc --noEmit` | P0 |
+| 改后 sonarjs 扫描 | `npm run lint 2>&1 \| grep "sonarjs/"` 必须零输出 | P1 |
+| Ant Design API 预检 | 使用 Ant Design 组件前查当前版本 API 签名 | P2 |
+
+### 强制流程（第六次更新）
+
+写完代码后的完整验证链（**不可跳过任何一步**）：
+
+```bash
+# 1. 目标包目录确认
+cd packages/frontend  # 或其他目标包
+
+# 2. Lint（检查 sonarjs 规则）
+npm run lint 2>&1 | grep -E "sonarjs" || echo "sonarjs 零警告"
+
+# 3. 生产构建（必须用 build 而非 typecheck）
+npm run build 2>&1 | grep -E "$(basename $(pwd))" || echo "构建零 error"
+
+# 4. 目视审查 — 打开修改的文件，逐行看一遍
+#    特别关注：重复代码、null 安全、废弃 API、console.log
+```
 
 执行代码变更后，必须运行 `npm run lint` 确保以下 sonarjs 规则零 error：
 

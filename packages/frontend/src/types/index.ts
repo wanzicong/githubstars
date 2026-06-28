@@ -5,6 +5,7 @@ export interface GithubRepo {
     description: string | null
     descriptionCn: string | null
     readmeCn: string | null
+    readmeOriginal: string | null
     readmeFetched: boolean
     language: string | null
     ownerName: string
