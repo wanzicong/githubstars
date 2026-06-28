@@ -360,13 +360,18 @@ export class CloneService {
      * 根据子项状态统计计算任务最终状态
      * 统一 finishTask / getTaskProgress / getRecentTasks 三处的终态判断逻辑
      *
+     * 注意：必须同时传入 totalCount，因为存在部分子项仍为 PENDING/PROCESSING
+     * 但无 FAILED 的情况（如任务超时中断），此时应返回 PARTIAL 而非 COMPLETED。
+     *
      * @param completedCount 已完成子项数
      * @param failedCount    失败子项数
+     * @param totalCount     子项总数
      * @returns 任务状态字符串: COMPLETED | FAILED | PARTIAL
      */
-    private static computeFinalTaskStatus(completedCount: number, failedCount: number): string {
-        if (failedCount === 0) return 'COMPLETED';
-        if (completedCount === 0) return 'FAILED';
+    private static computeFinalTaskStatus(completedCount: number, failedCount: number, totalCount: number): string {
+        const processedCount = completedCount + failedCount;
+        if (processedCount === 0) return 'FAILED';
+        if (failedCount === 0 && processedCount === totalCount) return 'COMPLETED';
         return 'PARTIAL';
     }
 
@@ -1039,8 +1044,9 @@ export class CloneService {
 
         const completedCount = items.filter((i) => i.status === 'COMPLETED').length;
         const failedCount = items.filter((i) => i.status === 'FAILED').length;
+        const totalCount = items.length;
 
-        const status = CloneService.computeFinalTaskStatus(completedCount, failedCount);
+        const status = CloneService.computeFinalTaskStatus(completedCount, failedCount, totalCount);
 
         await this.prisma.cloneTask.update({
             where: { id: taskId },
@@ -1088,7 +1094,7 @@ export class CloneService {
         // 根据子项状态实时计算任务状态
         let status = task.status;
         if (task.status !== 'PROCESSING' && task.status !== 'PENDING') {
-            status = CloneService.computeFinalTaskStatus(completedItems, failedItems);
+            status = CloneService.computeFinalTaskStatus(completedItems, failedItems, total);
         }
 
         const failedDetails = task.items.filter((i) => i.status === 'FAILED').map((i) => ({ fullName: i.fullName, error: i.errorMessage }));
@@ -1378,7 +1384,7 @@ export class CloneService {
                 // 根据子项状态实时计算任务状态
                 let status = t.status;
                 if (t.status !== 'PROCESSING' && t.status !== 'PENDING') {
-                    status = CloneService.computeFinalTaskStatus(completedItems, failedItems);
+                    status = CloneService.computeFinalTaskStatus(completedItems, failedItems, total);
                 }
 
                 return {
