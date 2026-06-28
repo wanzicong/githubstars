@@ -151,6 +151,17 @@ export class CloneService {
     /** 任务代际计数器，每 forceReleaseLock 递增，用于 processItem 判断是否应继续执行 */
     private generation = 0;
 
+    /**
+     * 已由 processItem 的超时分支写入过结果的子项 ID 集合
+     *
+     * 用于解决 withTimeout 不取消内部 Promise 导致的覆盖写入问题：
+     * processItem finally 块写入 FAILED 后，processItemInner 在后台完成后又会覆盖为 COMPLETED。
+     * processItemInner 在写入前检查此集合，若已存在则跳过写入。
+     *
+     * 在 resetSemaphore 中清空（新任务开始时）
+     */
+    private timeoutHandledItems = new Set<string>();
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly config: ConfigService,
@@ -222,6 +233,8 @@ export class CloneService {
         this.waitQueue = [];
         this.semaphore = 0;
         this.maxConcurrent = concurrency;
+        // 清空上一轮任务的超时标记，避免跨任务误判
+        this.timeoutHandledItems.clear();
     }
 
     /**
@@ -435,10 +448,16 @@ export class CloneService {
                 this.logger.error('更新任务失败状态时出错', updateErr);
             }
         } finally {
-            this.running = false;
-            this.lockAcquiredAt = null;
-            this.currentTaskId = null;
-            this.logger.log(`克隆任务执行结束，running 锁已释放: taskId=${Number(taskId)}`);
+            // 只有当前任务仍是"自己"时才释放锁，防止 forceReleaseLock + 新任务启动后
+            // 旧 executeTask 的 finally 错误地释放新任务的锁（Bug #1）
+            if (this.currentTaskId === taskId) {
+                this.running = false;
+                this.lockAcquiredAt = null;
+                this.currentTaskId = null;
+                this.logger.log(`克隆任务执行结束，running 锁已释放: taskId=${Number(taskId)}`);
+            } else {
+                this.logger.warn(`跳过旧任务锁释放: taskId=${Number(taskId)}, currentTaskId=${this.currentTaskId}`);
+            }
         }
     }
 
@@ -468,8 +487,13 @@ export class CloneService {
                 `concurrency=${task.concurrency} mirrorSource=${mirrorSource}`,
         );
 
-        // 并发执行所有 item
-        await Promise.all(items.map((item) => this.processItem(item, task.shallow ?? true, mirrorSource)));
+        // 并发执行所有 item（使用 allSettled 而非 all，避免单个 acquire 超时导致
+        // 其他正在运行的 item 状态丢失和 finishTask 计数不完整的问题）
+        const results = await Promise.allSettled(items.map((item) => this.processItem(item, task.shallow ?? true, mirrorSource)));
+        const rejectedCount = results.filter((r) => r.status === 'rejected').length;
+        if (rejectedCount > 0) {
+            this.logger.warn(`executeTaskInner: ${rejectedCount} 个子项未处理（信号量超时或其他初始化失败）`);
+        }
 
         await this.finishTask(taskId);
     }
@@ -501,6 +525,8 @@ export class CloneService {
         } finally {
             if (this.generation === capturedGen) {
                 if (error !== null) {
+                    // 先标记超时，再写入结果：防止 processItemInner 后台完成后覆盖为 COMPLETED
+                    this.timeoutHandledItems.add(String(item.id));
                     try {
                         await this.recordItemResult(item, false, error || '未知错误');
                     } catch (recordErr) {
@@ -532,6 +558,12 @@ export class CloneService {
 
         if (this.generation !== capturedGen) {
             this.logger.warn('代际已变更，跳过状态写入: ' + item.fullName);
+            return;
+        }
+
+        // processItem 可能已因超时写入 FAILED，若再写入会覆盖为 COMPLETED
+        if (this.timeoutHandledItems.has(String(item.id))) {
+            this.logger.warn(`子项 ${item.fullName} 已被 processItem 处理（超时），跳过 processItemInner 写入`);
             return;
         }
 
@@ -589,7 +621,7 @@ export class CloneService {
                 const validation = await this.validateExistingRepo(localPath, item.cloneUrl!);
                 if (validation.success) {
                     this.logger.log(`目录已存在且验证通过，执行 git pull 更新: ${item.fullName}`);
-                    return await this.executeGitPull(localPath, item.fullName);
+                    return await this.executeGitPull(localPath, item.fullName, githubToken);
                 }
                 this.logger.warn(`仓库验证失败，删除并重新克隆: ${item.fullName} | ${validation.error}`);
                 await this.removeCloneDir(localPath);
@@ -865,13 +897,28 @@ export class CloneService {
      * @callers executeClone()
      * @depends git CLI
      */
-    private async executeGitPull(localPath: string, fullName: string | null): Promise<{ success: boolean; error?: string }> {
+    private async executeGitPull(
+        localPath: string,
+        fullName: string | null,
+        githubToken?: string,
+    ): Promise<{ success: boolean; error?: string }> {
+        let askpassPath: string | undefined;
+        const env: NodeJS.ProcessEnv = {
+            ...process.env,
+            GIT_TERMINAL_PROMPT: '0',
+        };
+        if (githubToken) {
+            askpassPath = await this.writeAskpassScript(githubToken);
+            env.GIT_ASKPASS = askpassPath;
+        }
+
         try {
             // 先获取当前分支名
             const { stdout: branchName } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
                 cwd: localPath,
                 timeout: 10_000,
                 windowsHide: true,
+                env,
             });
             const branch = branchName.trim();
 
@@ -883,6 +930,7 @@ export class CloneService {
                     cwd: localPath,
                     timeout: CLONE_TIMEOUT_MS,
                     windowsHide: true,
+                    env,
                 });
                 // 尝试合并到默认分支（main/master）
                 const defaultBranch = await this.detectDefaultBranch(localPath);
@@ -891,6 +939,7 @@ export class CloneService {
                         cwd: localPath,
                         timeout: CLONE_TIMEOUT_MS,
                         windowsHide: true,
+                        env,
                     });
                 }
                 return { success: true };
@@ -901,6 +950,7 @@ export class CloneService {
                 cwd: localPath,
                 timeout: CLONE_TIMEOUT_MS,
                 windowsHide: true,
+                env,
             });
             this.logger.log(`git pull 成功: ${fullName} | ${stdout.trim()}`);
             return { success: true };
@@ -908,6 +958,10 @@ export class CloneService {
             const errorMsg = e instanceof Error ? (e as Error & { stderr?: string }).stderr || e.message : String(e);
             this.logger.error(`git pull 失败: ${fullName}`, e);
             return { success: false, error: `git pull 失败: ${errorMsg.substring(0, 1900)}` };
+        } finally {
+            if (askpassPath) {
+                this.cleanupAskpassScript(askpassPath);
+            }
         }
     }
 
@@ -1126,6 +1180,16 @@ export class CloneService {
      * 重试前会删除原目录。
      */
     async retryFailed(taskId: number) {
+        const task = await this.prisma.cloneTask.findUnique({
+            where: { id: BigInt(taskId) },
+            select: { id: true, targetDir: true },
+        });
+
+        if (!task) return { success: false, message: '任务不存在' };
+
+        // 设置目标目录，确保 removeCloneDir 的路径安全校验使用正确的 targetDir
+        this.targetDir = task.targetDir;
+
         const items = await this.prisma.cloneTaskItem.findMany({
             where: {
                 taskId: BigInt(taskId),
@@ -1254,11 +1318,21 @@ export class CloneService {
             return { success: false, message: '当前有任务正在执行，请稍后再试' };
         }
 
-        const item = await this.prisma.cloneTaskItem.findFirst({
-            where: { taskId: BigInt(taskId), fullName },
-        });
+        const [task, item] = await Promise.all([
+            this.prisma.cloneTask.findUnique({
+                where: { id: BigInt(taskId) },
+                select: { id: true, targetDir: true },
+            }),
+            this.prisma.cloneTaskItem.findFirst({
+                where: { taskId: BigInt(taskId), fullName },
+            }),
+        ]);
 
+        if (!task) return { success: false, message: '任务不存在' };
         if (!item) return { success: false, message: '未找到该任务项' };
+
+        // 设置目标目录，确保 removeCloneDir 的路径安全校验使用正确的 targetDir
+        this.targetDir = task.targetDir;
 
         if (item.status === 'PROCESSING') {
             return { success: false, message: '任务正在执行中，无法重试' };

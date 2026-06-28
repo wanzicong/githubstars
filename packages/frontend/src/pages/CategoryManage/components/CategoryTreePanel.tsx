@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Card, Tree, Button, Space, Dropdown, Empty, Spin } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, ExpandOutlined, CompressOutlined } from '@ant-design/icons'
-import type { TreeProps } from 'antd'
+import type { MenuProps, TreeProps } from 'antd'
 import type { UseCategoryTreeReturn } from '../hooks/useCategoryTree'
 import CategoryFormModal from './CategoryFormModal'
 
@@ -28,7 +28,7 @@ function CategoryTreeToolbar({ onAdd, expandAll, collapseAll }: CategoryTreeTool
 interface CategoryTreeContentProps {
     treeData: UseCategoryTreeReturn['treeData']
     loading: boolean
-    contextMenuItems: { key: string; label: string; icon?: React.ReactNode; danger?: boolean; type?: 'divider' }[]
+    contextMenuItems: MenuProps['items']
     handleMenuClick: (info: { key: string }) => void
     contextMenuNodeId: number | null
     setContextMenuNodeId: (id: number | null) => void
@@ -117,10 +117,10 @@ export default function CategoryTreePanel({ tree }: CategoryTreePanelProps) {
         handleDrop(dragKey, dropKey, dropPosition)
     }, [handleDrop])
 
-    const contextMenuItems = [
+    const contextMenuItems: MenuProps['items'] = [
         { key: 'add-child', label: '新建子分类', icon: <PlusOutlined /> },
         { key: 'rename', label: '重命名', icon: <EditOutlined /> },
-        { type: 'divider' as const },
+        { type: 'divider' },
         { key: 'delete', label: '删除', icon: <DeleteOutlined />, danger: true },
     ]
 

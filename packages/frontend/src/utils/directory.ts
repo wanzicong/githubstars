@@ -19,7 +19,7 @@ export async function selectDirectory(options?: {
 }): Promise<string | null> {
   if (isElectron()) {
     // 桌面端：使用原生对话框
-    return await window.electronAPI.dialog.openDirectory({
+    return await window.electronAPI!.dialog.openDirectory({
       title: options?.title ?? '选择目标目录',
       defaultPath: options?.defaultPath
     })

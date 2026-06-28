@@ -26,7 +26,7 @@ export function useDesktopConfig() {
 
   useEffect(() => {
     if (isElectron()) {
-      window.electronAPI.desktop.getConfig()
+      window.electronAPI!.desktop.getConfig()
         .then(setConfig)
         .catch((err) => console.error('获取桌面配置失败:', err))
     }
@@ -43,27 +43,27 @@ export function useWindowControls() {
 
   useEffect(() => {
     if (isElectron()) {
-      window.electronAPI.window.isMaximized().then(setIsMaximized)
+      window.electronAPI!.window.isMaximized().then(setIsMaximized)
     }
   }, [])
 
   const minimize = useCallback(async () => {
     if (isElectron()) {
-      await window.electronAPI.window.minimize()
+      await window.electronAPI!.window.minimize()
     }
   }, [])
 
   const maximize = useCallback(async () => {
     if (isElectron()) {
-      await window.electronAPI.window.maximize()
-      const maximized = await window.electronAPI.window.isMaximized()
+      await window.electronAPI!.window.maximize()
+      const maximized = await window.electronAPI!.window.isMaximized()
       setIsMaximized(maximized)
     }
   }, [])
 
   const close = useCallback(async () => {
     if (isElectron()) {
-      await window.electronAPI.window.close()
+      await window.electronAPI!.window.close()
     }
   }, [])
 
@@ -90,7 +90,7 @@ export function useDirectoryPicker() {
       // 非Electron环境返回null
       return null
     }
-    return await window.electronAPI.dialog.openDirectory(options)
+    return await window.electronAPI!.dialog.openDirectory(options)
   }, [])
 
   return useMemo(() => ({
@@ -119,7 +119,7 @@ export function useAppUpdate() {
   useEffect(() => {
     if (!isElectron()) return
 
-    const api = window.electronAPI.update
+    const api = window.electronAPI!.update
 
     api.onChecking(() => {
       setUpdateState(prev => ({ ...prev, checking: true, error: undefined }))
@@ -172,17 +172,17 @@ export function useAppUpdate() {
 
   const checkUpdate = useCallback(async () => {
     if (!isElectron()) return
-    await window.electronAPI.update.check()
+    await window.electronAPI!.update.check()
   }, [])
 
   const downloadUpdate = useCallback(async () => {
     if (!isElectron()) return
-    await window.electronAPI.update.download()
+    await window.electronAPI!.update.download()
   }, [])
 
   const installUpdate = useCallback(async () => {
     if (!isElectron()) return
-    await window.electronAPI.update.install()
+    await window.electronAPI!.update.install()
   }, [])
 
   return {

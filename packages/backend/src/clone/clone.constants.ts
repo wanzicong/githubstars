@@ -7,8 +7,8 @@ export const DEFAULT_CONCURRENCY = 5;
 /** 单个仓库克隆超时（毫秒）：15 分钟 */
 export const CLONE_TIMEOUT_MS = 15 * 60 * 1000;
 
-/** 单个子项处理超时（毫秒）：15 分钟（含数据库操作） */
-export const ITEM_TIMEOUT_MS = 15 * 60 * 1000;
+/** 单个子项处理超时（毫秒）：17 分钟（含数据库操作，留 2 分钟余量给 DB 写入） */
+export const ITEM_TIMEOUT_MS = 17 * 60 * 1000;
 
 /** 整体任务超时（毫秒）：1 小时 */
 export const TASK_TIMEOUT_MS = 60 * 60 * 1000;
