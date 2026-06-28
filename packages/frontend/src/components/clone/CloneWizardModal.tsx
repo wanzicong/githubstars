@@ -7,7 +7,7 @@ import DirectoryPicker from '@/components/common/DirectoryPicker'
 import type { GithubRepo } from '@/types'
 
 /** 克隆并发数可选值 */
-type CloneConcurrency = 5 | 10 | 20
+type CloneConcurrency = 5 | 10 | 20 | 50 | 80
 
 const { Text } = Typography
 
@@ -81,7 +81,7 @@ export default function CloneWizardModal({ open, onClose, selectedRepos, onTaskC
     const handleClose = () => {
         setCurrentStep(0)
         setTargetDir('')
-        setConcurrency(DEFAULT_CLONE_CONCURRENCY as 5 | 10 | 20)
+        setConcurrency(DEFAULT_CLONE_CONCURRENCY as CloneConcurrency)
         setShallow(true)
         setSelectedIds(selectedRepos.map((r) => r.id))
         onClose()

@@ -7,7 +7,7 @@ export type MirrorSource = 'gh-proxy' | 'gitclone' | 'direct'
 export async function createCloneTask(params: {
     repoIds: number[]
     targetDir: string
-    concurrency: 5 | 10 | 20
+    concurrency: 5 | 10 | 20 | 50 | 80
     shallow?: boolean
     mirrorSource?: MirrorSource
 }): Promise<{ success: boolean; taskId?: number; message?: string }> {

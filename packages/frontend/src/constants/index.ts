@@ -91,6 +91,8 @@ export const CLONE_CONCURRENCY_OPTIONS = [
     { value: 5, label: '5 个并发' },
     { value: 10, label: '10 个并发' },
     { value: 20, label: '20 个并发' },
+    { value: 50, label: '50 个并发' },
+    { value: 80, label: '80 个并发' },
 ]
 
 /** 默认克隆并发数 */

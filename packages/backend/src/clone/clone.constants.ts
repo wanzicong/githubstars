@@ -1,11 +1,11 @@
 /** 并发数选项（用户可选） */
-export const CLONE_CONCURRENCY_OPTIONS = [5, 10, 20] as const;
+export const CLONE_CONCURRENCY_OPTIONS = [5, 10, 20, 50, 80] as const;
 
 /** 默认并发数 */
 export const DEFAULT_CONCURRENCY = 5;
 
-/** 单个仓库克隆超时（毫秒）：15 分钟 */
-export const CLONE_TIMEOUT_MS = 15 * 60 * 1000;
+/** 单个仓库克隆超时（毫秒）：3 分钟 */
+export const CLONE_TIMEOUT_MS = 3 * 60 * 1000;
 
 /** 单个子项处理超时（毫秒）：17 分钟（含数据库操作，留 2 分钟余量给 DB 写入） */
 export const ITEM_TIMEOUT_MS = 17 * 60 * 1000;
