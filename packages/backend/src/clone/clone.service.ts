@@ -301,7 +301,13 @@ export class CloneService {
                 taskId: task.id,
                 repoId: repo.id,
                 fullName,
-                cloneUrl: `https://github.com/${safeOwner}/${safeRepoName}.git`,
+                // 若配置了镜像代理，直接生成代理 URL 存入数据库
+                // 这样 git clone 后 remote origin 自动指向代理地址，
+                // 后续 git pull / validateExistingRepo 也走代理，不绕原始 GitHub
+                cloneUrl:
+                    mirrorSource && mirrorSource !== 'direct'
+                        ? getMirrorUrl(`https://github.com/${safeOwner}/${safeRepoName}.git`, mirrorSource as MirrorSourceName)
+                        : `https://github.com/${safeOwner}/${safeRepoName}.git`,
                 localPath,
                 status: 'PENDING' as const,
                 retryCount: 0,
@@ -623,8 +629,21 @@ export class CloneService {
                     this.logger.log(`目录已存在且验证通过，执行 git pull 更新: ${item.fullName}`);
                     return await this.executeGitPull(localPath, item.fullName, githubToken);
                 }
-                this.logger.warn(`仓库验证失败，删除并重新克隆: ${item.fullName} | ${validation.error}`);
-                await this.removeCloneDir(localPath);
+
+                // 验证失败 -> 尝试修复仓库（删除 index.lock / git init / 修正 URL）
+                this.logger.warn(`仓库验证失败，尝试修复: ${item.fullName} | ${validation.error}`);
+                const repairResult = await this.tryRepairRepo(localPath, item.cloneUrl!, item.fullName, githubToken);
+
+                if (repairResult.success) {
+                    this.logger.log(`仓库修复成功，执行 git pull 更新: ${item.fullName}`);
+                    return await this.executeGitPull(localPath, item.fullName, githubToken);
+                }
+
+                this.logger.warn(`仓库修复失败，尝试删除重克隆: ${item.fullName} | ${repairResult.error}`);
+                const dirDeleted = await this.removeCloneDir(localPath);
+                if (!dirDeleted && existsSync(localPath)) {
+                    return { success: false, error: `无法删除已有目录，请手动删除后重试: ${localPath}` };
+                }
             }
 
             const parentDir = path.dirname(localPath);
@@ -672,7 +691,12 @@ export class CloneService {
         const githubToken = await this.config.getValue('github.token');
 
         const shouldUseMirror = mirrorSource !== 'direct' && !githubToken;
-        const finalUrl = shouldUseMirror ? getMirrorUrl(cloneUrl, mirrorSource) : cloneUrl;
+
+        // cloneUrl 可能已在 createTask 阶段被包装为代理地址（镜像源模式下）
+        // 检测是否已被代理，避免 getMirrorUrl 二次包装导致双代理
+        const isAlreadyProxied = shouldUseMirror && GITHUB_MIRROR_SOURCES.some((s) => s.url && cloneUrl.startsWith(s.url + '/'));
+
+        const finalUrl = shouldUseMirror && !isAlreadyProxied ? getMirrorUrl(cloneUrl, mirrorSource) : cloneUrl;
 
         if (shouldUseMirror && fullName) {
             this.logger.log(`使用镜像代理: ${mirrorSource} | ${fullName}`);
@@ -1067,10 +1091,166 @@ export class CloneService {
     }
 
     /**
-     * 记录子项结果
+     * 尝试修复已有仓库，避免直接删除重克隆
      *
-     * 不再更新父任务计数器，getTaskProgress 会根据子项状态实时计算。
+     * 验证失败 != 仓库不可用 —— 许多 git 问题可以原地修复：
+     * 1. index.lock 残留 → 删除锁文件（git 被强制杀死后的最常见残留）
+     * 2. .git 结构损坏/缺失 → git init 重建
+     * 3. remote origin URL 不匹配 → 修正为预期 URL
+     * 4. git fetch 验证远程可达并更新 refs
+     *
+     * 修复后的仓库可以正常走 git pull 更新路径，无需删除重克隆，
+     * 既避免了 Windows 文件锁导致删不掉的 BUG，
+     * 也节省了大仓库重复下载的时间和带宽。
+     *
+     * @param localPath        本地仓库路径
+     * @param expectedCloneUrl 期望的 remote origin URL
+     * @param fullName         仓库全名（用于日志）
+     * @param githubToken      GitHub Token（用于认证），可选
+     * @returns 修复后的验证结果：success=true 可继续 git pull
      */
+    private async tryRepairRepo(
+        localPath: string,
+        expectedCloneUrl: string,
+        fullName: string | null,
+        githubToken?: string,
+    ): Promise<{ success: boolean; error?: string }> {
+        let askpassPath: string | undefined;
+        const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+        if (githubToken) {
+            askpassPath = await this.writeAskpassScript(githubToken);
+            env.GIT_ASKPASS = askpassPath;
+        }
+
+        const gitDir = path.join(localPath, '.git');
+
+        try {
+            // Step 1: 删除 index.lock（git 被强制杀死后最常见的残留锁文件）
+            this.repairLockFile(gitDir, fullName);
+
+            // Step 2: 如果 .git 缺失，用 git init 重建
+            const initError = await this.repairGitInit(localPath, gitDir, fullName, env);
+            if (initError) return { success: false, error: initError };
+
+            // Step 3: 修正 remote origin URL（镜像源/直连切换可能导致 URL 不匹配）
+            await this.repairRemoteUrl(localPath, expectedCloneUrl, fullName, env);
+
+            // Step 4: 重新验证仓库完整性
+            const revalidation = await this.validateExistingRepo(localPath, expectedCloneUrl);
+            if (!revalidation.success) return revalidation;
+
+            // Step 5: 用 git fetch --prune 验证远程可达并更新 refs
+            await this.repairFetchOrigin(localPath, fullName, env);
+
+            return { success: true };
+        } finally {
+            if (askpassPath) this.cleanupAskpassScript(askpassPath);
+        }
+    }
+
+    /**
+     * 修复子步骤 1：删除 index.lock 残留锁文件
+     */
+    private repairLockFile(gitDir: string, fullName: string | null): void {
+        const lockFile = path.join(gitDir, 'index.lock');
+        if (!existsSync(lockFile)) return;
+        try {
+            unlinkSync(lockFile);
+            this.logger.log(`修复: 已删除残留锁文件 index.lock | ${fullName}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.warn(`修复: 删除 index.lock 失败（跳过）: ${msg} | ${fullName}`);
+        }
+    }
+
+    /**
+     * 修复子步骤 2：用 git init 重建缺失的 .git 目录
+     *
+     * @returns 错误消息，无错误返回 null
+     */
+    private async repairGitInit(
+        localPath: string,
+        gitDir: string,
+        fullName: string | null,
+        env: NodeJS.ProcessEnv,
+    ): Promise<string | null> {
+        if (existsSync(gitDir)) return null;
+        try {
+            await execFileAsync('git', ['init'], { cwd: localPath, timeout: 10_000, windowsHide: true, env });
+            this.logger.log(`修复: git init 重建 .git 目录成功 | ${fullName}`);
+            return null;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            return `仓库修复失败（git init 出错）: ${msg}`;
+        }
+    }
+
+    /**
+     * 修复子步骤 3：修正 remote origin URL
+     * 镜像源和直连模式切换后，git config 中的 URL 可能不匹配，需要修正。
+     */
+    private async repairRemoteUrl(
+        localPath: string,
+        expectedCloneUrl: string,
+        fullName: string | null,
+        env: NodeJS.ProcessEnv,
+    ): Promise<void> {
+        try {
+            const { stdout: currentUrl } = await execFileAsync('git', ['remote', 'get-url', 'origin'], {
+                cwd: localPath,
+                timeout: 10_000,
+                windowsHide: true,
+                env,
+            }).catch(() => ({ stdout: '' }));
+
+            const normalizeUrl = (u: string) => u.replace(/\.git$/, '').trim();
+            const current = normalizeUrl(currentUrl);
+            const expected = normalizeUrl(expectedCloneUrl);
+
+            if (!current) {
+                await execFileAsync('git', ['remote', 'add', 'origin', expectedCloneUrl], {
+                    cwd: localPath,
+                    timeout: 10_000,
+                    windowsHide: true,
+                    env,
+                });
+                this.logger.log(`修复: 已添加 remote origin | ${fullName}`);
+            } else if (current !== expected) {
+                await execFileAsync('git', ['remote', 'set-url', 'origin', expectedCloneUrl], {
+                    cwd: localPath,
+                    timeout: 10_000,
+                    windowsHide: true,
+                    env,
+                });
+                this.logger.log(`修复: 已修正 remote origin: ${current} -> ${expected} | ${fullName}`);
+            }
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.warn(`修复: remote origin 操作失败（跳过）: ${msg} | ${fullName}`);
+        }
+    }
+
+    /**
+     * 修复子步骤 4：git fetch --prune 验证远程可达并更新 refs
+     * fetch 失败不阻塞，pull 阶段会带上完整认证重试。
+     */
+    private async repairFetchOrigin(localPath: string, fullName: string | null, env: NodeJS.ProcessEnv): Promise<void> {
+        try {
+            await execFileAsync('git', ['fetch', '--prune', 'origin'], {
+                cwd: localPath,
+                timeout: CLONE_TIMEOUT_MS,
+                windowsHide: true,
+                env,
+            });
+            this.logger.log(`修复: git fetch 成功，仓库可用 | ${fullName}`);
+        } catch (e: unknown) {
+            const errorMsg = e instanceof Error ? (e as Error & { stderr?: string }).stderr || e.message : String(e);
+            this.logger.warn(
+                `修复: git fetch 失败，但仓库结构已验证通过，后续走 git pull 重试: ${errorMsg.substring(0, 200)} | ${fullName}`,
+            );
+        }
+    }
+
     private async recordItemResult(item: { id: bigint; fullName: string | null }, success: boolean, error?: string) {
         const status = success ? 'COMPLETED' : 'FAILED';
 
@@ -1369,23 +1549,50 @@ export class CloneService {
     /**
      * 删除克隆目录（安全操作，忽略不存在的情况）
      */
-    private async removeCloneDir(localPath: string | null) {
-        if (!localPath) return;
+    /**
+     * 删除克隆目录（带重试机制）
+     *
+     * 在 Windows 上，残留的 git 进程或杀毒软件可能锁定文件导致删除失败，
+     * 此时等待 1-2 秒后重试通常可以成功。
+     *
+     * @param localPath 要删除的目录路径
+     * @returns true=删除成功 / false=删除失败（重试后仍失败）
+     */
+    private async removeCloneDir(localPath: string | null): Promise<boolean> {
+        if (!localPath) return true;
 
         // 安全校验：只允许删除目标目录内的路径
         if (this.targetDir && !this.isPathWithinTargetDir(localPath)) {
             this.logger.warn(`拒绝删除目标目录外的路径: ${localPath}`);
-            return;
+            return false;
         }
 
-        try {
-            await rm(localPath, { recursive: true, force: true });
-            this.logger.log(`已删除克隆目录: ${localPath}`);
-        } catch (e: unknown) {
-            // rm({ force: true }) 在文件不存在时不会报错，无需额外 existsSync 检查
-            const msg = e instanceof Error ? e.message : String(e);
-            this.logger.warn(`删除克隆目录失败: ${localPath} | ${msg}`);
+        const MAX_RETRIES = 3;
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            try {
+                await rm(localPath, { recursive: true, force: true });
+                this.logger.log(`已删除克隆目录: ${localPath}`);
+                return true;
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                const isLastRetry = attempt === MAX_RETRIES - 1;
+
+                // 检查目录是否真的被删了（rm 报错不等于目录没删，某些权限错误可能已经部分删除了）
+                if (!existsSync(localPath)) {
+                    this.logger.log(`/!\\ rm 报错但目录已不存在，视为删除成功: ${localPath} | ${msg}`);
+                    return true;
+                }
+
+                if (isLastRetry) {
+                    this.logger.warn(`删除克隆目录失败（已重试 ${MAX_RETRIES} 次）: ${localPath} | ${msg}`);
+                    return false;
+                }
+
+                this.logger.warn(`删除克隆目录失败（第${attempt + 1}次）: ${localPath} | ${msg}，${attempt + 1}秒后重试`);
+                await delay((attempt + 1) * 1000);
+            }
         }
+        return false;
     }
 
     /**

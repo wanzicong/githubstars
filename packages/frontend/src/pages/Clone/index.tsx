@@ -37,6 +37,26 @@ export default function Clone() {
 
     useEffect(() => { loadTasks() }, [loadTasks])
 
+    // 任务列表自动轮询 — 有执行中/等待中的任务时每 2 秒刷新
+    const listPolling = usePolling(async () => {
+        try {
+            const res = await getRecentCloneTasks()
+            if (res.success) setTasks(res.tasks)
+        } catch {
+            // 轮询期间静默失败，避免频繁弹错误提示
+        }
+    }, 2000)
+
+    // 跟踪是否有活跃任务，自动启停轮询
+    useEffect(() => {
+        const hasActive = tasks.some((t) => t.status === 'PROCESSING' || t.status === 'PENDING')
+        if (hasActive) {
+            listPolling.start()
+        } else {
+            listPolling.stop()
+        }
+    }, [tasks, listPolling])
+
     // 轮询活跃任务进度
     const polling = usePolling(async () => {
         const taskId = activeTaskIdRef.current
