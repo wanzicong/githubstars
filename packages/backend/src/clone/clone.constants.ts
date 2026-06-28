@@ -4,17 +4,17 @@ export const CLONE_CONCURRENCY_OPTIONS = [5, 10, 20] as const;
 /** 默认并发数 */
 export const DEFAULT_CONCURRENCY = 5;
 
-/** 单个仓库克隆超时（毫秒）：10 分钟 */
-export const CLONE_TIMEOUT_MS = 10 * 60 * 1000;
+/** 单个仓库克隆超时（毫秒）：15 分钟 */
+export const CLONE_TIMEOUT_MS = 15 * 60 * 1000;
 
-/** 单个子项处理超时（毫秒）：10 分钟（含数据库操作） */
-export const ITEM_TIMEOUT_MS = 10 * 60 * 1000;
+/** 单个子项处理超时（毫秒）：15 分钟（含数据库操作） */
+export const ITEM_TIMEOUT_MS = 15 * 60 * 1000;
 
 /** 整体任务超时（毫秒）：1 小时 */
 export const TASK_TIMEOUT_MS = 60 * 60 * 1000;
 
-/** 信号量获取超时（毫秒）：10 分钟 */
-export const SEMAPHORE_TIMEOUT_MS = 10 * 60 * 1000;
+/** 信号量获取超时（毫秒）：15 分钟 */
+export const SEMAPHORE_TIMEOUT_MS = 15 * 60 * 1000;
 
 /** 卡住任务检测阈值（毫秒）：65 分钟（超过 TASK_TIMEOUT_MS） */
 export const STUCK_TASK_THRESHOLD_MS = 65 * 60 * 1000;

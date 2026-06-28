@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { GithubApiService } from './github-api.service';
 import { resolveSortField, resolveSortDir, parseLanguages, DATE_FIELD_MAP } from '../common/utils/query-params.util';
 import { buildPaginationResult } from '../common/utils/pagination.util';
 import type { BaseFilterParams, FilterParams, PaginatedFilterParams } from '../common/interfaces/filter-params.interface';
@@ -24,7 +25,10 @@ function resolveReadmeStatus(readmeCn: string | null | undefined, readmeFetched:
 export class GithubRepoService {
     private readonly logger = new Logger(GithubRepoService.name);
 
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly githubApi: GithubApiService,
+    ) {}
 
     /**
      * 根据筛选参数构建 Prisma where 条件
@@ -326,5 +330,52 @@ export class GithubRepoService {
             readmeCompleted,
             readmePending: total - readmeCompleted,
         };
+    }
+
+    /**
+     * 确保仓库 README 已被拉取（按需拉取）
+     *
+     * 当用户查看仓库详情时，如果 README 尚未拉取（readmeFetched=false），
+     * 立即从 GitHub API 拉取并持久化，避免依赖批量同步时的 API 限额。
+     *
+     * 静默处理失败——拉取失败不影响详情页展示其他信息。
+     *
+     * @param repoId 仓库 ID
+     * @returns 更新后的仓库对象（或原始对象，如果无需更新或拉取失败）
+     *
+     * @callers StarsController.detail()
+     * @depends GithubApiService.fetchReadmeFromGitHub()
+     */
+    async ensureReadmeFetched(repoId: bigint): Promise<any> {
+        try {
+            const repo = await this.prisma.githubRepo.findUnique({ where: { id: repoId } });
+            if (!repo || repo.readmeFetched) return repo;
+
+            this.logger.log(`按需拉取 README: ${repo.fullName}`);
+            const ghResult = await this.githubApi.fetchReadmeFromGitHub(repo.fullName!);
+
+            if (ghResult.content === null) {
+                // GitHub 上确实没有 README → 标记已获取（避免重复请求）
+                await this.prisma.githubRepo.update({
+                    where: { id: repoId },
+                    data: { readmeFetched: true, updatedAt: new Date() },
+                });
+                this.logger.log(`按需拉取 README 完成（无 README 文件）: ${repo.fullName}`);
+            } else {
+                // 保存原文并标记已获取
+                await this.prisma.githubRepo.update({
+                    where: { id: repoId },
+                    data: { readmeOriginal: ghResult.content, readmeFetched: true, updatedAt: new Date() },
+                });
+                this.logger.log(`按需拉取 README 成功: ${repo.fullName}, 大小=${ghResult.content.length}`);
+            }
+
+            // 重新查询获取完整的 Prisma 模型返回
+            return this.prisma.githubRepo.findUnique({ where: { id: repoId } });
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.error(`按需拉取 README 失败: ${msg}`);
+            return null;
+        }
     }
 }

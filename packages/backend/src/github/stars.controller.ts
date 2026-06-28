@@ -68,8 +68,19 @@ export class StarsController {
     async detail(@Body() body: { id: number }) {
         const numId = body.id;
         if (isNaN(numId) || numId <= 0) return { success: false, message: '无效的仓库ID' };
-        const repo = await this.service.findById(numId);
+        let repo = await this.service.findById(numId);
         if (!repo) return { success: false, message: '仓库不存在' };
+
+        // README 按需拉取：如果 README 尚未获取，立即从 GitHub API 拉取
+        if (!repo.readmeFetched) {
+            this.logger.log(`详情页触发 README 按需拉取: id=${numId}`);
+            const updated = await this.service.ensureReadmeFetched(BigInt(numId));
+            if (updated) {
+                repo = updated;
+            }
+            // 拉取失败不阻塞，继续返回已有信息
+        }
+
         return repo;
     }
 
