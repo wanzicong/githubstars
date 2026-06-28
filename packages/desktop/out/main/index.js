@@ -8860,17 +8860,17 @@ var require_source = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#region ../../node_modules/electron-store/index.js
 var require_electron_store = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var path$30 = require("path");
-	var { app: app$3, ipcMain: ipcMain$1, ipcRenderer, shell: shell$2 } = require("electron");
+	var { app: app$3, ipcMain: ipcMain$2, ipcRenderer, shell: shell$2 } = require("electron");
 	var Conf = require_source();
 	var isInitialized = false;
 	var initDataListener = () => {
-		if (!ipcMain$1 || !app$3) throw new Error("Electron Store: You need to call `.initRenderer()` from the main process.");
+		if (!ipcMain$2 || !app$3) throw new Error("Electron Store: You need to call `.initRenderer()` from the main process.");
 		const appData = {
 			defaultCwd: app$3.getPath("userData"),
 			appVersion: app$3.getVersion()
 		};
 		if (isInitialized) return appData;
-		ipcMain$1.on("electron-store-get-data", (event) => {
+		ipcMain$2.on("electron-store-get-data", (event) => {
 			event.returnValue = appData;
 		});
 		isInitialized = true;
@@ -8884,7 +8884,7 @@ var require_electron_store = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 				const appData = ipcRenderer.sendSync("electron-store-get-data");
 				if (!appData) throw new Error("Electron Store: You need to call `.initRenderer()` from the main process.");
 				({defaultCwd, appVersion} = appData);
-			} else if (ipcMain$1 && app$3) ({defaultCwd, appVersion} = initDataListener());
+			} else if (ipcMain$2 && app$3) ({defaultCwd, appVersion} = initDataListener());
 			options = {
 				name: "config",
 				...options
@@ -11105,7 +11105,7 @@ function createMainWindow() {
 		icon: (0, node_path.join)(__dirname, "../../build/icon.png"),
 		webPreferences: {
 			preload: (0, node_path.join)(__dirname, "../preload/index.js"),
-			sandbox: false,
+			sandbox: true,
 			contextIsolation: true,
 			nodeIntegration: false
 		}
@@ -11135,7 +11135,8 @@ function loadContent(window) {
 		window.webContents.openDevTools();
 		import_src.default.info(`开发环境：加载前端服务器 ${frontendUrl}`);
 	} else {
-		window.loadFile((0, node_path.join)(__dirname, "../../packages/frontend/dist/index.html"));
+		const frontendPath = (0, node_path.join)(process.resourcesPath, "frontend-dist", "index.html");
+		window.loadFile(frontendPath);
 		import_src.default.info("生产环境：加载打包文件");
 	}
 }
@@ -11157,10 +11158,22 @@ function setupIpcHandlers(mainWindow) {
 	electron.ipcMain.handle("app:getName", () => {
 		return electron.app.getName();
 	});
+	/** 允许渲染进程访问的系统路径名称白名单 */
+	const ALLOWED_PATHS = [
+		"userData",
+		"temp",
+		"downloads",
+		"desktop",
+		"documents",
+		"home",
+		"appData",
+		"logs"
+	];
 	/**
 	* 获取应用路径
 	*/
 	electron.ipcMain.handle("app:getPath", (_, name) => {
+		if (!ALLOWED_PATHS.includes(name)) throw new Error(`不允许的路径名称: ${name}`);
 		return electron.app.getPath(name);
 	});
 	/**
@@ -11195,8 +11208,11 @@ function setupIpcHandlers(mainWindow) {
 	});
 	/**
 	* 打开外部链接
+	* 仅允许 http/https 协议，防止 file:///smb:// 等危险协议
 	*/
 	electron.ipcMain.handle("shell:openExternal", async (_, url) => {
+		const parsed = new URL(url);
+		if (!["https:", "http:"].includes(parsed.protocol)) throw new Error(`不允许的协议: ${parsed.protocol}`);
 		await electron.shell.openExternal(url);
 	});
 	/**
@@ -25813,8 +25829,7 @@ function setupAutoUpdater(mainWindow) {
 	/**
 	* 监听渲染进程的更新请求
 	*/
-	const { ipcMain } = require("electron");
-	ipcMain.handle("update:check", async () => {
+	electron.ipcMain.handle("update:check", async () => {
 		try {
 			return { updateInfo: (await import_main.autoUpdater.checkForUpdates())?.updateInfo ?? null };
 		} catch (error) {
@@ -25822,7 +25837,7 @@ function setupAutoUpdater(mainWindow) {
 			return { error: error.message };
 		}
 	});
-	ipcMain.handle("update:download", async () => {
+	electron.ipcMain.handle("update:download", async () => {
 		try {
 			await import_main.autoUpdater.downloadUpdate();
 			return { success: true };
@@ -25831,8 +25846,9 @@ function setupAutoUpdater(mainWindow) {
 			return { error: error.message };
 		}
 	});
-	ipcMain.handle("update:install", () => {
+	electron.ipcMain.handle("update:install", () => {
 		import_main.autoUpdater.quitAndInstall();
+		return { success: true };
 	});
 	import_src.default.info("自动更新已配置");
 }
@@ -25841,6 +25857,7 @@ function setupAutoUpdater(mainWindow) {
 import_src.default.transports.file.level = "info";
 import_src.default.info("应用启动");
 if (process.platform === "win32") electron.app.setAppUserModelId("com.githubstars.desktop");
+var mainWindow = null;
 /**
 * 应用准备就绪时初始化
 */
@@ -25849,12 +25866,17 @@ electron.app.whenReady().then(() => {
 	if (is.dev) electron.app.on("browser-window-created", (_, window) => {
 		optimizer.watchWindowShortcuts(window);
 	});
-	const mainWindow = createMainWindow();
+	mainWindow = createMainWindow();
 	setupIpcHandlers(mainWindow);
 	createTray(mainWindow);
 	setupAutoUpdater(mainWindow);
 	electron.app.on("activate", () => {
-		if (electron.BrowserWindow.getAllWindows().length === 0) createMainWindow();
+		if (electron.BrowserWindow.getAllWindows().length === 0) {
+			mainWindow = createMainWindow();
+			setupIpcHandlers(mainWindow);
+			createTray(mainWindow);
+			setupAutoUpdater(mainWindow);
+		}
 	});
 	import_src.default.info("应用初始化完成");
 });
