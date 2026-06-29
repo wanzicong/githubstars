@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '../config/config.service';
 import {
     CLONE_TIMEOUT_MS,
+    ITEM_TIMEOUT_MS,
     TASK_TIMEOUT_MS,
     SEMAPHORE_TIMEOUT_MS,
     MAX_HISTORY_TASKS,
@@ -585,7 +586,11 @@ export class CloneService {
         await this.acquire();
         let error: string | null = null;
         try {
-            await this.processItemInner(item, shallow, mirrorSource, capturedGen);
+            await withTimeout(
+                this.processItemInner(item, shallow, mirrorSource, capturedGen),
+                ITEM_TIMEOUT_MS,
+                `子项处理超时 (${ITEM_TIMEOUT_MS / 60000}分钟): ${item.fullName}`,
+            );
         } catch (e: unknown) {
             error = e instanceof Error ? e.message : String(e);
             this.logger.error(`子项处理异常: ${item.fullName}`, e);

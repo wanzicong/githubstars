@@ -526,18 +526,24 @@ export class DownloadService {
                 const { owner, repoName } = parseFullName(fullName);
 
                 // HEAD.zip 会被 GitHub 302 到 .../archive/refs/heads/{branch}.zip
-                let branch = 'main';
+                // 注意：redirect: 'manual' 只取第一个 302 的 Location，避免被 S3/CDN 地址干扰
+                let branch: string | null = null;
                 try {
                     const response = await fetch(
                         `https://github.com/${owner}/${repoName}/archive/HEAD.zip`,
-                        { method: 'HEAD', signal: AbortSignal.timeout(5_000) },
+                        { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(5_000) },
                     );
-                    const match = /\/archive\/refs\/heads\/(.+)\.zip$/i.exec(response.url);
-                    if (match?.[1]) {
-                        branch = match[1];
+                    if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
+                        const location = response.headers.get('location') || '';
+                        const match = /\/archive\/refs\/heads\/(.+)\.zip$/i.exec(location);
+                        branch = match?.[1] ?? null;
                     }
                 } catch {
-                    // HEAD.zip 失败（网络问题），回退到传统分支检测
+                    // HEAD.zip 网络失败，交给 fallback
+                }
+
+                // HEAD.zip 未获取到有效分支 → 回退到传统分支检测
+                if (!branch) {
                     branch = await this.detectDefaultBranch(owner, repoName, token);
                 }
 
