@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '../config/config.service';
 import {
     CLONE_TIMEOUT_MS,
+    TASK_TIMEOUT_MS,
     SEMAPHORE_TIMEOUT_MS,
     MAX_HISTORY_TASKS,
     RETRYABLE_CLONE_ERROR_PATTERNS,
@@ -19,7 +20,11 @@ import * as path from 'path';
 import { randomBytes } from 'crypto';
 import * as os from 'os';
 import { existsSync, readdirSync, readFileSync, unlinkSync } from 'fs';
-import { chmod, mkdir, rm, writeFile } from 'fs/promises';
+import { chmod, mkdir, rm, rename, writeFile } from 'fs/promises';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * 跨平台杀死进程树
@@ -38,6 +43,9 @@ import { chmod, mkdir, rm, writeFile } from 'fs/promises';
  * @param errorMsg  超时错误消息
  * @returns 原始 Promise 的结果，或超时后抛出错误
  */
+function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Promise<T> {
+    return Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(errorMsg)), ms))]);
+}
 
 /**
  * 延迟指定毫秒（用于重试间隔）
@@ -88,8 +96,11 @@ function getMirrorUrl(originalUrl: string, mirrorSource: MirrorSourceName = 'dir
         return originalUrl;
     }
 
-    // URL 格式：{mirrorUrl}/{originalUrl}
-    return `${source.url}/${originalUrl}`;
+    // 移除 originalUrl 的 https:// 前缀，兼容所有镜像代理的 URL 格式
+    // gh-proxy:  支持 https://gh-proxy.com/https://github.com/... 和 https://gh-proxy.com/github.com/...
+    // gitclone:  仅支持 https://gitclone.com/github.com/...（不接受双协议头）
+    const strippedUrl = originalUrl.replace(/^https:\/\//i, '');
+    return `${source.url}/${strippedUrl}`;
 }
 
 @Injectable()
@@ -257,7 +268,33 @@ export class CloneService {
         }
 
         // 规范化路径（去除尾部分隔符，统一斜杠方向）
-        const normalizedTargetDir = path.normalize(targetDir).replace(/[\/\\]$/, '');
+        const normalizedTargetDir = path.normalize(targetDir).replace(/[\\/]$/, '');
+
+        // 安全校验：检查是否尝试写入系统关键目录
+        // 统一使用 / 分隔符进行比较，兼容 Windows（path.normalize 会转 \ 为系统分隔符）
+        const compareDir = normalizedTargetDir.toLowerCase().replace(/\\/g, '/');
+        const SYSTEM_FORBIDDEN_PREFIXES = [
+            'c:/windows',
+            'c:/program files',
+            'c:/program files (x86)',
+            '/bin',
+            '/boot',
+            '/dev',
+            '/etc',
+            '/lib',
+            '/lib64',
+            '/proc',
+            '/root',
+            '/sbin',
+            '/sys',
+            '/usr',
+            '/var',
+        ];
+        for (const prefix of SYSTEM_FORBIDDEN_PREFIXES) {
+            if (compareDir === prefix || compareDir.startsWith(prefix + '/')) {
+                return { success: false, message: `目标目录不能为系统关键目录: ${normalizedTargetDir}` };
+            }
+        }
 
         // 查询仓库信息
         const repos = await this.prisma.githubRepo.findMany({
@@ -444,7 +481,11 @@ export class CloneService {
         this.lockAcquiredAt = new Date();
         this.currentTaskId = taskId;
         try {
-            await this.executeTaskInner(taskId);
+            await withTimeout(
+                this.executeTaskInner(taskId),
+                TASK_TIMEOUT_MS,
+                `克隆任务超时 (${TASK_TIMEOUT_MS / 60000}分钟): taskId=${Number(taskId)}`,
+            );
         } catch (e: unknown) {
             this.logger.error(`克隆任务执行异常: taskId=${Number(taskId)}`, e);
             try {
@@ -580,10 +621,11 @@ export class CloneService {
      * @param targetPath 待校验的路径
      * @returns 路径是否安全
      */
-    private isPathWithinTargetDir(targetPath: string): boolean {
-        if (!this.targetDir) return true;
+    private isPathWithinTargetDir(targetPath: string, targetDir?: string): boolean {
+        const effectiveTarget = targetDir ?? this.targetDir;
+        if (!effectiveTarget) return true;
         const resolved = path.resolve(targetPath);
-        const target = path.resolve(this.targetDir);
+        const target = path.resolve(effectiveTarget);
         return resolved.startsWith(target + path.sep) || resolved === target;
     }
 
@@ -602,6 +644,54 @@ export class CloneService {
      * - Git 内部错误：删除目录后重试 1 次
      * - 网络错误：指数退避重试最多 3 次（5s → 10s → 20s，加随机抖动）
      */
+
+    /**
+     * 处理已存在的仓库目录：验证 → 修复 → 删除重克隆
+     *
+     * 提取自 executeClone，降低主方法的认知复杂度。
+     *
+     * @returns 操作结果；若目录不存在或已删除则返回 null（调用方继续执行 clone）
+     */
+    private async handleExistingRepo(
+        localPath: string,
+        item: { id: bigint; fullName: string | null; cloneUrl: string | null },
+        finalUrl: string,
+        shallow: boolean,
+        githubToken?: string,
+    ): Promise<{ success: boolean; error?: string } | null> {
+        if (!existsSync(localPath)) return null;
+
+        const validation = await this.validateExistingRepo(localPath, item.cloneUrl!);
+        if (validation.success) {
+            this.logger.log(`目录已存在且验证通过，执行 git pull 更新: ${item.fullName}`);
+            return await this.executeGitPull(localPath, item.fullName, githubToken);
+        }
+
+        this.logger.warn(`仓库验证失败，尝试修复: ${item.fullName} | ${validation.error}`);
+        const repairResult = await this.tryRepairRepo(localPath, item.cloneUrl!, item.fullName, githubToken);
+        if (repairResult.success) {
+            this.logger.log(`仓库修复成功，执行 git pull 更新: ${item.fullName}`);
+            return await this.executeGitPull(localPath, item.fullName, githubToken);
+        }
+
+        this.logger.warn(`仓库修复失败，尝试删除重克隆: ${item.fullName} | ${repairResult.error}`);
+        const dirDeleted = await this.removeCloneDir(localPath);
+        if (!dirDeleted && existsSync(localPath)) {
+            const altPath = this.findAlternateClonePath(localPath);
+            this.logger.warn(`原路径无法释放，使用备用路径: ${item.fullName} | ${localPath} → ${altPath}`);
+            await this.prisma.cloneTaskItem.update({
+                where: { id: item.id },
+                data: { localPath: altPath },
+            });
+            const parentDir = path.dirname(altPath);
+            await mkdir(parentDir, { recursive: true });
+            return await this.executeGitClone(finalUrl, altPath, shallow, item.fullName, githubToken);
+        }
+
+        // 目录已删除，返回 null 让调用方继续 clone
+        return null;
+    }
+
     private async executeClone(
         item: { id: bigint; fullName: string | null; localPath: string | null; cloneUrl: string | null },
         shallow: boolean,
@@ -609,7 +699,6 @@ export class CloneService {
     ): Promise<{ success: boolean; error?: string }> {
         const localPath = item.localPath as string;
 
-        // 路径安全校验
         if (!this.isPathWithinTargetDir(localPath)) {
             return { success: false, error: `路径安全校验失败: ${localPath} 不在目标目录内` };
         }
@@ -620,29 +709,8 @@ export class CloneService {
         const { finalUrl, githubToken } = await this.prepareCloneUrl(item.cloneUrl!, mirrorSource, item.fullName);
 
         try {
-            // 检查目录是否已存在
-            if (existsSync(localPath)) {
-                const validation = await this.validateExistingRepo(localPath, item.cloneUrl!);
-                if (validation.success) {
-                    this.logger.log(`目录已存在且验证通过，执行 git pull 更新: ${item.fullName}`);
-                    return await this.executeGitPull(localPath, item.fullName, githubToken);
-                }
-
-                // 验证失败 -> 尝试修复仓库（删除 index.lock / git init / 修正 URL）
-                this.logger.warn(`仓库验证失败，尝试修复: ${item.fullName} | ${validation.error}`);
-                const repairResult = await this.tryRepairRepo(localPath, item.cloneUrl!, item.fullName, githubToken);
-
-                if (repairResult.success) {
-                    this.logger.log(`仓库修复成功，执行 git pull 更新: ${item.fullName}`);
-                    return await this.executeGitPull(localPath, item.fullName, githubToken);
-                }
-
-                this.logger.warn(`仓库修复失败，尝试删除重克隆: ${item.fullName} | ${repairResult.error}`);
-                const dirDeleted = await this.removeCloneDir(localPath);
-                if (!dirDeleted && existsSync(localPath)) {
-                    return { success: false, error: `无法删除已有目录，请手动删除后重试: ${localPath}` };
-                }
-            }
+            const existingResult = await this.handleExistingRepo(localPath, item, finalUrl, shallow, githubToken);
+            if (existingResult) return existingResult;
 
             const parentDir = path.dirname(localPath);
             await mkdir(parentDir, { recursive: true });
@@ -679,22 +747,56 @@ export class CloneService {
      * @param fullName     仓库全名（用于日志，需要镜像时打印）
      * @returns 包含最终 URL 和是否使用镜像的标记
      */
+
+    /**
+     * 反向解包代理 URL：如果 cloneUrl 已被包装为代理地址且 Token 已配置，
+     * 需要还原为直连 URL，否则代理服务器无法识别 GitHub Token。
+     *
+     * @param cloneUrl 数据库中的 clone URL（可能已被代理包装）
+     * @returns 还原后的直连 URL，或原 URL（非代理地址时）
+     */
+    private stripProxyUrl(cloneUrl: string): string {
+        for (const source of GITHUB_MIRROR_SOURCES) {
+            if (source.url && cloneUrl.startsWith(source.url + '/')) {
+                // 新格式: https://gh-proxy.com/github.com/owner/repo.git → github.com/owner/repo.git
+                // 需要补回 https:// 前缀得到完整的直连 URL
+                let stripped = cloneUrl.substring(source.url.length + 1);
+                if (!stripped.startsWith('https://') && !stripped.startsWith('http://')) {
+                    stripped = 'https://' + stripped;
+                }
+                return stripped;
+            }
+        }
+        return cloneUrl;
+    }
+
     private async prepareCloneUrl(
         cloneUrl: string,
         mirrorSource: MirrorSourceName,
         fullName?: string | null,
     ): Promise<{ finalUrl: string; shouldUseMirror: boolean; githubToken?: string }> {
-        // 不在 URL 中注入 Token（避免 Token 出现在命令行参数中），
-        // Token 通过 GIT_ASKPASS 环境变量传递给 git 命令
         const githubToken = await this.config.getValue('github.token');
 
         const shouldUseMirror = mirrorSource !== 'direct' && !githubToken;
 
-        // cloneUrl 可能已在 createTask 阶段被包装为代理地址（镜像源模式下）
-        // 检测是否已被代理，避免 getMirrorUrl 二次包装导致双代理
-        const isAlreadyProxied = shouldUseMirror && GITHUB_MIRROR_SOURCES.some((s) => s.url && cloneUrl.startsWith(s.url + '/'));
+        let finalUrl = cloneUrl;
 
-        const finalUrl = shouldUseMirror && !isAlreadyProxied ? getMirrorUrl(cloneUrl, mirrorSource) : cloneUrl;
+        // Token 已配置 + cloneUrl 是代理地址 → 还原为直连
+        if (githubToken && mirrorSource !== 'direct') {
+            const stripped = this.stripProxyUrl(cloneUrl);
+            if (stripped !== cloneUrl) {
+                finalUrl = stripped;
+                this.logger.log(`检测到 Token 已配置，从代理 URL 还原为直连: ${mirrorSource} | ${fullName ?? cloneUrl}`);
+            }
+        }
+
+        // 无 Token + 需要镜像代理 + 尚未被代理 → 包装为代理 URL
+        if (shouldUseMirror) {
+            const isAlreadyProxied = GITHUB_MIRROR_SOURCES.some((s) => s.url && cloneUrl.startsWith(s.url + '/'));
+            if (!isAlreadyProxied) {
+                finalUrl = getMirrorUrl(cloneUrl, mirrorSource);
+            }
+        }
 
         if (shouldUseMirror && fullName) {
             this.logger.log(`使用镜像代理: ${mirrorSource} | ${fullName}`);
@@ -811,6 +913,14 @@ export class CloneService {
         githubToken?: string,
     ): Promise<{ success: boolean; error?: string }> {
         const parentDir = path.dirname(localPath);
+
+        // Windows: 预创建目标目录，避免 git clone --depth 1 时 .git 子目录创建竞态
+        // 症状: "fatal: Unable to create '.../.git/shallow.lock': No such file or directory"
+        // 原因: git 在 Windows 上可能先尝试创建 .git 内文件，但 .git 目录尚未被文件系统感知
+        if (!existsSync(localPath)) {
+            await mkdir(localPath, { recursive: true });
+        }
+
         const { git, cleanup } = await this.createGit({
             baseDir: parentDir,
             timeoutMs: CLONE_TIMEOUT_MS,
@@ -872,9 +982,24 @@ export class CloneService {
             }
 
             // 正常分支：显式指定远程和分支名
-            await git.pull(['--ff-only', '--no-edit', 'origin', branchName]);
-            this.logger.log(`git pull 成功: ${fullName}`);
-            return { success: true };
+            try {
+                await git.pull(['--ff-only', '--no-edit', 'origin', branchName]);
+                this.logger.log(`git pull 成功: ${fullName}`);
+                return { success: true };
+            } catch (pullErr: unknown) {
+                const pullErrorMsg = pullErr instanceof Error ? pullErr.message : String(pullErr);
+                // 非 fast-forward 错误：本地分支已分歧，强制重置到远程状态后重试
+                if (pullErrorMsg.includes('Not possible to fast-forward') || pullErrorMsg.includes('not possible to fast-forward')) {
+                    this.logger.warn(`git pull --ff-only 失败（历史分歧），执行 reset --hard 后重试: ${fullName}`);
+                    await git.reset(['--hard', `origin/${branchName}`]);
+                    await git.pull(['--ff-only', '--no-edit', 'origin', branchName]);
+                    this.logger.log(`git pull 成功（reset 后）: ${fullName}`);
+                    return { success: true };
+                }
+                // 其他 pull 错误
+                this.logger.error(`git pull 失败: ${fullName}`, pullErr);
+                return { success: false, error: `git pull 失败: ${pullErrorMsg.substring(0, 1900)}` };
+            }
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? e.message : String(e);
             this.logger.error(`git pull 失败: ${fullName}`, e);
@@ -1012,13 +1137,6 @@ export class CloneService {
         fullName: string | null,
         githubToken?: string,
     ): Promise<{ success: boolean; error?: string }> {
-        let askpassPath: string | undefined;
-        const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
-        if (githubToken) {
-            askpassPath = await this.writeAskpassScript(githubToken);
-            env.GIT_ASKPASS = askpassPath;
-        }
-
         const gitDir = path.join(localPath, '.git');
 
         try {
@@ -1026,22 +1144,22 @@ export class CloneService {
             this.repairLockFile(gitDir, fullName);
 
             // Step 2: 如果 .git 缺失，用 git init 重建
-            const initError = await this.repairGitInit(localPath, gitDir, fullName);
+            const initError = await this.repairGitInit(localPath, gitDir, fullName, githubToken);
             if (initError) return { success: false, error: initError };
 
             // Step 3: 修正 remote origin URL（镜像源/直连切换可能导致 URL 不匹配）
-            await this.repairRemoteUrl(localPath, expectedCloneUrl, fullName);
+            await this.repairRemoteUrl(localPath, expectedCloneUrl, fullName, githubToken);
 
             // Step 4: 重新验证仓库完整性
             const revalidation = await this.validateExistingRepo(localPath, expectedCloneUrl);
             if (!revalidation.success) return revalidation;
 
             // Step 5: 用 git fetch --prune 验证远程可达并更新 refs
-            await this.repairFetchOrigin(localPath, fullName);
+            await this.repairFetchOrigin(localPath, fullName, githubToken);
 
             return { success: true };
         } finally {
-            if (askpassPath) this.cleanupAskpassScript(askpassPath);
+            // 子步骤各自管理自己的 askpass 临时文件，此处无需清理
         }
     }
 
@@ -1061,15 +1179,58 @@ export class CloneService {
     }
 
     /**
-     * 修复子步骤 2：用 git init 重建缺失的 .git 目录
+     * 修复子步骤 2：确保 .git 目录存在且可用
+     *
+     * 三种情况：
+     * - .git 不存在 → git init 重建
+     * - .git 存在且可用 → 跳过
+     * - .git 存在但损坏（如克隆中断留下的残骸）→ 删除后 git init 重建
+     *
+     * 第三种情况是本次修复的核心：Windows 上 git clone 被超时强制杀死后，
+     * 残留的 .git 目录结构不完整（rev-parse 失败），之前的逻辑会跳过 repairGitInit
+     * 导致后续修复全部失败（remote/get-url 不是 git 仓库报错）。
      *
      * @returns 错误消息，无错误返回 null
      */
-    private async repairGitInit(localPath: string, gitDir: string, fullName: string | null): Promise<string | null> {
-        if (existsSync(gitDir)) return null;
+    private async repairGitInit(localPath: string, gitDir: string, fullName: string | null, githubToken?: string): Promise<string | null> {
+        if (!existsSync(gitDir)) {
+            // .git 不存在，直接 init
+            return await this.doGitInit(localPath, fullName, githubToken);
+        }
+
+        // .git 存在，检查是否可用
+        const { git: checkGit, cleanup: checkCleanup } = await this.createGit({
+            baseDir: localPath,
+            timeoutMs: 10_000,
+            githubToken,
+        });
+        try {
+            await checkGit.revparse(['--git-dir']);
+            // rev-parse 成功 → .git 可用，无需重建
+            return null;
+        } catch {
+            // rev-parse 失败 → .git 目录损坏，删除后重建
+            this.logger.warn(`修复: .git 目录存在但结构损坏，删除后重建 | ${fullName}`);
+            try {
+                await rm(gitDir, { recursive: true, force: true });
+            } catch (rmErr: unknown) {
+                const rmMsg = rmErr instanceof Error ? rmErr.message : String(rmErr);
+                return `仓库修复失败（无法删除损坏的 .git 目录）: ${rmMsg}`;
+            }
+            return await this.doGitInit(localPath, fullName, githubToken);
+        } finally {
+            checkCleanup();
+        }
+    }
+
+    /**
+     * 执行 git init（从 repairGitInit 提取）
+     */
+    private async doGitInit(localPath: string, fullName: string | null, githubToken?: string): Promise<string | null> {
         const { git, cleanup } = await this.createGit({
             baseDir: localPath,
             timeoutMs: 10_000,
+            githubToken,
         });
         try {
             await git.init();
@@ -1087,10 +1248,16 @@ export class CloneService {
      * 修复子步骤 3：修正 remote origin URL
      * 镜像源和直连模式切换后，git config 中的 URL 可能不匹配，需要修正。
      */
-    private async repairRemoteUrl(localPath: string, expectedCloneUrl: string, fullName: string | null): Promise<void> {
+    private async repairRemoteUrl(
+        localPath: string,
+        expectedCloneUrl: string,
+        fullName: string | null,
+        githubToken?: string,
+    ): Promise<void> {
         const { git, cleanup } = await this.createGit({
             baseDir: localPath,
             timeoutMs: 10_000,
+            githubToken,
         });
 
         try {
@@ -1119,10 +1286,11 @@ export class CloneService {
      * 修复子步骤 4：git fetch --prune 验证远程可达并更新 refs
      * fetch 失败不阻塞，pull 阶段会带上完整认证重试。
      */
-    private async repairFetchOrigin(localPath: string, fullName: string | null): Promise<void> {
+    private async repairFetchOrigin(localPath: string, fullName: string | null, githubToken?: string): Promise<void> {
         const { git, cleanup } = await this.createGit({
             baseDir: localPath,
             timeoutMs: CLONE_TIMEOUT_MS,
+            githubToken,
         });
 
         try {
@@ -1209,6 +1377,7 @@ export class CloneService {
         // 根据子项实际状态实时计算数量
         const completedItems = task.items.filter((i) => i.status === 'COMPLETED').length;
         const failedItems = task.items.filter((i) => i.status === 'FAILED').length;
+        const processingItems = task.items.filter((i) => i.status === 'PROCESSING').length;
         const total = task.items.length;
         const processed = completedItems + failedItems;
 
@@ -1218,7 +1387,14 @@ export class CloneService {
             status = CloneService.computeFinalTaskStatus(completedItems, failedItems, total);
         }
 
+        // 进度计算：对于 PENDING（重试后）场景，已完成项也应计入进度
+        const progress = total > 0 ? Math.round((processed * 100) / total) : 0;
+
         const failedDetails = task.items.filter((i) => i.status === 'FAILED').map((i) => ({ fullName: i.fullName, error: i.errorMessage }));
+
+        const processingDetails = task.items
+            .filter((i) => i.status === 'PROCESSING')
+            .map((i) => ({ fullName: i.fullName, localPath: i.localPath }));
 
         return {
             success: true,
@@ -1229,12 +1405,14 @@ export class CloneService {
             totalItems: total,
             completedItems,
             failedItems,
+            processingItems,
             skippedItems: 0,
-            progress: total > 0 ? Math.round((processed * 100) / total) : 0,
+            progress,
             createdAt: task.createdAt?.toISOString(),
             startedAt: task.startedAt?.toISOString(),
             finishedAt: task.finishedAt?.toISOString(),
             failedDetails,
+            processingDetails,
             skippedDetails: [],
             allItems: task.items,
         };
@@ -1247,6 +1425,10 @@ export class CloneService {
      * 重试前会删除原目录。
      */
     async retryFailed(taskId: number) {
+        if (this.running) {
+            return { success: false, message: '当前有任务正在执行，请稍后再试' };
+        }
+
         const task = await this.prisma.cloneTask.findUnique({
             where: { id: BigInt(taskId) },
             select: { id: true, targetDir: true },
@@ -1254,8 +1436,7 @@ export class CloneService {
 
         if (!task) return { success: false, message: '任务不存在' };
 
-        // 设置目标目录，确保 removeCloneDir 的路径安全校验使用正确的 targetDir
-        this.targetDir = task.targetDir;
+        const taskTargetDir = task.targetDir;
 
         const items = await this.prisma.cloneTaskItem.findMany({
             where: {
@@ -1266,7 +1447,13 @@ export class CloneService {
 
         if (!items.length) return { success: false, message: '没有需要重试的项' };
 
-        // 先执行数据库事务（原子操作），确保状态一致性
+        // 先删除旧目录，再执行数据库事务（原子操作）
+        // 删除目录必须在事务之前完成，否则调度器 1 秒 tick 可能 pick up 任务并开始克隆，
+        // 导致后续目录删除与进行中的克隆产生竞态（TOCTOU）
+        for (const item of items) {
+            await this.removeCloneDir(item.localPath, taskTargetDir);
+        }
+
         await this.prisma.$transaction([
             // 重置子项状态为 PENDING
             this.prisma.cloneTaskItem.updateMany({
@@ -1286,11 +1473,6 @@ export class CloneService {
                 },
             }),
         ]);
-
-        // 事务成功后再删除目录（文件系统操作无法回滚，失败仅记录日志）
-        for (const item of items) {
-            await this.removeCloneDir(item.localPath);
-        }
 
         this.logger.log(`克隆任务重试: taskId=${taskId} failed=${items.length}`);
         return { success: true, taskId, message: `已重置 ${items.length} 项失败项` };
@@ -1324,15 +1506,14 @@ export class CloneService {
             return { success: false, message: '任务不存在' };
         }
 
-        // 如果当前有任务在执行中，强制释放锁
-        // 这是为了防止任务卡在 PROCESSING 状态无法恢复
-        if (this.running) {
-            this.logger.warn(`重置任务时检测到有任务正在执行，强制释放锁: currentTaskId=${this.currentTaskId}, targetTaskId=${taskId}`);
+        // 仅当正在执行的任务就是当前要重置的任务时，才强制释放锁
+        // 避免误杀不相关的正在运行的任务
+        if (this.running && this.currentTaskId === BigInt(taskId)) {
+            this.logger.warn(`重置正在执行的任务，强制释放锁: taskId=${taskId}`);
             this.forceReleaseLock();
+        } else if (this.running) {
+            this.logger.warn(`重置操作跳过锁释放：当前运行的是 taskId=${this.currentTaskId}，与目标 taskId=${taskId} 不同`);
         }
-
-        // 设置目标目录，用于路径安全校验
-        this.targetDir = task.targetDir;
 
         // 查询失败项的目录路径（用于后续删除）
         const failedItems = await this.prisma.cloneTaskItem.findMany({
@@ -1342,6 +1523,14 @@ export class CloneService {
             },
             select: { id: true, localPath: true, fullName: true },
         });
+
+        const taskTargetDir = task.targetDir;
+
+        // 先删除失败项的目录，再执行事务
+        // 防止调度器在事务提交后 1 秒内 pick up 任务并开始克隆，产生 TOCTOU 竞态
+        for (const item of failedItems) {
+            await this.removeCloneDir(item.localPath, taskTargetDir);
+        }
 
         // 执行事务：重置任务和所有子项状态
         await this.prisma.$transaction([
@@ -1363,11 +1552,6 @@ export class CloneService {
                 },
             }),
         ]);
-
-        // 事务成功后删除失败项的目录（文件系统操作无法回滚，失败仅记录日志）
-        for (const item of failedItems) {
-            await this.removeCloneDir(item.localPath);
-        }
 
         this.logger.log(`克隆任务已重置: taskId=${taskId} previousStatus=${task.status} deletedDirs=${failedItems.length}`);
         return { success: true, taskId, message: `任务已重置，已清理 ${failedItems.length} 个失败目录` };
@@ -1398,14 +1582,17 @@ export class CloneService {
         if (!task) return { success: false, message: '任务不存在' };
         if (!item) return { success: false, message: '未找到该任务项' };
 
-        // 设置目标目录，确保 removeCloneDir 的路径安全校验使用正确的 targetDir
-        this.targetDir = task.targetDir;
+        const taskTargetDir = task.targetDir;
 
         if (item.status === 'PROCESSING') {
             return { success: false, message: '任务正在执行中，无法重试' };
         }
 
-        // 先执行数据库事务（原子操作），确保状态一致性
+        // 先删除旧目录，再执行数据库事务
+        // 防止调度器在事务提交后 pick up 此任务时开始克隆到旧目录，产生 TOCTOU 竞态
+        await this.removeCloneDir(item.localPath, taskTargetDir);
+
+        // 执行数据库事务（原子操作），确保状态一致性
         // 在事务内检查状态，避免 TOCTOU 竞态条件
         try {
             await this.prisma.$transaction(async (tx) => {
@@ -1426,34 +1613,28 @@ export class CloneService {
             return { success: false, message: msg };
         }
 
-        // 事务成功后再删除目录（文件系统操作无法回滚，失败仅记录日志）
-        await this.removeCloneDir(item.localPath);
-
         this.logger.log(`克隆项重试: taskId=${taskId} fullName=${fullName}`);
         return { success: true, message: `已重置 ${fullName}，等待重新执行` };
     }
 
     /**
-     * 删除克隆目录（安全操作，忽略不存在的情况）
-     */
-    /**
-     * 删除克隆目录（带重试机制）
+     * 删除克隆目录（三层兜底策略）
      *
-     * 在 Windows 上，残留的 git 进程或杀毒软件可能锁定文件导致删除失败，
-     * 此时等待 1-2 秒后重试通常可以成功。
+     * Layer 1 — 直接删除 + 重试（最多 3 次，间隔递增）
+     * Layer 2 — 找到并杀死占用该目录的 git 进程，再重试删除
+     * Layer 3 — 重命名目录（rename 比 delete 更不容易被 Windows 锁），
+     *           原路径被腾空后返回 true，后续克隆到原路径
      *
      * @param localPath 要删除的目录路径
-     * @returns true=删除成功 / false=删除失败（重试后仍失败）
+     * @returns true=原路径已可用（删除或重命名成功） / false=所有兜底方案均失败
      */
-    private async removeCloneDir(localPath: string | null): Promise<boolean> {
-        if (!localPath) return true;
 
-        // 安全校验：只允许删除目标目录内的路径
-        if (this.targetDir && !this.isPathWithinTargetDir(localPath)) {
-            this.logger.warn(`拒绝删除目标目录外的路径: ${localPath}`);
-            return false;
-        }
-
+    /**
+     * Layer 1: 直接删除 + 最多 3 次重试
+     *
+     * @returns true=删除成功，false=需要尝试 Layer 2
+     */
+    private async removeCloneDirLayer1(localPath: string): Promise<boolean> {
         const MAX_RETRIES = 3;
         for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             try {
@@ -1462,24 +1643,175 @@ export class CloneService {
                 return true;
             } catch (e: unknown) {
                 const msg = e instanceof Error ? e.message : String(e);
-                const isLastRetry = attempt === MAX_RETRIES - 1;
-
-                // 检查目录是否真的被删了（rm 报错不等于目录没删，某些权限错误可能已经部分删除了）
                 if (!existsSync(localPath)) {
-                    this.logger.log(`/!\\ rm 报错但目录已不存在，视为删除成功: ${localPath} | ${msg}`);
+                    this.logger.log(`rm 报错但目录已不存在，视为删除成功: ${localPath} | ${msg}`);
                     return true;
                 }
-
-                if (isLastRetry) {
-                    this.logger.warn(`删除克隆目录失败（已重试 ${MAX_RETRIES} 次）: ${localPath} | ${msg}`);
-                    return false;
+                if (attempt < MAX_RETRIES - 1) {
+                    this.logger.warn(
+                        `删除克隆目录失败（第${attempt + 1}次）: ${localPath} | ${msg.substring(0, 150)}，${attempt + 1}秒后重试`,
+                    );
+                    await delay((attempt + 1) * 1000);
                 }
-
-                this.logger.warn(`删除克隆目录失败（第${attempt + 1}次）: ${localPath} | ${msg}，${attempt + 1}秒后重试`);
-                await delay((attempt + 1) * 1000);
             }
         }
         return false;
+    }
+
+    /**
+     * Layer 2: 杀死占用进程后重试删除
+     *
+     * @returns true=删除成功，false=需要尝试 Layer 3
+     */
+    private async removeCloneDirLayer2(localPath: string): Promise<boolean> {
+        const killed = await this.killGitProcessesInDir(localPath);
+        if (killed === 0) return false;
+
+        await delay(2000);
+        try {
+            await rm(localPath, { recursive: true, force: true });
+            this.logger.log(`杀死 ${killed} 个进程后删除成功: ${localPath}`);
+            return true;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (!existsSync(localPath)) {
+                this.logger.log(`杀死进程后 rm 报错但目录已不存在: ${localPath}`);
+                return true;
+            }
+            this.logger.warn(`杀死进程后仍无法删除: ${localPath} | ${msg.substring(0, 150)}`);
+            return false;
+        }
+    }
+
+    /**
+     * Layer 3: 重命名目录腾出原路径
+     *
+     * rename 只修改目录元数据，Windows 上成功率远高于 rm。
+     *
+     * @returns true=原路径已可用（重命名成功），false=所有兜底方案均失败
+     */
+    private async removeCloneDirLayer3(localPath: string): Promise<boolean> {
+        const timestamp = Date.now();
+        const renamedPath = `${localPath}.conflict.${timestamp}`;
+        try {
+            await rename(localPath, renamedPath);
+            this.logger.warn(`无法删除原目录，已重命名为: ${renamedPath} | 原路径已腾空可供克隆`);
+            return true;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.error(`重命名也失败，所有兜底方案耗尽: ${localPath} | ${msg.substring(0, 150)}`);
+            return false;
+        }
+    }
+
+    private async removeCloneDir(localPath: string | null, targetDir?: string): Promise<boolean> {
+        if (!localPath) return true;
+
+        if (!this.isPathWithinTargetDir(localPath, targetDir)) {
+            this.logger.warn(`拒绝删除目标目录外的路径: ${localPath}`);
+            return false;
+        }
+
+        if (!existsSync(localPath)) return true;
+
+        // ─── Layer 1: 直接删除 + 重试 ───
+        if (await this.removeCloneDirLayer1(localPath)) return true;
+
+        // ─── Layer 2: 杀死占用进程后重试删除 ───
+        if (await this.removeCloneDirLayer2(localPath)) return true;
+
+        // ─── Layer 3: 重命名目录腾出原路径 ───
+        if (await this.removeCloneDirLayer3(localPath)) return true;
+
+        return false;
+    }
+
+    /**
+     * 查找并杀死在指定目录中工作的残留 git 进程（Layer 2 辅助方法）
+     *
+     * Windows: 通过 PowerShell Get-CimInstance 查找 git.exe，匹配命令行中的目录路径
+     * Unix:   通过 pgrep -f 查找，匹配命令行中的目录路径
+     *
+     * @param targetPath 目标目录路径
+     * @returns 杀死的进程数
+     */
+    private async killGitProcessesInDir(targetPath: string): Promise<number> {
+        try {
+            if (process.platform === 'win32') {
+                return await this.killGitProcessesWindows(targetPath);
+            }
+            return await this.killGitProcessesUnix(targetPath);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.warn(`查找残留 git 进程失败（跳过）: ${msg.substring(0, 200)}`);
+            return 0;
+        }
+    }
+
+    /**
+     * Windows: 通过 PowerShell 查找并杀死 git 进程
+     */
+    private async killGitProcessesWindows(targetPath: string): Promise<number> {
+        // 转义路径中的反斜杠（PowerShell 中 \\ 表示一个字面反斜杠）
+        const escapedPath = targetPath.replace(/\\/g, '\\\\');
+        const psScript = `
+            Get-CimInstance Win32_Process -Filter "name='git.exe'" |
+            Where-Object { $_.CommandLine -like '*${escapedPath}*' } |
+            ForEach-Object {
+                Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+                Write-Host $_.ProcessId
+            }
+        `;
+
+        const { stdout } = await execFileAsync(
+            'powershell',
+            ['-NoProfile', '-NonInteractive', '-Command', psScript.replace(/\n/g, ' ').trim()],
+            { timeout: 15000, windowsHide: true },
+        );
+
+        const pids = stdout.trim().split(/\s+/).filter(Boolean);
+        if (pids.length > 0) {
+            this.logger.log(`已杀死 ${pids.length} 个残留 git 进程 (PID: ${pids.join(', ')})，路径: ${targetPath}`);
+        }
+        return pids.length;
+    }
+
+    /**
+     * Unix: 通过 pgrep + kill 查找并杀死 git 进程
+     */
+    private async killGitProcessesUnix(targetPath: string): Promise<number> {
+        try {
+            const { stdout } = await execFileAsync('pgrep', ['-f', `git.*${targetPath}`], { timeout: 5000 });
+            const pids = stdout.trim().split('\n').filter(Boolean);
+            if (pids.length > 0) {
+                await execFileAsync('kill', ['-9', ...pids], { timeout: 5000 });
+                this.logger.log(`已杀死 ${pids.length} 个残留 git 进程 (PID: ${pids.join(', ')})，路径: ${targetPath}`);
+            }
+            return pids.length;
+        } catch {
+            // pgrep 找不到进程时返回非零 exit code，这是正常的
+            return 0;
+        }
+    }
+
+    /**
+     * 查找备用克隆路径（Layer 3 辅助方法）
+     *
+     * 当原路径无法释放时，在原路径基础上追加 .v2, .v3, ... 后缀，
+     * 返回第一个不存在的路径。
+     *
+     * @param originalPath 原始路径
+     * @returns 可用的备用路径
+     */
+    private findAlternateClonePath(originalPath: string): string {
+        for (let i = 2; i <= 99; i++) {
+            const altPath = `${originalPath}.v${i}`;
+            if (!existsSync(altPath)) {
+                return altPath;
+            }
+        }
+        // 极端情况：99 个备用路径全部占用，使用时间戳确保唯一性
+        return `${originalPath}.${Date.now()}`;
     }
 
     /**

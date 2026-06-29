@@ -4,25 +4,34 @@ export const CLONE_CONCURRENCY_OPTIONS = [5, 10, 20, 50, 80] as const;
 /** 默认并发数 */
 export const DEFAULT_CONCURRENCY = 5;
 
-/** 单个仓库克隆超时（毫秒）：3 分钟 */
-export const CLONE_TIMEOUT_MS = 3 * 60 * 1000;
+/** 单个仓库克隆超时（毫秒）：15 分钟
+ * 大仓库（如 DrKLO/Telegram 40GB+）浅克隆仍需 >10 分钟
+ * simple-git timeout.block 时间内无 stdout 输出即视为超时
+ */
+export const CLONE_TIMEOUT_MS = 15 * 60 * 1000;
 
-/** 单个子项处理超时（毫秒）：17 分钟（含数据库操作，留 2 分钟余量给 DB 写入） */
-export const ITEM_TIMEOUT_MS = 17 * 60 * 1000;
+/** 单个子项处理超时（毫秒）：30 分钟（含克隆 + 网络重试 + DB 写入） */
+export const ITEM_TIMEOUT_MS = 30 * 60 * 1000;
 
-/** 整体任务超时（毫秒）：1 小时 */
-export const TASK_TIMEOUT_MS = 60 * 60 * 1000;
+/** 整体任务超时（毫秒）：90 分钟
+ * 200仓库/50并发，最坏情况 4 批 × 20min(大仓库含重试) = 80分钟
+ * STUCK_TASK_THRESHOLD 应大于 TASK_TIMEOUT
+ */
+export const TASK_TIMEOUT_MS = 90 * 60 * 1000;
 
-/** 信号量获取超时（毫秒）：15 分钟 */
-export const SEMAPHORE_TIMEOUT_MS = 15 * 60 * 1000;
+/** 信号量获取超时（毫秒）：60 分钟
+ * 200个仓库/50并发下，最后一批需等待 3 × ITEM_TIMEOUT(30min) = 90分钟
+ * 设置为60分钟折中，极端大仓库可手动重试
+ */
+export const SEMAPHORE_TIMEOUT_MS = 60 * 60 * 1000;
 
-/** 卡住任务检测阈值（毫秒）：65 分钟（超过 TASK_TIMEOUT_MS） */
-export const STUCK_TASK_THRESHOLD_MS = 65 * 60 * 1000;
+/** 卡住任务检测阈值（毫秒）：100 分钟（超过 TASK_TIMEOUT_MS=90min） */
+export const STUCK_TASK_THRESHOLD_MS = 100 * 60 * 1000;
 
-/** 锁超时阈值（毫秒）：70 分钟（超过 STUCK_TASK_THRESHOLD_MS）
+/** 锁超时阈值（毫秒）：110 分钟（超过 STUCK_TASK_THRESHOLD_MS）
  * 用于检测 running 锁是否卡住，如果锁持有超过此时间，强制释放
  */
-export const LOCK_TIMEOUT_MS = 70 * 60 * 1000;
+export const LOCK_TIMEOUT_MS = 110 * 60 * 1000;
 
 /** 长时间 PENDING 任务阈值（毫秒）：5 分钟
  * 任务创建超过此时间仍为 PENDING，说明可能卡住
@@ -78,10 +87,16 @@ export const RETRYABLE_CLONE_ERROR_PATTERNS = [
     'initial ref transaction called with existing refs', // 同上，refs 残留
     'remote did not send all necessary objects', // 传输不完整，通常是网络中断
     'index file corrupt', // 索引文件损坏
+    'Unable to create', // Windows 上 git clone --depth 1 的 .git 目录创建竞态 (shallow.lock 等)
+    'not a git repository', // 目录中有残留的损坏 .git
+    'could not lock config file', // Windows 上 .git/config 文件锁竞态
+    'RPC failed', // 传输中断（curl 18/56），网络不稳定导致
+    'early EOF', // 连接提前关闭，网络不稳定导致
 
     // 网络连接错误（最常见的失败原因）
     'Failed to connect to github.com', // GitHub 连接失败
     'Could not connect to server', // 无法连接到服务器
+    'Could not resolve host', // DNS 解析失败（国内环境常见，可恢复）
     'Connection timed out', // 连接超时
     'SSL_ERROR_SYSCALL', // SSL 底层错误（通常是网络中断）
     'OpenSSL SSL_read: Connection was reset', // 连接被重置
@@ -96,8 +111,11 @@ export const RETRYABLE_CLONE_ERROR_PATTERNS = [
 export const NETWORK_ERROR_PATTERNS = [
     'Failed to connect to github.com',
     'Could not connect to server',
+    'Could not resolve host',
     'Connection timed out',
     'SSL_ERROR_SYSCALL',
+    'RPC failed',
+    'early EOF',
     'OpenSSL SSL_read: Connection was reset',
     'The requested URL returned error: 429',
     'The requested URL returned error: 503',
@@ -107,7 +125,7 @@ export const NETWORK_ERROR_PATTERNS = [
 ] as const;
 
 /** 重试次数（网络错误可重试更多次） */
-export const MAX_NETWORK_RETRY_ATTEMPTS = 3;
+export const MAX_NETWORK_RETRY_ATTEMPTS = 5;
 
 /** 重试基础延迟（毫秒），用于指数退避 */
 export const RETRY_BASE_DELAY_MS = 5000;

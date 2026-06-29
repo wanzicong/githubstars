@@ -39,6 +39,7 @@ model GithubRepo {
   // 关联
   translationItems TranslationTaskItem[]
   cloneItems       CloneTaskItem[]
+  downloadItems    DownloadTaskItem[]
   categories       CategoryRepoLink[]
 
   @@index([language])
@@ -206,4 +207,54 @@ model CloneTaskItem {
   @@index([repoId])
   @@index([status])
   @@map("clone_task_item")
+}
+
+model DownloadTask {
+  id                         BigInt    @id @default(autoincrement())
+  status                     String?   @default("PENDING") @map("status") @db.VarChar(50)
+  targetDir                  String    @map("target_dir") @db.VarChar(1000)
+  concurrency                Int       @default(5) @map("concurrency")
+  /** 镜像源列表（JSON 数组，如 ["ghproxy","gh-proxy"]），按顺序回退 */
+  mirrorSource              String?   @default("[\"direct\"]") @map("mirror_source") @db.VarChar(500)
+  extractArchive             Boolean   @default(false) @map("extract_archive") @db.TinyInt
+  deleteArchiveAfterExtract  Boolean   @default(false) @map("delete_archive_after_extract") @db.TinyInt
+  totalItems                 Int       @default(0) @map("total_items")
+  completedItems             Int       @default(0) @map("completed_items")
+  failedItems                Int       @default(0) @map("failed_items")
+  totalBytes                 BigInt?   @default(0) @map("total_bytes")
+  downloadedBytes            BigInt?   @default(0) @map("downloaded_bytes")
+  createdAt                  DateTime? @map("created_at") @db.DateTime
+  startedAt                  DateTime? @map("started_at") @db.DateTime
+  finishedAt                 DateTime? @map("finished_at") @db.DateTime
+
+  items DownloadTaskItem[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("download_task")
+}
+
+model DownloadTaskItem {
+  id             BigInt    @id @default(autoincrement())
+  taskId         BigInt    @map("task_id")
+  repoId         BigInt    @map("repo_id")
+  fullName       String?   @map("full_name") @db.VarChar(500)
+  archiveUrl     String?   @map("archive_url") @db.VarChar(2000)
+  localFilePath  String?   @map("local_file_path") @db.VarChar(1000)
+  extractDir     String?   @map("extract_dir") @db.VarChar(1000)
+  fileSize       BigInt?   @default(0) @map("file_size")
+  defaultBranch  String?   @map("default_branch") @db.VarChar(100)
+  status         String?   @default("PENDING") @map("status") @db.VarChar(50)
+  retryCount     Int       @default(0) @map("retry_count")
+  errorMessage   String?   @map("error_message") @db.Text
+  createdAt      DateTime? @map("created_at") @db.DateTime
+  updatedAt      DateTime? @updatedAt @map("updated_at") @db.DateTime
+
+  task DownloadTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  repo GithubRepo   @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([repoId])
+  @@index([status])
+  @@map("download_task_item")
 }

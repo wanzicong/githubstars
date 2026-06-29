@@ -12,6 +12,7 @@ import { TranslateModule } from './translate/translate.module';
 import { TrendingModule } from './trending/trending.module';
 import { ExportModule } from './export/export.module';
 import { CloneModule } from './clone/clone.module';
+import { DownloadModule } from './download/download.module';
 import { CategoryModule } from './category/category.module';
 
 import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
@@ -39,6 +40,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
         TrendingModule,
         ExportModule,
         CloneModule,
+        DownloadModule,
         CategoryModule,
     ],
     providers: [

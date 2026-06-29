@@ -98,6 +98,20 @@ export const CLONE_CONCURRENCY_OPTIONS = [
 /** 默认克隆并发数 */
 export const DEFAULT_CLONE_CONCURRENCY = 5
 
+// ─── 下载 ───
+
+/** 下载并发数选项 */
+export const DOWNLOAD_CONCURRENCY_OPTIONS = [
+    { value: 3, label: '3 个并发' },
+    { value: 5, label: '5 个并发' },
+    { value: 10, label: '10 个并发' },
+    { value: 20, label: '20 个并发' },
+    { value: 50, label: '50 个并发' },
+]
+
+/** 默认下载并发数 */
+export const DEFAULT_DOWNLOAD_CONCURRENCY = 5
+
 // ─── 趋势排名 ───
 
 /** Trending 排行榜前 3 名徽章颜色 */

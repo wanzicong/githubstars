@@ -18,6 +18,7 @@ const GithubSearch = lazy(() => import('@/pages/GithubSearch'))
 const Trending = lazy(() => import('@/pages/Trending'))
 const Logs = lazy(() => import('@/pages/Logs'))
 const Clone = lazy(() => import('@/pages/Clone'))
+const Download = lazy(() => import('@/pages/Download'))
 const CategoryManage = lazy(() => import('@/pages/CategoryManage'))
 
 /** 所有路由（Layout 子路由） */
@@ -31,6 +32,8 @@ export const appRoutes: RouteObject[] = [
   { path: 'search', element: <GithubSearch />, handle: { title: 'GitHub搜索' } },
   // ── 克隆 ──
   { path: 'clone', element: <Clone />, handle: { title: '克隆管理' } },
+  // ── 下载 ──
+  { path: 'download', element: <Download />, handle: { title: '下载管理' } },
   // ── 分类 ──
   { path: 'categories', element: <CategoryManage />, handle: { title: '分类管理' } },
   // ── 同步 / 统计 ──

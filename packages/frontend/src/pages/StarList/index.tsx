@@ -34,9 +34,13 @@ import { StarRepoView } from '../../components/stars'
 import { TranslateProgressModal } from '../../components/translate'
 import CloneWizardModal from '../../components/clone/CloneWizardModal'
 import CloneProgressModal from '../../components/clone/CloneProgressModal'
+import DownloadWizardModal from '../../components/download/DownloadWizardModal'
+import DownloadProgressModal from '../../components/download/DownloadProgressModal'
 import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../../types'
 import type { CloneTaskProgress } from '../../api/clone'
 import { getCloneTaskProgress, retryCloneFailed, retryCloneItem, deleteCloneTask } from '../../api/clone'
+import type { DownloadTaskProgress } from '../../api/download'
+import { getDownloadTaskProgress, retryDownloadFailed, retryDownloadItem, deleteDownloadTask } from '../../api/download'
 import { usePolling } from '../../hooks/usePolling'
 import { useStarListParams, TIME_PRESETS } from './hooks/useStarListParams'
 import { INITIAL_TASK_PROGRESS, type TaskProgress } from '../../constants'
@@ -227,6 +231,12 @@ export default function StarList() {
     const [loadingAllIds, setLoadingAllIds] = useState(false)
     const [loadingRepos, setLoadingRepos] = useState(false)
 
+    // ── 下载相关状态 ──
+    const [downloadWizardOpen, setDownloadWizardOpen] = useState(false)
+    const [downloadProgressOpen, setDownloadProgressOpen] = useState(false)
+    const [downloadTaskId, setDownloadTaskId] = useState<number | null>(null)
+    const [downloadProgress, setDownloadProgress] = useState<DownloadTaskProgress | null>(null)
+
     const translateTaskIdRef = useRef<number | null>(null)
 
     const polling = usePolling(async () => {
@@ -359,6 +369,73 @@ export default function StarList() {
         } catch { message.error('删除失败') }
     }, [cloneTaskId, clonePolling])
 
+    // ── 下载进度轮询 ──
+    const downloadTaskIdRef = useRef<number | null>(null)
+    const downloadPolling = usePolling(async () => {
+        const taskId = downloadTaskIdRef.current
+        if (!taskId) { downloadPolling.stop(); return }
+        try {
+            const res = await getDownloadTaskProgress(taskId)
+            if (res.success) {
+                setDownloadProgress(res)
+                if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
+                    downloadPolling.stop()
+                }
+            }
+        } catch { /* ignore */ }
+    }, 2000)
+
+    const handleDownloadTaskCreated = useCallback((taskId: number) => {
+        setDownloadTaskId(taskId)
+        setDownloadProgressOpen(true)
+        downloadTaskIdRef.current = taskId
+        downloadPolling.start()
+    }, [downloadPolling])
+
+    const handleRetryDownloadFailed = useCallback(async () => {
+        if (!downloadTaskId) return
+        try {
+            const result = await retryDownloadFailed(downloadTaskId)
+            if (result.success) {
+                setDownloadProgress(null)
+                downloadTaskIdRef.current = downloadTaskId
+                downloadPolling.start()
+            } else {
+                message.info(result.message || '没有失败项')
+            }
+        } catch { message.error('重试失败') }
+    }, [downloadTaskId, downloadPolling])
+
+    const handleRetryDownloadItem = useCallback(async (fullName: string) => {
+        if (!downloadTaskId) return
+        try {
+            const result = await retryDownloadItem(downloadTaskId, fullName)
+            if (result.success) {
+                message.success(result.message || '已重置')
+                const progress = await getDownloadTaskProgress(downloadTaskId)
+                setDownloadProgress(progress)
+            } else {
+                message.info(result.message || '重试失败')
+            }
+        } catch { message.error('重试失败') }
+    }, [downloadTaskId])
+
+    const handleDeleteDownloadTask = useCallback(async () => {
+        if (!downloadTaskId) return
+        try {
+            const result = await deleteDownloadTask(downloadTaskId)
+            if (result.success) {
+                message.success(result.message || '任务已删除')
+                downloadPolling.stop()
+                setDownloadProgressOpen(false)
+                setDownloadProgress(null)
+                setDownloadTaskId(null)
+            } else {
+                message.error(result.message || '删除失败')
+            }
+        } catch { message.error('删除失败') }
+    }, [downloadTaskId, downloadPolling])
+
     // ── 跨页全选 ──
     const handleSelectAllPages = useCallback(async () => {
         setLoadingAllIds(true)
@@ -402,6 +479,28 @@ export default function StarList() {
             setSelectedReposForClone(repos.filter((r) => selectedRepoIds.includes(r.id)))
         }
         setCloneWizardOpen(true)
+    }, [selectedRepoIds, repos])
+
+    // ── 打开下载向导 ──
+    const handleOpenDownloadWizard = useCallback(async () => {
+        const currentPageIds = repos.map((r) => r.id)
+        const missingIds = selectedRepoIds.filter((id) => !currentPageIds.includes(id))
+
+        if (missingIds.length > 0) {
+            setLoadingRepos(true)
+            try {
+                const allRepos = await fetchReposByIds(selectedRepoIds)
+                setSelectedReposForClone(allRepos)
+            } catch {
+                message.error('获取仓库信息失败')
+                return
+            } finally {
+                setLoadingRepos(false)
+            }
+        } else {
+            setSelectedReposForClone(repos.filter((r) => selectedRepoIds.includes(r.id)))
+        }
+        setDownloadWizardOpen(true)
     }, [selectedRepoIds, repos])
 
     const renderTranslateProgress = () => (
@@ -607,6 +706,13 @@ export default function StarList() {
                                 >
                                     批量克隆 {selectedRepoIds.length > 0 ? `(${selectedRepoIds.length})` : ''}
                                 </Button>
+                                <Button
+                                    icon={<DownloadOutlined />}
+                                    onClick={handleOpenDownloadWizard}
+                                    disabled={selectedRepoIds.length === 0}
+                                >
+                                    批量下载 {selectedRepoIds.length > 0 ? `(${selectedRepoIds.length})` : ''}
+                                </Button>
                                 <Button icon={<DownloadOutlined />} onClick={handleExportMd}>
                                     导出MD
                                 </Button>
@@ -747,6 +853,24 @@ export default function StarList() {
                 onRetryFailed={handleRetryCloneFailed}
                 onRetryItem={handleRetryCloneItem}
                 onDelete={handleDeleteCloneTask}
+            />
+
+            {/* 下载向导 */}
+            <DownloadWizardModal
+                open={downloadWizardOpen}
+                onClose={() => setDownloadWizardOpen(false)}
+                selectedRepos={selectedReposForClone}
+                onTaskCreated={handleDownloadTaskCreated}
+            />
+
+            {/* 下载进度 */}
+            <DownloadProgressModal
+                open={downloadProgressOpen}
+                progress={downloadProgress}
+                onClose={() => { downloadPolling.stop(); setDownloadProgressOpen(false) }}
+                onRetryFailed={handleRetryDownloadFailed}
+                onRetryItem={handleRetryDownloadItem}
+                onDelete={handleDeleteDownloadTask}
             />
 
             {/* 翻译管理面板 */}
