@@ -4,6 +4,15 @@ import { type DownloadTaskProgress, type DownloadTaskItem } from '@/api/download
 
 const { Text } = Typography
 
+/** 格式化字节数为人类可读的字符串 */
+function formatBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+    const units = ['B', 'KB', 'MB', 'GB']
+    const i = Math.max(0, Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1))
+    const val = bytes / Math.pow(1024, i)
+    return `${val < 10 ? val.toFixed(1) : Math.round(val)} ${units[i]}`
+}
+
 interface DownloadProgressModalProps {
     open: boolean
     progress: DownloadTaskProgress | null
@@ -199,6 +208,27 @@ export default function DownloadProgressModal({ open, progress, onClose, onRetry
                                                 }
                                                 const info = map[status] || { color: 'default', text: status }
                                                 return <Tag color={info.color}>{info.text}</Tag>
+                                            },
+                                        },
+                                        {
+                                            title: '大小',
+                                            key: 'size',
+                                            width: 140,
+                                            render: (_: unknown, record: DownloadTaskItem) => {
+                                                const total = Number(record.fileSize || 0)
+                                                const downloaded = record.downloadedBytes ?? (record.status === 'COMPLETED' ? total : 0)
+                                                if (total <= 0 && downloaded <= 0) return <Text type="secondary">-</Text>
+                                                // 有总大小+已下载 → 显示进度条
+                                                if (total > 0 && record.status === 'PROCESSING') {
+                                                    const percent = Math.round((downloaded * 100) / total)
+                                                    return (
+                                                        <Tooltip title={`${formatBytes(downloaded)} / ${formatBytes(total)}`}>
+                                                            <Progress percent={percent} size="small" style={{ margin: 0 }} />
+                                                        </Tooltip>
+                                                    )
+                                                }
+                                                // 已完成或有总大小 → 显示总大小
+                                                return <Text type="secondary">{formatBytes(total || downloaded)}</Text>
                                             },
                                         },
                                         {

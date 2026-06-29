@@ -754,3 +754,24 @@ MySQL (:3307)  githubstars 库
 | `clone_task` / `clone_task_item`             | 克隆任务/子项                    | `task_id`（UUID 格式）关联          |
 | `translation_task` / `translation_task_item` | 翻译任务/子项                    | 关联 `github_repo`                  |
 | `ai_analyze_task`                            | AI 分析任务结果                  |                                     |
+
+---
+
+## 对话启动三步流程（P0 — 不可跳过）
+
+每次编码前，依次执行以下三步：
+
+### 第一步：加载技能
+用 **Skill 工具**调用匹配当前任务的技能（见 `.claude/rules/common/skills.md` 匹配表）。
+
+### 第二步：加载 MCP 工具
+根据当前任务类型，确认需要哪些 MCP 工具（见 `.claude/rules/common/mcp-tools.md` 场景表）。
+- 搜索代码 → 用 Serena 工具，不用 Grep
+- 编辑代码 → 用 Serena 工具，不用 Edit
+- 查文档 → 用 Context7
+- 复杂推理 → 用 Sequential Thinking
+
+### 第三步：规划智能体
+对照 `.claude/rules/common/agents.md` 的 P0 强制表，判断当前场景需要调用哪个智能体。
+
+**三步都执行完，才能开始读代码和编码。**

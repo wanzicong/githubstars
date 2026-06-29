@@ -72,7 +72,7 @@ export class TranslateTaskService {
     /**
      * 处理单个翻译子项，带指数退避重试 + 原子状态记录
      */
-    private async processItem(item: any) {
+    private async processItem(item: { id: bigint; repoId: bigint; taskId: bigint; fullName: string | null; translateType: string | null }) {
         await this.acquire();
         try {
             let success = false,
@@ -107,7 +107,7 @@ export class TranslateTaskService {
     /**
      * 执行单次翻译尝试
      */
-    private async executeTranslationAttempt(item: any): Promise<{ success: boolean; resultNote: string }> {
+    private async executeTranslationAttempt(item: { id: bigint; repoId: bigint; taskId: bigint; fullName: string | null; translateType: string | null }): Promise<{ success: boolean; resultNote: string }> {
         try {
             const repoId = Number(item.repoId);
             if (item.translateType === 'description') {
@@ -143,7 +143,7 @@ export class TranslateTaskService {
     /**
      * 记录翻译子项成功结果，并原子更新父任务计数器
      */
-    private async recordItemSuccess(item: any, resultNote: string): Promise<void> {
+    private async recordItemSuccess(item: { id: bigint; taskId: bigint; fullName: string | null; translateType: string | null }, resultNote: string): Promise<void> {
         await this.prisma.translationTaskItem.update({
             where: { id: item.id },
             data: { status: 'SUCCESS', errorMessage: resultNote, updatedAt: new Date() },
@@ -157,7 +157,7 @@ export class TranslateTaskService {
     /**
      * 记录翻译子项失败结果，并原子更新父任务计数器
      */
-    private async recordItemFailure(item: any, attempts: number, resultNote: string): Promise<void> {
+    private async recordItemFailure(item: { id: bigint; taskId: bigint; fullName: string | null; translateType: string | null }, attempts: number, resultNote: string): Promise<void> {
         await this.prisma.translationTaskItem.update({
             where: { id: item.id },
             data: { status: 'FAILED', errorMessage: resultNote, retryCount: attempts, updatedAt: new Date() },
@@ -249,7 +249,7 @@ export class TranslateTaskService {
                     this.logger.error('更新任务失败状态时出错', updateErr);
                 }
             }
-        })().catch((e) => this.logger.error(e));
+        })();
     }
 
     /**

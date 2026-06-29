@@ -64,6 +64,7 @@ export interface DownloadTaskItem {
     localFilePath?: string
     extractDir?: string
     fileSize?: number | string
+    downloadedBytes?: number
     errorMessage?: string | null
 }
 

@@ -19,7 +19,7 @@ import * as path from 'path';
 import { randomBytes } from 'crypto';
 import { existsSync } from 'fs';
 import { createWriteStream, readFileSync } from 'fs';
-import { mkdir, rm, rename } from 'fs/promises';
+import { mkdir, rm, rename, stat } from 'fs/promises';
 import AdmZip from 'adm-zip';
 
 /**
@@ -183,7 +183,7 @@ export class DownloadService {
      * 创建下载任务
      */
     async createTask(dto: CreateDownloadTaskDto): Promise<{ success: boolean; taskId?: number; message?: string }> {
-        const { repoIds, targetDir, concurrency, mirrorSources, extractArchive, deleteAfterExtract } = dto;
+        const { repoIds, targetDir, concurrency, mirrorSources } = dto;
 
         // 路径校验
         if (!path.isAbsolute(targetDir)) {
@@ -301,7 +301,7 @@ export class DownloadService {
 
         this.logger.log(
             `下载任务已创建: taskId=${Number(task.id)} repos=${validItems.length} ` +
-                `mirrors=${JSON.stringify(mirrorSources)} extract=${extractArchive} deleteAfterExtract=${deleteAfterExtract}`,
+                `mirrors=${JSON.stringify(mirrorSources)}`,
         );
 
         return {
@@ -552,20 +552,34 @@ export class DownloadService {
                 const downloadDir = path.join(this.targetDir!, owner);
                 const newLocalFilePath = path.join(downloadDir, safeFileName);
 
-                return { item, newArchiveUrl, newLocalFilePath, branch };
+                // HEAD 最终 archive URL 获取文件总大小（用于下载进度显示）
+                let fileSize = BigInt(0);
+                try {
+                    const sizeResponse = await fetch(newArchiveUrl, {
+                        method: 'HEAD',
+                        signal: AbortSignal.timeout(3_000),
+                    });
+                    const contentLength = sizeResponse.headers.get('content-length');
+                    if (contentLength) {
+                        fileSize = BigInt(contentLength);
+                    }
+                } catch {
+                    // 获取大小失败不影响主流程，fileSize 保持 0
+                }
+
+                return { item, newArchiveUrl, newLocalFilePath, branch, fileSize };
             }),
         );
 
-        // 批量更新 DB（仅当 archiveUrl 或 localFilePath 有变化时）
-        const dbUpdates = branchResolvedItems
-            .filter((r) => r.newArchiveUrl !== r.item.archiveUrl || r.newLocalFilePath !== r.item.localFilePath)
-            .map((r) =>
+        // 批量更新 DB（archiveUrl/localFilePath/fileSize 均来自执行时解析，全部写入）
+        const dbUpdates = branchResolvedItems.map((r) =>
                 this.prisma.downloadTaskItem.update({
                     where: { id: r.item.id },
                     data: {
                         archiveUrl: r.newArchiveUrl,
                         localFilePath: r.newLocalFilePath,
                         defaultBranch: r.branch,
+                        fileSize: r.fileSize,
                     },
                 }),
             );
@@ -1007,15 +1021,25 @@ export class DownloadService {
     /**
      * 记录子项结果
      */
-    private async recordItemResult(item: { id: bigint; fullName: string | null }, success: boolean, error?: string) {
+    private async recordItemResult(item: { id: bigint; fullName: string | null; localFilePath?: string | null }, success: boolean, error?: string) {
         const status = success ? 'COMPLETED' : 'FAILED';
+        const data: Record<string, unknown> = {
+            status,
+            errorMessage: success ? null : error,
+            updatedAt: new Date(),
+        };
+        // 下载成功后 stat 本地文件，更新为实际文件大小（比 HEAD 的 Content-Length 更准确）
+        if (success && item.localFilePath) {
+            try {
+                const stats = await stat(item.localFilePath);
+                data.fileSize = BigInt(stats.size);
+            } catch {
+                // stat 失败不影响主流程
+            }
+        }
         await this.prisma.downloadTaskItem.update({
             where: { id: item.id },
-            data: {
-                status,
-                errorMessage: success ? null : error,
-                updatedAt: new Date(),
-            },
+            data,
         });
     }
 
@@ -1042,7 +1066,7 @@ export class DownloadService {
 
         await this.prisma.downloadTask.update({
             where: { id: taskId },
-            data: { status, finishedAt: new Date() },
+            data: { status, finishedAt: new Date(), completedItems: completedCount, failedItems: failedCount },
         });
 
         this.logger.log(`下载任务完成: taskId=${Number(taskId)} status=${status} completed=${completedCount} failed=${failedCount}`);
@@ -1126,7 +1150,21 @@ export class DownloadService {
             finishedAt: task.finishedAt?.toISOString(),
             failedDetails,
             processingDetails,
-            allItems: task.items,
+            // 为每个项添加已下载字节数（PROCESSING 项 stat 本地文件，COMPLETED = fileSize）
+            allItems: await Promise.all(
+                task.items.map(async (item) => {
+                    let downloadedBytes = item.fileSize ? Number(item.fileSize) : 0;
+                    if (item.status === 'PROCESSING' && item.localFilePath) {
+                        try {
+                            const stats = await stat(item.localFilePath);
+                            downloadedBytes = stats.size;
+                        } catch {
+                            downloadedBytes = 0;
+                        }
+                    }
+                    return { ...item, downloadedBytes };
+                }),
+            ),
         };
     }
 

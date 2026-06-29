@@ -1366,9 +1366,10 @@ export class CloneService {
 
         const status = CloneService.computeFinalTaskStatus(completedCount, failedCount, totalCount);
 
+        const skippedCount = totalCount - completedCount - failedCount;
         await this.prisma.cloneTask.update({
             where: { id: taskId },
-            data: { status, finishedAt: new Date() },
+            data: { status, finishedAt: new Date(), completedItems: completedCount, failedItems: failedCount, skippedItems: skippedCount },
         });
 
         this.logger.log(`克隆任务完成: taskId=${Number(taskId)} status=${status} completed=${completedCount} failed=${failedCount}`);
@@ -1499,6 +1500,9 @@ export class CloneService {
                     status: 'PENDING',
                     startedAt: null,
                     finishedAt: null,
+                    completedItems: 0,
+                    failedItems: 0,
+                    skippedItems: 0,
                 },
             }),
         ]);

@@ -3,6 +3,7 @@
  * 例：1049 → "1千"、61217 → "6万1千"、193336 → "19万3千"
  */
 export function formatNumberCn(n: number): string {
+    if (!Number.isFinite(n)) return '0'
     if (n === 0) return '0'
     if (n < 1000) return String(n)
 
@@ -108,6 +109,7 @@ export function getRelativeTime(dateStr: string | null | undefined): string {
  * 例：1049→"1.0k"、61217→"61.2k"、1933367→"1.9M"
  */
 export function formatNumberShort(n: number): string {
+    if (!Number.isFinite(n)) return '0'
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
     if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
     return String(n)

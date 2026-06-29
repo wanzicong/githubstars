@@ -16,6 +16,7 @@ interface AddRepoModalProps {
 
 /** 简单的数字格式化（k/m） */
 function fmtCompact(n: number): string {
+    if (!Number.isFinite(n)) return '0'
     if (n >= 1000000) return (n / 1000000).toFixed(1) + 'm'
     if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
     return String(n)
