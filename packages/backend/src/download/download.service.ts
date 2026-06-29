@@ -232,15 +232,14 @@ export class DownloadService {
                 targetDir: normalizedTargetDir,
                 concurrency,
                 mirrorSource: JSON.stringify(mirrorSources || ['direct']),
-                extractArchive: extractArchive ?? true,
-                deleteArchiveAfterExtract: deleteAfterExtract ?? true,
                 totalItems: repos.length,
                 createdAt: new Date(),
             },
         });
 
-        // 检测默认分支并创建任务明细
+        // 检测默认分支并创建任务明细（并发检测，每批 CONCURRENT_DETECT 个同时进行）
         const token = await this.getGitHubToken();
+        const CONCURRENT_DETECT = 10;
         const validItems: Array<{
             taskId: bigint;
             repoId: bigint;
@@ -255,41 +254,48 @@ export class DownloadService {
             createdAt: Date;
         }> = [];
 
-        for (const repo of repos) {
-            const fullName = repo.fullName || '';
-            const { owner, repoName } = parseFullName(fullName);
-            const defaultBranch = await this.detectDefaultBranch(owner, repoName, token);
+        for (let i = 0; i < repos.length; i += CONCURRENT_DETECT) {
+            const batch = repos.slice(i, i + CONCURRENT_DETECT);
+            const batchResults = await Promise.all(
+                batch.map(async (repo) => {
+                    const fullName = repo.fullName || '';
+                    const { owner, repoName } = parseFullName(fullName);
+                    const defaultBranch = await this.detectDefaultBranch(owner, repoName, token);
 
-            // 构建下载文件名：owner_repo-defaultBranch.zip
-            const safeFileName = `${owner}_${repoName}-${defaultBranch}.zip`.replace(/[<>:"/\\|?*]/g, '_');
-            const downloadDir = path.join(normalizedTargetDir, owner);
-            const localFilePath = path.join(downloadDir, safeFileName);
+                    // 构建下载文件名：owner_repo-defaultBranch.zip
+                    const safeFileName = `${owner}_${repoName}-${defaultBranch}.zip`.replace(/[<>:"/\\|?*]/g, '_');
+                    const downloadDir = path.join(normalizedTargetDir, owner);
+                    const localFilePath = path.join(downloadDir, safeFileName);
 
-            // 路径安全校验
-            if (!localFilePath.startsWith(normalizedTargetDir + path.sep)) {
-                this.logger.warn(`路径安全校验失败，跳过: ${fullName}`);
-                continue;
+                    // 路径安全校验
+                    if (!localFilePath.startsWith(normalizedTargetDir + path.sep)) {
+                        this.logger.warn(`路径安全校验失败，跳过: ${fullName}`);
+                        return null;
+                    }
+
+                    // 构建 archive URL（存储原始 GitHub URL，多镜像回退在下载时动态处理）
+                    const archiveUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${defaultBranch}.zip`;
+
+                    return {
+                        taskId: task.id,
+                        repoId: repo.id,
+                        fullName,
+                        archiveUrl,
+                        localFilePath,
+                        extractDir: null,
+                        fileSize: BigInt(0),
+                        defaultBranch,
+                        status: 'PENDING' as const,
+                        retryCount: 0,
+                        createdAt: new Date(),
+                    };
+                }),
+            );
+            for (const result of batchResults) {
+                if (result !== null) {
+                    validItems.push(result);
+                }
             }
-
-            // 构建 archive URL（存储原始 GitHub URL，多镜像回退在下载时动态处理）
-            const archiveUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${defaultBranch}.zip`;
-
-            // 解压目录
-            const extractDir = path.join(normalizedTargetDir, owner, repoName);
-
-            validItems.push({
-                taskId: task.id,
-                repoId: repo.id,
-                fullName,
-                archiveUrl,
-                localFilePath,
-                extractDir: extractArchive ? extractDir : null,
-                fileSize: BigInt(0),
-                defaultBranch,
-                status: 'PENDING' as const,
-                retryCount: 0,
-                createdAt: new Date(),
-            });
         }
 
         if (validItems.length === 0) {
@@ -322,9 +328,15 @@ export class DownloadService {
      * 检测仓库默认分支
      *
      * 通过 GitHub API 获取仓库信息，提取 default_branch。
-     * 如果 API 失败，尝试常见分支名（main / master）的 archive URL。
+     * 如果 API 失败（如限速），尝试常见分支名的 archive URL 来探测正确分支。
+     *
+     * @param owner   仓库所有者
+     * @param repoName 仓库名称
+     * @param token    GitHub Token（可选）
+     * @returns 检测到的默认分支名，所有探测失败时返回 'main'
      */
     private async detectDefaultBranch(owner: string, repoName: string, token?: string): Promise<string> {
+        // 优先通过 GitHub API 获取
         try {
             const headers: Record<string, string> = {
                 Accept: 'application/vnd.github.v3+json',
@@ -336,7 +348,7 @@ export class DownloadService {
 
             const response = await fetch(`https://api.github.com/repos/${owner}/${repoName}`, {
                 headers,
-                signal: AbortSignal.timeout(10_000),
+                signal: AbortSignal.timeout(5_000),
             });
 
             if (response.ok) {
@@ -347,9 +359,51 @@ export class DownloadService {
             }
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            this.logger.warn(`检测默认分支失败（将尝试 main）: ${owner}/${repoName} | ${msg}`);
+            this.logger.warn(`GitHub API 获取默认分支失败: ${owner}/${repoName} | ${msg}`);
         }
 
+        // API 失败（限速/网络问题），通过 HEAD 请求探测常见分支名
+        // 优先通过 ghproxy 镜像快速探测 master 和 main（国内网络友好），再直连探测所有候选
+        const proxyPrefixes = ['https://ghproxy.net/https://github.com'];
+        for (const prefix of proxyPrefixes) {
+            for (const branch of ['master', 'main']) {
+                try {
+                    const headResponse = await fetch(`${prefix}/${owner}/${repoName}/archive/refs/heads/${branch}.zip`, {
+                        method: 'HEAD',
+                        signal: AbortSignal.timeout(3_000),
+                    });
+                    if (headResponse.ok || headResponse.status === 302 || headResponse.status === 307) {
+                        this.logger.log(`通过镜像代理探测到默认分支: ${owner}/${repoName} -> ${branch}`);
+                        return branch;
+                    }
+                } catch {
+                    // 单个探测失败，继续
+                }
+            }
+        }
+
+        // 直连 GitHub 探测所有候选分支
+        const candidates = ['master', 'main', 'develop', 'dev', 'trunk'];
+        for (const branch of candidates) {
+            try {
+                const headResponse = await fetch(`https://github.com/${owner}/${repoName}/archive/refs/heads/${branch}.zip`, {
+                    method: 'HEAD',
+                    signal: AbortSignal.timeout(3_000),
+                });
+                if (headResponse.ok) {
+                    this.logger.log(`通过 HEAD 直连探测到默认分支: ${owner}/${repoName} -> ${branch}`);
+                    return branch;
+                }
+                if (headResponse.status === 302 || headResponse.status === 307) {
+                    this.logger.log(`通过 HEAD 重定向探测到默认分支: ${owner}/${repoName} -> ${branch}`);
+                    return branch;
+                }
+            } catch {
+                // 单个分支探测失败，继续尝试下一个
+            }
+        }
+
+        this.logger.warn(`所有分支探测失败，回退到 main: ${owner}/${repoName}`);
         return 'main';
     }
 
@@ -669,14 +723,7 @@ export class DownloadService {
                 }
             }
 
-            // 如果需要解压
-            if (item.extractDir) {
-                const extractResult = await this.extractWithRetry(localFilePath, item.extractDir, item.fullName);
-                if (!extractResult.success) {
-                    return extractResult;
-                }
-            }
-
+            // 只下载压缩包，解压由用户在任务列表中手动操作
             return { success: true };
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? e.message : String(e);
@@ -1064,11 +1111,47 @@ export class DownloadService {
             await this.removeItemFiles(item.localFilePath, item.extractDir, taskTargetDir);
         }
 
-        await this.prisma.$transaction([
-            this.prisma.downloadTaskItem.updateMany({
-                where: { taskId: BigInt(taskId), status: 'FAILED' },
-                data: { status: 'PENDING', errorMessage: null, retryCount: { increment: 1 } },
+        // 重新检测所有失败项的分支，并纠正 archiveUrl（修复之前 detectDefaultBranch 探测错误的分支）
+        const token = await this.getGitHubToken();
+        const updatedItems = await Promise.all(
+            items.map(async (item) => {
+                const fullName = item.fullName || '';
+                const { owner, repoName } = parseFullName(fullName);
+                const defaultBranch = await this.detectDefaultBranch(owner, repoName, token);
+
+                const safeFileName = `${owner}_${repoName}-${defaultBranch}.zip`.replace(/[<>:"/\\|?*]/g, '_');
+                const downloadDir = path.join(taskTargetDir, owner);
+                const localFilePath = path.join(downloadDir, safeFileName);
+                const archiveUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${defaultBranch}.zip`;
+                const extractDir = path.join(taskTargetDir, owner, repoName);
+
+                return {
+                    id: item.id,
+                    fullName,
+                    archiveUrl,
+                    localFilePath,
+                    extractDir,
+                    defaultBranch,
+                };
             }),
+        );
+
+        await this.prisma.$transaction([
+            // 每个失败项单独更新（archiveUrl/localFilePath 可能不同）
+            ...updatedItems.map((item) =>
+                this.prisma.downloadTaskItem.update({
+                    where: { id: item.id },
+                    data: {
+                        status: 'PENDING',
+                        errorMessage: null,
+                        retryCount: { increment: 1 },
+                        archiveUrl: item.archiveUrl,
+                        localFilePath: item.localFilePath,
+                        defaultBranch: item.defaultBranch,
+                        extractDir: item.extractDir,
+                    },
+                }),
+            ),
             this.prisma.downloadTask.update({
                 where: { id: BigInt(taskId) },
                 data: { status: 'PENDING', startedAt: null, finishedAt: null },
@@ -1152,11 +1235,30 @@ export class DownloadService {
 
         await this.removeItemFiles(item.localFilePath, item.extractDir, taskTargetDir);
 
+        // 重新检测分支（修复之前探测错误的分支导致 404 的问题）
+        const { owner, repoName } = parseFullName(fullName);
+        const token = await this.getGitHubToken();
+        const defaultBranch = await this.detectDefaultBranch(owner, repoName, token);
+
+        const safeFileName = `${owner}_${repoName}-${defaultBranch}.zip`.replace(/[<>:"/\\|?*]/g, '_');
+        const downloadDir = path.join(taskTargetDir, owner);
+        const localFilePath = path.join(downloadDir, safeFileName);
+        const archiveUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${defaultBranch}.zip`;
+        const extractDir = path.join(taskTargetDir, owner, repoName);
+
         try {
             await this.prisma.$transaction(async (tx) => {
                 const updated = await tx.downloadTaskItem.updateMany({
                     where: { id: item.id, status: { notIn: ['PROCESSING', 'PENDING'] } },
-                    data: { status: 'PENDING', errorMessage: null, retryCount: { increment: 1 } },
+                    data: {
+                        status: 'PENDING',
+                        errorMessage: null,
+                        retryCount: { increment: 1 },
+                        archiveUrl,
+                        localFilePath,
+                        defaultBranch,
+                        extractDir,
+                    },
                 });
                 if (updated.count === 0) {
                     throw new Error('任务项正在执行中或已是待执行状态，无法重试');
@@ -1171,8 +1273,73 @@ export class DownloadService {
             return { success: false, message: msg };
         }
 
-        this.logger.log(`下载项重试: taskId=${taskId} fullName=${fullName}`);
-        return { success: true, message: `已重置 ${fullName}，等待重新执行` };
+        this.logger.log(`下载项重试: taskId=${taskId} fullName=${fullName} -> ${defaultBranch}`);
+        return { success: true, message: `已重置 ${fullName}（分支: ${defaultBranch}），等待重新执行` };
+    }
+
+    /**
+     * 手动解压已下载的压缩包
+     *
+     * 任务只负责下载 zip 文件，解压由用户在任务列表中手动触发。
+     * 解压目录根据 fullName 动态计算：{targetDir}/{owner}/{repoName}
+     */
+    async extractItemFile(taskId: number, fullName: string): Promise<{ success: boolean; message?: string }> {
+        const task = await this.prisma.downloadTask.findUnique({
+            where: { id: BigInt(taskId) },
+            select: { targetDir: true },
+        });
+        if (!task) return { success: false, message: '任务不存在' };
+
+        const item = await this.prisma.downloadTaskItem.findFirst({
+            where: { taskId: BigInt(taskId), fullName },
+        });
+        if (!item) return { success: false, message: '未找到该任务项' };
+        if (item.status !== 'COMPLETED') return { success: false, message: '仅可解压已下载完成的压缩包' };
+        if (!item.localFilePath) return { success: false, message: '压缩包路径为空' };
+
+        if (!existsSync(item.localFilePath)) {
+            return { success: false, message: `压缩包文件不存在: ${item.localFilePath}` };
+        }
+
+        const { owner, repoName } = parseFullName(fullName);
+        const extractDir = path.join(task.targetDir, owner, repoName);
+
+        this.logger.log(`开始手动解压: ${fullName} -> ${extractDir}`);
+        const result = await this.extractWithRetry(item.localFilePath, extractDir, fullName);
+
+        if (result.success) {
+            this.logger.log(`手动解压成功: ${fullName}`);
+            return { success: true, message: `解压成功: ${fullName}` };
+        }
+        return { success: false, message: result.error || '解压失败' };
+    }
+
+    /**
+     * 手动删除已下载的压缩包
+     *
+     * 用户下载完成后，若不需要保留压缩包，可手动删除。
+     * 只删除 zip 文件，不影响已解压的目录。
+     */
+    async deleteItemZipFile(taskId: number, fullName: string): Promise<{ success: boolean; message?: string }> {
+        const item = await this.prisma.downloadTaskItem.findFirst({
+            where: { taskId: BigInt(taskId), fullName },
+        });
+        if (!item) return { success: false, message: '未找到该任务项' };
+        if (item.status !== 'COMPLETED') return { success: false, message: '仅可删除已下载完成的压缩包' };
+        if (!item.localFilePath) return { success: false, message: '压缩包路径为空' };
+
+        if (!existsSync(item.localFilePath)) {
+            return { success: false, message: `压缩包文件不存在: ${item.localFilePath}` };
+        }
+
+        try {
+            await rm(item.localFilePath, { force: true });
+            this.logger.log(`已删除压缩包: ${fullName} -> ${item.localFilePath}`);
+            return { success: true, message: `已删除压缩包: ${fullName}` };
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            return { success: false, message: `删除失败: ${msg}` };
+        }
     }
 
     /**

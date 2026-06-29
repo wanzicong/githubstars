@@ -10,8 +10,6 @@ export async function createDownloadTask(params: {
     concurrency: 3 | 5 | 10 | 20 | 50
     /** 镜像源列表（按优先级排序），下载时会按顺序尝试，失败自动回退到下一个源 */
     mirrorSources?: DownloadMirrorSource[]
-    extractArchive?: boolean
-    deleteAfterExtract?: boolean
 }): Promise<{ success: boolean; taskId?: number; message?: string }> {
     const { data } = await api.post('/api/download', params)
     return data
@@ -67,6 +65,18 @@ export interface DownloadTaskItem {
     extractDir?: string
     fileSize?: number | string
     errorMessage?: string | null
+}
+
+/** 解压任务项 */
+export async function extractDownloadItem(taskId: number, fullName: string): Promise<{ success: boolean; message?: string }> {
+    const { data } = await api.post('/api/download/tasks/extract', { taskId, fullName })
+    return data
+}
+
+/** 删除任务项的压缩包 */
+export async function deleteDownloadItemFile(taskId: number, fullName: string): Promise<{ success: boolean; message?: string }> {
+    const { data } = await api.post('/api/download/tasks/delete-item', { taskId, fullName })
+    return data
 }
 
 /** 下载任务进度类型 */

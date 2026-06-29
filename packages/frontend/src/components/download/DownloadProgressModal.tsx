@@ -1,6 +1,6 @@
 import { Modal, Progress, Tag, Space, Button, Typography, Collapse, Spin, Table, Tooltip, Popconfirm } from 'antd'
-import { ReloadOutlined, CloseCircleOutlined, UndoOutlined, DeleteOutlined, DownloadOutlined, FolderOutlined } from '@ant-design/icons'
-import type { DownloadTaskProgress, DownloadTaskItem } from '@/api/download'
+import { ReloadOutlined, CloseCircleOutlined, UndoOutlined, DeleteOutlined, DownloadOutlined, FolderOutlined, FileZipOutlined } from '@ant-design/icons'
+import { type DownloadTaskProgress, type DownloadTaskItem } from '@/api/download'
 
 const { Text } = Typography
 
@@ -11,6 +11,8 @@ interface DownloadProgressModalProps {
     onRetryFailed?: () => void
     onRetryItem?: (fullName: string) => void
     onDelete?: () => void
+    onExtract?: (fullName: string) => void
+    onDeleteItem?: (fullName: string) => void
 }
 
 /**
@@ -19,8 +21,8 @@ interface DownloadProgressModalProps {
  * 展示下载任务的实时进度：圆环百分比 + 统计标签 + 任务详情列表
  * 比克隆进度多显示：代理源、解压状态、文件路径信息
  */
-export default function DownloadProgressModal({ open, progress, onClose, onRetryFailed, onRetryItem, onDelete }: DownloadProgressModalProps) {
-    const { status, totalItems = 0, completedItems = 0, failedItems = 0, progress: percent = 0, mirrorSources, extractArchive, deleteAfterExtract } = progress || {}
+export default function DownloadProgressModal({ open, progress, onClose, onRetryFailed, onRetryItem, onDelete, onExtract, onDeleteItem }: DownloadProgressModalProps) {
+    const { status, totalItems = 0, completedItems = 0, failedItems = 0, progress: percent = 0, mirrorSources } = progress || {}
     const isRunning = status === 'PROCESSING' || status === 'PENDING'
     const isCompleted = status === 'COMPLETED'
     const isFailed = status === 'FAILED'
@@ -120,8 +122,6 @@ export default function DownloadProgressModal({ open, progress, onClose, onRetry
                 <div style={{ textAlign: 'center', marginBottom: 16 }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>
                         代理: {getMirrorListLabel(mirrorSources || ['direct'])}
-                        {extractArchive ? ' | 自动解压' : ' | 仅下载'}
-                        {extractArchive && deleteAfterExtract ? ' | 解压后删包' : ''}
                     </Text>
                 </div>
 
@@ -213,28 +213,56 @@ export default function DownloadProgressModal({ open, progress, onClose, onRetry
                                         {
                                             title: '操作',
                                             key: 'action',
-                                            width: 80,
-                                            render: (_: unknown, record: DownloadTaskItem) => (
-                                                record.status !== 'COMPLETED' && record.status !== 'PROCESSING' && (
-                                                    <Popconfirm
-                                                        title="确定重试此项？"
-                                                        description="将删除原文件并重新下载，是否继续？"
-                                                        onConfirm={() => onRetryItem?.(record.fullName)}
-                                                        okText="重试"
-                                                        cancelText="取消"
-                                                    >
-                                                        <Tooltip title="重试此项（会删除原文件）">
-                                                            <Button
-                                                                type="link"
-                                                                size="small"
-                                                                icon={<UndoOutlined />}
+                                            width: 160,
+                                            render: (_: unknown, record: DownloadTaskItem) => {
+                                                if (record.status === 'COMPLETED') {
+                                                    return (
+                                                        <Space size={0}>
+                                                            <Popconfirm
+                                                                title="确定解压此压缩包？"
+                                                                description="将解压到目标目录下的对应仓库文件夹"
+                                                                onConfirm={() => onExtract?.(record.fullName)}
+                                                                okText="解压"
+                                                                cancelText="取消"
                                                             >
-                                                                重试
-                                                            </Button>
-                                                        </Tooltip>
-                                                    </Popconfirm>
-                                                )
-                                            ),
+                                                                <Button type="link" size="small" icon={<FileZipOutlined />}>
+                                                                    解压
+                                                                </Button>
+                                                            </Popconfirm>
+                                                            <Popconfirm
+                                                                title="确定删除此压缩包？"
+                                                                description="将删除已下载的 .zip 文件，不影响已解压的内容。"
+                                                                onConfirm={() => onDeleteItem?.(record.fullName)}
+                                                                okText="删除"
+                                                                cancelText="取消"
+                                                                okButtonProps={{ danger: true }}
+                                                            >
+                                                                <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+                                                                    删包
+                                                                </Button>
+                                                            </Popconfirm>
+                                                        </Space>
+                                                    )
+                                                }
+                                                if (record.status !== 'PROCESSING') {
+                                                    return (
+                                                        <Popconfirm
+                                                            title="确定重试此项？"
+                                                            description="将删除原文件并重新下载，是否继续？"
+                                                            onConfirm={() => onRetryItem?.(record.fullName)}
+                                                            okText="重试"
+                                                            cancelText="取消"
+                                                        >
+                                                            <Tooltip title="重试此项（会删除原文件）">
+                                                                <Button type="link" size="small" icon={<UndoOutlined />}>
+                                                                    重试
+                                                                </Button>
+                                                            </Tooltip>
+                                                        </Popconfirm>
+                                                    )
+                                                }
+                                                return null
+                                            },
                                         },
                                     ]}
                                 />

@@ -13,7 +13,8 @@ const { Text } = Typography
 
 /** 镜像源选项 */
 const MIRROR_OPTIONS = [
-    { value: 'gh-proxy' as MirrorSource, label: 'gh-proxy.com', description: '国内快速代理，推荐' },
+    { value: 'ghproxy' as MirrorSource, label: 'ghproxy.net', description: '国内最稳定代理，推荐' },
+    { value: 'gh-proxy' as MirrorSource, label: 'gh-proxy.com', description: '国内快速代理' },
     { value: 'gitclone' as MirrorSource, label: 'gitclone.com', description: '知名镜像服务' },
     { value: 'direct' as MirrorSource, label: '不加速', description: '直连 GitHub，需要网络通畅' },
 ]

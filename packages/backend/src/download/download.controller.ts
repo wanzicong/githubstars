@@ -1,6 +1,6 @@
 import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/common';
 import { DownloadService } from './download.service';
-import { CreateDownloadTaskSchema, DownloadTaskIdSchema, RetryItemSchema } from './download.dto';
+import { CreateDownloadTaskSchema, DownloadTaskIdSchema, RetryItemSchema, ExtractItemSchema, DeleteItemFileSchema } from './download.dto';
 
 @Controller('api/download')
 export class DownloadController {
@@ -92,5 +92,29 @@ export class DownloadController {
             throw new HttpException({ success: false, message: '任务 ID 无效' }, HttpStatus.BAD_REQUEST);
         }
         return this.downloadService.deleteTask(parsed.data.id);
+    }
+
+    /**
+     * 手动解压任务项的压缩包
+     */
+    @Post('tasks/extract')
+    async extractItem(@Body() body: unknown) {
+        const parsed = ExtractItemSchema.safeParse(body);
+        if (!parsed.success) {
+            throw new HttpException({ success: false, message: parsed.error.issues[0]?.message || '参数错误' }, HttpStatus.BAD_REQUEST);
+        }
+        return this.downloadService.extractItemFile(parsed.data.taskId, parsed.data.fullName);
+    }
+
+    /**
+     * 手动删除任务项的压缩包
+     */
+    @Post('tasks/delete-item')
+    async deleteItemFile(@Body() body: unknown) {
+        const parsed = DeleteItemFileSchema.safeParse(body);
+        if (!parsed.success) {
+            throw new HttpException({ success: false, message: parsed.error.issues[0]?.message || '参数错误' }, HttpStatus.BAD_REQUEST);
+        }
+        return this.downloadService.deleteItemZipFile(parsed.data.taskId, parsed.data.fullName);
     }
 }

@@ -15,7 +15,7 @@ export const CreateDownloadTaskSchema = z.object({
         })
         .default(DEFAULT_CONCURRENCY),
     /** 镜像代理源列表（按优先级排序），下载时会按顺序尝试，失败自动回退到下一个源 */
-    mirrorSources: z.array(z.enum(MIRROR_SOURCE_NAMES)).min(1, '至少选择一个镜像源').optional().default(['ghproxy']),
+    mirrorSources: z.array(z.enum(MIRROR_SOURCE_NAMES)).min(1, '至少选择一个镜像源').optional().default(['direct']),
     /** 下载后是否解压 */
     extractArchive: z.boolean().optional().default(true),
     /** 解压后是否删除原压缩文件 */
@@ -34,6 +34,18 @@ export type DownloadTaskIdDto = z.infer<typeof DownloadTaskIdSchema>;
 /** 重试单个任务项请求验证 */
 export const RetryItemSchema = z.object({
     id: z.coerce.number().int().positive(),
+    fullName: z.string().min(1, '仓库全名不能为空'),
+});
+
+/** 提取任务项压缩包请求验证 */
+export const ExtractItemSchema = z.object({
+    taskId: z.coerce.number().int().positive(),
+    fullName: z.string().min(1, '仓库全名不能为空'),
+});
+
+/** 删除任务项压缩包请求验证 */
+export const DeleteItemFileSchema = z.object({
+    taskId: z.coerce.number().int().positive(),
     fullName: z.string().min(1, '仓库全名不能为空'),
 });
 

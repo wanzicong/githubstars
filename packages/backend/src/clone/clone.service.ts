@@ -81,8 +81,13 @@ function isNetworkError(errorMsg: string): boolean {
  * 获取镜像代理 URL
  *
  * 将 GitHub URL 转换为镜像代理 URL，加速国内访问。
+ * URL 格式因源而异，通过 keepProtocol 控制：
+ * - keepProtocol=true:  {proxyUrl}/{完整原始URL(含https://)}
+ *   → gh-proxy.com 官方格式: https://gh-proxy.com/https://github.com/user/repo
+ * - keepProtocol=false: {proxyUrl}/{去掉https://的原始URL}
+ *   → gitclone.com 仅支持此格式
  *
- * @param originalUrl 原始 GitHub URL
+ * @param originalUrl 原始 GitHub URL（含 https://）
  * @param mirrorSource 镜像源名称
  * @returns 转换后的 URL（如果是直连则返回原 URL）
  */
@@ -96,9 +101,13 @@ function getMirrorUrl(originalUrl: string, mirrorSource: MirrorSourceName = 'dir
         return originalUrl;
     }
 
-    // 移除 originalUrl 的 https:// 前缀，兼容所有镜像代理的 URL 格式
-    // gh-proxy:  支持 https://gh-proxy.com/https://github.com/... 和 https://gh-proxy.com/github.com/...
-    // gitclone:  仅支持 https://gitclone.com/github.com/...（不接受双协议头）
+    if (source.keepProtocol) {
+        // gh-proxy.com / ghproxy.net 官方格式：保留完整原始 URL（含 https://）
+        // https://gh-proxy.com/https://github.com/user/repo.git
+        return `${source.url}/${originalUrl}`;
+    }
+    // gitclone.com 不支持双协议头：去掉 https://
+    // https://gitclone.com/github.com/user/repo.git
     const strippedUrl = originalUrl.replace(/^https:\/\//i, '');
     return `${source.url}/${strippedUrl}`;
 }
@@ -199,6 +208,19 @@ export class CloneService {
         if (options.githubToken) {
             askpassPath = await this.writeAskpassScript(options.githubToken);
             git.env('GIT_ASKPASS', askpassPath);
+        }
+
+        // 读取并注入代理配置（从 system_config 或环境变量）
+        // HTTP_PROXY/HTTPS_PROXY 是 git 标准环境变量，git CLI 会自动识别使用
+        const httpProxy = (await this.config.getValue('clone.http_proxy')) || process.env.HTTP_PROXY || process.env.http_proxy || '';
+        const httpsProxy = (await this.config.getValue('clone.https_proxy')) || process.env.HTTPS_PROXY || process.env.https_proxy || '';
+        if (httpProxy) {
+            git.env('HTTP_PROXY', httpProxy);
+            git.env('http_proxy', httpProxy);
+        }
+        if (httpsProxy) {
+            git.env('HTTPS_PROXY', httpsProxy);
+            git.env('https_proxy', httpsProxy);
         }
 
         return {
@@ -758,8 +780,10 @@ export class CloneService {
     private stripProxyUrl(cloneUrl: string): string {
         for (const source of GITHUB_MIRROR_SOURCES) {
             if (source.url && cloneUrl.startsWith(source.url + '/')) {
-                // 新格式: https://gh-proxy.com/github.com/owner/repo.git → github.com/owner/repo.git
-                // 需要补回 https:// 前缀得到完整的直连 URL
+                // 新格式 (keepProtocol=true): https://gh-proxy.com/https://github.com/owner/repo.git
+                //   → https://github.com/owner/repo.git（已含 https:// 前缀）
+                // 旧格式 (keepProtocol=false): https://gh-proxy.com/github.com/owner/repo.git
+                //   → 需要补回 https:// 前缀
                 let stripped = cloneUrl.substring(source.url.length + 1);
                 if (!stripped.startsWith('https://') && !stripped.startsWith('http://')) {
                     stripped = 'https://' + stripped;

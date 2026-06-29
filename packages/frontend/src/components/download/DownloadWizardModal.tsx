@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { Modal, Steps, Table, Radio, Switch, Button, Space, Tag, Typography, App, Tooltip, Checkbox } from 'antd'
+import { Modal, Steps, Table, Radio, Button, Space, Tag, Typography, App, Tooltip, Checkbox } from 'antd'
 import {
     FolderOutlined,
     ThunderboltOutlined,
     CloudOutlined,
     CheckCircleOutlined,
-    FileZipOutlined,
     QuestionCircleOutlined,
 } from '@ant-design/icons'
 import { createDownloadTask, type DownloadMirrorSource } from '@/api/download'
@@ -44,9 +43,7 @@ export default function DownloadWizardModal({ open, onClose, selectedRepos, onTa
     const [currentStep, setCurrentStep] = useState(0)
     const [targetDir, setTargetDir] = useState('')
     const [concurrency, setConcurrency] = useState<DownloadConcurrency>(DEFAULT_DOWNLOAD_CONCURRENCY as DownloadConcurrency)
-    const [mirrorSources, setMirrorSources] = useState<DownloadMirrorSource[]>(['ghproxy'])
-    const [extractArchive, setExtractArchive] = useState(true)
-    const [deleteAfterExtract, setDeleteAfterExtract] = useState(true)
+    const [mirrorSources, setMirrorSources] = useState<DownloadMirrorSource[]>(['direct'])
     const [selectedIds, setSelectedIds] = useState<number[]>(selectedRepos.map((r) => r.id))
     const [loading, setLoading] = useState(false)
 
@@ -72,8 +69,6 @@ export default function DownloadWizardModal({ open, onClose, selectedRepos, onTa
                 targetDir: targetDir.trim(),
                 concurrency,
                 mirrorSources,
-                extractArchive,
-                deleteAfterExtract,
             })
             if (result.success && result.taskId) {
                 message.success(result.message || '下载任务已创建')
@@ -93,9 +88,7 @@ export default function DownloadWizardModal({ open, onClose, selectedRepos, onTa
         setCurrentStep(0)
         setTargetDir('')
         setConcurrency(DEFAULT_DOWNLOAD_CONCURRENCY as DownloadConcurrency)
-        setMirrorSources(['ghproxy'])
-        setExtractArchive(true)
-        setDeleteAfterExtract(true)
+        setMirrorSources(['direct'])
         setSelectedIds(selectedRepos.map((r) => r.id))
         onClose()
     }
@@ -222,30 +215,6 @@ export default function DownloadWizardModal({ open, onClose, selectedRepos, onTa
                                 </div>
                             )}
                         </div>
-
-                        {/* 下载后处理 */}
-                        <div>
-                            <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                                <FileZipOutlined /> 下载后处理
-                            </Text>
-                            <Space direction="vertical" size="small">
-                                <Space>
-                                    <Switch checked={extractArchive} onChange={setExtractArchive} />
-                                    <Text>下载后自动解压</Text>
-                                </Space>
-                                {extractArchive && (
-                                    <Space style={{ marginLeft: 48 }}>
-                                        <Switch checked={deleteAfterExtract} onChange={setDeleteAfterExtract} />
-                                        <Space>
-                                            <Text>解压后删除原压缩文件</Text>
-                                            <Text type="secondary" style={{ fontSize: 12 }}>
-                                                （勾选后解压完成会自动清理 .zip 文件，节省硬盘空间）
-                                            </Text>
-                                        </Space>
-                                    </Space>
-                                )}
-                            </Space>
-                        </div>
                     </Space>
                 )
             case 2:
@@ -263,8 +232,6 @@ export default function DownloadWizardModal({ open, onClose, selectedRepos, onTa
                                 { key: 'dir', label: '目标目录', value: targetDir },
                                 { key: 'concurrency', label: '并发数量', value: `${concurrency} 个` },
                                 { key: 'mirror', label: '加速代理', value: mirrorSources.map(s => MIRROR_OPTIONS.find((o) => o.value === s)?.label || s).join(' → ') },
-                                { key: 'extract', label: '自动解压', value: extractArchive ? '是' : '否' },
-                                { key: 'clean', label: '解压后删除压缩包', value: deleteAfterExtract ? '是' : '否' },
                             ]}
                             columns={[
                                 { title: '配置项', dataIndex: 'label', key: 'label', width: 140 },

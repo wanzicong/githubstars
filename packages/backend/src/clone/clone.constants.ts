@@ -48,26 +48,40 @@ export const MAX_HISTORY_TASKS = 10;
  * GitHub 镜像代理源配置
  *
  * 用于加速国内访问 GitHub，支持多个代理源自动轮询。
- * URL 格式：{proxyUrl}/{originalGithubUrl}
+ * URL 格式因源而异：
+ * - keepProtocol=true:  {proxyUrl}/{完整原始URL(含https://)}
+ *   → gh-proxy.com:     https://gh-proxy.com/https://github.com/user/repo
+ * - keepProtocol=false: {proxyUrl}/{去掉https://的原始URL}
+ *   → gitclone.com:     https://gitclone.com/github.com/user/repo
  */
 export const GITHUB_MIRROR_SOURCES = [
+    {
+        name: 'ghproxy',
+        label: 'ghproxy.net',
+        url: 'https://ghproxy.net',
+        description: '国内最稳定的 GitHub 代理，推荐',
+        keepProtocol: true,
+    },
     {
         name: 'gh-proxy',
         label: 'gh-proxy.com',
         url: 'https://gh-proxy.com',
         description: '国内快速代理，支持大文件',
+        keepProtocol: true,
     },
     {
         name: 'gitclone',
         label: 'gitclone.com',
         url: 'https://gitclone.com',
         description: '知名镜像服务，长期维护',
+        keepProtocol: false,
     },
     {
         name: 'direct',
         label: '直连（不加速）',
         url: '',
         description: '直接连接 GitHub，需要网络通畅',
+        keepProtocol: false,
     },
 ] as const;
 

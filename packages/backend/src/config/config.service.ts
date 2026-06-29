@@ -28,6 +28,18 @@ export class ConfigService implements OnModuleInit {
             description: 'DeepSeek Chat Completions API 地址',
         },
         { key: 'deepseek.model', value: 'deepseek-chat', description: 'DeepSeek 模型名称' },
+
+        // 克隆代理配置
+        {
+            key: 'clone.http_proxy',
+            value: '',
+            description: 'Git 克隆 HTTP 代理地址（如 http://127.0.0.1:7897），留空则不使用代理',
+        },
+        {
+            key: 'clone.https_proxy',
+            value: '',
+            description: 'Git 克隆 HTTPS 代理地址（如 http://127.0.0.1:7897），留空则不使用代理',
+        },
     ];
 
     constructor(private readonly prisma: PrismaService) {}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, Table, Tag, Button, Space, Typography, Row, Col, Statistic, Progress, App, Popconfirm } from 'antd'
 import { ReloadOutlined, CopyOutlined, FolderOutlined, UndoOutlined, DeleteOutlined, DownloadOutlined, CloudOutlined } from '@ant-design/icons'
-import { getRecentDownloadTasks, getDownloadTaskProgress, retryDownloadFailed, retryDownloadItem, resetDownloadTask, deleteDownloadTask } from '@/api/download'
+import { getRecentDownloadTasks, getDownloadTaskProgress, retryDownloadFailed, retryDownloadItem, resetDownloadTask, deleteDownloadTask, extractDownloadItem, deleteDownloadItemFile } from '@/api/download'
 import type { DownloadTaskProgress, DownloadTaskListResult } from '@/api/download'
 import DownloadProgressModal from '@/components/download/DownloadProgressModal'
 import { usePolling } from '@/hooks/usePolling'
@@ -130,6 +130,34 @@ export default function Download() {
         }
     }, [activeTaskId, polling, loadTasks])
 
+    const handleExtract = useCallback(async (fullName: string) => {
+        if (!activeTaskId) return
+        try {
+            const result = await extractDownloadItem(activeTaskId, fullName)
+            if (result.success) {
+                message.success(result.message)
+            } else {
+                message.info(result.message || '解压失败')
+            }
+        } catch {
+            message.error('解压失败')
+        }
+    }, [activeTaskId, message])
+
+    const handleDeleteItem = useCallback(async (fullName: string) => {
+        if (!activeTaskId) return
+        try {
+            const result = await deleteDownloadItemFile(activeTaskId, fullName)
+            if (result.success) {
+                message.success(result.message)
+            } else {
+                message.info(result.message || '删除失败')
+            }
+        } catch {
+            message.error('删除失败')
+        }
+    }, [activeTaskId, message])
+
     const handleCloseProgress = () => {
         polling.stop()
         setProgressOpen(false)
@@ -200,12 +228,6 @@ export default function Download() {
                     <Tag icon={<CloudOutlined />} style={{ margin: 0 }}>
                         {getMirrorListLabel(record.mirrorSources)}
                     </Tag>
-                    {record.extractArchive && (
-                        <Tag color="blue" style={{ margin: 0 }}>解压</Tag>
-                    )}
-                    {record.deleteAfterExtract && (
-                        <Tag color="orange" style={{ margin: 0 }}>删包</Tag>
-                    )}
                 </Space>
             ),
         },
@@ -382,6 +404,8 @@ export default function Download() {
                 onRetryFailed={handleRetryFailed}
                 onRetryItem={handleRetryItem}
                 onDelete={handleDeleteTask}
+                onExtract={handleExtract}
+                onDeleteItem={handleDeleteItem}
             />
         </div>
     )

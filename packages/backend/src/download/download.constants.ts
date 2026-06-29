@@ -48,7 +48,11 @@ export const MAX_HISTORY_TASKS = 10;
  * GitHub 下载镜像代理源配置
  *
  * 用于加速国内访问 GitHub 的压缩包下载。
- * URL 格式：{proxyUrl}/{originalArchiveUrl}
+ * URL 格式因源而异，通过 keepProtocol 控制：
+ * - keepProtocol=true:  {proxyUrl}/{完整原始URL(含https://)}
+ *   → ghproxy.net:      https://ghproxy.net/https://github.com/user/repo/...
+ * - keepProtocol=false: {proxyUrl}/{去掉https://的原始URL}
+ *   → gitclone.com 仅支持此格式
  */
 export const DOWNLOAD_MIRROR_SOURCES = [
     {
@@ -56,24 +60,28 @@ export const DOWNLOAD_MIRROR_SOURCES = [
         label: 'ghproxy.net',
         url: 'https://ghproxy.net',
         description: '国内最稳定的 GitHub 代理，推荐',
+        keepProtocol: true,
     },
     {
         name: 'gh-proxy',
         label: 'gh-proxy.com',
         url: 'https://gh-proxy.com',
         description: '国内快速代理，支持大文件',
+        keepProtocol: true,
     },
     {
         name: 'gitclone',
         label: 'gitclone.com',
         url: 'https://gitclone.com',
         description: '知名镜像服务，长期维护',
+        keepProtocol: false,
     },
     {
         name: 'direct',
         label: '直连（不加速）',
         url: '',
         description: '直接连接 GitHub，需要网络通畅',
+        keepProtocol: false,
     },
 ] as const;
 
@@ -95,6 +103,13 @@ export function getOriginalArchiveUrl(mirroredUrl: string): string {
 
 /**
  * 构建镜像代理 URL
+ *
+ * URL 格式因源而异，通过 keepProtocol 控制：
+ * - keepProtocol=true:  {proxyUrl}/{完整原始URL(含https://)}
+ *   → ghproxy.net 官方格式: https://ghproxy.net/https://github.com/user/repo
+ * - keepProtocol=false: {proxyUrl}/{去掉https://的原始URL}
+ *   → gitclone.com 仅支持此格式
+ *
  * @param originalUrl - 原始 GitHub URL（如 https://github.com/owner/repo/archive/refs/heads/main.zip）
  * @param mirrorSource - 镜像源名称
  */
@@ -106,6 +121,11 @@ export function getMirrorUrl(originalUrl: string, mirrorSource: MirrorSourceName
     if (!source || !source.url) {
         return originalUrl;
     }
+    if (source.keepProtocol) {
+        // ghproxy.net / gh-proxy.com 官方格式：保留完整原始 URL（含 https://）
+        return `${source.url}/${originalUrl}`;
+    }
+    // gitclone.com 不支持双协议头：去掉 https://
     const strippedUrl = originalUrl.replace(/^https:\/\//i, '');
     return `${source.url}/${strippedUrl}`;
 }
