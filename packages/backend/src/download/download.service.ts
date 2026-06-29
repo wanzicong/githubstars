@@ -237,9 +237,7 @@ export class DownloadService {
             },
         });
 
-        // 检测默认分支并创建任务明细（并发检测，每批 CONCURRENT_DETECT 个同时进行）
-        const token = await this.getGitHubToken();
-        const CONCURRENT_DETECT = 10;
+        // 创建任务明细（分支检测推迟到任务执行时，创建不做网络请求）
         const validItems: Array<{
             taskId: bigint;
             repoId: bigint;
@@ -248,54 +246,43 @@ export class DownloadService {
             localFilePath: string;
             extractDir: string | null;
             fileSize: bigint;
-            defaultBranch: string;
+            defaultBranch: string | null;
             status: 'PENDING';
             retryCount: number;
             createdAt: Date;
         }> = [];
 
-        for (let i = 0; i < repos.length; i += CONCURRENT_DETECT) {
-            const batch = repos.slice(i, i + CONCURRENT_DETECT);
-            const batchResults = await Promise.all(
-                batch.map(async (repo) => {
-                    const fullName = repo.fullName || '';
-                    const { owner, repoName } = parseFullName(fullName);
-                    const defaultBranch = await this.detectDefaultBranch(owner, repoName, token);
+        for (const repo of repos) {
+            const fullName = repo.fullName || '';
+            const { owner, repoName } = parseFullName(fullName);
 
-                    // 构建下载文件名：owner_repo-defaultBranch.zip
-                    const safeFileName = `${owner}_${repoName}-${defaultBranch}.zip`.replace(/[<>:"/\\|?*]/g, '_');
-                    const downloadDir = path.join(normalizedTargetDir, owner);
-                    const localFilePath = path.join(downloadDir, safeFileName);
+            // 使用 HEAD.zip（GitHub 自动 302 到默认分支），执行时再解析真实分支名
+            const safeFileName = `${owner}_${repoName}.zip`.replace(/[<>:"/\\|?*]/g, '_');
+            const downloadDir = path.join(normalizedTargetDir, owner);
+            const localFilePath = path.join(downloadDir, safeFileName);
 
-                    // 路径安全校验
-                    if (!localFilePath.startsWith(normalizedTargetDir + path.sep)) {
-                        this.logger.warn(`路径安全校验失败，跳过: ${fullName}`);
-                        return null;
-                    }
-
-                    // 构建 archive URL（存储原始 GitHub URL，多镜像回退在下载时动态处理）
-                    const archiveUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${defaultBranch}.zip`;
-
-                    return {
-                        taskId: task.id,
-                        repoId: repo.id,
-                        fullName,
-                        archiveUrl,
-                        localFilePath,
-                        extractDir: null,
-                        fileSize: BigInt(0),
-                        defaultBranch,
-                        status: 'PENDING' as const,
-                        retryCount: 0,
-                        createdAt: new Date(),
-                    };
-                }),
-            );
-            for (const result of batchResults) {
-                if (result !== null) {
-                    validItems.push(result);
-                }
+            // 路径安全校验
+            if (!localFilePath.startsWith(normalizedTargetDir + path.sep)) {
+                this.logger.warn(`路径安全校验失败，跳过: ${fullName}`);
+                continue;
             }
+
+            // archive URL 使用 HEAD.zip，执行时解析重定向后更新
+            const archiveUrl = `https://github.com/${owner}/${repoName}/archive/HEAD.zip`;
+
+            validItems.push({
+                taskId: task.id,
+                repoId: repo.id,
+                fullName,
+                archiveUrl,
+                localFilePath,
+                extractDir: null,
+                fileSize: BigInt(0),
+                defaultBranch: null,
+                status: 'PENDING' as const,
+                retryCount: 0,
+                createdAt: new Date(),
+            });
         }
 
         if (validItems.length === 0) {
@@ -528,9 +515,63 @@ export class DownloadService {
         const mirrorSources = this.parseMirrorSources(task.mirrorSource);
         this.logger.log(
             `下载任务开始执行: taskId=${Number(taskId)} pendingItems=${items.length} ` +
-                `concurrency=${task.concurrency} mirrorSources=${JSON.stringify(mirrorSources)} ` +
-                `extractArchive=${task.extractArchive} deleteAfterExtract=${task.deleteArchiveAfterExtract}`,
+                `concurrency=${task.concurrency} mirrorSources=${JSON.stringify(mirrorSources)}`,
         );
+
+        // 解析所有 PENDING 项的真实分支：HEAD HEAD.zip → 跟 302 → 提取分支名 → 更新 DB
+        const token = await this.getGitHubToken();
+        const branchResolvedItems = await Promise.all(
+            items.map(async (item) => {
+                const fullName = item.fullName || '';
+                const { owner, repoName } = parseFullName(fullName);
+
+                // HEAD.zip 会被 GitHub 302 到 .../archive/refs/heads/{branch}.zip
+                let branch = 'main';
+                try {
+                    const response = await fetch(
+                        `https://github.com/${owner}/${repoName}/archive/HEAD.zip`,
+                        { method: 'HEAD', signal: AbortSignal.timeout(5_000) },
+                    );
+                    const match = /\/archive\/refs\/heads\/(.+)\.zip$/i.exec(response.url);
+                    if (match?.[1]) {
+                        branch = match[1];
+                    }
+                } catch {
+                    // HEAD.zip 失败（网络问题），回退到传统分支检测
+                    branch = await this.detectDefaultBranch(owner, repoName, token);
+                }
+
+                const newArchiveUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${branch}.zip`;
+                const safeFileName = `${owner}_${repoName}-${branch}.zip`.replace(/[<>:"/\\|?*]/g, '_');
+                const downloadDir = path.join(this.targetDir!, owner);
+                const newLocalFilePath = path.join(downloadDir, safeFileName);
+
+                return { item, newArchiveUrl, newLocalFilePath, branch };
+            }),
+        );
+
+        // 批量更新 DB（仅当 archiveUrl 或 localFilePath 有变化时）
+        const dbUpdates = branchResolvedItems
+            .filter((r) => r.newArchiveUrl !== r.item.archiveUrl || r.newLocalFilePath !== r.item.localFilePath)
+            .map((r) =>
+                this.prisma.downloadTaskItem.update({
+                    where: { id: r.item.id },
+                    data: {
+                        archiveUrl: r.newArchiveUrl,
+                        localFilePath: r.newLocalFilePath,
+                        defaultBranch: r.branch,
+                    },
+                }),
+            );
+        if (dbUpdates.length > 0) {
+            await this.prisma.$transaction(dbUpdates);
+        }
+
+        // 更新内存中的 item 对象（后续 processItem 会直接使用）
+        for (const r of branchResolvedItems) {
+            r.item.archiveUrl = r.newArchiveUrl;
+            r.item.localFilePath = r.newLocalFilePath;
+        }
 
         const results = await Promise.allSettled(items.map((item) => this.processItem(item, mirrorSources)));
         const rejectedCount = results.filter((r) => r.status === 'rejected').length;

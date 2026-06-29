@@ -19,10 +19,14 @@ const { Text } = Typography
 
 /** 镜像源选项 */
 const MIRROR_OPTIONS = [
-    { value: 'ghproxy' as DownloadMirrorSource, label: 'ghproxy.net', description: '国内最稳定的代理，推荐' },
-    { value: 'gh-proxy' as DownloadMirrorSource, label: 'gh-proxy.com', description: '国内快速代理' },
-    { value: 'gitclone' as DownloadMirrorSource, label: 'gitclone.com', description: '知名镜像服务' },
-    { value: 'direct' as DownloadMirrorSource, label: '直连（不加速）', description: '直接连接 GitHub' },
+    { value: 'ghproxy' as DownloadMirrorSource, label: 'ghproxy.net', description: '国内最稳定的 GitHub 代理，推荐' },
+    { value: 'gh-proxy' as DownloadMirrorSource, label: 'gh-proxy.com', description: '国内快速代理，支持大文件' },
+    { value: 'gh-proxy-org' as DownloadMirrorSource, label: 'gh-proxy.org(CF v4)', description: '主站加速，全球高速分发' },
+    { value: 'gh-proxy-v4' as DownloadMirrorSource, label: 'v4.gh-proxy.org', description: '优选加速，仅支持 IPv4' },
+    { value: 'gh-proxy-v6' as DownloadMirrorSource, label: 'v6.gh-proxy.org', description: '优选加速，支持 IPv4/IPv6' },
+    { value: 'gh-proxy-cdn' as DownloadMirrorSource, label: 'cdn.gh-proxy.org', description: 'Fastly CDN 节点加速' },
+    { value: 'gitclone' as DownloadMirrorSource, label: 'gitclone.com', description: '知名镜像服务，长期维护' },
+    { value: 'direct' as DownloadMirrorSource, label: '直连（不加速）', description: '直接连接 GitHub，需要网络通畅' },
 ]
 
 interface DownloadWizardModalProps {

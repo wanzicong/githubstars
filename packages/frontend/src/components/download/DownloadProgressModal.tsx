@@ -52,6 +52,10 @@ export default function DownloadProgressModal({ open, progress, onClose, onRetry
         const map: Record<string, string> = {
             ghproxy: 'ghproxy.net',
             'gh-proxy': 'gh-proxy.com',
+            'gh-proxy-org': 'gh-proxy.org(CF v4)',
+            'gh-proxy-v4': 'v4.gh-proxy.org',
+            'gh-proxy-v6': 'v6.gh-proxy.org',
+            'gh-proxy-cdn': 'cdn.gh-proxy.org',
             gitclone: 'gitclone.com',
             direct: '直连',
         }

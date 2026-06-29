@@ -1,7 +1,7 @@
 import api from './request'
 
 /** 镜像代理源类型 */
-export type MirrorSource = 'ghproxy' | 'gh-proxy' | 'gitclone' | 'direct'
+export type MirrorSource = 'ghproxy' | 'gh-proxy' | 'gh-proxy-org' | 'gh-proxy-v4' | 'gh-proxy-v6' | 'gh-proxy-cdn' | 'gitclone' | 'direct'
 
 /** 创建克隆任务 */
 export async function createCloneTask(params: {
