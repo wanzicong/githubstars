@@ -1,6 +1,13 @@
 import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/common';
 import { DownloadService } from './download.service';
-import { CreateDownloadTaskSchema, DownloadTaskIdSchema, RetryItemSchema, ExtractItemSchema, DeleteItemFileSchema } from './download.dto';
+import {
+    CreateDownloadTaskSchema,
+    DownloadTaskIdSchema,
+    RetryItemSchema,
+    ExtractItemSchema,
+    DeleteItemFileSchema,
+    ExtractAllSchema,
+} from './download.dto';
 
 @Controller('api/download')
 export class DownloadController {
@@ -116,5 +123,33 @@ export class DownloadController {
             throw new HttpException({ success: false, message: parsed.error.issues[0]?.message || '参数错误' }, HttpStatus.BAD_REQUEST);
         }
         return this.downloadService.deleteItemZipFile(parsed.data.taskId, parsed.data.fullName);
+    }
+
+    /**
+     * 一键解压任务中所有已完成项的压缩包
+     *
+     * 自动跳过：
+     * - 状态不是 COMPLETED 的任务项（失败/跳过项不处理）
+     * - 已解压过的任务项（目标目录已存在）
+     */
+    @Post('tasks/extract-all')
+    async extractAll(@Body() body: unknown) {
+        const parsed = ExtractAllSchema.safeParse(body);
+        if (!parsed.success) {
+            throw new HttpException({ success: false, message: '任务 ID 无效' }, HttpStatus.BAD_REQUEST);
+        }
+        return this.downloadService.extractAllItems(parsed.data.taskId);
+    }
+
+    /**
+     * 查询批量解压进度
+     */
+    @Post('tasks/extract-all/progress')
+    getExtractAllProgress(@Body() body: unknown) {
+        const parsed = DownloadTaskIdSchema.safeParse(body);
+        if (!parsed.success) {
+            throw new HttpException({ success: false, message: '任务 ID 无效' }, HttpStatus.BAD_REQUEST);
+        }
+        return this.downloadService.getExtractAllProgress(parsed.data.id);
     }
 }

@@ -1,7 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Row, Col, Statistic, Progress, App, Popconfirm, Tooltip } from 'antd'
-import { ReloadOutlined, CopyOutlined, FolderOutlined, UndoOutlined, DeleteOutlined, DownloadOutlined, CloudOutlined } from '@ant-design/icons'
-import { getRecentDownloadTasks, getDownloadTaskProgress, retryDownloadFailed, retryDownloadItem, resetDownloadTask, deleteDownloadTask, extractDownloadItem, deleteDownloadItemFile } from '@/api/download'
+import { Card, Table, Tag, Button, Space, Typography, Row, Col, Statistic, Progress, App, Popconfirm, Tooltip, Modal } from 'antd'
+import {
+    ReloadOutlined,
+    CopyOutlined,
+    FolderOutlined,
+    UndoOutlined,
+    DeleteOutlined,
+    DownloadOutlined,
+    CloudOutlined,
+    CompressOutlined,
+} from '@ant-design/icons'
+import {
+    getRecentDownloadTasks,
+    getDownloadTaskProgress,
+    retryDownloadFailed,
+    retryDownloadItem,
+    resetDownloadTask,
+    deleteDownloadTask,
+    extractDownloadItem,
+    deleteDownloadItemFile,
+    extractAllDownloadItems,
+    getExtractAllProgress,
+} from '@/api/download'
 import type { DownloadTaskProgress, DownloadTaskListResult } from '@/api/download'
 import DownloadProgressModal from '@/components/download/DownloadProgressModal'
 import { usePolling } from '@/hooks/usePolling'
@@ -18,6 +38,26 @@ export default function Download() {
     const { message } = App.useApp()
     const [tasks, setTasks] = useState<DownloadTaskListResult['tasks']>([])
     const [loading, setLoading] = useState(true)
+    const [extracting, setExtracting] = useState<number | null>(null)
+    const [extractProgress, setExtractProgress] = useState<{
+        status: 'extracting' | 'completed'
+        total: number
+        current: number
+        extracted: number
+        skipped: number
+        failed: number
+        message: string
+    } | null>(null)
+    const [extractResult, setExtractResult] = useState<{
+        visible: boolean
+        message: string
+        extracted: number
+        skipped: number
+        failed: number
+        details: Array<{ fullName: string; status: string; message?: string }>
+    } | null>(null)
+    const extractingRef = useRef<number | null>(null)
+
     const [progressOpen, setProgressOpen] = useState(false)
     const [activeTaskId, setActiveTaskId] = useState<number | null>(null)
     const [progress, setProgress] = useState<DownloadTaskProgress | null>(null)
@@ -35,7 +75,9 @@ export default function Download() {
         }
     }, [])
 
-    useEffect(() => { loadTasks() }, [loadTasks])
+    useEffect(() => {
+        loadTasks()
+    }, [loadTasks])
 
     // 任务列表自动轮询
     const listPolling = usePolling(async () => {
@@ -60,7 +102,10 @@ export default function Download() {
     // 轮询活跃任务进度
     const polling = usePolling(async () => {
         const taskId = activeTaskIdRef.current
-        if (!taskId) { polling.stop(); return }
+        if (!taskId) {
+            polling.stop()
+            return
+        }
         try {
             const res = await getDownloadTaskProgress(taskId)
             if (res.success) {
@@ -70,15 +115,20 @@ export default function Download() {
                     loadTasks()
                 }
             }
-        } catch { /* ignore */ }
+        } catch {
+            /* ignore */
+        }
     }, 2000)
 
-    const handleViewProgress = useCallback((taskId: number) => {
-        setActiveTaskId(taskId)
-        activeTaskIdRef.current = taskId
-        setProgressOpen(true)
-        polling.start()
-    }, [polling])
+    const handleViewProgress = useCallback(
+        (taskId: number) => {
+            setActiveTaskId(taskId)
+            activeTaskIdRef.current = taskId
+            setProgressOpen(true)
+            polling.start()
+        },
+        [polling],
+    )
 
     const handleRetryFailed = useCallback(async () => {
         if (!activeTaskId) return
@@ -96,21 +146,24 @@ export default function Download() {
         }
     }, [activeTaskId, polling])
 
-    const handleRetryItem = useCallback(async (fullName: string) => {
-        if (!activeTaskId) return
-        try {
-            const result = await retryDownloadItem(activeTaskId, fullName)
-            if (result.success) {
-                message.success(result.message)
-                const progressRes = await getDownloadTaskProgress(activeTaskId)
-                if (progressRes.success) setProgress(progressRes)
-            } else {
-                message.info(result.message)
+    const handleRetryItem = useCallback(
+        async (fullName: string) => {
+            if (!activeTaskId) return
+            try {
+                const result = await retryDownloadItem(activeTaskId, fullName)
+                if (result.success) {
+                    message.success(result.message)
+                    const progressRes = await getDownloadTaskProgress(activeTaskId)
+                    if (progressRes.success) setProgress(progressRes)
+                } else {
+                    message.info(result.message)
+                }
+            } catch {
+                message.error('重试失败')
             }
-        } catch {
-            message.error('重试失败')
-        }
-    }, [activeTaskId])
+        },
+        [activeTaskId],
+    )
 
     const handleDeleteTask = useCallback(async () => {
         if (!activeTaskId) return
@@ -130,33 +183,105 @@ export default function Download() {
         }
     }, [activeTaskId, polling, loadTasks])
 
-    const handleExtract = useCallback(async (fullName: string) => {
-        if (!activeTaskId) return
-        try {
-            const result = await extractDownloadItem(activeTaskId, fullName)
-            if (result.success) {
-                message.success(result.message)
-            } else {
-                message.info(result.message || '解压失败')
+    const handleExtract = useCallback(
+        async (fullName: string) => {
+            if (!activeTaskId) return
+            try {
+                const result = await extractDownloadItem(activeTaskId, fullName)
+                if (result.success) {
+                    message.success(result.message)
+                } else {
+                    message.info(result.message || '解压失败')
+                }
+            } catch {
+                message.error('解压失败')
             }
-        } catch {
-            message.error('解压失败')
-        }
-    }, [activeTaskId, message])
+        },
+        [activeTaskId, message],
+    )
 
-    const handleDeleteItem = useCallback(async (fullName: string) => {
-        if (!activeTaskId) return
+    const handleDeleteItem = useCallback(
+        async (fullName: string) => {
+            if (!activeTaskId) return
+            try {
+                const result = await deleteDownloadItemFile(activeTaskId, fullName)
+                if (result.success) {
+                    message.success(result.message)
+                } else {
+                    message.info(result.message || '删除失败')
+                }
+            } catch {
+                message.error('删除失败')
+            }
+        },
+        [activeTaskId, message],
+    )
+
+    // 解压进度轮询
+    const extractPolling = usePolling(async () => {
+        const taskId = extractingRef.current
+        if (!taskId) {
+            extractPolling.stop()
+            return
+        }
         try {
-            const result = await deleteDownloadItemFile(activeTaskId, fullName)
-            if (result.success) {
-                message.success(result.message)
-            } else {
-                message.info(result.message || '删除失败')
+            const res = await getExtractAllProgress(taskId)
+            if (res.success && res.status) {
+                setExtractProgress({
+                    status: res.status,
+                    total: res.total ?? 0,
+                    current: res.current ?? 0,
+                    extracted: res.extracted ?? 0,
+                    skipped: res.skipped ?? 0,
+                    failed: res.failed ?? 0,
+                    message: res.message ?? '',
+                })
+                if (res.status === 'completed') {
+                    extractPolling.stop()
+                    setExtracting(null)
+                    setExtractProgress(null)
+                    loadTasks()
+                    if ((res.failed ?? 0) > 0 && res.details) {
+                        setExtractResult({
+                            visible: true,
+                            message: res.message ?? '',
+                            extracted: res.extracted ?? 0,
+                            skipped: res.skipped ?? 0,
+                            failed: res.failed ?? 0,
+                            details: res.details,
+                        })
+                    } else {
+                        message.success(res.message ?? '解压完成')
+                    }
+                }
             }
         } catch {
-            message.error('删除失败')
+            // 轮询期间静默失败
         }
-    }, [activeTaskId, message])
+    }, 2000)
+
+    const handleExtractAll = useCallback(
+        async (taskId: number) => {
+            setExtracting(taskId)
+            extractingRef.current = taskId
+            try {
+                const res = await extractAllDownloadItems(taskId)
+                if (!res.success) {
+                    message.info(res.message)
+                    setExtracting(null)
+                    extractingRef.current = null
+                    return
+                }
+                // 后台解压已启动，开始轮询进度
+                extractPolling.start()
+            } catch {
+                message.error('一键解压失败：网络请求异常，请检查后端服务是否正常运行')
+                setExtracting(null)
+                extractingRef.current = null
+            }
+        },
+        [extractPolling, message],
+    )
 
     const handleCloseProgress = () => {
         polling.stop()
@@ -194,7 +319,7 @@ export default function Download() {
     /** 镜像源列表中文标签 */
     const getMirrorListLabel = (sources: string[]): string => {
         if (!sources || sources.length === 0) return '直连'
-        return sources.map(s => getMirrorName(s)).join(' → ')
+        return sources.map((s) => getMirrorName(s)).join(' → ')
     }
 
     const columns = [
@@ -232,9 +357,14 @@ export default function Download() {
                 const mirrorLabel = getMirrorListLabel(record.mirrorSources)
                 return (
                     <Space size={4}>
-                        <Text type="secondary" style={{ fontSize: 12 }}>{record.concurrency}并发</Text>
+                        <Text type='secondary' style={{ fontSize: 12 }}>
+                            {record.concurrency}并发
+                        </Text>
                         <Tooltip title={mirrorLabel}>
-                            <Tag icon={<CloudOutlined />} style={{ margin: 0, maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <Tag
+                                icon={<CloudOutlined />}
+                                style={{ margin: 0, maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            >
                                 {mirrorLabel}
                             </Tag>
                         </Tooltip>
@@ -255,10 +385,10 @@ export default function Download() {
                 else if (record.status === 'FAILED') progressStatus = 'exception'
                 return (
                     <div>
-                        <Progress percent={percent} size="small" status={progressStatus} />
-                        <Text type="secondary" style={{ fontSize: 12 }}>
+                        <Progress percent={percent} size='small' status={progressStatus} />
+                        <Text type='secondary' style={{ fontSize: 12 }}>
                             {record.completedItems}/{total}
-                            {record.failedItems > 0 && <Text type="danger"> 失败{record.failedItems}</Text>}
+                            {record.failedItems > 0 && <Text type='danger'> 失败{record.failedItems}</Text>}
                         </Text>
                     </div>
                 )
@@ -270,21 +400,41 @@ export default function Download() {
             dataIndex: 'createdAt',
             key: 'createdAt',
             width: 160,
-            render: (time: string) => time ? dayjs(time).format('MM-DD HH:mm:ss') : '-',
+            render: (time: string) => (time ? dayjs(time).format('MM-DD HH:mm:ss') : '-'),
         },
         {
             title: '操作',
             key: 'action',
             width: 260,
             render: (_: unknown, record: DownloadTaskListResult['tasks'][0]) => (
-                <Space size="middle" wrap>
-                    <Button size="small" icon={<CopyOutlined />} onClick={() => handleViewProgress(record.taskId)}>
+                <Space size='middle' wrap>
+                    <Button size='small' icon={<CopyOutlined />} onClick={() => handleViewProgress(record.taskId)}>
                         详情
                     </Button>
+                    {(record.status === 'COMPLETED' || record.status === 'PARTIAL') &&
+                        (extracting === record.taskId && extractProgress ? (
+                            <Tooltip title={extractProgress.message}>
+                                <Button size='small' loading icon={<CompressOutlined />}>
+                                    {extractProgress.current}/{extractProgress.total}
+                                </Button>
+                            </Tooltip>
+                        ) : (
+                            <Popconfirm
+                                title='确定要一键解压所有已完成项吗？'
+                                description='将自动跳过已解压项和失败项'
+                                onConfirm={() => handleExtractAll(record.taskId)}
+                                okText='解压'
+                                cancelText='取消'
+                            >
+                                <Button size='small' loading={extracting === record.taskId} icon={<CompressOutlined />}>
+                                    一键解压
+                                </Button>
+                            </Popconfirm>
+                        ))}
                     {(record.status === 'FAILED' || record.status === 'PARTIAL') && (
                         <Popconfirm
-                            title="确定要重试失败项吗？"
-                            description="将重新执行所有失败的下载项"
+                            title='确定要重试失败项吗？'
+                            description='将重新执行所有失败的下载项'
                             onConfirm={async () => {
                                 try {
                                     const res = await retryDownloadFailed(record.taskId)
@@ -298,18 +448,25 @@ export default function Download() {
                                     message.error('重试失败')
                                 }
                             }}
-                            okText="重试"
-                            cancelText="取消"
+                            okText='重试'
+                            cancelText='取消'
                         >
-                            <Button size="small" type="link" icon={<ReloadOutlined />}>
+                            <Button size='small' type='link' icon={<ReloadOutlined />}>
                                 重试
                             </Button>
                         </Popconfirm>
                     )}
-                    {(record.status === 'PROCESSING' || record.status === 'COMPLETED' || record.status === 'FAILED' || record.status === 'PARTIAL') && (
+                    {(record.status === 'PROCESSING' ||
+                        record.status === 'COMPLETED' ||
+                        record.status === 'FAILED' ||
+                        record.status === 'PARTIAL') && (
                         <Popconfirm
-                            title="确定要重置此任务吗？"
-                            description={record.status === 'PROCESSING' ? '任务正在运行中，重置后将强制停止并重新执行。' : '将删除失败项目录并重置为待执行状态，是否继续？'}
+                            title='确定要重置此任务吗？'
+                            description={
+                                record.status === 'PROCESSING'
+                                    ? '任务正在运行中，重置后将强制停止并重新执行。'
+                                    : '将删除失败项目录并重置为待执行状态，是否继续？'
+                            }
                             onConfirm={async () => {
                                 try {
                                     const res = await resetDownloadTask(record.taskId)
@@ -323,18 +480,18 @@ export default function Download() {
                                     message.error('重置失败')
                                 }
                             }}
-                            okText="重置"
-                            cancelText="取消"
+                            okText='重置'
+                            cancelText='取消'
                         >
-                            <Button size="small" type="link" icon={<UndoOutlined />}>
+                            <Button size='small' type='link' icon={<UndoOutlined />}>
                                 重置
                             </Button>
                         </Popconfirm>
                     )}
                     {record.status !== 'PROCESSING' && (
                         <Popconfirm
-                            title="确定要删除此任务吗？"
-                            description="删除后不可恢复"
+                            title='确定要删除此任务吗？'
+                            description='删除后不可恢复'
                             onConfirm={async () => {
                                 try {
                                     const res = await deleteDownloadTask(record.taskId)
@@ -348,11 +505,11 @@ export default function Download() {
                                     message.error('删除失败')
                                 }
                             }}
-                            okText="删除"
-                            cancelText="取消"
+                            okText='删除'
+                            cancelText='取消'
                             okButtonProps={{ danger: true }}
                         >
-                            <Button size="small" type="link" danger icon={<DeleteOutlined />}>
+                            <Button size='small' type='link' danger icon={<DeleteOutlined />}>
                                 删除
                             </Button>
                         </Popconfirm>
@@ -374,23 +531,25 @@ export default function Download() {
                     <DownloadOutlined style={{ marginRight: 8 }} />
                     下载任务管理
                 </Title>
-                <Button icon={<ReloadOutlined />} onClick={loadTasks} loading={loading}>刷新</Button>
+                <Button icon={<ReloadOutlined />} onClick={loadTasks} loading={loading}>
+                    刷新
+                </Button>
             </div>
 
             <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
                 <Col xs={12} sm={8}>
-                    <Card size="small">
-                        <Statistic title="总任务数" value={totalTasks} prefix={<CopyOutlined />} />
+                    <Card size='small'>
+                        <Statistic title='总任务数' value={totalTasks} prefix={<CopyOutlined />} />
                     </Card>
                 </Col>
                 <Col xs={12} sm={8}>
-                    <Card size="small">
-                        <Statistic title="执行中" value={runningTasks} valueStyle={{ color: '#1677ff' }} />
+                    <Card size='small'>
+                        <Statistic title='执行中' value={runningTasks} valueStyle={{ color: '#1677ff' }} />
                     </Card>
                 </Col>
                 <Col xs={12} sm={8}>
-                    <Card size="small">
-                        <Statistic title="已完成" value={completedTasks} valueStyle={{ color: '#52c41a' }} />
+                    <Card size='small'>
+                        <Statistic title='已完成' value={completedTasks} valueStyle={{ color: '#52c41a' }} />
                     </Card>
                 </Col>
             </Row>
@@ -398,7 +557,7 @@ export default function Download() {
             <Table
                 dataSource={tasks}
                 columns={columns}
-                rowKey="taskId"
+                rowKey='taskId'
                 loading={loading}
                 pagination={{ pageSize: 10 }}
                 scroll={{ x: 1200 }}
@@ -414,6 +573,43 @@ export default function Download() {
                 onExtract={handleExtract}
                 onDeleteItem={handleDeleteItem}
             />
+
+            {/* 批量解压结果详情弹窗 */}
+            <Modal
+                title='一键解压结果'
+                open={extractResult?.visible ?? false}
+                onCancel={() => setExtractResult(null)}
+                footer={<Button onClick={() => setExtractResult(null)}>关闭</Button>}
+                width={600}
+            >
+                {extractResult && (
+                    <div>
+                        <div style={{ marginBottom: 16 }}>
+                            <Space size='large'>
+                                <Statistic title='成功' value={extractResult.extracted} valueStyle={{ color: '#52c41a' }} />
+                                <Statistic title='跳过' value={extractResult.skipped} />
+                                <Statistic
+                                    title='失败'
+                                    value={extractResult.failed}
+                                    valueStyle={{ color: extractResult.failed > 0 ? '#ff4d4f' : undefined }}
+                                />
+                            </Space>
+                        </div>
+                        {extractResult.failed > 0 && (
+                            <Table
+                                dataSource={extractResult.details.filter((d) => d.status === 'fail')}
+                                columns={[
+                                    { title: '仓库', dataIndex: 'fullName', key: 'fullName', width: 200 },
+                                    { title: '原因', dataIndex: 'message', key: 'message' },
+                                ]}
+                                rowKey='fullName'
+                                pagination={false}
+                                size='small'
+                            />
+                        )}
+                    </div>
+                )}
+            </Modal>
         </div>
     )
 }

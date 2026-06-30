@@ -34,19 +34,35 @@ export type DownloadTaskIdDto = z.infer<typeof DownloadTaskIdSchema>;
 /** 重试单个任务项请求验证 */
 export const RetryItemSchema = z.object({
     id: z.coerce.number().int().positive(),
-    fullName: z.string().min(1, '仓库全名不能为空'),
+    fullName: z
+        .string()
+        .min(1, '仓库全名不能为空')
+        .regex(/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/, '仓库全名格式必须为 owner/repo'),
 });
 
 /** 提取任务项压缩包请求验证 */
 export const ExtractItemSchema = z.object({
     taskId: z.coerce.number().int().positive(),
-    fullName: z.string().min(1, '仓库全名不能为空'),
+    fullName: z
+        .string()
+        .min(1, '仓库全名不能为空')
+        .regex(/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/, '仓库全名格式必须为 owner/repo'),
 });
 
 /** 删除任务项压缩包请求验证 */
 export const DeleteItemFileSchema = z.object({
     taskId: z.coerce.number().int().positive(),
-    fullName: z.string().min(1, '仓库全名不能为空'),
+    fullName: z
+        .string()
+        .min(1, '仓库全名不能为空')
+        .regex(/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/, '仓库全名格式必须为 owner/repo'),
 });
+
+/** 批量解压请求验证 */
+export const ExtractAllSchema = z.object({
+    taskId: z.coerce.number().int().positive(),
+});
+
+export type ExtractAllDto = z.infer<typeof ExtractAllSchema>;
 
 export type RetryItemDto = z.infer<typeof RetryItemSchema>;

@@ -18,9 +18,9 @@ import { CreateDownloadTaskDto } from './download.dto';
 import { SYSTEM_FORBIDDEN_PREFIXES } from '../common/constants/system.constants';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
-import { existsSync } from 'fs';
-import { createWriteStream, readFileSync } from 'fs';
-import { mkdir, rm, rename, stat } from 'fs/promises';
+import { existsSync, openSync, readSync, closeSync, statSync } from 'fs';
+import { createWriteStream } from 'fs';
+import { mkdir, rm, rename, stat, writeFile } from 'fs/promises';
 import AdmZip from 'adm-zip';
 
 /**
@@ -71,15 +71,52 @@ function parseFullName(fullName: string): { owner: string; repoName: string } {
 /**
  * 验证文件是否为有效的 ZIP 文件（检查魔术字节）
  */
+/**
+ * 验证 ZIP 文件完整性（头尾双重校验）
+ *
+ * - 检查魔术字节（文件头 4 字节：PK\x03\x04）
+ * - 检查 EOCD 尾部记录（文件末尾的 PK\x05\x06 签名）
+ *
+ * EOCD 检查能有效检测文件截断问题：镜像代理下载大文件时可能提前断开
+ * 连接但未报错，导致文件头完整但内容被截断。
+ *
+ * 性能：仅读取文件头 4 字节 + 文件尾 64KB，不读取整个文件。
+ */
 function isValidZipFile(filePath: string): boolean {
     try {
-        const buffer = readFileSync(filePath);
-        if (buffer.length < 4) return false;
-        return buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04;
+        const fd = openSync(filePath, 'r');
+        try {
+            const size = statSync(filePath).size;
+            if (size < 22) return false; // 最小有效 ZIP 22 字节
+
+            // 检查魔术字节（文件头）
+            const header = Buffer.alloc(4);
+            readSync(fd, header, 0, 4, 0);
+            if (header[0] !== 0x50 || header[1] !== 0x4b || header[2] !== 0x03 || header[3] !== 0x04) {
+                return false;
+            }
+
+            // 检查 EOCD 尾部记录（文件末尾 22~65557 字节范围内搜索 PK\x05\x06）
+            const searchSize = Math.min(size, 65557);
+            const tail = Buffer.alloc(searchSize);
+            readSync(fd, tail, 0, searchSize, size - searchSize);
+
+            for (let i = searchSize - 22; i >= 0; i--) {
+                if (tail[i] === 0x50 && tail[i + 1] === 0x4b && tail[i + 2] === 0x05 && tail[i + 3] === 0x06) {
+                    return true;
+                }
+            }
+            return false; // EOCD 未找到 → 文件被截断
+        } finally {
+            closeSync(fd);
+        }
     } catch {
         return false;
     }
 }
+
+/** 解压完成标记文件名 */
+const EXTRACT_MARKER_FILE = '.extracted_done';
 
 @Injectable()
 export class DownloadService {
@@ -107,6 +144,21 @@ export class DownloadService {
 
     /** 已由 processItem 超时处理过的子项 ID 集合 */
     private timeoutHandledItems = new Set<string>();
+
+    /** 批量解压进度追踪 key=taskId */
+    private extractProgress = new Map<
+        number,
+        {
+            status: 'extracting' | 'completed';
+            total: number;
+            current: number;
+            extracted: number;
+            skipped: number;
+            failed: number;
+            details: Array<{ fullName: string; status: string; message?: string }>;
+            message: string;
+        }
+    >();
 
     constructor(
         private readonly prisma: PrismaService,
@@ -862,10 +914,19 @@ export class DownloadService {
 
                 await this.downloadFile(url, destPath);
 
-                // 验证文件完整性
+                // 验证文件完整性（头 + 尾双重校验）
                 if (!isValidZipFile(destPath)) {
                     await rm(destPath, { force: true });
-                    throw new Error('下载文件不是有效的 ZIP 文件（魔术字节校验失败），可能是代理返回了错误页面');
+                    throw new Error('下载文件不是有效的 ZIP 文件（文件头损坏或文件被截断），可能是代理返回了错误页面');
+                }
+
+                // 大文件预检（超过 500MB 不下载，直接失败避免反复重试）
+                const MAX_FILE_SIZE = 500 * 1024 * 1024;
+                const size = (await stat(destPath)).size;
+                if (size > MAX_FILE_SIZE) {
+                    await rm(destPath, { force: true });
+                    const sizeMB = (size / 1024 / 1024).toFixed(1);
+                    throw new Error(`文件过大 (${sizeMB} MB)，超过 ${500} MB 限制，跳过下载`);
                 }
 
                 this.logger.log(`下载成功: ${fullName} -> ${destPath}`);
@@ -923,6 +984,9 @@ export class DownloadService {
             throw new Error('响应体为空');
         }
 
+        // 记录 Content-Length（部分代理会返回，可用于后续校验）
+        const contentLength = response.headers.get('content-length');
+
         const writer = createWriteStream(destPath);
         const reader = body.getReader();
 
@@ -950,6 +1014,23 @@ export class DownloadService {
             writer.on('finish', resolve);
             writer.on('error', reject);
         });
+
+        // Content-Length 校验：如果代理返回了 Content-Length 头，验证实际下载大小是否匹配
+        // 能额外拦截代理返回"虚假完成"响应的情况
+        if (contentLength) {
+            const expectedSize = Number.parseInt(contentLength, 10);
+            const actualSize = (await stat(destPath)).size;
+            if (actualSize !== expectedSize) {
+                try {
+                    await rm(destPath, { force: true });
+                } catch {
+                    // 忽略清理错误
+                }
+                throw new Error(
+                    `文件大小不匹配：下载完成但实际大小 (${actualSize} 字节) 与预期 (${expectedSize} 字节) 不一致，文件可能被截断`,
+                );
+            }
+        }
     }
 
     /**
@@ -960,6 +1041,12 @@ export class DownloadService {
         destDir: string,
         fullName: string | null,
     ): Promise<{ success: boolean; error?: string }> {
+        // ZIP 炸弹预检
+        const precheck = await this.precheckZipBomb(zipPath);
+        if (!precheck.success) {
+            return precheck;
+        }
+
         for (let attempt = 0; attempt < 2; attempt++) {
             try {
                 await mkdir(destDir, { recursive: true });
@@ -967,9 +1054,6 @@ export class DownloadService {
                 // 读取 ZIP 并提取
                 const zip = new AdmZip(zipPath);
                 const entries = zip.getEntries();
-                if (entries.length === 0) {
-                    throw new Error('ZIP 文件为空');
-                }
 
                 // 获取 ZIP 中的顶层目录名（如 "repo-main"）
                 // GitHub archive 中的文件路径格式: {repoName}-{branch}/src/...
@@ -1410,20 +1494,337 @@ export class DownloadService {
         if (!item.localFilePath) return { success: false, message: '压缩包路径为空' };
 
         if (!existsSync(item.localFilePath)) {
-            return { success: false, message: `压缩包文件不存在: ${item.localFilePath}` };
+            return { success: false, message: '压缩包文件不存在' };
         }
 
         const { owner, repoName } = parseFullName(fullName);
         const extractDir = path.join(task.targetDir, owner, repoName);
+        const markerFile = path.join(extractDir, EXTRACT_MARKER_FILE);
+
+        // 路径安全校验
+        if (!this.isPathWithinTargetDir(extractDir, task.targetDir)) {
+            return { success: false, message: '提取路径安全校验失败' };
+        }
 
         this.logger.log(`开始手动解压: ${fullName} -> ${extractDir}`);
         const result = await this.extractWithRetry(item.localFilePath, extractDir, fullName);
 
         if (result.success) {
+            // 写入解压完成标记，与批量解压保持一致
+            try {
+                await writeFile(markerFile, new Date().toISOString(), 'utf8');
+            } catch (e: unknown) {
+                this.logger.warn(`写入解压标记失败: ${fullName} | ${e instanceof Error ? e.message : String(e)}`);
+            }
             this.logger.log(`手动解压成功: ${fullName}`);
             return { success: true, message: `解压成功: ${fullName}` };
         }
         return { success: false, message: result.error || '解压失败' };
+    }
+
+    /**
+     * 一键解压任务中所有已完成项的压缩包
+     *
+     * 逻辑：
+     * 1. 仅允许对 COMPLETED / PARTIAL 状态的任务操作
+     * 2. 只处理 COMPLETED 状态的任务项（跳过失败/等待项）
+     * 3. 跳过已解压过的项（extractDir 目录已存在）
+     * 4. 逐项解压，汇总结果
+     *
+     * @param taskId - 任务 ID
+     * @returns { success, message, extracted, skipped, failed, details }
+     */
+    /**
+     * 一键解压所有已完成项（异步后台执行，立即返回）
+     *
+     * 解压在后台逐步进行，可通过 getExtractAllProgress 查询进度。
+     */
+    /**
+     * 一键解压所有已完成项（异步后台执行，立即返回）
+     *
+     * 解压在后台逐步进行，可通过 getExtractAllProgress 查询进度。
+     */
+    async extractAllItems(taskId: number): Promise<{
+        success: boolean;
+        message: string;
+    }> {
+        if (this.extractProgress.has(taskId)) {
+            const p = this.extractProgress.get(taskId)!;
+            if (p.status === 'extracting') {
+                return { success: false, message: '该任务正在后台解压中，请稍候' };
+            }
+            // 已完成但保留在 Map 中 → 清理旧记录后重新开始
+            this.extractProgress.delete(taskId);
+        }
+
+        const task = await this.prisma.downloadTask.findUnique({
+            where: { id: BigInt(taskId) },
+            select: { id: true, status: true, targetDir: true },
+        });
+        if (!task) return { success: false, message: '任务不存在' };
+        if (task.status === 'PROCESSING' || task.status === 'PENDING') {
+            return { success: false, message: '任务正在执行中，请等待完成后再解压' };
+        }
+
+        const completedItems = await this.prisma.downloadTaskItem.findMany({
+            where: { taskId: BigInt(taskId), status: 'COMPLETED' },
+            select: { fullName: true, localFilePath: true },
+        });
+        if (completedItems.length === 0) {
+            return { success: false, message: '没有可解压的已完成项' };
+        }
+
+        // 初始化进度
+        this.extractProgress.set(taskId, {
+            status: 'extracting',
+            total: completedItems.length,
+            current: 0,
+            extracted: 0,
+            skipped: 0,
+            failed: 0,
+            details: [],
+            message: `解压中: 0/${completedItems.length}`,
+        });
+
+        // 后台异步执行，不阻塞返回（使用 IIFE 替代 .catch() 链）
+        void (async () => {
+            try {
+                await this.runExtractAllInBackground(taskId, completedItems, task.targetDir);
+            } catch (e: unknown) {
+                const errMsg = e instanceof Error ? e.message : String(e);
+                this.logger.error(`后台批量解压异常: taskId=${taskId}`, e instanceof Error ? e : new Error(String(e)));
+                const p = this.extractProgress.get(taskId);
+                if (p) {
+                    p.status = 'completed';
+                    p.message = `解压异常: ${errMsg}`;
+                }
+            }
+        })();
+
+        this.logger.log(`后台批量解压已启动: taskId=${taskId} items=${completedItems.length}`);
+        return { success: true, message: '后台解压已开始，可在任务列表中查看进度' };
+    }
+
+    /**
+     * 查询批量解压进度
+     */
+    getExtractAllProgress(taskId: number): {
+        success: boolean;
+        status?: 'extracting' | 'completed';
+        total?: number;
+        current?: number;
+        extracted?: number;
+        skipped?: number;
+        failed?: number;
+        details?: Array<{ fullName: string; status: string; message?: string }>;
+        message?: string;
+    } {
+        const p = this.extractProgress.get(taskId);
+        if (!p) return { success: false, message: '没有进行中的解压任务或记录已过期' };
+        return {
+            success: true,
+            status: p.status,
+            total: p.total,
+            current: p.current,
+            extracted: p.extracted,
+            skipped: p.skipped,
+            failed: p.failed,
+            details: p.details,
+            message: p.message,
+        };
+    }
+
+    /**
+     * 在后台逐项解压，更新进度
+     */
+    private async runExtractAllInBackground(
+        taskId: number,
+        items: Array<{ fullName: string | null; localFilePath: string | null }>,
+        targetDir: string,
+    ) {
+        for (const item of items) {
+            const p = this.extractProgress.get(taskId);
+            if (!p) break; // Map 被清理，终止执行
+
+            p.current++;
+
+            const result = await this.processExtractOneItem(taskId, item, targetDir);
+            if (!result) break; // Map 在执行过程中被清理
+
+            if (result.status === 'skip') {
+                p.skipped++;
+            } else if (result.status === 'fail') {
+                p.failed++;
+            } else {
+                p.extracted++;
+            }
+            p.details.push({ fullName: result.fullName, status: result.status, message: result.message });
+            this.updateExtractProgressMessage(taskId);
+        }
+
+        // 完成
+        const p = this.extractProgress.get(taskId);
+        if (p) {
+            p.status = 'completed';
+            p.message = `解压完成: 成功 ${p.extracted} 个, 跳过 ${p.skipped} 个, 失败 ${p.failed} 个`;
+            this.logger.log(`后台批量解压完成: taskId=${taskId} | ${p.message}`);
+        }
+    }
+
+    /**
+     * 更新解压进度消息
+     */
+    private updateExtractProgressMessage(taskId: number) {
+        const p = this.extractProgress.get(taskId);
+        if (!p) return;
+        p.message = `解压中: ${p.current}/${p.total}（成功 ${p.extracted} 跳过 ${p.skipped} 失败 ${p.failed}）`;
+    }
+
+    /**
+     * 清理不完整解压目录
+     *
+     * @param extractDir - 目标解压目录
+     * @returns true 清理成功，false 清理失败
+     */
+    /**
+     * ZIP 炸弹预检：检查压缩包大小、条目数、未压缩总量是否在安全范围内
+     *
+     * @param zipPath - ZIP 文件路径
+     * @returns 校验结果，success=false 时携带错误信息
+     */
+    private async precheckZipBomb(zipPath: string): Promise<{
+        success: boolean;
+        error?: string;
+    }> {
+        try {
+            const stats = await stat(zipPath);
+            const MAX_ZIP_SIZE = 500 * 1024 * 1024; // 压缩文件上限 500 MB
+            if (stats.size > MAX_ZIP_SIZE) {
+                const sizeMB = (stats.size / 1024 / 1024).toFixed(1);
+                return { success: false, error: `压缩包过大 (${sizeMB} MB)，超过 500 MB 上限` };
+            }
+        } catch {
+            return { success: false, error: '无法读取压缩包信息' };
+        }
+
+        try {
+            const zip = new AdmZip(zipPath);
+            const entries = zip.getEntries();
+
+            if (entries.length === 0) {
+                return { success: false, error: 'ZIP 文件为空' };
+            }
+
+            // 条目数上限检查
+            const MAX_ENTRIES = 100_000;
+            if (entries.length > MAX_ENTRIES) {
+                return { success: false, error: `ZIP 条目过多 (${entries.length})，超过 ${MAX_ENTRIES} 上限` };
+            }
+
+            // 未压缩总大小上限检查
+            const MAX_UNCOMPRESSED_MB = 1000;
+            const totalUncompressed = entries.reduce((sum, e) => {
+                const header = e.header as { size?: number };
+                return sum + (header.size ?? 0);
+            }, 0);
+            if (totalUncompressed > MAX_UNCOMPRESSED_MB * 1024 * 1024) {
+                const sizeMB = (totalUncompressed / 1024 / 1024).toFixed(1);
+                return { success: false, error: `ZIP 未压缩总大小过大 (${sizeMB} MB)，超过 ${MAX_UNCOMPRESSED_MB} MB 上限` };
+            }
+        } catch {
+            return { success: false, error: '无法读取 ZIP 文件信息' };
+        }
+
+        return { success: true };
+    }
+
+    private async cleanIncompleteExtractDir(extractDir: string): Promise<boolean> {
+        try {
+            await rm(extractDir, { recursive: true, force: true });
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * 处理单项解压（包含前置检查、目录准备、执行解压）
+     *
+     * 处理逻辑：
+     * 1. 检查压缩包文件是否存在
+     * 2. 验证 ZIP 文件完整性
+     * 3. 检查目标目录是否已完整解压（通过标记文件判断）
+     * 4. 路径安全校验
+     * 5. 执行解压
+     * 6. 写入解压完成标记
+     *
+     * @returns 解压结果（fullName/status/message），Map 被清理时返回 null
+     */
+    private async processExtractOneItem(
+        taskId: number,
+        item: { fullName: string | null; localFilePath: string | null },
+        targetDir: string,
+    ): Promise<{ fullName: string; status: 'success' | 'skip' | 'fail'; message?: string } | null> {
+        const p = this.extractProgress.get(taskId);
+        if (!p) return null;
+
+        const fullName = item.fullName || '';
+
+        // 压缩包文件不存在
+        if (!item.localFilePath || !existsSync(item.localFilePath)) {
+            return { fullName, status: 'skip', message: '压缩包文件不存在' };
+        }
+
+        // 验证 ZIP 文件完整性
+        if (!isValidZipFile(item.localFilePath)) {
+            return { fullName, status: 'fail', message: '压缩包文件损坏，不是有效的 ZIP 格式' };
+        }
+
+        const { owner, repoName } = parseFullName(fullName);
+        const extractDir = path.join(targetDir, owner, repoName);
+        const markerFile = path.join(extractDir, EXTRACT_MARKER_FILE);
+
+        // 检查是否已完整解压
+        if (existsSync(extractDir)) {
+            if (existsSync(markerFile)) {
+                return { fullName, status: 'skip', message: '已解压，跳过' };
+            }
+            // 半成品目录 → 清理后重试
+            this.logger.warn(`检测到不完整解压目录，清理后重试: ${fullName}`);
+            const cleaned = await this.cleanIncompleteExtractDir(extractDir);
+            if (!cleaned) {
+                return { fullName, status: 'fail', message: '清理不完整解压目录失败' };
+            }
+        }
+
+        // 路径安全校验
+        if (!this.isPathWithinTargetDir(extractDir, targetDir)) {
+            return { fullName, status: 'fail', message: '提取路径安全校验失败' };
+        }
+
+        // 执行解压
+        this.logger.log(`后台解压: ${fullName} -> ${extractDir}`);
+        const result = await this.extractWithRetry(item.localFilePath, extractDir, fullName);
+
+        if (result.success) {
+            // 写入解压完成标记
+            try {
+                await writeFile(markerFile, new Date().toISOString(), 'utf8');
+            } catch (e: unknown) {
+                this.logger.warn(`写入解压标记失败: ${fullName} | ${e instanceof Error ? e.message : String(e)}`);
+            }
+            return { fullName, status: 'success' };
+        }
+
+        // 解压失败 → 清理半成品目录
+        try {
+            if (existsSync(extractDir)) {
+                await rm(extractDir, { recursive: true, force: true });
+            }
+        } catch {
+            // 清理失败不影响主流程
+        }
+        return { fullName, status: 'fail', message: result.error || '解压失败' };
     }
 
     /**

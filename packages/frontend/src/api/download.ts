@@ -1,7 +1,15 @@
 import api from './request'
 
 /** 镜像代理源类型 */
-export type DownloadMirrorSource = 'ghproxy' | 'gh-proxy' | 'gh-proxy-org' | 'gh-proxy-v4' | 'gh-proxy-v6' | 'gh-proxy-cdn' | 'gitclone' | 'direct'
+export type DownloadMirrorSource =
+    | 'ghproxy'
+    | 'gh-proxy'
+    | 'gh-proxy-org'
+    | 'gh-proxy-v4'
+    | 'gh-proxy-v6'
+    | 'gh-proxy-cdn'
+    | 'gitclone'
+    | 'direct'
 
 /** 创建下载任务 */
 export async function createDownloadTask(params: {
@@ -71,6 +79,31 @@ export interface DownloadTaskItem {
 /** 解压任务项 */
 export async function extractDownloadItem(taskId: number, fullName: string): Promise<{ success: boolean; message?: string }> {
     const { data } = await api.post('/api/download/tasks/extract', { taskId, fullName })
+    return data
+}
+
+/** 一键解压任务中所有已完成项的压缩包 */
+export async function extractAllDownloadItems(taskId: number): Promise<{
+    success: boolean
+    message: string
+}> {
+    const { data } = await api.post('/api/download/tasks/extract-all', { taskId })
+    return data
+}
+
+/** 查询批量解压进度 */
+export async function getExtractAllProgress(taskId: number): Promise<{
+    success: boolean
+    status?: 'extracting' | 'completed'
+    total?: number
+    current?: number
+    extracted?: number
+    skipped?: number
+    failed?: number
+    details?: Array<{ fullName: string; status: string; message?: string }>
+    message?: string
+}> {
+    const { data } = await api.post('/api/download/tasks/extract-all/progress', { id: taskId })
     return data
 }
 
