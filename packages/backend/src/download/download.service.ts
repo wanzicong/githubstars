@@ -531,6 +531,33 @@ export class DownloadService {
                     branch = await this.detectDefaultBranch(owner, repoName, token);
                 }
 
+                // 验证分支的压缩包是否存在，如果 404 则尝试另一种常见分支名
+                let branchVerified = branch;
+                if (branch) {
+                    try {
+                        const checkUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${branch}.zip`;
+                        const checkResponse = await fetch(checkUrl, {
+                            method: 'HEAD',
+                            signal: AbortSignal.timeout(5_000),
+                        });
+                        if (checkResponse.status === 404) {
+                            const altBranch = branch === 'main' ? 'master' : 'main';
+                            const altUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${altBranch}.zip`;
+                            const altResponse = await fetch(altUrl, {
+                                method: 'HEAD',
+                                signal: AbortSignal.timeout(5_000),
+                            });
+                            if (altResponse.ok) {
+                                this.logger.log(`分支 ${branch} 不存在，自动切换到 ${altBranch}: ${fullName}`);
+                                branchVerified = altBranch;
+                            }
+                        }
+                    } catch {
+                        // 验证失败，沿用原始分支
+                    }
+                }
+                branch = branchVerified;
+
                 const newArchiveUrl = branch
                     ? `https://github.com/${owner}/${repoName}/archive/refs/heads/${branch}.zip`
                     : `https://github.com/${owner}/${repoName}/archive/HEAD.zip`;
