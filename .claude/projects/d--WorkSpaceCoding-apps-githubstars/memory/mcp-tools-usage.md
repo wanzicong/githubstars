@@ -12,7 +12,7 @@ metadata:
 搜索代码必须用 Serena（禁止 Grep）
 编辑代码必须用 Serena（禁止 Edit）
 查文档必须用 Context7
-复杂推理必须用 Sequential Thinking
+复杂推理、架构方案对比、Bug追踪、代码审查、设计方案时必须用 Sequential Thinking
 
 ## 违反记录
 

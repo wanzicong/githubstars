@@ -23,6 +23,10 @@
 | 用户问某个库的 API | → **立即**用 Context7 query-docs |
 | 用户要求测功能 | → **立即**用 Playwright |
 | 问题需要分步推理 | → **立即**用 Sequential Thinking |
+| 架构方案对比（多种方案选哪种） | → **立即**用 Sequential Thinking |
+| Bug 追踪（现象→根因→修复方案） | → **立即**用 Sequential Thinking |
+| 代码审查需要系统性分析 | → **立即**用 Sequential Thinking |
+| 设计实现方案 | → **立即**用 Sequential Thinking |
 | 学到了新知识/教训 | → **立即**用 Memory write_memory |
 
 ## 为什么默认工具不够
