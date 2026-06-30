@@ -15,6 +15,7 @@ import {
     type MirrorSourceName,
 } from './download.constants';
 import { CreateDownloadTaskDto } from './download.dto';
+import { SYSTEM_FORBIDDEN_PREFIXES } from '../common/constants/system.constants';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
 import { existsSync } from 'fs';
@@ -193,23 +194,6 @@ export class DownloadService {
 
         // 安全校验
         const compareDir = normalizedTargetDir.toLowerCase().replace(/\\/g, '/');
-        const SYSTEM_FORBIDDEN_PREFIXES = [
-            'c:/windows',
-            'c:/program files',
-            'c:/program files (x86)',
-            '/bin',
-            '/boot',
-            '/dev',
-            '/etc',
-            '/lib',
-            '/lib64',
-            '/proc',
-            '/root',
-            '/sbin',
-            '/sys',
-            '/usr',
-            '/var',
-        ];
         for (const prefix of SYSTEM_FORBIDDEN_PREFIXES) {
             if (compareDir === prefix || compareDir.startsWith(prefix + '/')) {
                 return { success: false, message: `目标目录不能为系统关键目录: ${normalizedTargetDir}` };

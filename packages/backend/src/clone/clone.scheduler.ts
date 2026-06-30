@@ -57,7 +57,7 @@ export class CloneScheduler {
 
         try {
             const lockAge = this.cloneService.getLockAge();
-            if (lockAge < 0) return; // 锁未被持有
+            if (lockAge === null || lockAge < 0) return; // 锁未被持有
 
             if (lockAge > LOCK_TIMEOUT_MS) {
                 const currentTaskId = this.cloneService.getCurrentTaskId();
