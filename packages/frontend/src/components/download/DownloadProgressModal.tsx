@@ -213,12 +213,13 @@ export default function DownloadProgressModal({ open, progress, onClose, onRetry
                                         {
                                             title: '大小',
                                             key: 'size',
-                                            width: 140,
+                                            width: 150,
                                             render: (_: unknown, record: DownloadTaskItem) => {
                                                 const total = Number(record.fileSize || 0)
                                                 const downloaded = record.downloadedBytes ?? (record.status === 'COMPLETED' ? total : 0)
-                                                if (total <= 0 && downloaded <= 0) return <Text type="secondary">-</Text>
-                                                // 有总大小+已下载 → 显示进度条
+                                                // 未开始下载 → 等待中
+                                                if (total <= 0 && downloaded <= 0) return <Text type="secondary">等待中</Text>
+                                                // 总大小已知且下载中 → 进度条
                                                 if (total > 0 && record.status === 'PROCESSING') {
                                                     const percent = Math.round((downloaded * 100) / total)
                                                     return (
@@ -227,7 +228,15 @@ export default function DownloadProgressModal({ open, progress, onClose, onRetry
                                                         </Tooltip>
                                                     )
                                                 }
-                                                // 已完成或有总大小 → 显示总大小
+                                                // 总大小已知但未完成 → 显示 "已下载 / 总大小"
+                                                if (total > 0 && downloaded > 0 && downloaded < total) {
+                                                    return <Text type="secondary">{formatBytes(downloaded)} / {formatBytes(total)}</Text>
+                                                }
+                                                // 总大小未知 → 只显示已下载，标注清楚
+                                                if (total <= 0 && downloaded > 0) {
+                                                    return <Text type="secondary">已下载 {formatBytes(downloaded)}</Text>
+                                                }
+                                                // 已完成或只有总大小 → 显示总大小
                                                 return <Text type="secondary">{formatBytes(total || downloaded)}</Text>
                                             },
                                         },

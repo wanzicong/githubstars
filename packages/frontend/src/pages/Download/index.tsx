@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Card, Table, Tag, Button, Space, Typography, Row, Col, Statistic, Progress, App, Popconfirm } from 'antd'
+import { Card, Table, Tag, Button, Space, Typography, Row, Col, Statistic, Progress, App, Popconfirm, Tooltip } from 'antd'
 import { ReloadOutlined, CopyOutlined, FolderOutlined, UndoOutlined, DeleteOutlined, DownloadOutlined, CloudOutlined } from '@ant-design/icons'
 import { getRecentDownloadTasks, getDownloadTaskProgress, retryDownloadFailed, retryDownloadItem, resetDownloadTask, deleteDownloadTask, extractDownloadItem, deleteDownloadItemFile } from '@/api/download'
 import type { DownloadTaskProgress, DownloadTaskListResult } from '@/api/download'
@@ -215,6 +215,7 @@ export default function Download() {
             title: '目标目录',
             dataIndex: 'targetDir',
             key: 'targetDir',
+            width: 220,
             ellipsis: true,
             render: (dir: string) => (
                 <Space>
@@ -226,14 +227,20 @@ export default function Download() {
         {
             title: '配置',
             key: 'config',
-            width: 180,
-            render: (_: unknown, record: DownloadTaskListResult['tasks'][0]) => (
-                <Space size={4} wrap>
-                    <Tag icon={<CloudOutlined />} style={{ margin: 0 }}>
-                        {getMirrorListLabel(record.mirrorSources)}
-                    </Tag>
-                </Space>
-            ),
+            width: 120,
+            render: (_: unknown, record: DownloadTaskListResult['tasks'][0]) => {
+                const mirrorLabel = getMirrorListLabel(record.mirrorSources)
+                return (
+                    <Space size={4}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>{record.concurrency}并发</Text>
+                        <Tooltip title={mirrorLabel}>
+                            <Tag icon={<CloudOutlined />} style={{ margin: 0, maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {mirrorLabel}
+                            </Tag>
+                        </Tooltip>
+                    </Space>
+                )
+            },
         },
         {
             title: '进度',
@@ -257,12 +264,7 @@ export default function Download() {
                 )
             },
         },
-        {
-            title: '并发数',
-            dataIndex: 'concurrency',
-            key: 'concurrency',
-            width: 80,
-        },
+
         {
             title: '创建时间',
             dataIndex: 'createdAt',
@@ -399,6 +401,7 @@ export default function Download() {
                 rowKey="taskId"
                 loading={loading}
                 pagination={{ pageSize: 10 }}
+                scroll={{ x: 1200 }}
             />
 
             <DownloadProgressModal

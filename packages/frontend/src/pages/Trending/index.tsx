@@ -1,10 +1,21 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Segmented, Select, Spin, Empty, Typography, Tag, Space, Button, App } from 'antd'
-import { StarFilled, ForkOutlined, FireOutlined, TranslationOutlined } from '@ant-design/icons'
-import { fetchTrending, translateTrending } from '../../api'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Segmented, Select, Spin, Empty, Typography, Tag, Space, Button, App, Modal, Input } from 'antd'
+import { StarFilled, ForkOutlined, FireOutlined, TranslationOutlined, DownloadOutlined } from '@ant-design/icons'
+import { fetchTrending, translateTrending, downloadTrending } from '../../api'
+import {
+    getDownloadTaskProgress,
+    getRecentDownloadDirectories,
+    retryDownloadFailed,
+    retryDownloadItem,
+    deleteDownloadTask,
+    extractDownloadItem,
+    deleteDownloadItemFile,
+    type DownloadTaskProgress,
+} from '../../api/download'
 import type { GithubSearchRepo } from '../../types'
 import { LANGUAGE_OPTIONS, RANK_BADGE_COLORS } from '../../constants'
 import { formatNumberShort, getRelativeTime } from '../../utils/format'
+import DownloadProgressModal from '../../components/download/DownloadProgressModal'
 
 const { Title, Text } = Typography
 
@@ -17,6 +28,49 @@ export default function Trending() {
     const [dateRange, setDateRange] = useState('')
     const [loading, setLoading] = useState(false)
     const [translating, setTranslating] = useState(false)
+
+    // ── 下载相关状态 ──
+    const [downloadConfigOpen, setDownloadConfigOpen] = useState(false)
+    const [downloadProgressOpen, setDownloadProgressOpen] = useState(false)
+    const [downloadTaskId, setDownloadTaskId] = useState<number | null>(null)
+    const [downloadProgress, setDownloadProgress] = useState<DownloadTaskProgress | null>(null)
+    const [downloading, setDownloading] = useState(false)
+    const downloadTaskIdRef = useRef<number | null>(null)
+    const [configTargetDir, setConfigTargetDir] = useState('')
+    const [configConcurrency, setConfigConcurrency] = useState<number>(3)
+    const [configMirrorSources, setConfigMirrorSources] = useState<string[]>(['direct'])
+    const [configDirs, setConfigDirs] = useState<string[]>([])
+
+    // ── 下载轮询 ──
+    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+    const startPolling = useCallback(() => {
+        if (pollingRef.current) clearInterval(pollingRef.current)
+        pollingRef.current = setInterval(async () => {
+            const taskId = downloadTaskIdRef.current
+            if (!taskId) {
+                if (pollingRef.current) clearInterval(pollingRef.current)
+                return
+            }
+            try {
+                const res = await getDownloadTaskProgress(taskId)
+                if (res.success) {
+                    setDownloadProgress(res)
+                    if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
+                        if (pollingRef.current) clearInterval(pollingRef.current)
+                    }
+                }
+            } catch {
+                // 轮询失败不中断
+            }
+        }, 2000)
+    }, [])
+
+    useEffect(() => {
+        return () => {
+            if (pollingRef.current) clearInterval(pollingRef.current)
+        }
+    }, [])
 
     const load = useCallback(async (s: string, lang: string) => {
         setLoading(true)
@@ -61,6 +115,119 @@ export default function Trending() {
         }
     }, [since, language, load])
 
+    /** 打开下载配置弹窗 */
+    const handleOpenDownloadConfig = useCallback(async () => {
+        try {
+            const dirs = await getRecentDownloadDirectories()
+            setConfigDirs(dirs.directories || [])
+            if (dirs.directories?.length > 0) {
+                setConfigTargetDir(dirs.directories[0])
+            }
+        } catch {
+            // 获取目录失败不影响使用
+        }
+        setDownloadConfigOpen(true)
+    }, [])
+
+    /** 确认下载趋势仓库 */
+    const handleConfirmDownload = useCallback(async () => {
+        if (!configTargetDir.trim()) {
+            message.error('请输入目标下载目录')
+            return
+        }
+        setDownloading(true)
+        try {
+            const result = await downloadTrending({
+                since,
+                language: language || undefined,
+                perPage: 20,
+                targetDir: configTargetDir.trim(),
+                concurrency: configConcurrency,
+                mirrorSources: configMirrorSources,
+                extractArchive: true,
+                deleteAfterExtract: true,
+            })
+            if (result.success && result.taskId) {
+                setDownloadConfigOpen(false)
+                downloadTaskIdRef.current = result.taskId
+                setDownloadTaskId(result.taskId)
+                setDownloadProgressOpen(true)
+                setDownloadProgress(null)
+                message.success(result.message || '下载任务已创建')
+                startPolling()
+            } else {
+                message.error(result.message || '创建下载任务失败')
+            }
+        } catch {
+            message.error('创建下载任务失败')
+        } finally {
+            setDownloading(false)
+        }
+    }, [since, language, configTargetDir, configConcurrency, configMirrorSources, startPolling, message])
+
+    /** 下载重试/操作回调 */
+    const handleRetryDownloadFailed = useCallback(async () => {
+        if (!downloadTaskId) return
+        try {
+            const result = await retryDownloadFailed(downloadTaskId)
+            if (result.success) {
+                downloadTaskIdRef.current = downloadTaskId
+                startPolling()
+            }
+        } catch {
+            message.error('重置任务失败')
+        }
+    }, [downloadTaskId, startPolling, message])
+
+    const handleRetryDownloadItem = useCallback(async (fullName: string) => {
+        if (!downloadTaskId) return
+        try {
+            await retryDownloadItem(downloadTaskId, fullName)
+            const progress = await getDownloadTaskProgress(downloadTaskId)
+            if (progress.success) setDownloadProgress(progress)
+        } catch {
+            message.error('重试失败')
+        }
+    }, [downloadTaskId, message])
+
+    const handleDeleteDownloadTask = useCallback(async () => {
+        if (!downloadTaskId) return
+        try {
+            await deleteDownloadTask(downloadTaskId)
+            if (pollingRef.current) clearInterval(pollingRef.current)
+            setDownloadProgressOpen(false)
+        } catch {
+            message.error('删除任务失败')
+        }
+    }, [downloadTaskId, message])
+
+    const handleExtractDownloadItem = useCallback(async (fullName: string) => {
+        if (!downloadTaskId) return
+        try {
+            const result = await extractDownloadItem(downloadTaskId, fullName)
+            if (result.success) {
+                message.success('解压成功')
+                const progress = await getDownloadTaskProgress(downloadTaskId)
+                if (progress.success) setDownloadProgress(progress)
+            } else {
+                message.error(result.message || '解压失败')
+            }
+        } catch {
+            message.error('解压失败')
+        }
+    }, [downloadTaskId, message])
+
+    const handleDeleteDownloadItem = useCallback(async (fullName: string) => {
+        if (!downloadTaskId) return
+        try {
+            await deleteDownloadItemFile(downloadTaskId, fullName)
+            const progress = await getDownloadTaskProgress(downloadTaskId)
+            if (progress.success) setDownloadProgress(progress)
+        } catch {
+            message.error('删除失败')
+        }
+    }, [downloadTaskId, message])
+
     // 统计未翻译数量
     const untranslatedCount = repos.filter((r) => r.description && !r.descriptionCn).length
 
@@ -84,6 +251,15 @@ export default function Trending() {
                     趋势排行榜
                 </Title>
                 <Space wrap size={[8, 8]}>
+                    {repos.length > 0 && (
+                        <Button
+                            icon={<DownloadOutlined />}
+                            onClick={handleOpenDownloadConfig}
+                            size='small'
+                        >
+                            下载趋势
+                        </Button>
+                    )}
                     {untranslatedCount > 0 && (
                         <Button
                             icon={<TranslationOutlined />}
@@ -237,6 +413,91 @@ export default function Trending() {
                     </div>
                 )}
             </Spin>
+
+            {/* 下载配置弹窗 */}
+            <Modal
+                title="下载趋势仓库"
+                open={downloadConfigOpen}
+                onCancel={() => setDownloadConfigOpen(false)}
+                onOk={handleConfirmDownload}
+                confirmLoading={downloading}
+                okText="开始下载"
+                destroyOnClose
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 16 }}>
+                    <div>
+                        <Text style={{ display: 'block', marginBottom: 4 }}>目标下载目录</Text>
+                        <Input
+                            value={configTargetDir}
+                            onChange={(e) => setConfigTargetDir(e.target.value)}
+                            placeholder='请输入绝对路径，如 D:/downloads'
+                        />
+                        {configDirs.length > 0 && (
+                            <Space wrap size={4} style={{ marginTop: 8 }}>
+                                <Text type='secondary' style={{ fontSize: 12 }}>常用目录:</Text>
+                                {configDirs.map((dir) => (
+                                    <Tag
+                                        key={dir}
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={() => setConfigTargetDir(dir)}
+                                    >
+                                        {dir}
+                                    </Tag>
+                                ))}
+                            </Space>
+                        )}
+                    </div>
+                    <div>
+                        <Text style={{ display: 'block', marginBottom: 4 }}>并发数</Text>
+                        <Select
+                            value={configConcurrency}
+                            onChange={(v) => setConfigConcurrency(v)}
+                            options={[
+                                { value: 1, label: '1（单线程）' },
+                                { value: 3, label: '3（推荐）' },
+                                { value: 5, label: '5' },
+                                { value: 10, label: '10' },
+                            ]}
+                            style={{ width: 200 }}
+                        />
+                    </div>
+                    <div>
+                        <Text style={{ display: 'block', marginBottom: 4 }}>镜像源</Text>
+                        <Select
+                            mode='multiple'
+                            value={configMirrorSources}
+                            onChange={(v) => setConfigMirrorSources(v)}
+                            options={[
+                                { value: 'direct', label: '直连' },
+                                { value: 'ghproxy', label: 'ghproxy.net' },
+                                { value: 'gh-proxy', label: 'gh-proxy.com' },
+                                { value: 'gh-proxy-org', label: 'gh-proxy.org' },
+                                { value: 'gh-proxy-v4', label: 'gh-proxy (v4)' },
+                                { value: 'gh-proxy-v6', label: 'gh-proxy (v6)' },
+                                { value: 'gh-proxy-cdn', label: 'gh-proxy (CDN)' },
+                                { value: 'gitclone', label: 'gitclone.com' },
+                            ]}
+                            style={{ width: '100%' }}
+                            placeholder='选择镜像源（按优先级排序）'
+                        />
+                    </div>
+                </div>
+            </Modal>
+
+            {/* 下载进度弹窗 */}
+            <DownloadProgressModal
+                open={downloadProgressOpen}
+                progress={downloadProgress}
+                onClose={() => {
+                    if (pollingRef.current) clearInterval(pollingRef.current)
+                    setDownloadProgressOpen(false)
+                }}
+                onRetryFailed={handleRetryDownloadFailed}
+                onRetryItem={handleRetryDownloadItem}
+                onDelete={handleDeleteDownloadTask}
+                onExtract={handleExtractDownloadItem}
+                onDeleteItem={handleDeleteDownloadItem}
+            />
         </div>
     )
 }

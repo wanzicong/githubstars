@@ -3,6 +3,7 @@ import { TrendingController } from './trending.controller';
 import { TrendingService } from './trending.service';
 import { GithubModule } from '../github/github.module';
 import { TranslateModule } from '../translate/translate.module';
+import { DownloadModule } from '../download/download.module';
 
 /**
  * GitHub Trending 模块
@@ -12,7 +13,7 @@ import { TranslateModule } from '../translate/translate.module';
  * TrendingService 负责翻译结果的缓存管理，同一仓库描述只翻译一次。
  */
 @Module({
-    imports: [GithubModule, TranslateModule],
+    imports: [GithubModule, TranslateModule, DownloadModule],
     controllers: [TrendingController],
     providers: [TrendingService],
 })

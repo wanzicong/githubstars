@@ -300,8 +300,7 @@ export class DownloadService {
         await this.prisma.downloadTaskItem.createMany({ data: validItems });
 
         this.logger.log(
-            `下载任务已创建: taskId=${Number(task.id)} repos=${validItems.length} ` +
-                `mirrors=${JSON.stringify(mirrorSources)}`,
+            `下载任务已创建: taskId=${Number(task.id)} repos=${validItems.length} ` + `mirrors=${JSON.stringify(mirrorSources)}`,
         );
 
         return {
@@ -529,10 +528,11 @@ export class DownloadService {
                 // 注意：redirect: 'manual' 只取第一个 302 的 Location，避免被 S3/CDN 地址干扰
                 let branch: string | null = null;
                 try {
-                    const response = await fetch(
-                        `https://github.com/${owner}/${repoName}/archive/HEAD.zip`,
-                        { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(5_000) },
-                    );
+                    const response = await fetch(`https://github.com/${owner}/${repoName}/archive/HEAD.zip`, {
+                        method: 'HEAD',
+                        redirect: 'manual',
+                        signal: AbortSignal.timeout(5_000),
+                    });
                     if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
                         const location = response.headers.get('location') || '';
                         const match = /\/archive\/refs\/heads\/(.+)\.zip$/i.exec(location);
@@ -573,16 +573,16 @@ export class DownloadService {
 
         // 批量更新 DB（archiveUrl/localFilePath/fileSize 均来自执行时解析，全部写入）
         const dbUpdates = branchResolvedItems.map((r) =>
-                this.prisma.downloadTaskItem.update({
-                    where: { id: r.item.id },
-                    data: {
-                        archiveUrl: r.newArchiveUrl,
-                        localFilePath: r.newLocalFilePath,
-                        defaultBranch: r.branch,
-                        fileSize: r.fileSize,
-                    },
-                }),
-            );
+            this.prisma.downloadTaskItem.update({
+                where: { id: r.item.id },
+                data: {
+                    archiveUrl: r.newArchiveUrl,
+                    localFilePath: r.newLocalFilePath,
+                    defaultBranch: r.branch,
+                    fileSize: r.fileSize,
+                },
+            }),
+        );
         if (dbUpdates.length > 0) {
             await this.prisma.$transaction(dbUpdates);
         }
@@ -1021,7 +1021,11 @@ export class DownloadService {
     /**
      * 记录子项结果
      */
-    private async recordItemResult(item: { id: bigint; fullName: string | null; localFilePath?: string | null }, success: boolean, error?: string) {
+    private async recordItemResult(
+        item: { id: bigint; fullName: string | null; localFilePath?: string | null },
+        success: boolean,
+        error?: string,
+    ) {
         const status = success ? 'COMPLETED' : 'FAILED';
         const data: Record<string, unknown> = {
             status,

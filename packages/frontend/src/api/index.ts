@@ -9,7 +9,7 @@ export { findSimilarRepos as fetchSimilarRepos } from './similar'
 export { fetchAuthorList, fetchAuthorRepos, exportAuthorUrls } from './authors'
 
 // Trending
-export { fetchTrending, translateTrending } from './trending'
+export { fetchTrending, translateTrending, downloadTrending } from './trending'
 
 // GitHub Search
 export { searchRepos, starRepo, checkStarred } from './github'

@@ -65,6 +65,44 @@ export class TrendingService {
     }
 
     /**
+     * 批量确保趋势仓库在本地 DB 中存在并返回 ID
+     *
+     * 先批量查询已存在的仓库，再逐个创建缺失的仓库。
+     * 比逐个调用 ensureRepoExists 更高效。
+     *
+     * @param repos 趋势仓库列表
+     * @returns 本地数据库中的仓库 ID 数组
+     */
+    async batchEnsureReposExist(repos: TrendingRepoItem[]): Promise<number[]> {
+        if (!repos.length) return [];
+
+        const fullNames = repos.map((r) => r.fullName).filter(Boolean);
+        if (!fullNames.length) return [];
+
+        // 批量查询已存在的仓库
+        const existing = await this.prisma.githubRepo.findMany({
+            where: { fullName: { in: fullNames } },
+            select: { id: true, fullName: true },
+        });
+        const existingMap = new Map(existing.map((r) => [r.fullName, Number(r.id)]));
+
+        const repoIds: number[] = [];
+
+        for (const repo of repos) {
+            const id = existingMap.get(repo.fullName);
+            if (id) {
+                repoIds.push(id);
+            } else {
+                // 缺失的仓库逐个创建
+                const newId = await this.ensureRepoExists(repo);
+                if (newId) repoIds.push(newId);
+            }
+        }
+
+        return repoIds;
+    }
+
+    /**
      * 为趋势仓库列表补充中文描述（从缓存读取）
      *
      * 查询本地 github_repo 表，将已有的 description_cn 回填到仓库对象中。
