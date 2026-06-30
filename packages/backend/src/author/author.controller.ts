@@ -14,7 +14,7 @@ export class AuthorController {
     /**
      * 分页获取作者列表
      *
-     * 支持关键字搜索，按总 Star 数降序排列
+     * 支持关键字搜索，按星标仓库数量降序排列
      *
      * @param body { page, size, keyword }
      * @returns 分页后的作者列表

@@ -12,7 +12,7 @@ export class AuthorService {
     /**
      * 分页查询作者列表
      *
-     * 按拥有 Star 仓库的总 Star 数降序排列，支持关键字模糊搜索作者名。
+     * 按星标仓库数量降序排列，支持关键字模糊搜索作者名。
      * 使用 Prisma tagged template ($queryRaw) 防 SQL 注入；keyword 由 Prisma 自动参数化。
      *
      * @param page 页码（从1开始）
@@ -35,9 +35,9 @@ export class AuthorService {
 
             const rows: any[] = keyword
                 ? await this.prisma
-                      .$queryRaw`SELECT owner_name, MAX(owner_avatar_url) AS owner_avatar_url, COUNT(*) AS repo_count, SUM(stars_count) AS total_stars, (SELECT language FROM github_repo r2 WHERE r2.owner_name = r1.owner_name AND r2.language IS NOT NULL AND r2.language != '' GROUP BY language ORDER BY COUNT(*) DESC LIMIT 1) AS top_language, MAX(starred_at) AS last_starred_at FROM github_repo r1 WHERE owner_name IS NOT NULL AND owner_name != '' AND owner_name LIKE ${likePattern} GROUP BY owner_name ORDER BY total_stars DESC LIMIT ${size} OFFSET ${offset}`
+                      .$queryRaw`SELECT owner_name, MAX(owner_avatar_url) AS owner_avatar_url, COUNT(*) AS repo_count, SUM(stars_count) AS total_stars, (SELECT language FROM github_repo r2 WHERE r2.owner_name = r1.owner_name AND r2.language IS NOT NULL AND r2.language != '' GROUP BY language ORDER BY COUNT(*) DESC LIMIT 1) AS top_language, MAX(starred_at) AS last_starred_at FROM github_repo r1 WHERE owner_name IS NOT NULL AND owner_name != '' AND owner_name LIKE ${likePattern} GROUP BY owner_name ORDER BY repo_count DESC LIMIT ${size} OFFSET ${offset}`
                 : await this.prisma
-                      .$queryRaw`SELECT owner_name, MAX(owner_avatar_url) AS owner_avatar_url, COUNT(*) AS repo_count, SUM(stars_count) AS total_stars, (SELECT language FROM github_repo r2 WHERE r2.owner_name = r1.owner_name AND r2.language IS NOT NULL AND r2.language != '' GROUP BY language ORDER BY COUNT(*) DESC LIMIT 1) AS top_language, MAX(starred_at) AS last_starred_at FROM github_repo r1 WHERE owner_name IS NOT NULL AND owner_name != '' GROUP BY owner_name ORDER BY total_stars DESC LIMIT ${size} OFFSET ${offset}`;
+                      .$queryRaw`SELECT owner_name, MAX(owner_avatar_url) AS owner_avatar_url, COUNT(*) AS repo_count, SUM(stars_count) AS total_stars, (SELECT language FROM github_repo r2 WHERE r2.owner_name = r1.owner_name AND r2.language IS NOT NULL AND r2.language != '' GROUP BY language ORDER BY COUNT(*) DESC LIMIT 1) AS top_language, MAX(starred_at) AS last_starred_at FROM github_repo r1 WHERE owner_name IS NOT NULL AND owner_name != '' GROUP BY owner_name ORDER BY repo_count DESC LIMIT ${size} OFFSET ${offset}`;
 
             return {
                 records: rows.map((r: any) => ({
