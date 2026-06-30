@@ -1,5 +1,11 @@
 import { randomBytes } from 'crypto';
-import { RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS, GITHUB_MIRROR_SOURCES, NETWORK_ERROR_PATTERNS, type MirrorSourceName } from './clone.constants';
+import {
+    RETRY_BASE_DELAY_MS,
+    RETRY_MAX_DELAY_MS,
+    GITHUB_MIRROR_SOURCES,
+    NETWORK_ERROR_PATTERNS,
+    type MirrorSourceName,
+} from './clone.constants';
 import * as path from 'path';
 
 /**

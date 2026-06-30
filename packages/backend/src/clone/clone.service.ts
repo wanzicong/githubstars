@@ -3,13 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '../config/config.service';
 import { CreateCloneTaskDto } from './clone.dto';
 import { SYSTEM_FORBIDDEN_PREFIXES } from '../common/constants/system.constants';
-import {
-    TASK_TIMEOUT_MS,
-    ITEM_TIMEOUT_MS,
-    SEMAPHORE_TIMEOUT_MS,
-    MAX_HISTORY_TASKS,
-    type MirrorSourceName,
-} from './clone.constants';
+import { TASK_TIMEOUT_MS, ITEM_TIMEOUT_MS, SEMAPHORE_TIMEOUT_MS, MAX_HISTORY_TASKS, type MirrorSourceName } from './clone.constants';
 import { CloneExecutorService } from './clone-executor.service';
 import { CloneCleanupService } from './clone-cleanup.service';
 import { withTimeout, getMirrorUrl } from './clone.utils';
@@ -124,7 +118,15 @@ export class CloneService {
         if (repos.length === 0) return { success: false, message: '未找到指定仓库' };
 
         const task = await this.prisma.cloneTask.create({
-            data: { status: 'PENDING', targetDir: normalizedTargetDir, concurrency, shallow, mirrorSource: mirrorSource || 'direct', totalItems: repos.length, createdAt: new Date() },
+            data: {
+                status: 'PENDING',
+                targetDir: normalizedTargetDir,
+                concurrency,
+                shallow,
+                mirrorSource: mirrorSource || 'direct',
+                totalItems: repos.length,
+                createdAt: new Date(),
+            },
         });
 
         const validItems = this.buildCloneTaskItems(repos, task.id, normalizedTargetDir, mirrorSource);
@@ -184,9 +186,10 @@ export class CloneService {
                 taskId,
                 repoId: repo.id,
                 fullName,
-                cloneUrl: mirrorSource && mirrorSource !== 'direct'
-                    ? getMirrorUrl(`https://github.com/${safeOwner}/${safeRepoName}.git`, mirrorSource as MirrorSourceName)
-                    : `https://github.com/${safeOwner}/${safeRepoName}.git`,
+                cloneUrl:
+                    mirrorSource && mirrorSource !== 'direct'
+                        ? getMirrorUrl(`https://github.com/${safeOwner}/${safeRepoName}.git`, mirrorSource as MirrorSourceName)
+                        : `https://github.com/${safeOwner}/${safeRepoName}.git`,
                 localPath,
                 status: 'PENDING' as const,
                 retryCount: 0,
@@ -228,7 +231,11 @@ export class CloneService {
             );
         } catch (e: unknown) {
             this.logger.error(`克隆任务执行异常: taskId=${Number(taskId)}`, e);
-            try { await this.prisma.cloneTask.update({ where: { id: taskId }, data: { status: 'FAILED', finishedAt: new Date() } }); } catch { /* 忽略 */ }
+            try {
+                await this.prisma.cloneTask.update({ where: { id: taskId }, data: { status: 'FAILED', finishedAt: new Date() } });
+            } catch {
+                /* 忽略 */
+            }
         } finally {
             if (this.currentTaskId === taskId) {
                 this.running = false;
@@ -252,7 +259,9 @@ export class CloneService {
 
         const items = await this.prisma.cloneTaskItem.findMany({ where: { taskId, status: 'PENDING' } });
         const mirrorSource = (task.mirrorSource as MirrorSourceName) || 'direct';
-        this.logger.log(`克隆任务开始执行: taskId=${Number(taskId)} pendingItems=${items.length} concurrency=${task.concurrency} mirrorSource=${mirrorSource}`);
+        this.logger.log(
+            `克隆任务开始执行: taskId=${Number(taskId)} pendingItems=${items.length} concurrency=${task.concurrency} mirrorSource=${mirrorSource}`,
+        );
 
         const results = await Promise.allSettled(items.map((item) => this.processItem(item, task.shallow ?? true, mirrorSource)));
         const rejectedCount = results.filter((r) => r.status === 'rejected').length;
@@ -288,7 +297,11 @@ export class CloneService {
             if (this.generation === capturedGen) {
                 if (error !== null) {
                     this.timeoutHandledItems.add(String(item.id));
-                    try { await this.recordItemResult(item, false, error || '未知错误'); } catch (recordErr) { this.logger.error('记录子项失败状态时出错', recordErr); }
+                    try {
+                        await this.recordItemResult(item, false, error || '未知错误');
+                    } catch (recordErr) {
+                        this.logger.error('记录子项失败状态时出错', recordErr);
+                    }
                 }
                 this.release();
             } else {
@@ -309,8 +322,14 @@ export class CloneService {
         await this.prisma.cloneTaskItem.update({ where: { id: item.id }, data: { status: 'PROCESSING' } });
         const result = await this.executor.executeClone(item, shallow, mirrorSource, this.targetDir ?? undefined);
 
-        if (this.generation !== capturedGen) { this.logger.warn('代际已变更，跳过状态写入: ' + item.fullName); return; }
-        if (this.timeoutHandledItems.has(String(item.id))) { this.logger.warn(`子项 ${item.fullName} 已被 processItem 处理（超时），跳过写入`); return; }
+        if (this.generation !== capturedGen) {
+            this.logger.warn('代际已变更，跳过状态写入: ' + item.fullName);
+            return;
+        }
+        if (this.timeoutHandledItems.has(String(item.id))) {
+            this.logger.warn(`子项 ${item.fullName} 已被 processItem 处理（超时），跳过写入`);
+            return;
+        }
 
         await this.recordItemResult(item, result.success, result.error);
     }
@@ -344,7 +363,11 @@ export class CloneService {
         });
         this.logger.log(`克隆任务完成: taskId=${Number(taskId)} status=${status} completed=${completedCount} failed=${failedCount}`);
 
-        try { await this.cleanOldTasks(); } catch (e) { this.logger.error('清理历史任务失败', e); }
+        try {
+            await this.cleanOldTasks();
+        } catch (e) {
+            this.logger.error('清理历史任务失败', e);
+        }
     }
 
     private static computeFinalTaskStatus(completedCount: number, failedCount: number, totalCount: number): string {
@@ -378,10 +401,20 @@ export class CloneService {
         const progress = total > 0 ? Math.round((processed * 100) / total) : 0;
 
         return {
-            success: true, taskId: Number(task.id), status, targetDir: task.targetDir,
-            concurrency: task.concurrency, mirrorSource: task.mirrorSource, totalItems: total,
-            completedItems, failedItems, processingItems, progress,
-            createdAt: task.createdAt?.toISOString(), startedAt: task.startedAt?.toISOString(), finishedAt: task.finishedAt?.toISOString(),
+            success: true,
+            taskId: Number(task.id),
+            status,
+            targetDir: task.targetDir,
+            concurrency: task.concurrency,
+            mirrorSource: task.mirrorSource,
+            totalItems: total,
+            completedItems,
+            failedItems,
+            processingItems,
+            progress,
+            createdAt: task.createdAt?.toISOString(),
+            startedAt: task.startedAt?.toISOString(),
+            finishedAt: task.finishedAt?.toISOString(),
             failedDetails: task.items.filter((i) => i.status === 'FAILED').map((i) => ({ fullName: i.fullName, error: i.errorMessage })),
             allItems: task.items,
         };
@@ -396,18 +429,34 @@ export class CloneService {
             orderBy: { createdAt: 'desc' },
             take: MAX_HISTORY_TASKS,
             select: {
-                id: true, status: true, targetDir: true, concurrency: true, mirrorSource: true,
-                totalItems: true, completedItems: true, failedItems: true, createdAt: true, startedAt: true, finishedAt: true,
+                id: true,
+                status: true,
+                targetDir: true,
+                concurrency: true,
+                mirrorSource: true,
+                totalItems: true,
+                completedItems: true,
+                failedItems: true,
+                createdAt: true,
+                startedAt: true,
+                finishedAt: true,
             },
         });
 
         return {
             success: true,
             tasks: tasks.map((t) => ({
-                taskId: Number(t.id), status: t.status, targetDir: t.targetDir, concurrency: t.concurrency,
-                mirrorSource: t.mirrorSource, totalItems: t.totalItems,
-                completedItems: t.completedItems, failedItems: t.failedItems,
-                createdAt: t.createdAt?.toISOString(), startedAt: t.startedAt?.toISOString(), finishedAt: t.finishedAt?.toISOString(),
+                taskId: Number(t.id),
+                status: t.status,
+                targetDir: t.targetDir,
+                concurrency: t.concurrency,
+                mirrorSource: t.mirrorSource,
+                totalItems: t.totalItems,
+                completedItems: t.completedItems,
+                failedItems: t.failedItems,
+                createdAt: t.createdAt?.toISOString(),
+                startedAt: t.startedAt?.toISOString(),
+                finishedAt: t.finishedAt?.toISOString(),
             })),
         };
     }
@@ -417,7 +466,9 @@ export class CloneService {
      */
     async getRecentDirectories() {
         const tasks = await this.prisma.cloneTask.findMany({
-            orderBy: { createdAt: 'desc' }, take: 20, select: { targetDir: true },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+            select: { targetDir: true },
         });
         const uniqueDirs = [...new Set(tasks.map((t) => t.targetDir).filter(Boolean))];
         return { success: true, directories: uniqueDirs };
@@ -440,8 +491,14 @@ export class CloneService {
         }
 
         await this.prisma.$transaction([
-            this.prisma.cloneTaskItem.updateMany({ where: { taskId: BigInt(taskId), status: 'FAILED' }, data: { status: 'PENDING', errorMessage: null, retryCount: { increment: 1 } } }),
-            this.prisma.cloneTask.update({ where: { id: BigInt(taskId) }, data: { status: 'PENDING', startedAt: null, finishedAt: null, completedItems: 0, failedItems: 0, skippedItems: 0 } }),
+            this.prisma.cloneTaskItem.updateMany({
+                where: { taskId: BigInt(taskId), status: 'FAILED' },
+                data: { status: 'PENDING', errorMessage: null, retryCount: { increment: 1 } },
+            }),
+            this.prisma.cloneTask.update({
+                where: { id: BigInt(taskId) },
+                data: { status: 'PENDING', startedAt: null, finishedAt: null, completedItems: 0, failedItems: 0, skippedItems: 0 },
+            }),
         ]);
 
         this.logger.log(`克隆任务重试: taskId=${taskId} failed=${items.length}`);
@@ -468,7 +525,10 @@ export class CloneService {
                     data: { status: 'PENDING', errorMessage: null, retryCount: { increment: 1 } },
                 });
                 if (updated.count === 0) throw new Error('任务项正在执行中或已是待执行状态，无法重试');
-                await tx.cloneTask.update({ where: { id: BigInt(taskId) }, data: { status: 'PENDING', startedAt: null, finishedAt: null } });
+                await tx.cloneTask.update({
+                    where: { id: BigInt(taskId) },
+                    data: { status: 'PENDING', startedAt: null, finishedAt: null },
+                });
             });
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -479,11 +539,17 @@ export class CloneService {
     }
 
     async resetTask(taskId: number) {
-        const task = await this.prisma.cloneTask.findUnique({ where: { id: BigInt(taskId) }, select: { id: true, status: true, targetDir: true } });
+        const task = await this.prisma.cloneTask.findUnique({
+            where: { id: BigInt(taskId) },
+            select: { id: true, status: true, targetDir: true },
+        });
         if (!task) return { success: false, message: '任务不存在' };
 
-        if (this.running && this.currentTaskId === BigInt(taskId)) { this.forceReleaseLock(); }
-        else if (this.running) { this.logger.warn(`重置操作跳过锁释放`); }
+        if (this.running && this.currentTaskId === BigInt(taskId)) {
+            this.forceReleaseLock();
+        } else if (this.running) {
+            this.logger.warn(`重置操作跳过锁释放`);
+        }
 
         const failedItems = await this.prisma.cloneTaskItem.findMany({
             where: { taskId: BigInt(taskId), status: { not: 'COMPLETED' } },
@@ -495,8 +561,14 @@ export class CloneService {
         }
 
         await this.prisma.$transaction([
-            this.prisma.cloneTaskItem.updateMany({ where: { taskId: BigInt(taskId) }, data: { status: 'PENDING', errorMessage: null, retryCount: 0 } }),
-            this.prisma.cloneTask.update({ where: { id: BigInt(taskId) }, data: { status: 'PENDING', startedAt: null, finishedAt: null, completedItems: 0, failedItems: 0, skippedItems: 0 } }),
+            this.prisma.cloneTaskItem.updateMany({
+                where: { taskId: BigInt(taskId) },
+                data: { status: 'PENDING', errorMessage: null, retryCount: 0 },
+            }),
+            this.prisma.cloneTask.update({
+                where: { id: BigInt(taskId) },
+                data: { status: 'PENDING', startedAt: null, finishedAt: null, completedItems: 0, failedItems: 0, skippedItems: 0 },
+            }),
         ]);
 
         this.logger.log(`克隆任务已重置: taskId=${taskId}`);
@@ -510,7 +582,9 @@ export class CloneService {
         });
         if (!task) return { success: false, message: '任务不存在' };
 
-        if (this.running && this.currentTaskId === BigInt(taskId)) { this.forceReleaseLock(); }
+        if (this.running && this.currentTaskId === BigInt(taskId)) {
+            this.forceReleaseLock();
+        }
 
         try {
             await this.prisma.cloneTaskItem.deleteMany({ where: { taskId: BigInt(taskId) } });
@@ -537,14 +611,18 @@ export class CloneService {
 
     // ==================== 锁管理 ====================
 
-    isRunning(): boolean { return this.running; }
+    isRunning(): boolean {
+        return this.running;
+    }
 
     getLockAge(): number | null {
         if (!this.lockAcquiredAt) return null;
         return Date.now() - this.lockAcquiredAt.getTime();
     }
 
-    getCurrentTaskId(): bigint | null { return this.currentTaskId; }
+    getCurrentTaskId(): bigint | null {
+        return this.currentTaskId;
+    }
 
     forceReleaseLock() {
         this.generation++;
@@ -560,7 +638,10 @@ export class CloneService {
     private async cleanOldTasks() {
         const old = await this.prisma.cloneTask.findMany({
             where: { status: { in: ['COMPLETED', 'FAILED', 'PARTIAL'] } },
-            orderBy: { createdAt: 'desc' }, skip: MAX_HISTORY_TASKS, take: 1000, select: { id: true },
+            orderBy: { createdAt: 'desc' },
+            skip: MAX_HISTORY_TASKS,
+            take: 1000,
+            select: { id: true },
         });
         for (const t of old) {
             await this.prisma.cloneTaskItem.deleteMany({ where: { taskId: t.id } });

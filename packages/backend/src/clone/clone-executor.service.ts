@@ -48,7 +48,11 @@ export class CloneExecutorService {
      * @param options.githubToken GitHub Token（可选，通过 GIT_ASKPASS 注入）
      * @returns git 实例 + cleanup 回调（清理 askpass 脚本）
      */
-    private async createGit(options: { baseDir?: string; timeoutMs?: number; githubToken?: string }): Promise<{ git: SimpleGit; cleanup: () => void }> {
+    private async createGit(options: {
+        baseDir?: string;
+        timeoutMs?: number;
+        githubToken?: string;
+    }): Promise<{ git: SimpleGit; cleanup: () => void }> {
         let askpassPath: string | undefined;
 
         const git = simpleGit({
@@ -66,8 +70,14 @@ export class CloneExecutorService {
         // 读取并注入代理配置（从 system_config 或环境变量）
         const httpProxy = (await this.config.getValue('clone.http_proxy')) || process.env.HTTP_PROXY || process.env.http_proxy || '';
         const httpsProxy = (await this.config.getValue('clone.https_proxy')) || process.env.HTTPS_PROXY || process.env.https_proxy || '';
-        if (httpProxy) { git.env('HTTP_PROXY', httpProxy); git.env('http_proxy', httpProxy); }
-        if (httpsProxy) { git.env('HTTPS_PROXY', httpsProxy); git.env('https_proxy', httpsProxy); }
+        if (httpProxy) {
+            git.env('HTTP_PROXY', httpProxy);
+            git.env('http_proxy', httpProxy);
+        }
+        if (httpsProxy) {
+            git.env('HTTPS_PROXY', httpsProxy);
+            git.env('https_proxy', httpsProxy);
+        }
 
         return {
             git,
@@ -364,7 +374,11 @@ export class CloneExecutorService {
             // 检查 remote origin 是否匹配
             try {
                 const remoteUrl = await git.raw(['remote', 'get-url', 'origin']);
-                const normalizeUrl = (url: string) => url.replace(/^https:\/\//, '').replace(/\.git$/, '').toLowerCase();
+                const normalizeUrl = (url: string) =>
+                    url
+                        .replace(/^https:\/\//, '')
+                        .replace(/\.git$/, '')
+                        .toLowerCase();
                 const urlMatch = normalizeUrl(remoteUrl.trim()).includes(normalizeUrl(expectedCloneUrl));
                 if (!urlMatch) {
                     return { success: false, error: `remote origin 不匹配: ${remoteUrl.trim()}` };
@@ -472,7 +486,11 @@ export class CloneExecutorService {
         try {
             try {
                 const currentUrl = await git.raw(['remote', 'get-url', 'origin']);
-                const normalizeUrl = (url: string) => url.replace(/^https:\/\//, '').replace(/\.git$/, '').toLowerCase();
+                const normalizeUrl = (url: string) =>
+                    url
+                        .replace(/^https:\/\//, '')
+                        .replace(/\.git$/, '')
+                        .toLowerCase();
                 if (normalizeUrl(currentUrl.trim()).includes(normalizeUrl(expectedUrl))) {
                     return; // URL 匹配，无需修复
                 }
@@ -482,7 +500,9 @@ export class CloneExecutorService {
             // 重置 remote
             try {
                 await git.raw(['remote', 'remove', 'origin']);
-            } catch { /* 忽略 */ }
+            } catch {
+                /* 忽略 */
+            }
             await git.raw(['remote', 'add', 'origin', expectedUrl]);
             this.logger.log(`已修复 remote origin: ${localPath}`);
         } catch (e: unknown) {
@@ -496,10 +516,7 @@ export class CloneExecutorService {
     /**
      * 修复：fetch origin 信息
      */
-    async repairFetchOrigin(
-        localPath: string,
-        fullName?: string | null,
-    ): Promise<{ success: boolean; error?: string }> {
+    async repairFetchOrigin(localPath: string, fullName?: string | null): Promise<{ success: boolean; error?: string }> {
         const { git, cleanup } = await this.createGit({ baseDir: localPath, timeoutMs: 30_000 });
         try {
             await git.fetch(['--all']);
@@ -529,7 +546,9 @@ export class CloneExecutorService {
                 try {
                     await git.raw(['rev-parse', `refs/remotes/origin/${candidate}`]);
                     return candidate;
-                } catch { /* continue */ }
+                } catch {
+                    /* continue */
+                }
             }
             return null;
         } finally {
@@ -587,6 +606,8 @@ export class CloneExecutorService {
             if (existsSync(scriptPath)) {
                 await rm(scriptPath, { force: true });
             }
-        } catch { /* 忽略清理失败 */ }
+        } catch {
+            /* 忽略清理失败 */
+        }
     }
 }
