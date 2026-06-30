@@ -82,7 +82,8 @@ export default function DownloadProgressModal({ open, progress, onClose, onRetry
             title="下载进度"
             open={open}
             onCancel={onClose}
-            width={560}
+            width={960}
+            styles={{ body: { maxHeight: '70vh', overflow: 'auto' } }}
             footer={
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <Popconfirm
@@ -189,9 +190,10 @@ export default function DownloadProgressModal({ open, progress, onClose, onRetry
                                     scroll={{ y: 300 }}
                                     columns={[
                                         {
-                                            title: '仓库',
+                                            title: '仓库名称',
                                             dataIndex: 'fullName',
                                             key: 'fullName',
+                                            width: 280,
                                             ellipsis: true,
                                         },
                                         {

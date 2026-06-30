@@ -305,7 +305,7 @@ export class DownloadService {
      * @param token    GitHub Token（可选）
      * @returns 检测到的默认分支名，所有探测失败时返回 'main'
      */
-    private async detectDefaultBranch(owner: string, repoName: string, token?: string): Promise<string> {
+    private async detectDefaultBranch(owner: string, repoName: string, token?: string): Promise<string | null> {
         // 优先通过 GitHub API 获取
         try {
             const headers: Record<string, string> = {
@@ -373,8 +373,8 @@ export class DownloadService {
             }
         }
 
-        this.logger.warn(`所有分支探测失败，回退到 main: ${owner}/${repoName}`);
-        return 'main';
+        this.logger.warn(`所有分支探测失败，回退到 HEAD.zip 自动重定向: ${owner}/${repoName}`);
+        return null;
     }
 
     /**
@@ -531,8 +531,12 @@ export class DownloadService {
                     branch = await this.detectDefaultBranch(owner, repoName, token);
                 }
 
-                const newArchiveUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${branch}.zip`;
-                const safeFileName = `${owner}_${repoName}-${branch}.zip`.replace(/[<>:"/\\|?*]/g, '_');
+                const newArchiveUrl = branch
+                    ? `https://github.com/${owner}/${repoName}/archive/refs/heads/${branch}.zip`
+                    : `https://github.com/${owner}/${repoName}/archive/HEAD.zip`;
+                const safeFileName = branch
+                    ? `${owner}_${repoName}-${branch}.zip`.replace(/[<>:"/\\|?*]/g, '_')
+                    : `${owner}_${repoName}.zip`.replace(/[<>:"/\\|?*]/g, '_');
                 const downloadDir = path.join(this.targetDir!, owner);
                 const newLocalFilePath = path.join(downloadDir, safeFileName);
 
@@ -1192,10 +1196,14 @@ export class DownloadService {
                 const { owner, repoName } = parseFullName(fullName);
                 const defaultBranch = await this.detectDefaultBranch(owner, repoName, token);
 
-                const safeFileName = `${owner}_${repoName}-${defaultBranch}.zip`.replace(/[<>:"/\\|?*]/g, '_');
+                const safeFileName = defaultBranch
+                    ? `${owner}_${repoName}-${defaultBranch}.zip`.replace(/[<>:"/\\|?*]/g, '_')
+                    : `${owner}_${repoName}.zip`.replace(/[<>:"/\\|?*]/g, '_');
                 const downloadDir = path.join(taskTargetDir, owner);
                 const localFilePath = path.join(downloadDir, safeFileName);
-                const archiveUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${defaultBranch}.zip`;
+                const archiveUrl = defaultBranch
+                    ? `https://github.com/${owner}/${repoName}/archive/refs/heads/${defaultBranch}.zip`
+                    : `https://github.com/${owner}/${repoName}/archive/HEAD.zip`;
                 const extractDir = path.join(taskTargetDir, owner, repoName);
 
                 return {
@@ -1313,10 +1321,14 @@ export class DownloadService {
         const token = await this.getGitHubToken();
         const defaultBranch = await this.detectDefaultBranch(owner, repoName, token);
 
-        const safeFileName = `${owner}_${repoName}-${defaultBranch}.zip`.replace(/[<>:"/\\|?*]/g, '_');
+        const safeFileName = defaultBranch
+            ? `${owner}_${repoName}-${defaultBranch}.zip`.replace(/[<>:"/\\|?*]/g, '_')
+            : `${owner}_${repoName}.zip`.replace(/[<>:"/\\|?*]/g, '_');
         const downloadDir = path.join(taskTargetDir, owner);
         const localFilePath = path.join(downloadDir, safeFileName);
-        const archiveUrl = `https://github.com/${owner}/${repoName}/archive/refs/heads/${defaultBranch}.zip`;
+        const archiveUrl = defaultBranch
+            ? `https://github.com/${owner}/${repoName}/archive/refs/heads/${defaultBranch}.zip`
+            : `https://github.com/${owner}/${repoName}/archive/HEAD.zip`;
         const extractDir = path.join(taskTargetDir, owner, repoName);
 
         try {
