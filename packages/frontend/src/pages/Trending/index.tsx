@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Segmented, Select, Spin, Empty, Typography, Tag, Space, Button, App, Modal, Input } from 'antd'
+import { Segmented, Select, Spin, Empty, Typography, Tag, Space, Button, App, Modal, Input, theme } from 'antd'
 import { StarFilled, ForkOutlined, FireOutlined, TranslationOutlined, DownloadOutlined } from '@ant-design/icons'
 import { fetchTrending, translateTrending, downloadTrending } from '../../api'
 import {
@@ -308,9 +308,9 @@ export default function Trending() {
                                     style={{
                                         display: 'flex',
                                         alignItems: 'stretch',
-                                        background: '#fff',
+                                        background: token.colorBgContainer,
                                         borderRadius: 8,
-                                        border: '1px solid #f0f0f0',
+                                        border: `1px solid ${token.colorBorderSecondary}`,
                                         overflow: 'hidden',
                                         minHeight: 72,
                                     }}
@@ -323,8 +323,8 @@ export default function Trending() {
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            background: idx < 3 ? RANK_BADGE_COLORS[idx] : '#f5f5f5',
-                                            color: idx < 3 ? '#fff' : '#999',
+                                            background: idx < 3 ? RANK_BADGE_COLORS[idx] : token.colorFillTertiary,
+                                            color: idx < 3 ? '#fff' : token.colorTextTertiary,
                                             fontWeight: 700,
                                             fontSize: idx < 3 ? 18 : 14,
                                         }}
@@ -387,10 +387,10 @@ export default function Trending() {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                             <StarFilled style={{ color: '#faad14', fontSize: 12 }} />
                                             <Text style={{ fontSize: 14, fontWeight: 700 }}>{formatNumberShort(repo.starsCount)}</Text>
-                                            <ForkOutlined style={{ fontSize: 11, color: '#999', marginLeft: 4 }} />
+                                            <ForkOutlined style={{ fontSize: 11, color: token.colorTextTertiary, marginLeft: 4 }} />
                                             <Text type='secondary' style={{ fontSize: 11 }}>{formatNumberShort(repo.forksCount)}</Text>
                                         </div>
-                                        <div style={{ width: '100%', height: 8, background: '#f5f5f5', borderRadius: 4, overflow: 'hidden' }}>
+                                        <div style={{ width: '100%', height: 8, background: token.colorFillTertiary, borderRadius: 4, overflow: 'hidden' }}>
                                             <div
                                                 style={{
                                                     width: `${barPercent}%`,
@@ -501,3 +501,5 @@ export default function Trending() {
         </div>
     )
 }
+
+    const { token } = theme.useToken()
