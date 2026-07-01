@@ -38,8 +38,9 @@ export default function Download() {
     const { message } = App.useApp()
     const [tasks, setTasks] = useState<DownloadTaskListResult['tasks']>([])
     const [loading, setLoading] = useState(true)
-    const [extracting, setExtracting] = useState<number | null>(null)
-    const [extractProgress, setExtractProgress] = useState<{
+
+    /** 批量解压进度 key=taskId，支持多个任务同时解压 */
+    interface ExtractProgressData {
         status: 'extracting' | 'completed'
         total: number
         current: number
@@ -47,7 +48,11 @@ export default function Download() {
         skipped: number
         failed: number
         message: string
-    } | null>(null)
+    }
+    const [extractingTasks, setExtractingTasks] = useState<Record<number, ExtractProgressData>>({})
+    const extractingTasksRef = useRef<Record<number, ExtractProgressData>>({})
+
+    /** 批量解压结果详情弹窗 */
     const [extractResult, setExtractResult] = useState<{
         visible: boolean
         message: string
@@ -56,7 +61,6 @@ export default function Download() {
         failed: number
         details: Array<{ fullName: string; status: string; message?: string }>
     } | null>(null)
-    const extractingRef = useRef<number | null>(null)
 
     const [progressOpen, setProgressOpen] = useState(false)
     const [activeTaskId, setActiveTaskId] = useState<number | null>(null)
@@ -217,29 +221,24 @@ export default function Download() {
         [activeTaskId, message],
     )
 
-    // 解压进度轮询
+    // 解压进度轮询（支持同时跟踪多个任务的解压进度）
     const extractPolling = usePolling(async () => {
-        const taskId = extractingRef.current
-        if (!taskId) {
+        const tasks = extractingTasksRef.current
+        const taskIds = Object.keys(tasks)
+        if (taskIds.length === 0) {
             extractPolling.stop()
             return
         }
-        try {
-            const res = await getExtractAllProgress(taskId)
-            if (res.success && res.status) {
-                setExtractProgress({
-                    status: res.status,
-                    total: res.total ?? 0,
-                    current: res.current ?? 0,
-                    extracted: res.extracted ?? 0,
-                    skipped: res.skipped ?? 0,
-                    failed: res.failed ?? 0,
-                    message: res.message ?? '',
-                })
+
+        for (const taskIdStr of taskIds) {
+            const taskId = Number(taskIdStr)
+            try {
+                const res = await getExtractAllProgress(taskId)
+                if (!res.success || !res.status) continue
+
                 if (res.status === 'completed') {
-                    extractPolling.stop()
-                    setExtracting(null)
-                    setExtractProgress(null)
+                    // 从进行中移除
+                    delete extractingTasksRef.current[taskId]
                     loadTasks()
                     if ((res.failed ?? 0) > 0 && res.details) {
                         setExtractResult({
@@ -251,33 +250,56 @@ export default function Download() {
                             details: res.details,
                         })
                     } else {
-                        message.success(res.message ?? '解压完成')
+                        message.success(`任务 ${taskId} 解压完成: ${res.message ?? ''}`)
+                    }
+                } else {
+                    // 更新进度到 ref + state
+                    extractingTasksRef.current[taskId] = {
+                        status: res.status,
+                        total: res.total ?? 0,
+                        current: res.current ?? 0,
+                        extracted: res.extracted ?? 0,
+                        skipped: res.skipped ?? 0,
+                        failed: res.failed ?? 0,
+                        message: res.message ?? '',
                     }
                 }
+            } catch {
+                // 单个任务轮询失败不影响其他任务
             }
-        } catch {
-            // 轮询期间静默失败
         }
+
+        // 同步 ref 到 state 触发 UI 更新
+        setExtractingTasks({ ...extractingTasksRef.current })
     }, 2000)
 
     const handleExtractAll = useCallback(
         async (taskId: number) => {
-            setExtracting(taskId)
-            extractingRef.current = taskId
+            // 初始化进度
+            extractingTasksRef.current[taskId] = {
+                status: 'extracting',
+                total: 0,
+                current: 0,
+                extracted: 0,
+                skipped: 0,
+                failed: 0,
+                message: '启动中...',
+            }
+            setExtractingTasks({ ...extractingTasksRef.current })
+            // 确保轮询在运行
+            extractPolling.start()
+
             try {
                 const res = await extractAllDownloadItems(taskId)
                 if (!res.success) {
                     message.info(res.message)
-                    setExtracting(null)
-                    extractingRef.current = null
-                    return
+                    delete extractingTasksRef.current[taskId]
+                    setExtractingTasks({ ...extractingTasksRef.current })
                 }
-                // 后台解压已启动，开始轮询进度
-                extractPolling.start()
             } catch {
                 message.error('一键解压失败：网络请求异常，请检查后端服务是否正常运行')
-                setExtracting(null)
-                extractingRef.current = null
+                delete extractingTasksRef.current[taskId]
+                setExtractingTasks({ ...extractingTasksRef.current })
             }
         },
         [extractPolling, message],
@@ -412,10 +434,10 @@ export default function Download() {
                         详情
                     </Button>
                     {(record.status === 'COMPLETED' || record.status === 'PARTIAL') &&
-                        (extracting === record.taskId && extractProgress ? (
-                            <Tooltip title={extractProgress.message}>
+                        (extractingTasks[record.taskId] ? (
+                            <Tooltip title={extractingTasks[record.taskId].message}>
                                 <Button size='small' loading icon={<CompressOutlined />}>
-                                    {extractProgress.current}/{extractProgress.total}
+                                    {extractingTasks[record.taskId].current}/{extractingTasks[record.taskId].total}
                                 </Button>
                             </Tooltip>
                         ) : (
@@ -426,7 +448,7 @@ export default function Download() {
                                 okText='解压'
                                 cancelText='取消'
                             >
-                                <Button size='small' loading={extracting === record.taskId} icon={<CompressOutlined />}>
+                                <Button size='small' loading={!!extractingTasks[record.taskId]} icon={<CompressOutlined />}>
                                     一键解压
                                 </Button>
                             </Popconfirm>
