@@ -21,6 +21,7 @@ const { Title, Text } = Typography
 
 export default function Trending() {
     const { message } = App.useApp()
+    const { token } = theme.useToken()
     const [since, setSince] = useState<string>('daily')
     const [language, setLanguage] = useState<string>('')
     const [repos, setRepos] = useState<GithubSearchRepo[]>([])
@@ -344,7 +345,7 @@ export default function Trending() {
                                                 href={repo.htmlUrl}
                                                 target='_blank'
                                                 rel='noopener noreferrer'
-                                                style={{ fontWeight: 600, fontSize: 14, color: '#1677ff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                                style={{ fontWeight: 600, fontSize: 14, color: token.colorPrimary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                                             >
                                                 {repo.fullName}
                                             </a>
@@ -502,4 +503,3 @@ export default function Trending() {
     )
 }
 
-    const { token } = theme.useToken()
