@@ -16,6 +16,7 @@ interface ElectronDesktopAPI {
     userDataPath: string
     tempPath: string
     downloadsPath: string
+    backendPort: number
   }>
 }
 
@@ -24,6 +25,10 @@ interface ElectronWindowAPI {
   maximize(): Promise<void>
   isMaximized(): Promise<boolean>
   close(): Promise<void>
+}
+
+interface ElectronBackendAPI {
+  getStatus(): Promise<{ running: boolean; port: number }>
 }
 
 interface ElectronUpdateAPI {
@@ -43,6 +48,7 @@ interface ElectronAPI {
   dialog: ElectronDialogAPI
   desktop: ElectronDesktopAPI
   window: ElectronWindowAPI
+  backend: ElectronBackendAPI
   update: ElectronUpdateAPI
 }
 

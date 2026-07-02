@@ -1,7 +1,7 @@
 // @ts-check
 const { Configuration } = require('electron-builder')
 
-/** @type {Configuration} */
+/** @type {import('electron-builder').Configuration} */
 const config = {
   appId: 'com.githubstars.desktop',
   // monorepo 中 electron 提升到根 node_modules，需显式指定版本
@@ -17,9 +17,16 @@ const config = {
     'package.json'
   ],
   extraResources: [
+    // 前端构建产物
     {
       from: '../../packages/frontend/dist',
       to: 'frontend-dist',
+      filter: ['**/*']
+    },
+    // 后端服务（由 bundle-backend.mjs 生成）
+    {
+      from: 'build/backend-bundle',
+      to: 'backend',
       filter: ['**/*']
     }
   ],

@@ -4,6 +4,7 @@ import { createMainWindow } from './window'
 import { setupIpcHandlers } from './ipc'
 import { createTray } from './tray'
 import { setupAutoUpdater } from './updater'
+import { backendManager } from './backend'
 import log from 'electron-log'
 
 // 配置日志
@@ -23,7 +24,7 @@ let mainWindow: BrowserWindow | null = null
 /**
  * 应用准备就绪时初始化
  */
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // 设置应用安全模型
   electronApp.setAppUserModelId('com.githubstars.desktop')
 
@@ -32,6 +33,14 @@ app.whenReady().then(() => {
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)
     })
+  }
+
+  // 启动后端服务（先于窗口创建）
+  const backendStarted = await backendManager.start()
+  if (!backendStarted) {
+    log.error('[App] 后端服务启动失败，应用将以有限模式运行')
+  } else {
+    log.info(`[App] 后端服务已启动，端口: ${backendManager.getPort()}`)
   }
 
   // 创建主窗口
@@ -57,6 +66,14 @@ app.whenReady().then(() => {
   })
 
   log.info('应用初始化完成')
+})
+
+/**
+ * 应用退出时停止后端
+ */
+app.on('before-quit', async () => {
+  log.info('[App] 应用退出，停止后端服务')
+  await backendManager.stop()
 })
 
 /**

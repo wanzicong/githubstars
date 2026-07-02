@@ -32,6 +32,7 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	system: { getInfo: () => electron.ipcRenderer.invoke("system:getInfo") },
 	desktop: { getConfig: () => electron.ipcRenderer.invoke("desktop:getConfig") },
+	backend: { getStatus: () => electron.ipcRenderer.invoke("backend:getStatus") },
 	update: {
 		check: () => electron.ipcRenderer.invoke("update:check"),
 		download: () => electron.ipcRenderer.invoke("update:download"),

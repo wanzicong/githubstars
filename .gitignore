@@ -67,3 +67,6 @@ githubstars-desktop/
 # Desktop (Electron app)
 packages/desktop/out/
 packages/desktop/dist/
+
+# Desktop backend bundle (build artifact)
+packages/desktop/build/backend-bundle/

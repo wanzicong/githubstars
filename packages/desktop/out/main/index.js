@@ -34,6 +34,8 @@ var __toCommonJS = (mod) => __hasOwnProp.call(mod, "module.exports") ? mod["modu
 //#endregion
 let electron = require("electron");
 let node_path = require("node:path");
+let node_child_process = require("node:child_process");
+let node_net = require("node:net");
 //#region ../../node_modules/@electron-toolkit/utils/dist/index.mjs
 var is = { dev: !electron.app.isPackaged };
 var platform = {
@@ -8860,14 +8862,14 @@ var require_source = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#region ../../node_modules/electron-store/index.js
 var require_electron_store = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var path$30 = require("path");
-	var { app: app$3, ipcMain: ipcMain$2, ipcRenderer, shell: shell$2 } = require("electron");
+	var { app: app$4, ipcMain: ipcMain$2, ipcRenderer, shell: shell$2 } = require("electron");
 	var Conf = require_source();
 	var isInitialized = false;
 	var initDataListener = () => {
-		if (!ipcMain$2 || !app$3) throw new Error("Electron Store: You need to call `.initRenderer()` from the main process.");
+		if (!ipcMain$2 || !app$4) throw new Error("Electron Store: You need to call `.initRenderer()` from the main process.");
 		const appData = {
-			defaultCwd: app$3.getPath("userData"),
-			appVersion: app$3.getVersion()
+			defaultCwd: app$4.getPath("userData"),
+			appVersion: app$4.getVersion()
 		};
 		if (isInitialized) return appData;
 		ipcMain$2.on("electron-store-get-data", (event) => {
@@ -8884,7 +8886,7 @@ var require_electron_store = /* @__PURE__ */ __commonJSMin(((exports, module) =>
 				const appData = ipcRenderer.sendSync("electron-store-get-data");
 				if (!appData) throw new Error("Electron Store: You need to call `.initRenderer()` from the main process.");
 				({defaultCwd, appVersion} = appData);
-			} else if (ipcMain$2 && app$3) ({defaultCwd, appVersion} = initDataListener());
+			} else if (ipcMain$2 && app$4) ({defaultCwd, appVersion} = initDataListener());
 			options = {
 				name: "config",
 				...options
@@ -11141,6 +11143,201 @@ function loadContent(window) {
 	}
 }
 //#endregion
+//#region src/main/backend.ts
+/**
+* 后端管理器 —— 在 Electron 中自动启动后端服务
+*
+* 使用 ELECTRON_RUN_AS_NODE=1 模式启动：将 Electron 的可执行文件当作
+* 纯 Node.js 运行时使用（不会创建新窗口），直接运行后端编译后的 main.js。
+*
+* 负责：
+* 1. 找到可用端口（默认 10004，避免与 Web 端 10002 冲突）
+* 2. 启动后端子进程（使用 ELECTRON_RUN_AS_NODE 模式）
+* 3. 监控后端健康状态，崩溃自动重启
+* 4. 应用退出时优雅关闭后端
+*/
+var BackendManager = class {
+	process = null;
+	port = 10004;
+	isShuttingDown = false;
+	healthCheckInterval = null;
+	startupResolve = null;
+	startupTimeout = null;
+	/** 获取后端运行的端口 */
+	getPort() {
+		return this.port;
+	}
+	/** 后端是否正在运行 */
+	isRunning() {
+		return this.process !== null && this.process.exitCode === null;
+	}
+	/**
+	* 启动后端服务
+	*/
+	async start() {
+		this.isShuttingDown = false;
+		this.port = await this.findFreePort(10004, 10010);
+		const backendEntry = this.getBackendEntry();
+		const nodeExe = this.getExecutablePath();
+		import_src.default.info(`[Backend] 启动后端服务 exe=${nodeExe} entry=${backendEntry} port=${this.port}`);
+		return new Promise((resolve) => {
+			this.startupResolve = resolve;
+			this.process = (0, node_child_process.spawn)(nodeExe, [backendEntry], {
+				env: {
+					ELECTRON_RUN_AS_NODE: "1",
+					PORT: String(this.port),
+					NODE_ENV: "production",
+					CORS_ORIGINS: "*",
+					LOG_LEVEL: "info",
+					DATABASE_URL: process.env.DATABASE_URL || "mysql://root:123456@127.0.0.1:3307/githubstars?charset=utf8mb4"
+				},
+				cwd: this.getBackendDir(),
+				stdio: [
+					"ignore",
+					"pipe",
+					"pipe"
+				],
+				windowsHide: true
+			});
+			this.process.stdout?.on("data", (data) => {
+				const msg = data.toString().trim();
+				if (msg) import_src.default.info(`[Backend:out] ${msg}`);
+			});
+			this.process.stderr?.on("data", (data) => {
+				const msg = data.toString().trim();
+				if (msg) import_src.default.error(`[Backend:err] ${msg}`);
+			});
+			this.process.on("exit", (code, signal) => {
+				const willRestart = !this.isShuttingDown && this.process !== null;
+				import_src.default.warn(`[Backend] 进程退出 code=${code} signal=${signal} restart=${willRestart}`);
+				this.process = null;
+				if (willRestart) {
+					import_src.default.info("[Backend] 2 秒后自动重启...");
+					setTimeout(() => this.start(), 2e3);
+				}
+				if (this.startupResolve) {
+					this.startupResolve(false);
+					this.startupResolve = null;
+				}
+			});
+			this.process.on("error", (err) => {
+				import_src.default.error(`[Backend] 进程错误: ${err.message}`);
+			});
+			this.startHealthCheck();
+			this.startupTimeout = setTimeout(() => {
+				if (this.startupResolve) {
+					import_src.default.warn("[Backend] 启动超时（30s），进程仍在运行中");
+					this.startupResolve(this.process !== null && this.process.exitCode === null);
+					this.startupResolve = null;
+				}
+			}, 3e4);
+			setTimeout(() => {
+				if (this.startupResolve) {
+					if (this.process !== null && this.process.exitCode === null) {
+						import_src.default.info("[Backend] 后端进程启动成功");
+						this.startupResolve(true);
+						this.startupResolve = null;
+					}
+				}
+			}, 5e3);
+		});
+	}
+	/**
+	* 停止后端服务
+	*/
+	async stop() {
+		this.isShuttingDown = true;
+		this.stopHealthCheck();
+		if (this.startupTimeout) {
+			clearTimeout(this.startupTimeout);
+			this.startupTimeout = null;
+		}
+		if (!this.process) return;
+		import_src.default.info("[Backend] 正在停止后端服务...");
+		return new Promise((resolve) => {
+			const killTimeout = setTimeout(() => {
+				if (this.process && this.process.exitCode === null) {
+					import_src.default.warn("[Backend] 强制终止后端进程");
+					this.process.kill("SIGKILL");
+				}
+				resolve();
+			}, 5e3);
+			this.process.on("exit", () => {
+				clearTimeout(killTimeout);
+				resolve();
+			});
+			this.process.kill("SIGTERM");
+		});
+	}
+	/**
+	* 获取可执行文件路径
+	* - 生产环境：使用 electron.exe 自身（ELECTRON_RUN_AS_NODE=1）
+	* - 开发环境：使用系统 node.exe
+	*/
+	getExecutablePath() {
+		if (electron.app.isPackaged) return process.execPath;
+		return "node";
+	}
+	/**
+	* 获取后端入口文件
+	* - 生产环境：resources/backend/dist/main.js
+	* - 开发环境：packages/backend/dist/main.js
+	*/
+	getBackendEntry() {
+		return (0, node_path.join)(this.getBackendDir(), "dist", "main.js");
+	}
+	/**
+	* 获取后端工作目录
+	* - 生产环境：resources/backend/
+	* - 开发环境：packages/backend/
+	*/
+	getBackendDir() {
+		if (electron.app.isPackaged) return (0, node_path.join)(process.resourcesPath, "backend");
+		return (0, node_path.resolve)(__dirname, "../../../../backend");
+	}
+	/**
+	* 找到可用端口（从 start 到 end 递增尝试）
+	*/
+	findFreePort(start, end) {
+		return new Promise((resolve, reject) => {
+			const tryPort = (port) => {
+				if (port > end) {
+					reject(/* @__PURE__ */ new Error(`没有可用端口 (${start}-${end})`));
+					return;
+				}
+				const server = (0, node_net.createServer)();
+				server.listen(port, "127.0.0.1", () => {
+					server.close(() => resolve(port));
+				});
+				server.on("error", () => tryPort(port + 1));
+			};
+			tryPort(start);
+		});
+	}
+	/**
+	* 启动健康检查（每 15 秒检查一次后端是否存活）
+	*/
+	startHealthCheck() {
+		this.stopHealthCheck();
+		this.healthCheckInterval = setInterval(() => {
+			if (this.process && this.process.exitCode !== null) {
+				import_src.default.warn("[Backend] 健康检查：后端进程已退出");
+				if (!this.isShuttingDown) {
+					import_src.default.info("[Backend] 健康检查：触发自动重启");
+					this.start();
+				}
+			}
+		}, 15e3);
+	}
+	stopHealthCheck() {
+		if (this.healthCheckInterval) {
+			clearInterval(this.healthCheckInterval);
+			this.healthCheckInterval = null;
+		}
+	}
+};
+var backendManager = new BackendManager();
+//#endregion
 //#region src/main/ipc.ts
 /**
 * 设置IPC处理器
@@ -11259,7 +11456,17 @@ function setupIpcHandlers(mainWindow) {
 			platform: process.platform,
 			userDataPath: electron.app.getPath("userData"),
 			tempPath: electron.app.getPath("temp"),
-			downloadsPath: electron.app.getPath("downloads")
+			downloadsPath: electron.app.getPath("downloads"),
+			backendPort: backendManager.getPort()
+		};
+	});
+	/**
+	* 获取后端服务状态
+	*/
+	electron.ipcMain.handle("backend:getStatus", () => {
+		return {
+			running: backendManager.isRunning(),
+			port: backendManager.getPort()
 		};
 	});
 	import_src.default.info("IPC处理器已注册");
@@ -25861,11 +26068,13 @@ var mainWindow = null;
 /**
 * 应用准备就绪时初始化
 */
-electron.app.whenReady().then(() => {
+electron.app.whenReady().then(async () => {
 	electronApp.setAppUserModelId("com.githubstars.desktop");
 	if (is.dev) electron.app.on("browser-window-created", (_, window) => {
 		optimizer.watchWindowShortcuts(window);
 	});
+	if (!await backendManager.start()) import_src.default.error("[App] 后端服务启动失败，应用将以有限模式运行");
+	else import_src.default.info(`[App] 后端服务已启动，端口: ${backendManager.getPort()}`);
 	mainWindow = createMainWindow();
 	setupIpcHandlers(mainWindow);
 	createTray(mainWindow);
@@ -25879,6 +26088,13 @@ electron.app.whenReady().then(() => {
 		}
 	});
 	import_src.default.info("应用初始化完成");
+});
+/**
+* 应用退出时停止后端
+*/
+electron.app.on("before-quit", async () => {
+	import_src.default.info("[App] 应用退出，停止后端服务");
+	await backendManager.stop();
 });
 /**
 * 所有窗口关闭时退出应用（macOS除外）

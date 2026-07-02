@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain, dialog, app, shell } from 'electron'
 import { join } from 'node:path'
+import { backendManager } from './backend'
 import log from 'electron-log'
 
 /**
@@ -140,7 +141,18 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
       platform: process.platform,
       userDataPath: app.getPath('userData'),
       tempPath: app.getPath('temp'),
-      downloadsPath: app.getPath('downloads')
+      downloadsPath: app.getPath('downloads'),
+      backendPort: backendManager.getPort()
+    }
+  })
+
+  /**
+   * 获取后端服务状态
+   */
+  ipcMain.handle('backend:getStatus', () => {
+    return {
+      running: backendManager.isRunning(),
+      port: backendManager.getPort()
     }
   })
 

@@ -1,17 +1,96 @@
+import { useEffect, useState } from 'react'
 import { RouterProvider } from 'react-router-dom'
-import { ConfigProvider, App as AntApp } from 'antd'
+import { ConfigProvider, App as AntApp, Spin, Typography } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { useAppStore } from '@/stores'
 import { generateThemeConfig } from '@/designs'
 import { router } from '@/router'
+import { setBaseURL } from '@/api/request'
+import { isElectron } from '@/utils/electron'
+
+const { Text } = Typography
+
+/**
+ * 桌面端初始化 —— 获取后端端口并设置 API baseURL
+ */
+function DesktopInit({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>(
+    isElectron() ? 'loading' : 'ready'
+  )
+  const [errorMsg, setErrorMsg] = useState('')
+
+  useEffect(() => {
+    if (!isElectron()) return
+
+    let cancelled = false
+    let pollTimer: ReturnType<typeof setTimeout> | null = null
+
+    // 轮询等待后端就绪（最多 60 秒）
+    const pollBackend = () => {
+      if (cancelled) return
+      window.electronAPI!.backend.getStatus().then((status) => {
+        if (cancelled) return
+        if (status.running && status.port) {
+          setBaseURL(`http://localhost:${status.port}`)
+          console.log(`[Desktop] 后端已就绪，端口 ${status.port}`)
+          setState('ready')
+        } else {
+          // 后端还没就绪，继续轮询
+          pollTimer = setTimeout(pollBackend, 2000)
+        }
+      }).catch(() => {
+        if (cancelled) return
+        pollTimer = setTimeout(pollBackend, 2000)
+      })
+    }
+
+    // 启动轮询 + 超时保护
+    pollBackend()
+    const timeout = setTimeout(() => {
+      if (cancelled) return
+      setState('error')
+      setErrorMsg('后端服务启动超时，请检查数据库连接（MySQL :3307）是否正常运行')
+    }, 60000)
+
+    return () => {
+      cancelled = true
+      if (pollTimer) clearTimeout(pollTimer)
+      clearTimeout(timeout)
+    }
+  }, [])
+
+  if (state === 'loading') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 16 }}>
+        <Spin size="large" />
+        <Text type="secondary">正在启动后端服务...</Text>
+      </div>
+    )
+  }
+
+  if (state === 'error') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 12, padding: 32, textAlign: 'center' }}>
+        <Text type="danger" style={{ fontSize: 18 }}>❌ {errorMsg}</Text>
+        <Text type="secondary" style={{ fontSize: 13, maxWidth: 480 }}>
+          请确保 MySQL 已启动（127.0.0.1:3307），并且数据库 githubstars 已创建。
+          可在系统配置页面查看或修改数据库连接信息。
+        </Text>
+      </div>
+    )
+  }
+
+  return <>{children}</>
+}
 
 /**
  * 应用根组件 —— 配置 Antd 主题 + 提供路由。
  *
+ * - 桌面端：先获取后端端口，再渲染（显示"正在启动后端服务..."）
+ * - Web 端：直接渲染
+ *
  * 主题由 appStore（Zustand）驱动，用户通过设置抽屉实时调整。
  * 路由由 router/index.ts 通过 createBrowserRouter 创建。
- *
- * 架构层级：根组件，无上层调用方。
  *
  * @depends
  *   - useAppStore（主题色、暗色模式）
@@ -31,7 +110,9 @@ export default function App() {
   return (
     <ConfigProvider locale={zhCN} theme={themeConfig}>
       <AntApp>
-        <RouterProvider router={router} />
+        <DesktopInit>
+          <RouterProvider router={router} />
+        </DesktopInit>
       </AntApp>
     </ConfigProvider>
   )
