@@ -18,7 +18,8 @@
     "ignoreDeprecations": "6.0",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "jsx": "react"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "out", "dist"]
