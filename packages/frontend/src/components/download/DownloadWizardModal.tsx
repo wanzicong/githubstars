@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Modal, Steps, Table, Radio, Button, Space, Tag, Typography, App, Tooltip, Checkbox } from 'antd'
 import {
     FolderOutlined,
@@ -7,7 +7,7 @@ import {
     CheckCircleOutlined,
     QuestionCircleOutlined,
 } from '@ant-design/icons'
-import { createDownloadTask, type DownloadMirrorSource } from '@/api/download'
+import { createDownloadTask, estimateDownloadSizes, type DownloadMirrorSource, type SizeEstimateItem } from '@/api/download'
 import { DOWNLOAD_CONCURRENCY_OPTIONS, DEFAULT_DOWNLOAD_CONCURRENCY } from '@/constants'
 import DirectoryPicker from '@/components/common/DirectoryPicker'
 import type { GithubRepo } from '@/types'
@@ -16,6 +16,19 @@ import type { GithubRepo } from '@/types'
 type DownloadConcurrency = 3 | 5 | 10 | 20 | 50
 
 const { Text } = Typography
+
+/** 格式化字节数为可读大小 */
+function formatBytes(bytes: number): string {
+    if (bytes <= 0) return '未知'
+    const units = ['B', 'KB', 'MB', 'GB']
+    let unitIndex = 0
+    let size = bytes
+    while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024
+        unitIndex++
+    }
+    return `${unitIndex === 0 ? size : size.toFixed(1)} ${units[unitIndex]}`
+}
 
 /** 镜像源选项 */
 const MIRROR_OPTIONS = [
@@ -50,6 +63,25 @@ export default function DownloadWizardModal({ open, onClose, selectedRepos, onTa
     const [mirrorSources, setMirrorSources] = useState<DownloadMirrorSource[]>(['direct'])
     const [selectedIds, setSelectedIds] = useState<number[]>(selectedRepos.map((r) => r.id))
     const [loading, setLoading] = useState(false)
+    const [sizeEstimates, setSizeEstimates] = useState<Map<number, SizeEstimateItem>>(new Map())
+    const [sizeEstimating, setSizeEstimating] = useState(false)
+
+    // 打开模态框时自动拉取下载大小预估
+    useEffect(() => {
+        if (!open || selectedRepos.length === 0) return
+        setSizeEstimating(true)
+        setSizeEstimates(new Map())
+        estimateDownloadSizes(selectedRepos.map((r) => r.id))
+            .then((result) => {
+                if (result.success && result.items.length > 0) {
+                    setSizeEstimates(new Map(result.items.map((item) => [item.repoId, item])))
+                }
+            })
+            .catch(() => {
+                // 预估失败不影响主流程，静默处理
+            })
+            .finally(() => setSizeEstimating(false))
+    }, [open])
 
     const handleNext = () => {
         if (currentStep === 0 && selectedIds.length === 0) {
@@ -124,6 +156,17 @@ export default function DownloadWizardModal({ open, onClose, selectedRepos, onTa
             width: 80,
             sorter: (a: GithubRepo, b: GithubRepo) => a.starsCount - b.starsCount,
         },
+        {
+            title: '大小',
+            key: 'size',
+            width: 100,
+            render: (_: unknown, record: GithubRepo) => {
+                const estimate = sizeEstimates.get(record.id)
+                if (sizeEstimating) return <Text type="secondary">估算中...</Text>
+                if (!estimate || estimate.sizeInBytes <= 0) return <Text type="secondary">未知</Text>
+                return <Text>{formatBytes(estimate.sizeInBytes)}</Text>
+            },
+        },
     ]
 
     const renderStepContent = () => {
@@ -141,7 +184,24 @@ export default function DownloadWizardModal({ open, onClose, selectedRepos, onTa
                             selectedRowKeys: selectedIds,
                             onChange: (keys) => setSelectedIds(keys as number[]),
                         }}
-                        footer={() => <Text type="secondary">已选 {selectedIds.length} 个仓库</Text>}
+                        footer={() => {
+                    const totalBytes = selectedIds.reduce((sum, id) => {
+                        const est = sizeEstimates.get(id)
+                        return sum + (est?.sizeInBytes ?? 0)
+                    }, 0)
+                    let sizeText = ''
+                    if (sizeEstimating) {
+                        sizeText = '估算中...'
+                    } else if (totalBytes > 0) {
+                        sizeText = formatBytes(totalBytes)
+                    }
+                    return (
+                        <Text type="secondary">
+                            已选 {selectedIds.length} 个仓库
+                            {sizeText ? <>，预估总大小 {sizeText}</> : null}
+                        </Text>
+                    )
+                }}
                     />
                 )
             case 1:
@@ -236,6 +296,19 @@ export default function DownloadWizardModal({ open, onClose, selectedRepos, onTa
                                 { key: 'dir', label: '目标目录', value: targetDir },
                                 { key: 'concurrency', label: '并发数量', value: `${concurrency} 个` },
                                 { key: 'mirror', label: '加速代理', value: mirrorSources.map(s => MIRROR_OPTIONS.find((o) => o.value === s)?.label || s).join(' → ') },
+                                {
+                                    key: 'totalSize',
+                                    label: '预估总大小',
+                                    value: (() => {
+                                        if (sizeEstimating) return '估算中...'
+                                        const totalBytes = selectedIds.reduce((sum, id) => {
+                                            const est = sizeEstimates.get(id)
+                                            return sum + (est?.sizeInBytes ?? 0)
+                                        }, 0)
+                                        if (totalBytes <= 0) return '未知'
+                                        return formatBytes(totalBytes)
+                                    })(),
+                                },
                             ]}
                             columns={[
                                 { title: '配置项', dataIndex: 'label', key: 'label', width: 140 },

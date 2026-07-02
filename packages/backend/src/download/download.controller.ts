@@ -3,6 +3,7 @@ import { DownloadService } from './download.service';
 import {
     CreateDownloadTaskSchema,
     DownloadTaskIdSchema,
+    EstimateSizesSchema,
     RetryItemSchema,
     ExtractItemSchema,
     DeleteItemFileSchema,
@@ -56,6 +57,18 @@ export class DownloadController {
     /**
      * 重试失败项
      */
+    /**
+     * 预估多个仓库的下载大小（HEAD 请求获取 Content-Length）
+     */
+    @Post('estimate-sizes')
+    async estimateSizes(@Body() body: unknown) {
+        const parsed = EstimateSizesSchema.safeParse(body);
+        if (!parsed.success) {
+            throw new HttpException({ success: false, message: '仓库 ID 列表无效' }, HttpStatus.BAD_REQUEST);
+        }
+        return this.downloadService.estimateSizes(parsed.data.repoIds);
+    }
+
     @Post('tasks/retry')
     async retryFailed(@Body() body: unknown) {
         const parsed = DownloadTaskIdSchema.safeParse(body);

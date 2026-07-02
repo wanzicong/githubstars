@@ -23,6 +23,24 @@ export async function createDownloadTask(params: {
     return data
 }
 
+/** 预估下载大小结果项 */
+export interface SizeEstimateItem {
+    repoId: number
+    fullName: string
+    sizeInBytes: number
+}
+
+/** 预估下载大小 */
+export async function estimateDownloadSizes(repoIds: number[]): Promise<{
+    success: boolean
+    items: SizeEstimateItem[]
+    totalBytes: number
+    failedCount: number
+}> {
+    const { data } = await api.post('/api/download/estimate-sizes', { repoIds })
+    return data
+}
+
 /** 获取下载任务进度 */
 export async function getDownloadTaskProgress(taskId: number): Promise<DownloadTaskProgress> {
     const { data } = await api.post<DownloadTaskProgress>('/api/download/tasks/detail', { id: taskId })

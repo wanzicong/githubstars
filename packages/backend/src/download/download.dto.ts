@@ -41,6 +41,12 @@ export const RetryItemSchema = z.object({
 });
 
 /** 提取任务项压缩包请求验证 */
+/** 预估下载大小请求验证 */
+export const EstimateSizesSchema = z.object({
+    repoIds: z.array(z.coerce.number().int().positive()).min(1, '至少提供一个仓库 ID'),
+});
+
+export type EstimateSizesDto = z.infer<typeof EstimateSizesSchema>;
 export const ExtractItemSchema = z.object({
     taskId: z.coerce.number().int().positive(),
     fullName: z

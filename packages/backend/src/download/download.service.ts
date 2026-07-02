@@ -347,6 +347,133 @@ export class DownloadService {
     }
 
     /**
+     * 预估多个仓库的下载大小
+     *
+     * 对每个仓库的 archive URL 发 HEAD 请求获取 Content-Length（不下载 body），
+     * 用于前端在创建下载任务前展示总计大小。
+     *
+     * @param repoIds 仓库 ID 列表
+     * @returns 每个仓库的预估大小（字节）和总计
+     *
+     * @callers
+     *   - DownloadController.estimateSizes()  — POST /api/download/estimate-sizes
+     *
+     * @depends
+     *   - prisma.githubRepo.findMany()  — 查仓库信息
+     *   - fetch(url, { method: 'HEAD' }) — 获取 Content-Length
+     *   - getGitHubToken()              — 避免 GitHub API 限速
+     */
+    async estimateSizes(repoIds: number[]): Promise<{
+        success: boolean;
+        items: Array<{ repoId: number; fullName: string; sizeInBytes: number }>;
+        totalBytes: number;
+        failedCount: number;
+    }> {
+        const repos = await this.prisma.githubRepo.findMany({
+            where: { id: { in: repoIds.map((id) => BigInt(id)) } },
+            select: { id: true, fullName: true },
+        });
+        if (repos.length === 0) {
+            return { success: true, items: [], totalBytes: 0, failedCount: 0 };
+        }
+
+        const token = await this.getGitHubToken();
+        // 按 fullName 排序保持确定性
+        const sorted = [...repos].sort((a, b) => ((a.fullName || '') > (b.fullName || '') ? 1 : -1));
+
+        const items: Array<{ repoId: number; fullName: string; sizeInBytes: number }> = [];
+        let failedCount = 0;
+
+        // 并发限制 5 个
+        const CONCURRENCY = 5;
+        const url = 'https://api.github.com/repos';
+
+        for (let i = 0; i < sorted.length; i += CONCURRENCY) {
+            const batch = sorted.slice(i, i + CONCURRENCY);
+            const results = await Promise.allSettled(
+                batch.map(async (repo) => {
+                    const fullName = repo.fullName || '';
+                    const [owner, repoName] = fullName.split('/');
+                    if (!owner || !repoName) {
+                        return { repoId: Number(repo.id), fullName, sizeInBytes: 0 };
+                    }
+
+                    const headers: Record<string, string> = {
+                        Accept: 'application/vnd.github.v3+json',
+                        'User-Agent': 'GithubStars-Manager',
+                    };
+                    if (token) {
+                        headers['Authorization'] = `Bearer ${token}`;
+                    }
+
+                    // 通过 GitHub API 获取仓库信息，其中 size 字段是磁盘大小（KB），
+                    // 但 archive 压缩包大小 ≈ size * 0.3~0.5（压缩比），
+                    // 需要更精确的值就用 HEAD 请求 archive URL 获取 Content-Length
+                    //
+                    // 方案：HEAD 请求 archive URL 获取精准的 Content-Length
+                    const archiveUrl = `https://github.com/${owner}/${repoName}/archive/HEAD.zip`;
+
+                    try {
+                        const headResponse = await fetch(archiveUrl, {
+                            method: 'HEAD',
+                            headers: token ? { Authorization: `Bearer ${token}` } : {},
+                            signal: AbortSignal.timeout(15_000),
+                            redirect: 'follow',
+                        });
+
+                        if (headResponse.ok) {
+                            const contentLength = headResponse.headers.get('content-length');
+                            if (contentLength) {
+                                const sizeInBytes = Number.parseInt(contentLength, 10);
+                                if (!Number.isNaN(sizeInBytes)) {
+                                    return { repoId: Number(repo.id), fullName, sizeInBytes };
+                                }
+                            }
+                        }
+                    } catch {
+                        // HEAD 失败不阻塞，回退到估算方式
+                    }
+
+                    // 回退：通过 GitHub API 的 size 字段估算（size 是磁盘 KB，压缩后约 40%）
+                    try {
+                        const apiResponse = await fetch(`${url}/${owner}/${repoName}`, {
+                            headers,
+                            signal: AbortSignal.timeout(5_000),
+                        });
+                        if (apiResponse.ok) {
+                            const repoData = (await apiResponse.json()) as { size?: number };
+                            if (repoData.size && typeof repoData.size === 'number') {
+                                // 磁盘 KB 转 bytes，按 40% 压缩比估算
+                                const sizeInBytes = Math.round(repoData.size * 1024 * 0.4);
+                                return { repoId: Number(repo.id), fullName, sizeInBytes };
+                            }
+                        }
+                    } catch {
+                        // API 失败返回 0
+                    }
+
+                    return { repoId: Number(repo.id), fullName, sizeInBytes: 0 };
+                }),
+            );
+
+            for (const result of results) {
+                if (result.status === 'fulfilled') {
+                    items.push(result.value);
+                    if (result.value.sizeInBytes === 0) {
+                        failedCount++;
+                    }
+                }
+            }
+        }
+
+        const totalBytes = items.reduce((sum, item) => sum + item.sizeInBytes, 0);
+
+        this.logger.log(`下载大小预估完成: repos=${items.length} totalBytes=${totalBytes} failedCount=${failedCount}`);
+
+        return { success: true, items, totalBytes, failedCount };
+    }
+
+    /**
      * 检测仓库默认分支
      *
      * 通过 GitHub API 获取仓库信息，提取 default_branch。
