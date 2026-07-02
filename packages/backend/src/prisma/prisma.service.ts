@@ -21,9 +21,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
      * createdAt/updatedAt 默认值在各自 Service 层处理。
      */
     async onModuleInit() {
-        this.logger.log('正在连接数据库...');
+        this.logger.log(`正在连接数据库 (${this.isSqlite() ? 'SQLite' : 'MySQL'})...`);
         await this.$connect();
         this.logger.log('数据库连接成功');
+    }
+
+    /**
+     * 检测当前数据库是否为 SQLite
+     *
+     * 通过 DATABASE_URL 前缀判断：file: 开头为 SQLite，否则为 MySQL。
+     */
+    isSqlite(): boolean {
+        const url = process.env.DATABASE_URL || '';
+        return url.startsWith('file:');
     }
 
     /**

@@ -1,5 +1,6 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, execSync, type ChildProcess } from 'node:child_process'
 import { join, resolve } from 'node:path'
+import { existsSync, mkdirSync } from 'node:fs'
 import { app } from 'electron'
 import { request } from 'node:http'
 import log from 'electron-log'
@@ -52,6 +53,9 @@ export class BackendManager {
     this.isShuttingDown = false
     this.port = await this.findFreePort(10004, 10010)
 
+    // 初始化 SQLite 数据库
+    this.initDatabase()
+
     const backendEntry = this.getBackendEntry()
     const nodeExe = this.getExecutablePath()
 
@@ -67,7 +71,8 @@ export class BackendManager {
           NODE_ENV: 'production',
           CORS_ORIGINS: '*',
           LOG_LEVEL: 'info',
-          DATABASE_URL: process.env.DATABASE_URL || 'mysql://root:123456@127.0.0.1:3307/githubstars?charset=utf8mb4',
+          // SQLite 数据库文件路径（存放在用户数据目录）
+          DATABASE_URL: `file:${this.getDatabasePath()}`,
         },
         cwd: this.getBackendDir(),
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -240,6 +245,43 @@ export class BackendManager {
       return join(process.resourcesPath, 'backend')
     }
     return resolve(__dirname, '../../../../backend')
+  }
+
+  /** SQLite 数据库文件路径（Electron userData 目录下） */
+  private getDatabasePath(): string {
+    const userDataPath = app.getPath('userData')
+    if (!existsSync(userDataPath)) {
+      mkdirSync(userDataPath, { recursive: true })
+    }
+    return join(userDataPath, 'githubstars.db')
+  }
+
+  /** 首次启动时创建数据库表结构 */
+  private initDatabase(): void {
+    const dbPath = this.getDatabasePath()
+    if (existsSync(dbPath)) {
+      log.info('[Backend] SQLite 数据库已存在')
+      return
+    }
+    log.info('[Backend] 首次启动，创建数据库表...')
+    try {
+      const backendDir = this.getBackendDir()
+      const nodeExe = this.getExecutablePath()
+      execSync(`"${nodeExe}" node_modules/prisma/build/index.js db push --skip-generate`, {
+        cwd: backendDir,
+        env: {
+          ELECTRON_RUN_AS_NODE: '1',
+          DATABASE_URL: `file:${dbPath}`,
+        },
+        stdio: 'pipe',
+        timeout: 30000,
+        windowsHide: true,
+      })
+      log.info('[Backend] 数据库表创建成功')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      log.error(`[Backend] 数据库初始化失败: ${msg}`)
+    }
   }
 
   private findFreePort(start: number, end: number): Promise<number> {

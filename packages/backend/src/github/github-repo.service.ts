@@ -246,8 +246,8 @@ export class GithubRepoService {
     /**
      * 插入或更新仓库记录
      *
-     * 使用 INSERT ON DUPLICATE KEY UPDATE 实现单次数据库往返的 upsert 操作。
-     * 以 full_name 为唯一键判断是否存在，存在则更新字段，不存在则插入新记录。
+     * 使用 Prisma upsert（ORM）替代原始 SQL，兼容 MySQL 和 SQLite 双数据库。
+     * 以 fullName 为唯一键：新记录插入，已存在则仅更新基础元数据（不覆盖翻译结果）。
      *
      * @param data 仓库数据对象，对应 github_repo 表字段
      *
@@ -255,26 +255,66 @@ export class GithubRepoService {
      *   - SyncService 同步流程
      */
     async upsertRepo(data: UpsertRepoInput) {
-        this.logger.log('upsert 仓库: ' + (data.fullName || data.repoName || 'unknown'));
-        await this.prisma.$executeRaw`
-      INSERT INTO github_repo (repo_name, full_name, description, language, owner_name, owner_avatar_url, html_url, homepage,
-        stars_count, forks_count, watchers_count, open_issues_count, topics, license_name, is_fork, is_archived,
-        repo_created_at, repo_updated_at, repo_pushed_at, starred_at, created_at, updated_at, description_cn, readme_cn, readme_original, readme_fetched)
-      VALUES (${data.repoName || ''}, ${data.fullName || ''}, ${data.description}, ${data.language}, ${data.ownerName},
-        ${data.ownerAvatarUrl}, ${data.htmlUrl}, ${data.homepage}, ${data.starsCount || 0}, ${data.forksCount || 0},
-        ${data.watchersCount || 0}, ${data.openIssuesCount || 0}, ${data.topics || '[]'}, ${data.licenseName},
-        ${data.isFork ? 1 : 0}, ${data.isArchived ? 1 : 0}, ${data.repoCreatedAt}, ${data.repoUpdatedAt},
-        ${data.repoPushedAt}, ${data.starredAt}, ${data.createdAt || new Date()}, ${data.updatedAt || new Date()},
-        ${data.descriptionCn || null}, ${data.readmeCn || null}, ${data.readmeOriginal || null}, ${data.readmeFetched ? 1 : 0})
-      ON DUPLICATE KEY UPDATE
-        repo_name=VALUES(repo_name), description=VALUES(description), language=VALUES(language),
-        owner_name=VALUES(owner_name), owner_avatar_url=VALUES(owner_avatar_url), html_url=VALUES(html_url),
-        homepage=VALUES(homepage), stars_count=VALUES(stars_count), forks_count=VALUES(forks_count),
-        watchers_count=VALUES(watchers_count), open_issues_count=VALUES(open_issues_count), topics=VALUES(topics),
-        license_name=VALUES(license_name), is_fork=VALUES(is_fork), is_archived=VALUES(is_archived),
-        repo_created_at=VALUES(repo_created_at), repo_updated_at=VALUES(repo_updated_at),
-        repo_pushed_at=VALUES(repo_pushed_at), starred_at=VALUES(starred_at), updated_at=VALUES(updated_at)
-    `;
+        const fullName = data.fullName || '';
+        if (!fullName) {
+            this.logger.warn('upsert 跳过: fullName 为空');
+            return;
+        }
+        this.logger.log('upsert 仓库: ' + fullName);
+        const now = new Date();
+        await this.prisma.githubRepo.upsert({
+            where: { fullName },
+            create: {
+                repoName: data.repoName || '',
+                fullName,
+                description: data.description,
+                language: data.language,
+                ownerName: data.ownerName,
+                ownerAvatarUrl: data.ownerAvatarUrl,
+                htmlUrl: data.htmlUrl,
+                homepage: data.homepage,
+                starsCount: data.starsCount || 0,
+                forksCount: data.forksCount || 0,
+                watchersCount: data.watchersCount || 0,
+                openIssuesCount: data.openIssuesCount || 0,
+                topics: data.topics || '[]',
+                licenseName: data.licenseName,
+                isFork: data.isFork || false,
+                isArchived: data.isArchived || false,
+                repoCreatedAt: data.repoCreatedAt,
+                repoUpdatedAt: data.repoUpdatedAt,
+                repoPushedAt: data.repoPushedAt,
+                starredAt: data.starredAt,
+                createdAt: data.createdAt || now,
+                updatedAt: data.updatedAt || now,
+                descriptionCn: data.descriptionCn || null,
+                readmeCn: data.readmeCn || null,
+                readmeOriginal: data.readmeOriginal || null,
+                readmeFetched: data.readmeFetched || false,
+            },
+            update: {
+                repoName: data.repoName || '',
+                description: data.description,
+                language: data.language,
+                ownerName: data.ownerName,
+                ownerAvatarUrl: data.ownerAvatarUrl,
+                htmlUrl: data.htmlUrl,
+                homepage: data.homepage,
+                starsCount: data.starsCount || 0,
+                forksCount: data.forksCount || 0,
+                watchersCount: data.watchersCount || 0,
+                openIssuesCount: data.openIssuesCount || 0,
+                topics: data.topics || '[]',
+                licenseName: data.licenseName,
+                isFork: data.isFork || false,
+                isArchived: data.isArchived || false,
+                repoCreatedAt: data.repoCreatedAt,
+                repoUpdatedAt: data.repoUpdatedAt,
+                repoPushedAt: data.repoPushedAt,
+                starredAt: data.starredAt,
+                updatedAt: data.updatedAt || now,
+            },
+        });
     }
 
     /**

@@ -63,9 +63,15 @@ export class StatsService {
     async getTimelineStats() {
         this.logger.log('查询时间线统计');
         try {
-            const rows = await this.prisma.$queryRaw<Array<{ month: string; count: bigint }>>`
-                SELECT DATE_FORMAT(starred_at, '%Y-%m') AS month, COUNT(*) AS count FROM github_repo WHERE starred_at IS NOT NULL GROUP BY month ORDER BY month ASC
-            `;
+            const isSqlite = this.prisma.isSqlite();
+            // SQLite 用 strftime，MySQL 用 DATE_FORMAT
+            const rows = isSqlite
+                ? await this.prisma.$queryRaw<Array<{ month: string; count: bigint }>>`
+                    SELECT strftime('%Y-%m', starred_at) AS month, COUNT(*) AS count FROM github_repo WHERE starred_at IS NOT NULL GROUP BY month ORDER BY month ASC
+                  `
+                : await this.prisma.$queryRaw<Array<{ month: string; count: bigint }>>`
+                    SELECT DATE_FORMAT(starred_at, '%Y-%m') AS month, COUNT(*) AS count FROM github_repo WHERE starred_at IS NOT NULL GROUP BY month ORDER BY month ASC
+                  `;
             return rows.map((r) => ({ month: r.month, count: Number(r.count) }));
         } catch (e) {
             this.logger.error(`查询时间线统计失败: ${e instanceof Error ? e.message : String(e)}`, e);

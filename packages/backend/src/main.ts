@@ -1,6 +1,10 @@
-import { config } from 'dotenv';
-import { resolve } from 'path';
-config({ path: resolve(__dirname, '..', '.env') });
+// 加载 .env（仅开发环境；打包环境由 spawn 传入环境变量）
+try {
+    const dotenv = require('dotenv');
+    dotenv.config({ path: require('path').resolve(__dirname, '..', '.env') });
+} catch {
+    // dotenv 不可用 — 环境变量已通过父进程传入
+}
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';

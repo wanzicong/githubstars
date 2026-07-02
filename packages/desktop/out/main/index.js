@@ -35,6 +35,8 @@ var __toCommonJS = (mod) => __hasOwnProp.call(mod, "module.exports") ? mod["modu
 let electron = require("electron");
 let node_path = require("node:path");
 let node_child_process = require("node:child_process");
+let node_fs = require("node:fs");
+let node_http = require("node:http");
 let node_net = require("node:net");
 //#region ../../node_modules/@electron-toolkit/utils/dist/index.mjs
 var is = { dev: !electron.app.isPackaged };
@@ -11153,30 +11155,41 @@ function loadContent(window) {
 * 负责：
 * 1. 找到可用端口（默认 10004，避免与 Web 端 10002 冲突）
 * 2. 启动后端子进程（使用 ELECTRON_RUN_AS_NODE 模式）
-* 3. 监控后端健康状态，崩溃自动重启
-* 4. 应用退出时优雅关闭后端
+* 3. 轮询 HTTP 健康检查，直到后端就绪后才通知前端
+* 4. 监控后端健康状态，崩溃自动重启（最多 3 次）
+* 5. 应用退出时优雅关闭后端
 */
 var BackendManager = class {
 	process = null;
 	port = 10004;
 	isShuttingDown = false;
+	restartCount = 0;
+	MAX_RESTARTS = 3;
 	healthCheckInterval = null;
 	startupResolve = null;
 	startupTimeout = null;
+	healthPollInterval = null;
 	/** 获取后端运行的端口 */
 	getPort() {
 		return this.port;
 	}
-	/** 后端是否正在运行 */
+	/** 后端是否正在运行（进程存活 + HTTP 可响应） */
 	isRunning() {
 		return this.process !== null && this.process.exitCode === null;
 	}
 	/**
 	* 启动后端服务
+	*
+	* 流程：
+	* 1. 找到可用端口
+	* 2. 启动后端子进程
+	* 3. 轮询 HTTP 健康检查等待后端就绪
+	* 4. 就绪后返回 true，超时或崩溃返回 false
 	*/
 	async start() {
 		this.isShuttingDown = false;
 		this.port = await this.findFreePort(10004, 10010);
+		this.initDatabase();
 		const backendEntry = this.getBackendEntry();
 		const nodeExe = this.getExecutablePath();
 		import_src.default.info(`[Backend] 启动后端服务 exe=${nodeExe} entry=${backendEntry} port=${this.port}`);
@@ -11189,7 +11202,7 @@ var BackendManager = class {
 					NODE_ENV: "production",
 					CORS_ORIGINS: "*",
 					LOG_LEVEL: "info",
-					DATABASE_URL: process.env.DATABASE_URL || "mysql://root:123456@127.0.0.1:3307/githubstars?charset=utf8mb4"
+					DATABASE_URL: `file:${this.getDatabasePath()}`
 				},
 				cwd: this.getBackendDir(),
 				stdio: [
@@ -11208,38 +11221,82 @@ var BackendManager = class {
 				if (msg) import_src.default.error(`[Backend:err] ${msg}`);
 			});
 			this.process.on("exit", (code, signal) => {
-				const willRestart = !this.isShuttingDown && this.process !== null;
-				import_src.default.warn(`[Backend] 进程退出 code=${code} signal=${signal} restart=${willRestart}`);
+				import_src.default.warn(`[Backend] 进程退出 code=${code} signal=${signal}`);
 				this.process = null;
-				if (willRestart) {
-					import_src.default.info("[Backend] 2 秒后自动重启...");
-					setTimeout(() => this.start(), 2e3);
-				}
+				this.stopHealthPoll();
 				if (this.startupResolve) {
 					this.startupResolve(false);
 					this.startupResolve = null;
+					return;
 				}
+				if (!this.isShuttingDown && this.restartCount < this.MAX_RESTARTS) {
+					this.restartCount++;
+					import_src.default.info(`[Backend] 自动重启 (${this.restartCount}/${this.MAX_RESTARTS})...`);
+					setTimeout(() => this.start(), 2e3);
+				} else if (this.restartCount >= this.MAX_RESTARTS) import_src.default.error(`[Backend] 已达最大重启次数 (${this.MAX_RESTARTS})，停止自动恢复`);
 			});
 			this.process.on("error", (err) => {
 				import_src.default.error(`[Backend] 进程错误: ${err.message}`);
 			});
-			this.startHealthCheck();
-			this.startupTimeout = setTimeout(() => {
+			this.pollHealth();
+		});
+	}
+	/**
+	* 轮询 HTTP 健康检查
+	* 每 1 秒检查一次，直到后端返回 200/404 等正常响应
+	*/
+	pollHealth() {
+		let elapsed = 0;
+		const MAX_WAIT = 60;
+		this.stopHealthPoll();
+		this.healthPollInterval = setInterval(() => {
+			elapsed += 1;
+			if (!this.process || this.process.exitCode !== null) {
+				this.stopHealthPoll();
+				return;
+			}
+			if (elapsed >= MAX_WAIT) {
+				this.stopHealthPoll();
+				import_src.default.warn(`[Backend] HTTP 健康检查超时 (${MAX_WAIT}s)，但进程仍在运行`);
 				if (this.startupResolve) {
-					import_src.default.warn("[Backend] 启动超时（30s），进程仍在运行中");
-					this.startupResolve(this.process !== null && this.process.exitCode === null);
+					this.startupResolve(true);
 					this.startupResolve = null;
 				}
-			}, 3e4);
-			setTimeout(() => {
-				if (this.startupResolve) {
-					if (this.process !== null && this.process.exitCode === null) {
-						import_src.default.info("[Backend] 后端进程启动成功");
-						this.startupResolve(true);
-						this.startupResolve = null;
-					}
+				return;
+			}
+			this.httpGet(`http://127.0.0.1:${this.port}/api/docs`).then((ok) => {
+				if (ok && this.startupResolve) {
+					import_src.default.info(`[Backend] HTTP 健康检查通过，后端就绪 (${elapsed}s)`);
+					this.stopHealthPoll();
+					this.startHealthCheck();
+					this.restartCount = 0;
+					this.startupResolve(true);
+					this.startupResolve = null;
 				}
-			}, 5e3);
+			}).catch(() => {});
+		}, 1e3);
+	}
+	stopHealthPoll() {
+		if (this.healthPollInterval) {
+			clearInterval(this.healthPollInterval);
+			this.healthPollInterval = null;
+		}
+	}
+	/**
+	* 简单的 HTTP GET 请求
+	* @returns 如果服务器返回 2xx/3xx/4xx 算"可响应"
+	*/
+	httpGet(url) {
+		return new Promise((resolve, reject) => {
+			const req = (0, node_http.request)(url, { timeout: 2e3 }, (res) => {
+				resolve(res.statusCode < 500);
+			});
+			req.on("error", () => reject());
+			req.on("timeout", () => {
+				req.destroy();
+				reject();
+			});
+			req.end();
 		});
 	}
 	/**
@@ -11247,6 +11304,7 @@ var BackendManager = class {
 	*/
 	async stop() {
 		this.isShuttingDown = true;
+		this.stopHealthPoll();
 		this.stopHealthCheck();
 		if (this.startupTimeout) {
 			clearTimeout(this.startupTimeout);
@@ -11269,35 +11327,49 @@ var BackendManager = class {
 			this.process.kill("SIGTERM");
 		});
 	}
-	/**
-	* 获取可执行文件路径
-	* - 生产环境：使用 electron.exe 自身（ELECTRON_RUN_AS_NODE=1）
-	* - 开发环境：使用系统 node.exe
-	*/
 	getExecutablePath() {
 		if (electron.app.isPackaged) return process.execPath;
 		return "node";
 	}
-	/**
-	* 获取后端入口文件
-	* - 生产环境：resources/backend/dist/main.js
-	* - 开发环境：packages/backend/dist/main.js
-	*/
 	getBackendEntry() {
 		return (0, node_path.join)(this.getBackendDir(), "dist", "main.js");
 	}
-	/**
-	* 获取后端工作目录
-	* - 生产环境：resources/backend/
-	* - 开发环境：packages/backend/
-	*/
 	getBackendDir() {
 		if (electron.app.isPackaged) return (0, node_path.join)(process.resourcesPath, "backend");
 		return (0, node_path.resolve)(__dirname, "../../../../backend");
 	}
-	/**
-	* 找到可用端口（从 start 到 end 递增尝试）
-	*/
+	/** SQLite 数据库文件路径（Electron userData 目录下） */
+	getDatabasePath() {
+		const userDataPath = electron.app.getPath("userData");
+		if (!(0, node_fs.existsSync)(userDataPath)) (0, node_fs.mkdirSync)(userDataPath, { recursive: true });
+		return (0, node_path.join)(userDataPath, "githubstars.db");
+	}
+	/** 首次启动时创建数据库表结构 */
+	initDatabase() {
+		const dbPath = this.getDatabasePath();
+		if ((0, node_fs.existsSync)(dbPath)) {
+			import_src.default.info("[Backend] SQLite 数据库已存在");
+			return;
+		}
+		import_src.default.info("[Backend] 首次启动，创建数据库表...");
+		try {
+			const backendDir = this.getBackendDir();
+			(0, node_child_process.execSync)(`"${this.getExecutablePath()}" node_modules/prisma/build/index.js db push --skip-generate`, {
+				cwd: backendDir,
+				env: {
+					ELECTRON_RUN_AS_NODE: "1",
+					DATABASE_URL: `file:${dbPath}`
+				},
+				stdio: "pipe",
+				timeout: 3e4,
+				windowsHide: true
+			});
+			import_src.default.info("[Backend] 数据库表创建成功");
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e);
+			import_src.default.error(`[Backend] 数据库初始化失败: ${msg}`);
+		}
+	}
 	findFreePort(start, end) {
 		return new Promise((resolve, reject) => {
 			const tryPort = (port) => {
@@ -11314,9 +11386,6 @@ var BackendManager = class {
 			tryPort(start);
 		});
 	}
-	/**
-	* 启动健康检查（每 15 秒检查一次后端是否存活）
-	*/
 	startHealthCheck() {
 		this.stopHealthCheck();
 		this.healthCheckInterval = setInterval(() => {
