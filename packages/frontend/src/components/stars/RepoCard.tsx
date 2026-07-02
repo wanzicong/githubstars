@@ -1,121 +1,204 @@
-import { memo, type ReactNode } from 'react'
+import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Tag, Typography, Avatar, Space } from 'antd'
-import { StarFilled, ForkOutlined, ReadOutlined } from '@ant-design/icons'
+import { Card, Tag, Typography, Avatar, Tooltip, theme } from 'antd'
+import {
+    StarFilled, ForkOutlined, ReadOutlined,
+    ClockCircleOutlined,
+} from '@ant-design/icons'
 import { formatNumberCn, formatDate, daysSince, getStalenessColor } from '@/utils/format'
 import type { GithubRepo } from '@/types'
 
 const { Text, Paragraph } = Typography
+const { useToken } = theme
 
 interface RepoCardProps {
     repo: GithubRepo
 }
 
-/** 网格卡片视图 — 每个仓库展示为可点击卡片（React.memo 避免列表项无效重渲染） */
+/** 语言对应的标签色（取 GitHub 常用语言色系） */
+const LANG_COLORS: Record<string, string> = {
+    TypeScript: '#3178c6',
+    JavaScript: '#f7df1e',
+    Python: '#3572a5',
+    Java: '#b07219',
+    Go: '#00add8',
+    Rust: '#dea584',
+    'C++': '#f34b7d',
+    C: '#555555',
+    Ruby: '#701516',
+    PHP: '#4f5d95',
+    Swift: '#f05138',
+    Kotlin: '#a97bff',
+    Dart: '#00b4ab',
+    Shell: '#89e051',
+    HTML: '#e34c26',
+    CSS: '#563d7c',
+}
+
+/**
+ * 网格卡片视图 — 每个仓库展示为可点击卡片。
+ *
+ * 设计要点：
+ * - 使用 Ant Design 主题 token，自动适配亮/暗模式
+ * - Star 数作为视觉焦点，与仓库名同级展示
+ * - 语言用带色圆点 + 文字，更简洁易扫
+ * - 中文翻译状态用优雅标签展示
+ * - "未更新"天数通过色阶表达保鲜度
+ */
 const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
     const navigate = useNavigate()
+    const { token } = useToken()
 
-    let descriptionContent: ReactNode
-    if (repo.descriptionCn) {
-        descriptionContent = (
-            <Paragraph
-                ellipsis={{ rows: 2 }}
-                style={{ marginBottom: 10, fontSize: 14, minHeight: 40, color: '#333', lineHeight: '1.6' }}
-            >
-                {repo.descriptionCn}
-                <Text type='secondary' style={{ fontSize: 12, marginLeft: 4 }}>
-                    🇨🇳
-                </Text>
-            </Paragraph>
-        )
-    } else if (repo.description) {
-        descriptionContent = (
-            <Paragraph
-                type='secondary'
-                ellipsis={{ rows: 2 }}
-                style={{ marginBottom: 10, fontSize: 14, minHeight: 40, lineHeight: '1.6' }}
-            >
-                {repo.description}
-            </Paragraph>
-        )
-    } else {
-        descriptionContent = null
-    }
-
-    let readmeTag: ReactNode
-    if (repo.readmeFetched && repo.readmeCn) {
-        readmeTag = (
-            <Tag color='purple' style={{ margin: 0, fontSize: 12 }}>
-                <ReadOutlined style={{ fontSize: 11 }} /> 已翻译
-            </Tag>
-        )
-    } else if (repo.readmeFetched) {
-        readmeTag = (
-            <Tag color='default' style={{ margin: 0, fontSize: 12 }}>
-                无README
-            </Tag>
-        )
-    } else {
-        readmeTag = null
-    }
+    const descriptionText = repo.descriptionCn ?? repo.description
+    const hasTranslation = Boolean(repo.descriptionCn)
+    const days = repo.repoPushedAt ? daysSince(repo.repoPushedAt) : null
+    const langColor = repo.language ? LANG_COLORS[repo.language] : token.colorBorderSecondary
 
     return (
         <Card
             hoverable
-            style={{ height: '100%', cursor: 'pointer' }}
-            styles={{ body: { padding: 16 } }}
+            style={{
+                height: '100%',
+                cursor: 'pointer',
+                borderRadius: token.borderRadiusLG,
+                borderColor: token.colorBorderSecondary,
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+            }}
+            styles={{
+                body: { padding: 16, display: 'flex', flexDirection: 'column', gap: 10 },
+            }}
+            onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = token.colorPrimary
+                e.currentTarget.style.boxShadow = `0 0 0 1px ${token.colorPrimary}10`
+            }}
+            onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = token.colorBorderSecondary
+                e.currentTarget.style.boxShadow = 'none'
+            }}
             onClick={() => navigate(`/stars/${repo.id}`)}
         >
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
-                <Avatar src={repo.ownerAvatarUrl} alt={repo.ownerName} size={48} style={{ flexShrink: 0 }} />
+            {/* 头部：头像 + 仓库名 + Star 数徽章 */}
+            <header style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <Avatar
+                    src={repo.ownerAvatarUrl}
+                    alt={repo.ownerName}
+                    size={44}
+                    style={{ flexShrink: 0, border: `1px solid ${token.colorBorderSecondary}` }}
+                />
                 <div style={{ minWidth: 0, flex: 1 }}>
-                    <Text strong style={{ fontSize: 16, display: 'block', lineHeight: '24px' }} ellipsis>
-                        <span style={{ color: '#1677ff' }}>{repo.repoName}</span>
-                    </Text>
-                    <Text type='secondary' style={{ fontSize: 14 }} ellipsis>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 1 }}>
+                        <Text strong style={{ fontSize: 15, lineHeight: '22px', color: token.colorText }} ellipsis>
+                            {repo.repoName}
+                        </Text>
+                        {/* Star 数 — 视觉焦点 */}
+                        <Tooltip title={`${repo.starsCount.toLocaleString()} stars`}>
+                            <span
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    flexShrink: 0,
+                                    fontSize: 13,
+                                    fontWeight: 500,
+                                    color: token.colorTextSecondary,
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                <StarFilled style={{ color: '#faad14', fontSize: 13 }} />
+                                {formatNumberCn(repo.starsCount)}
+                            </span>
+                        </Tooltip>
+                    </div>
+                    <Text type='secondary' style={{ fontSize: 13 }} ellipsis>
                         {repo.ownerName}
                     </Text>
                 </div>
-            </div>
-            {descriptionContent}
-            {/* 标签行 — 语言 + 翻译状态 */}
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            </header>
+
+            {/* 描述文本 */}
+            {descriptionText && (
+                <Paragraph
+                    ellipsis={{ rows: 2 }}
+                    type='secondary'
+                    style={{
+                        marginBottom: 0,
+                        fontSize: 13,
+                        lineHeight: '1.6',
+                        color: hasTranslation ? token.colorText : token.colorTextTertiary,
+                    }}
+                >
+                    {descriptionText}
+                </Paragraph>
+            )}
+
+            {/* 底部分隔行：标签 + 元信息 */}
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    marginTop: 'auto',
+                    paddingTop: 4,
+                    borderTop: `1px solid ${token.colorBorderSecondary}`,
+                }}
+            >
+                {/* 语言标记 — 色点 + 文字 */}
                 {repo.language && (
-                    <Tag color='processing' style={{ margin: 0, fontSize: 12, borderRadius: 10 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: token.colorTextSecondary }}>
+                        <span
+                            style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                backgroundColor: langColor,
+                                display: 'inline-block',
+                                flexShrink: 0,
+                            }}
+                        />
                         {repo.language}
+                    </span>
+                )}
+
+                {/* Fork */}
+                {repo.forksCount > 0 && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, color: token.colorTextTertiary }}>
+                        <ForkOutlined style={{ fontSize: 12 }} />
+                        {repo.forksCount}
+                    </span>
+                )}
+
+                {/* 中文翻译标签 */}
+                {repo.readmeFetched && repo.readmeCn && (
+                    <Tag bordered={false} style={{ margin: 0, fontSize: 11, lineHeight: '18px', paddingInline: 6, color: token.colorPrimary }}>
+                        <ReadOutlined style={{ fontSize: 10, marginRight: 2 }} />
+                        已翻译
                     </Tag>
                 )}
-                {readmeTag}
-                <Space size={4}>
-                    <StarFilled style={{ color: '#faad14', fontSize: 14 }} />
-                    <Text style={{ fontSize: 14 }}>{repo.starsCount}</Text>
-                    <Text type='secondary' style={{ fontSize: 12 }}>
-                        {formatNumberCn(repo.starsCount)}
-                    </Text>
-                </Space>
-                <Space size={4}>
-                    <ForkOutlined style={{ fontSize: 14 }} />
-                    <Text style={{ fontSize: 14 }}>{repo.forksCount}</Text>
-                    <Text type='secondary' style={{ fontSize: 12 }}>
-                        {formatNumberCn(repo.forksCount)}
-                    </Text>
-                </Space>
+
+                {/* 保鲜度指示器 */}
+                {days !== null && (
+                    <Tooltip title={`最近推送于 ${formatDate(repo.repoPushedAt!)}`}>
+                        <span
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                fontSize: 12,
+                                color: getStalenessColor(days),
+                                marginLeft: 'auto',
+                            }}
+                        >
+                            <ClockCircleOutlined style={{ fontSize: 11 }} />
+                            {days}d
+                        </span>
+                    </Tooltip>
+                )}
             </div>
-            {/* 分类标签 - 已移除 */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
-                <Text type='secondary' style={{ fontSize: 13 }}>
-                    Star 于 {formatDate(repo.starredAt)}
-                </Text>
-                {repo.repoPushedAt &&
-                    (() => {
-                        const days = daysSince(repo.repoPushedAt)
-                        const color = getStalenessColor(days)
-                        return (
-                            <Tag color={color} style={{ margin: 0, fontSize: 12 }}>
-                                未更新 {days} 天
-                            </Tag>
-                        )
-                    })()}
+
+            {/* Star 日期 — 始终展示在最底部 */}
+            <div style={{ fontSize: 11, color: token.colorTextQuaternary, lineHeight: 1 }}>
+                Star 于 {formatDate(repo.starredAt)}
             </div>
         </Card>
     )
