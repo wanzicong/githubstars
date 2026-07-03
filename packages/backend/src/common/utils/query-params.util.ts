@@ -13,6 +13,7 @@ const SORT_FIELD_MAP: Record<string, string> = {
     repo_created_at: 'repoCreatedAt',
     repo_pushed_at: 'repoPushedAt',
     starred_at: 'starredAt',
+    repo_size: 'repoSize',
 };
 
 /** 前端日期字段 → Prisma 模型字段映射表 */

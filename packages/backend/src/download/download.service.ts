@@ -371,98 +371,30 @@ export class DownloadService {
     }> {
         const repos = await this.prisma.githubRepo.findMany({
             where: { id: { in: repoIds.map((id) => BigInt(id)) } },
-            select: { id: true, fullName: true },
+            select: { id: true, fullName: true, repoSize: true },
         });
         if (repos.length === 0) {
             return { success: true, items: [], totalBytes: 0, failedCount: 0 };
         }
 
-        const token = await this.getGitHubToken();
         // 按 fullName 排序保持确定性
         const sorted = [...repos].sort((a, b) => ((a.fullName || '') > (b.fullName || '') ? 1 : -1));
 
         const items: Array<{ repoId: number; fullName: string; sizeInBytes: number }> = [];
         let failedCount = 0;
 
-        // 并发限制 5 个
-        const CONCURRENCY = 5;
-        const url = 'https://api.github.com/repos';
+        for (const repo of sorted) {
+            const fullName = repo.fullName || '';
 
-        for (let i = 0; i < sorted.length; i += CONCURRENCY) {
-            const batch = sorted.slice(i, i + CONCURRENCY);
-            const results = await Promise.allSettled(
-                batch.map(async (repo) => {
-                    const fullName = repo.fullName || '';
-                    const [owner, repoName] = fullName.split('/');
-                    if (!owner || !repoName) {
-                        return { repoId: Number(repo.id), fullName, sizeInBytes: 0 };
-                    }
-
-                    const headers: Record<string, string> = {
-                        Accept: 'application/vnd.github.v3+json',
-                        'User-Agent': 'GithubStars-Manager',
-                    };
-                    if (token) {
-                        headers['Authorization'] = `Bearer ${token}`;
-                    }
-
-                    // 通过 GitHub API 获取仓库信息，其中 size 字段是磁盘大小（KB），
-                    // 但 archive 压缩包大小 ≈ size * 0.3~0.5（压缩比），
-                    // 需要更精确的值就用 HEAD 请求 archive URL 获取 Content-Length
-                    //
-                    // 方案：HEAD 请求 archive URL 获取精准的 Content-Length
-                    const archiveUrl = `https://github.com/${owner}/${repoName}/archive/HEAD.zip`;
-
-                    try {
-                        const headResponse = await fetch(archiveUrl, {
-                            method: 'HEAD',
-                            headers: token ? { Authorization: `Bearer ${token}` } : {},
-                            signal: AbortSignal.timeout(15_000),
-                            redirect: 'follow',
-                        });
-
-                        if (headResponse.ok) {
-                            const contentLength = headResponse.headers.get('content-length');
-                            if (contentLength) {
-                                const sizeInBytes = Number.parseInt(contentLength, 10);
-                                if (!Number.isNaN(sizeInBytes)) {
-                                    return { repoId: Number(repo.id), fullName, sizeInBytes };
-                                }
-                            }
-                        }
-                    } catch {
-                        // HEAD 失败不阻塞，回退到估算方式
-                    }
-
-                    // 回退：通过 GitHub API 的 size 字段估算（size 是磁盘 KB，压缩后约 40%）
-                    try {
-                        const apiResponse = await fetch(`${url}/${owner}/${repoName}`, {
-                            headers,
-                            signal: AbortSignal.timeout(5_000),
-                        });
-                        if (apiResponse.ok) {
-                            const repoData = (await apiResponse.json()) as { size?: number };
-                            if (repoData.size && typeof repoData.size === 'number') {
-                                // 磁盘 KB 转 bytes，按 40% 压缩比估算
-                                const sizeInBytes = Math.round(repoData.size * 1024 * 0.4);
-                                return { repoId: Number(repo.id), fullName, sizeInBytes };
-                            }
-                        }
-                    } catch {
-                        // API 失败返回 0
-                    }
-
-                    return { repoId: Number(repo.id), fullName, sizeInBytes: 0 };
-                }),
-            );
-
-            for (const result of results) {
-                if (result.status === 'fulfilled') {
-                    items.push(result.value);
-                    if (result.value.sizeInBytes === 0) {
-                        failedCount++;
-                    }
-                }
+            if (repo.repoSize != null && repo.repoSize > 0) {
+                // repo_size 是 git 仓库磁盘大小（KB），压缩包约为磁盘大小的 30%~50%
+                // 取中间值 40% 作为估算系数
+                const sizeInBytes = Math.round(repo.repoSize * 1024 * 0.4);
+                items.push({ repoId: Number(repo.id), fullName, sizeInBytes });
+            } else {
+                // 没有 repo_size 数据，标记为失败
+                items.push({ repoId: Number(repo.id), fullName, sizeInBytes: 0 });
+                failedCount++;
             }
         }
 
@@ -680,37 +612,68 @@ export class DownloadService {
                 `concurrency=${task.concurrency} mirrorSources=${JSON.stringify(mirrorSources)}`,
         );
 
-        // 解析所有 PENDING 项的真实分支：HEAD HEAD.zip → 跟 302 → 提取分支名 → 更新 DB
+        // 优先从数据库读取所有 repo 的 defaultBranch 和 repoSize，避免不必要的网络请求
+        const repoIds = items.map((item) => item.repoId).filter(Boolean);
+        const reposWithBranch =
+            repoIds.length > 0
+                ? await this.prisma.githubRepo.findMany({
+                      where: { id: { in: repoIds } },
+                      select: { id: true, defaultBranch: true, repoSize: true },
+                  })
+                : [];
+        const branchCache = new Map(reposWithBranch.map((r) => [Number(r.id), r.defaultBranch]));
+        const sizeCache = new Map(reposWithBranch.map((r) => [Number(r.id), r.repoSize]));
+
+        // 解析所有 PENDING 项的真实分支：优先从 DB 取，DB 没有再走 HEAD.zip 302 探测
         const token = await this.getGitHubToken();
         const branchResolvedItems = await Promise.all(
             items.map(async (item) => {
                 const fullName = item.fullName || '';
                 const { owner, repoName } = parseFullName(fullName);
 
-                // HEAD.zip 会被 GitHub 302 到 .../archive/refs/heads/{branch}.zip
-                // 注意：redirect: 'manual' 只取第一个 302 的 Location，避免被 S3/CDN 地址干扰
-                let branch: string | null = null;
-                try {
-                    const response = await fetch(`https://github.com/${owner}/${repoName}/archive/HEAD.zip`, {
-                        method: 'HEAD',
-                        redirect: 'manual',
-                        signal: AbortSignal.timeout(5_000),
-                    });
-                    if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
-                        const location = response.headers.get('location') || '';
-                        const match = /\/archive\/refs\/heads\/(.+)\.zip$/i.exec(location);
-                        branch = match?.[1] ?? null;
-                    }
-                } catch {
-                    // HEAD.zip 网络失败，交给 fallback
-                }
+                // Step 1: 优先从数据库取 defaultBranch
+                let branch: string | null = item.repoId ? (branchCache.get(Number(item.repoId)) ?? null) : null;
 
-                // HEAD.zip 未获取到有效分支 → 回退到传统分支检测
+                // Step 2: DB 没有 → 网络探测（HEAD.zip 302 重定向 + detectDefaultBranch 兜底）
                 if (!branch) {
-                    branch = await this.detectDefaultBranch(owner, repoName, token);
+                    try {
+                        const response = await fetch(`https://github.com/${owner}/${repoName}/archive/HEAD.zip`, {
+                            method: 'HEAD',
+                            redirect: 'manual',
+                            signal: AbortSignal.timeout(5_000),
+                        });
+                        if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
+                            const location = response.headers.get('location') || '';
+                            const match = /\/archive\/refs\/heads\/(.+)\.zip$/i.exec(location);
+                            branch = match?.[1] ?? null;
+                        }
+                    } catch {
+                        // HEAD.zip 网络失败，交给 fallback
+                    }
+
+                    // HEAD.zip 未获取到有效分支 → 回退到传统分支检测
+                    if (!branch) {
+                        branch = await this.detectDefaultBranch(owner, repoName, token);
+                    }
+
+                    // 网络探测到的分支写回数据库，下次直接读取
+                    if (branch && item.repoId) {
+                        try {
+                            await this.prisma.githubRepo
+                                .update({
+                                    where: { id: item.repoId },
+                                    data: { defaultBranch: branch },
+                                })
+                                .catch(() => {
+                                    /* 静默失败，不影响主流程 */
+                                });
+                        } catch {
+                            /* 静默 */
+                        }
+                    }
                 }
 
-                // 验证分支的压缩包是否存在，如果 404 则尝试另一种常见分支名
+                // Step 3: 验证分支的压缩包是否存在，如果 404 则尝试另一种常见分支名
                 let branchVerified = branch;
                 if (branch) {
                     try {
@@ -746,20 +709,11 @@ export class DownloadService {
                 const downloadDir = path.join(this.targetDir!, owner);
                 const newLocalFilePath = path.join(downloadDir, safeFileName);
 
-                // HEAD 最终 archive URL 获取文件总大小（用于下载进度显示）
-                let fileSize = BigInt(0);
-                try {
-                    const sizeResponse = await fetch(newArchiveUrl, {
-                        method: 'HEAD',
-                        signal: AbortSignal.timeout(3_000),
-                    });
-                    const contentLength = sizeResponse.headers.get('content-length');
-                    if (contentLength) {
-                        fileSize = BigInt(contentLength);
-                    }
-                } catch {
-                    // 获取大小失败不影响主流程，fileSize 保持 0
-                }
+                // 从数据库 repo_size 估算文件大小（repo_size KB × 0.4 压缩比 → bytes）
+                const repoSize = item.repoId ? (sizeCache.get(Number(item.repoId)) ?? null) : null;
+                const fileSize = repoSize != null && repoSize > 0
+                    ? BigInt(Math.round(repoSize * 1024 * 0.4))
+                    : BigInt(0);
 
                 return { item, newArchiveUrl, newLocalFilePath, branch, fileSize };
             }),
@@ -1426,13 +1380,44 @@ export class DownloadService {
             await this.removeItemFiles(item.localFilePath, item.extractDir, taskTargetDir);
         }
 
-        // 重新检测所有失败项的分支，并纠正 archiveUrl（修复之前 detectDefaultBranch 探测错误的分支）
+        // 重新检测所有失败项的分支，优先从数据库读取，DB 没有再通过网络探测
         const token = await this.getGitHubToken();
         const updatedItems = await Promise.all(
             items.map(async (item) => {
                 const fullName = item.fullName || '';
                 const { owner, repoName } = parseFullName(fullName);
-                const defaultBranch = await this.detectDefaultBranch(owner, repoName, token);
+
+                // 优先从数据库取 defaultBranch
+                let defaultBranch: string | null = null;
+                if (item.repoId) {
+                    try {
+                        const repoInfo = await this.prisma.githubRepo.findUnique({
+                            where: { id: item.repoId },
+                            select: { defaultBranch: true },
+                        });
+                        defaultBranch = repoInfo?.defaultBranch ?? null;
+                    } catch {
+                        /* 静默 */
+                    }
+                }
+
+                // DB 没有 → 网络探测
+                if (!defaultBranch) {
+                    defaultBranch = await this.detectDefaultBranch(owner, repoName, token);
+                    // 探测到的分支写回数据库
+                    if (defaultBranch && item.repoId) {
+                        try {
+                            await this.prisma.githubRepo
+                                .update({
+                                    where: { id: item.repoId },
+                                    data: { defaultBranch },
+                                })
+                                .catch(() => {});
+                        } catch {
+                            /* 静默 */
+                        }
+                    }
+                }
 
                 const safeFileName = defaultBranch
                     ? `${owner}_${repoName}-${defaultBranch}.zip`.replace(/[<>:"/\\|?*]/g, '_')
@@ -1554,10 +1539,36 @@ export class DownloadService {
 
         await this.removeItemFiles(item.localFilePath, item.extractDir, taskTargetDir);
 
-        // 重新检测分支（修复之前探测错误的分支导致 404 的问题）
+        // 重新检测分支：优先从数据库读取，DB 没有再通过网络探测
         const { owner, repoName } = parseFullName(fullName);
-        const token = await this.getGitHubToken();
-        const defaultBranch = await this.detectDefaultBranch(owner, repoName, token);
+        let defaultBranch: string | null = null;
+        if (item.repoId) {
+            try {
+                const repoInfo = await this.prisma.githubRepo.findUnique({
+                    where: { id: item.repoId },
+                    select: { defaultBranch: true },
+                });
+                defaultBranch = repoInfo?.defaultBranch ?? null;
+            } catch {
+                /* 静默 */
+            }
+        }
+        if (!defaultBranch) {
+            const token = await this.getGitHubToken();
+            defaultBranch = await this.detectDefaultBranch(owner, repoName, token);
+            if (defaultBranch && item.repoId) {
+                try {
+                    await this.prisma.githubRepo
+                        .update({
+                            where: { id: item.repoId },
+                            data: { defaultBranch },
+                        })
+                        .catch(() => {});
+                } catch {
+                    /* 静默 */
+                }
+            }
+        }
 
         const safeFileName = defaultBranch
             ? `${owner}_${repoName}-${defaultBranch}.zip`.replace(/[<>:"/\\|?*]/g, '_')

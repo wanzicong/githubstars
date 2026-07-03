@@ -29,6 +29,9 @@ model GithubRepo {
   licenseName     String?   @map("license_name") @db.VarChar(255)
   isFork          Boolean   @default(false) @map("is_fork") @db.TinyInt
   isArchived      Boolean   @default(false) @map("is_archived") @db.TinyInt
+  repoSize        Int?      @map("repo_size")
+  defaultBranch   String?   @map("default_branch") @db.VarChar(255)
+  visibility      String?   @map("visibility") @db.VarChar(50)
   repoCreatedAt   DateTime? @map("repo_created_at") @db.DateTime
   repoUpdatedAt   DateTime? @map("repo_updated_at") @db.DateTime
   repoPushedAt    DateTime? @map("repo_pushed_at") @db.DateTime

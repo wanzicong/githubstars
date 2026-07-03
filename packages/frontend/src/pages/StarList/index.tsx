@@ -51,6 +51,7 @@ const SORT_BY_OPTIONS = [
     { label: 'Star 数量', value: 'stars_count' },
     { label: 'Star 时间', value: 'starred_at' },
     { label: 'Fork 数量', value: 'forks_count' },
+    { label: '仓库大小', value: 'repo_size' },
     { label: '最近更新', value: 'repo_updated_at' },
     { label: '创建时间', value: 'repo_created_at' },
     { label: '推送时间', value: 'repo_pushed_at' },

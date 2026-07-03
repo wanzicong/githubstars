@@ -520,6 +520,7 @@ export class CategoryService {
         const sortMap: Record<string, string> = {
             stars_count: 'starsCount',
             forks_count: 'forksCount',
+            repo_size: 'repoSize',
             repo_updated_at: 'repoUpdatedAt',
             repo_created_at: 'repoCreatedAt',
             repo_pushed_at: 'repoPushedAt',

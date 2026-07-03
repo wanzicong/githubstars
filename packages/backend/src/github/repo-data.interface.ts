@@ -23,6 +23,9 @@ export interface MappedRepoData {
     licenseName: string | null;
     isFork: boolean;
     isArchived: boolean;
+    repoSize: number | null;
+    defaultBranch: string | null;
+    visibility: string | null;
     repoCreatedAt: Date | null;
     repoUpdatedAt: Date | null;
     repoPushedAt: Date | null;

@@ -216,6 +216,8 @@ export default function DownloadProgressModal({ open, progress, onClose, onRetry
                                             title: '大小',
                                             key: 'size',
                                             width: 150,
+                                            sorter: (a: DownloadTaskItem, b: DownloadTaskItem) =>
+                                                Number(a.fileSize || 0) - Number(b.fileSize || 0),
                                             render: (_: unknown, record: DownloadTaskItem) => {
                                                 const total = Number(record.fileSize || 0)
                                                 const downloaded = record.downloadedBytes ?? (record.status === 'COMPLETED' ? total : 0)

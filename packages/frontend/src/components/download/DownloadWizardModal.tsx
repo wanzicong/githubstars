@@ -160,6 +160,11 @@ export default function DownloadWizardModal({ open, onClose, selectedRepos, onTa
             title: '大小',
             key: 'size',
             width: 100,
+            sorter: (a: GithubRepo, b: GithubRepo) => {
+                const sizeA = sizeEstimates.get(a.id)?.sizeInBytes ?? 0
+                const sizeB = sizeEstimates.get(b.id)?.sizeInBytes ?? 0
+                return sizeA - sizeB
+            },
             render: (_: unknown, record: GithubRepo) => {
                 const estimate = sizeEstimates.get(record.id)
                 if (sizeEstimating) return <Text type="secondary">估算中...</Text>

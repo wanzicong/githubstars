@@ -20,6 +20,9 @@ export interface GithubRepo {
     licenseName: string | null
     isFork: boolean
     isArchived: boolean
+    repoSize: number | null
+    defaultBranch: string | null
+    visibility: string | null
     repoCreatedAt: string | null
     repoUpdatedAt: string | null
     repoPushedAt: string | null
