@@ -108,7 +108,7 @@ export default function StarRepoView({
                                                     style={{ marginTop: 12 }}
                                                 />
                                             )}
-                                            <div style={{ flex: 1 }}>
+                                            <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
                                                 <RepoRow repo={repo} />
                                             </div>
                                         </div>
@@ -117,10 +117,11 @@ export default function StarRepoView({
                             )
                         }
                         return (
-                            <Row gutter={[16, 16]}>
+                            <div style={{ overflow: 'hidden', width: '100%' }}>
+                                <Row gutter={[16, 16]}>
                                 {repos.map((repo) => (
                                     <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
-                                        <div style={{ position: 'relative' }}>
+                                        <div style={{ position: 'relative', overflow: 'hidden', width: '100%' }}>
                                             {selectionEnabled && (
                                                 <Checkbox
                                                     checked={selectedIds?.includes(repo.id)}
@@ -133,6 +134,7 @@ export default function StarRepoView({
                                     </Col>
                                 ))}
                             </Row>
+                            </div>
                         )
                     }
                     let emptyDescription: string

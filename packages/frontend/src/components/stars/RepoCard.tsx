@@ -5,7 +5,7 @@ import {
     StarFilled, ForkOutlined, ReadOutlined,
     ClockCircleOutlined,
 } from '@ant-design/icons'
-import { formatNumberCn, formatDate, daysSince, getStalenessColor } from '@/utils/format'
+import { formatNumberCn, formatDate, formatSize, daysSince, getStalenessColor } from '@/utils/format'
 import type { GithubRepo } from '@/types'
 
 const { Text, Paragraph } = Typography
@@ -59,13 +59,16 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
             hoverable
             style={{
                 height: '100%',
+                width: '100%',
+                maxWidth: '100%',
                 cursor: 'pointer',
                 borderRadius: token.borderRadiusLG,
                 borderColor: token.colorBorderSecondary,
                 transition: 'border-color 0.2s, box-shadow 0.2s',
+                overflow: 'hidden',
             }}
             styles={{
-                body: { padding: 16, display: 'flex', flexDirection: 'column', gap: 10 },
+                body: { padding: 16, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' },
             }}
             onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = token.colorPrimary
@@ -86,8 +89,8 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
                     style={{ flexShrink: 0, border: `1px solid ${token.colorBorderSecondary}` }}
                 />
                 <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 1 }}>
-                        <Text strong style={{ fontSize: 15, lineHeight: '22px', color: token.colorText }} ellipsis>
+                    <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 1, overflow: 'hidden' }}>
+                        <Text strong style={{ fontSize: 15, lineHeight: '22px', color: token.colorText, maxWidth: '100%' }} ellipsis>
                             {repo.repoName}
                         </Text>
                         {/* Star 数 — 视觉焦点 */}
@@ -124,6 +127,9 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
                         marginBottom: 0,
                         fontSize: 13,
                         lineHeight: '1.6',
+                        width: '100%',
+                        overflow: 'hidden',
+                        wordBreak: 'break-word',
                         color: hasTranslation ? token.colorText : token.colorTextTertiary,
                     }}
                 >
@@ -165,6 +171,13 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, color: token.colorTextTertiary }}>
                         <ForkOutlined style={{ fontSize: 12 }} />
                         {repo.forksCount}
+                    </span>
+                )}
+
+                {/* 文件大小 */}
+                {repo.repoSize != null && repo.repoSize > 0 && (
+                    <span style={{ fontSize: 12, color: token.colorTextTertiary }}>
+                        {formatSize(repo.repoSize * 1024)}
                     </span>
                 )}
 

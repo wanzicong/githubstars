@@ -306,6 +306,7 @@ export default function StarDetail() {
                 forksCount={repo.forksCount}
                 watchersCount={repo.watchersCount}
                 openIssuesCount={repo.openIssuesCount}
+                repoSize={repo.repoSize}
             />
 
             <Card title='详细信息' style={{ marginBottom: 20 }}>
@@ -326,6 +327,12 @@ export default function StarDetail() {
                         ) : (
                             <Text type='secondary'>-</Text>
                         )}
+                    </Descriptions.Item>
+                    <Descriptions.Item label='默认分支'>
+                        {repo.defaultBranch ? <Text>{repo.defaultBranch}</Text> : <Text type='secondary'>-</Text>}
+                    </Descriptions.Item>
+                    <Descriptions.Item label='可见性'>
+                        {repo.visibility ? <Tag>{repo.visibility}</Tag> : <Text type='secondary'>-</Text>}
                     </Descriptions.Item>
                     <Descriptions.Item label='Star 时间'>{formatDate(repo.starredAt)}</Descriptions.Item>
                     <Descriptions.Item label='仓库创建时间'>{formatDate(repo.repoCreatedAt)}</Descriptions.Item>

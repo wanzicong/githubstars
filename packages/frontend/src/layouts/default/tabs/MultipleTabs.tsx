@@ -38,15 +38,15 @@ export default function MultipleTabs() {
   const setActiveKey = useMultipleTabStore((s) => s.setActiveKey)
   const refreshTab = useMultipleTabStore((s) => s.refreshTab)
 
-  // 路由变化时自动添加标签
+  // 路由变化时自动添加标签（仅基于 pathname，避免筛选参数变化产生重复标签）
   useEffect(() => {
     const title = getMenuTitle(location.pathname)
     addTab({
-      key: location.pathname + location.search,
+      key: location.pathname,
       title,
       closable: location.pathname !== '/',
     })
-  }, [location.pathname, location.search, addTab])
+  }, [location.pathname, addTab])
 
   // 标签切换 → 路由跳转
   const handleTabChange = useCallback(

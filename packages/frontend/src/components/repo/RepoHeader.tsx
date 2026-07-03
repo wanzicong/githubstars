@@ -28,10 +28,16 @@ export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onR
 
     /** 渲染描述区域的 JSX（已翻译 / 未翻译 / 无描述三个阶段） */
     const renderDescription = () => {
+        const textStyle: React.CSSProperties = {
+            width: '100%',
+            overflow: 'hidden',
+            wordBreak: 'break-word',
+            lineHeight: 1.7,
+        }
         if (hasTranslation) {
             return (
                 <div>
-                    <Paragraph style={{ marginBottom: 4, color: token.colorText, lineHeight: 1.7 }}>
+                    <Paragraph style={{ marginBottom: 4, color: token.colorText, ...textStyle }}>
                         {repo.descriptionCn}
                         <Tag
                             bordered={false}
@@ -45,6 +51,7 @@ export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onR
                     {hasOriginal && repo.description !== repo.descriptionCn && (
                         <Paragraph
                             type='secondary'
+                            ellipsis={{ rows: 2 }}
                             style={{
                                 marginBottom: 0,
                                 fontSize: 12,
@@ -52,6 +59,7 @@ export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onR
                                 paddingTop: 4,
                                 borderTop: `1px dashed ${token.colorBorderSecondary}`,
                                 color: token.colorTextTertiary,
+                                ...textStyle,
                             }}
                         >
                             <Text italic style={{ color: token.colorTextQuaternary, marginRight: 4 }}>
@@ -76,7 +84,7 @@ export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onR
         if (hasOriginal) {
             return (
                 <div>
-                    <Paragraph type='secondary' style={{ marginBottom: 8, lineHeight: 1.7, color: token.colorTextSecondary }}>
+                    <Paragraph type='secondary' style={{ marginBottom: 8, color: token.colorTextSecondary, ...textStyle }}>
                         {repo.description}
                     </Paragraph>
                     <Button
