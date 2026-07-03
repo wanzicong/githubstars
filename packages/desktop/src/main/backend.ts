@@ -269,20 +269,23 @@ export class BackendManager {
     try {
       const backendDir = this.getBackendDir()
       const nodeExe = this.getExecutablePath()
-      execSync(`"${nodeExe}" node_modules/prisma/build/index.js db push --skip-generate`, {
+      const output = execSync(`"${nodeExe}" node_modules/prisma/build/index.js db push --skip-generate`, {
         cwd: backendDir,
         env: {
           ELECTRON_RUN_AS_NODE: '1',
           DATABASE_URL: `file:${dbPath}`,
         },
-        stdio: 'pipe',
         timeout: 30000,
         windowsHide: true,
       })
+      log.info(`[Backend] db push 输出: ${output.toString().trim()}`)
       log.info('[Backend] 数据库表结构同步完成')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      // execSync 抛异常时 stderr 在 .stderr 属性上
+      const stderr = (e as any)?.stderr?.toString() || ''
       log.error(`[Backend] 数据库初始化失败: ${msg}`)
+      if (stderr) log.error(`[Backend] db push stderr: ${stderr}`)
     }
   }
 

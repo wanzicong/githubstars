@@ -11356,20 +11356,22 @@ var BackendManager = class {
 		import_src.default.info("[Backend] 检查数据库表结构...");
 		try {
 			const backendDir = this.getBackendDir();
-			(0, node_child_process.execSync)(`"${this.getExecutablePath()}" node_modules/prisma/build/index.js db push --skip-generate`, {
+			const output = (0, node_child_process.execSync)(`"${this.getExecutablePath()}" node_modules/prisma/build/index.js db push --skip-generate`, {
 				cwd: backendDir,
 				env: {
 					ELECTRON_RUN_AS_NODE: "1",
 					DATABASE_URL: `file:${dbPath}`
 				},
-				stdio: "pipe",
 				timeout: 3e4,
 				windowsHide: true
 			});
+			import_src.default.info(`[Backend] db push 输出: ${output.toString().trim()}`);
 			import_src.default.info("[Backend] 数据库表结构同步完成");
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
+			const stderr = e?.stderr?.toString() || "";
 			import_src.default.error(`[Backend] 数据库初始化失败: ${msg}`);
+			if (stderr) import_src.default.error(`[Backend] db push stderr: ${stderr}`);
 		}
 	}
 	findFreePort(start, end) {
