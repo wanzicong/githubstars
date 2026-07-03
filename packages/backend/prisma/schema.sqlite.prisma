@@ -9,7 +9,7 @@ datasource db {
 }
 
 model GithubRepo {
-  id              Int        @id @default(autoincrement())
+  id              Int    @id @default(autoincrement())
   repoName        String?   @map("repo_name") 
   fullName        String?   @unique @map("full_name") 
   description     String?   @map("description") 
@@ -63,8 +63,8 @@ model GithubRepo {
  * 使用 onDelete: Cascade 确保删除父分类时自动删除所有子分类。
  */
 model Category {
-  id          Int       @id @default(autoincrement())
-  name        String   @map("name") 
+  id          Int      @id @default(autoincrement())
+  name        String   @map("name")
   parentId    Int?     @map("parent_id")
   sortOrder   Int      @default(0) @map("sort_order")
   icon        String?  @map("icon") 
@@ -88,9 +88,9 @@ model Category {
  * @@unique([categoryId, repoId]) 防止重复关联。
  */
 model CategoryRepoLink {
-  id         Int       @id @default(autoincrement())
-  categoryId Int      @map("category_id")
-  repoId     Int       @map("repo_id")
+  id         Int  @id @default(autoincrement())
+  categoryId Int @map("category_id")
+  repoId     Int  @map("repo_id")
   createdAt  DateTime @map("created_at") 
 
   category Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -102,7 +102,7 @@ model CategoryRepoLink {
 }
 
 model SyncLog {
-  id           Int        @id @default(autoincrement())
+  id           Int    @id @default(autoincrement())
   syncType     String?   @map("sync_type") 
   status       String?   @map("status") 
   totalCount   Int?      @map("total_count")
@@ -118,7 +118,7 @@ model SyncLog {
 }
 
 model SystemConfig {
-  id          Int        @id @default(autoincrement())
+  id          Int    @id @default(autoincrement())
   configKey   String    @unique @map("config_key") 
   configValue String?   @map("config_value") 
   description String?   @map("description") 
@@ -129,7 +129,7 @@ model SystemConfig {
 }
 
 model TranslationTask {
-  id              Int        @id @default(autoincrement())
+  id              Int    @id @default(autoincrement())
   status          String?   @default("PENDING") @map("status") 
   totalItems      Int       @default(0) @map("total_items")
   completedItems  Int       @default(0) @map("completed_items")
@@ -149,9 +149,9 @@ model TranslationTask {
 }
 
 model TranslationTaskItem {
-  id            Int        @id @default(autoincrement())
-  taskId        Int        @map("task_id")
-  repoId        Int        @map("repo_id")
+  id            Int    @id @default(autoincrement())
+  taskId        Int    @map("task_id")
+  repoId        Int    @map("repo_id")
   fullName      String?   @map("full_name") 
   translateType String    @map("translate_type") 
   status        String?   @default("PENDING") @map("status") 
@@ -170,7 +170,7 @@ model TranslationTaskItem {
 }
 
 model CloneTask {
-  id             Int        @id @default(autoincrement())
+  id             Int    @id @default(autoincrement())
   status         String?   @default("PENDING") @map("status") 
   targetDir      String    @map("target_dir") 
   concurrency    Int       @default(5) @map("concurrency")
@@ -192,9 +192,9 @@ model CloneTask {
 }
 
 model CloneTaskItem {
-  id           Int        @id @default(autoincrement())
-  taskId       Int        @map("task_id")
-  repoId       Int        @map("repo_id")
+  id           Int    @id @default(autoincrement())
+  taskId       Int    @map("task_id")
+  repoId       Int    @map("repo_id")
   fullName     String?   @map("full_name") 
   cloneUrl     String?   @map("clone_url") 
   localPath    String?   @map("local_path") 
@@ -214,7 +214,7 @@ model CloneTaskItem {
 }
 
 model DownloadTask {
-  id                         Int        @id @default(autoincrement())
+  id                         Int    @id @default(autoincrement())
   status                     String?   @default("PENDING") @map("status") 
   targetDir                  String    @map("target_dir") 
   concurrency                Int       @default(5) @map("concurrency")
@@ -225,8 +225,8 @@ model DownloadTask {
   totalItems                 Int       @default(0) @map("total_items")
   completedItems             Int       @default(0) @map("completed_items")
   failedItems                Int       @default(0) @map("failed_items")
-  totalBytes                 Int?      @default(0) @map("total_bytes")
-  downloadedBytes            Int?      @default(0) @map("downloaded_bytes")
+  totalBytes                 BigInt?      @default(0) @map("total_bytes")
+  downloadedBytes            BigInt?      @default(0) @map("downloaded_bytes")
   createdAt                  DateTime? @map("created_at") 
   startedAt                  DateTime? @map("started_at") 
   finishedAt                 DateTime? @map("finished_at") 
@@ -239,14 +239,14 @@ model DownloadTask {
 }
 
 model DownloadTaskItem {
-  id             Int        @id @default(autoincrement())
-  taskId         Int        @map("task_id")
-  repoId         Int        @map("repo_id")
+  id             Int    @id @default(autoincrement())
+  taskId         Int    @map("task_id")
+  repoId         Int    @map("repo_id")
   fullName       String?   @map("full_name") 
   archiveUrl     String?   @map("archive_url") 
   localFilePath  String?   @map("local_file_path") 
   extractDir     String?   @map("extract_dir") 
-  fileSize       Int?      @default(0) @map("file_size")
+  fileSize       BigInt?      @default(0) @map("file_size")
   defaultBranch  String?   @map("default_branch") 
   status         String?   @default("PENDING") @map("status") 
   retryCount     Int       @default(0) @map("retry_count")

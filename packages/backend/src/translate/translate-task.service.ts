@@ -278,7 +278,7 @@ export class TranslateTaskService {
      */
     private async createTaskWithItems(
         taskData: { totalItems: number; descTotal?: number; readmeTotal?: number },
-        items: Array<{ repoId: bigint; fullName: string | null; translateType: string }>,
+        items: Array<{ repoId: number; fullName: string | null; translateType: string }>,
         logMessage: string,
     ): Promise<number> {
         const task = await this.prisma.translationTask.create({
@@ -313,7 +313,7 @@ export class TranslateTaskService {
         if (!repo) return null;
         return this.createTaskWithItems(
             { totalItems: 1, readmeTotal: 1 },
-            [{ repoId: BigInt(repoId), fullName: repo.fullName, translateType: 'readme' }],
+            [{ repoId: repoId, fullName: repo.fullName, translateType: 'readme' }],
             `创建单仓库 README 翻译任务 repoId=${repoId}`,
         );
     }
@@ -328,7 +328,7 @@ export class TranslateTaskService {
      */
     async createAndStartSingleReadmeForce(repoId: number) {
         await this.prisma.githubRepo.update({
-            where: { id: BigInt(repoId) },
+            where: { id: repoId },
             data: { readmeFetched: false, readmeOriginal: null, readmeCn: null },
         });
         return this.createAndStartSingleReadme(repoId);
@@ -351,7 +351,7 @@ export class TranslateTaskService {
         if (!need.length) return null;
         return this.createTaskWithItems(
             { totalItems: need.length, readmeTotal: need.length },
-            need.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'readme' })),
+            need.map((r) => ({ repoId: Number(r.id), fullName: r.fullName, translateType: 'readme' })),
             `创建全量 README 批量翻译任务 count=${need.length}`,
         );
     }
@@ -383,8 +383,8 @@ export class TranslateTaskService {
             }),
         ]);
         if (!needDesc.length && !needReadme.length) return null;
-        const descItems = needDesc.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'description' }));
-        const readmeItems = needReadme.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'readme' }));
+        const descItems = needDesc.map((r) => ({ repoId: Number(r.id), fullName: r.fullName, translateType: 'description' }));
+        const readmeItems = needReadme.map((r) => ({ repoId: Number(r.id), fullName: r.fullName, translateType: 'readme' }));
         return this.createTaskWithItems(
             { totalItems: descItems.length + readmeItems.length, descTotal: descItems.length, readmeTotal: readmeItems.length },
             [...descItems, ...readmeItems],
@@ -403,19 +403,19 @@ export class TranslateTaskService {
      */
     async createBatchTask(repoIds: number[], type: 'readme' | 'both'): Promise<number | null> {
         if (!repoIds.length) return null;
-        const items: Array<{ repoId: bigint; fullName: string | null; translateType: string }> = [];
+        const items: Array<{ repoId: number; fullName: string | null; translateType: string }> = [];
         let descTotal = 0;
         let readmeTotal = 0;
 
         if (type === 'readme') {
             for (const rid of repoIds) {
-                items.push({ repoId: BigInt(rid), fullName: null, translateType: 'readme' });
+                items.push({ repoId: rid, fullName: null, translateType: 'readme' });
             }
             readmeTotal = repoIds.length;
         } else {
             for (const rid of repoIds) {
-                items.push({ repoId: BigInt(rid), fullName: null, translateType: 'description' });
-                items.push({ repoId: BigInt(rid), fullName: null, translateType: 'readme' });
+                items.push({ repoId: rid, fullName: null, translateType: 'description' });
+                items.push({ repoId: rid, fullName: null, translateType: 'readme' });
             }
             descTotal = repoIds.length;
             readmeTotal = repoIds.length;
@@ -455,20 +455,20 @@ export class TranslateTaskService {
         const repos = result.records as Array<{ id: bigint; fullName: string; description?: string; descriptionCn?: string }>;
         if (!repos.length) return null;
 
-        let items: Array<{ repoId: bigint; fullName: string | null; translateType: string }> = [];
+        let items: Array<{ repoId: number; fullName: string | null; translateType: string }> = [];
         let descTotal = 0;
         let readmeTotal = 0;
 
         if (type === 'description') {
-            items = repos.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'description' }));
+            items = repos.map((r) => ({ repoId: Number(r.id), fullName: r.fullName, translateType: 'description' }));
             descTotal = repos.length;
         } else if (type === 'readme') {
-            items = repos.map((r) => ({ repoId: r.id, fullName: r.fullName, translateType: 'readme' }));
+            items = repos.map((r) => ({ repoId: Number(r.id), fullName: r.fullName, translateType: 'readme' }));
             readmeTotal = repos.length;
         } else {
             items = repos.flatMap((r) => [
-                { repoId: r.id, fullName: r.fullName, translateType: 'description' },
-                { repoId: r.id, fullName: r.fullName, translateType: 'readme' },
+                { repoId: Number(r.id), fullName: r.fullName, translateType: 'description' },
+                { repoId: Number(r.id), fullName: r.fullName, translateType: 'readme' },
             ]);
             descTotal = repos.length;
             readmeTotal = repos.length;
@@ -490,18 +490,18 @@ export class TranslateTaskService {
      * @returns 任务进度详情，任务不存在时返回 { success: false, message: '任务不存在' }
      */
     async getTaskProgress(taskId: number) {
-        const task = await this.prisma.translationTask.findUnique({ where: { id: BigInt(taskId) } });
+        const task = await this.prisma.translationTask.findUnique({ where: { id: taskId } });
         if (!task) return { success: false, message: '任务不存在' };
         const total = task.totalItems;
         const pending = total - task.completedItems - task.failedItems;
 
         // 获取已完成子项的备注，让前端看到每个仓库的实际状态
         const successItems = await this.prisma.translationTaskItem.findMany({
-            where: { taskId: BigInt(taskId), status: 'SUCCESS' },
+            where: { taskId: taskId, status: 'SUCCESS' },
             select: { fullName: true, translateType: true, errorMessage: true },
         });
         const failedItems = await this.prisma.translationTaskItem.findMany({
-            where: { taskId: BigInt(taskId), status: 'FAILED' },
+            where: { taskId: taskId, status: 'FAILED' },
             select: { fullName: true, translateType: true, errorMessage: true },
         });
 
@@ -537,13 +537,13 @@ export class TranslateTaskService {
      * @returns 新创建的任务 ID，无失败项时返回 null
      */
     async retryFailed(taskId: number) {
-        const items = await this.prisma.translationTaskItem.findMany({ where: { taskId: BigInt(taskId), status: 'FAILED' } });
+        const items = await this.prisma.translationTaskItem.findMany({ where: { taskId: taskId, status: 'FAILED' } });
         if (!items.length) return null;
         const descCount = items.filter((i) => i.translateType === 'description').length;
         const readmeCount = items.filter((i) => i.translateType === 'readme').length;
         return this.createTaskWithItems(
             { totalItems: items.length, descTotal: descCount, readmeTotal: readmeCount },
-            items.map((i) => ({ repoId: i.repoId, fullName: i.fullName, translateType: i.translateType })),
+            items.map((i) => ({ repoId: Number(i.repoId), fullName: i.fullName, translateType: i.translateType })),
             `创建重试翻译任务 failedCount=${items.length}`,
         );
     }
@@ -555,7 +555,7 @@ export class TranslateTaskService {
      * @returns { success: true, failures: 失败子项列表, count: 失败数量 }
      */
     async getFailures(taskId: number) {
-        const items = await this.prisma.translationTaskItem.findMany({ where: { taskId: BigInt(taskId), status: 'FAILED' } });
+        const items = await this.prisma.translationTaskItem.findMany({ where: { taskId: taskId, status: 'FAILED' } });
         return { success: true, failures: items, count: items.length };
     }
 

@@ -128,8 +128,8 @@ export class DownloadService {
     /** 锁获取时间 */
     private lockAcquiredAt: Date | null = null;
 
-    /** 当前正在执行的任务 ID */
-    private currentTaskId: bigint | null = null;
+    /** 当前正在执行的任务 ID（统一存 number，兼容 SQLite number / MySQL bigint） */
+    private currentTaskId: number | null = null;
 
     /** 信号量并发控制 */
     private semaphore = 0;
@@ -254,7 +254,7 @@ export class DownloadService {
 
         // 查询仓库信息
         const repos = await this.prisma.githubRepo.findMany({
-            where: { id: { in: repoIds.map((id) => BigInt(id)) } },
+            where: { id: { in: repoIds } },
             select: { id: true, fullName: true, htmlUrl: true },
         });
         if (repos.length === 0) {
@@ -370,7 +370,7 @@ export class DownloadService {
         failedCount: number;
     }> {
         const repos = await this.prisma.githubRepo.findMany({
-            where: { id: { in: repoIds.map((id) => BigInt(id)) } },
+            where: { id: { in: repoIds } },
             select: { id: true, fullName: true, repoSize: true },
         });
         if (repos.length === 0) {
@@ -533,7 +533,7 @@ export class DownloadService {
         return Date.now() - this.lockAcquiredAt.getTime();
     }
 
-    getCurrentTaskId(): bigint | null {
+    getCurrentTaskId(): number | null {
         return this.currentTaskId;
     }
 
@@ -556,7 +556,7 @@ export class DownloadService {
 
         this.running = true;
         this.lockAcquiredAt = new Date();
-        this.currentTaskId = taskId;
+        this.currentTaskId = Number(taskId);
         try {
             await withTimeout(
                 this.executeTaskInner(taskId),
@@ -574,7 +574,7 @@ export class DownloadService {
                 this.logger.error('更新任务失败状态时出错', updateErr);
             }
         } finally {
-            if (this.currentTaskId === taskId) {
+            if (this.currentTaskId === Number(taskId)) {
                 this.running = false;
                 this.lockAcquiredAt = null;
                 this.currentTaskId = null;
@@ -711,9 +711,7 @@ export class DownloadService {
 
                 // 从数据库 repo_size 估算文件大小（repo_size KB × 0.4 压缩比 → bytes）
                 const repoSize = item.repoId ? (sizeCache.get(Number(item.repoId)) ?? null) : null;
-                const fileSize = repoSize != null && repoSize > 0
-                    ? BigInt(Math.round(repoSize * 1024 * 0.4))
-                    : BigInt(0);
+                const fileSize = repoSize != null && repoSize > 0 ? BigInt(Math.round(repoSize * 1024 * 0.4)) : BigInt(0);
 
                 return { item, newArchiveUrl, newLocalFilePath, branch, fileSize };
             }),
@@ -1278,7 +1276,7 @@ export class DownloadService {
      */
     async getTaskProgress(taskId: number) {
         const task = await this.prisma.downloadTask.findUnique({
-            where: { id: BigInt(taskId) },
+            where: { id: taskId },
             include: {
                 items: {
                     select: {
@@ -1361,7 +1359,7 @@ export class DownloadService {
         }
 
         const task = await this.prisma.downloadTask.findUnique({
-            where: { id: BigInt(taskId) },
+            where: { id: taskId },
             select: { id: true, targetDir: true, deleteArchiveAfterExtract: true },
         });
 
@@ -1370,7 +1368,7 @@ export class DownloadService {
         const taskTargetDir = task.targetDir;
 
         const items = await this.prisma.downloadTaskItem.findMany({
-            where: { taskId: BigInt(taskId), status: 'FAILED' },
+            where: { taskId: taskId, status: 'FAILED' },
         });
 
         if (!items.length) return { success: false, message: '没有需要重试的项' };
@@ -1457,7 +1455,7 @@ export class DownloadService {
                 }),
             ),
             this.prisma.downloadTask.update({
-                where: { id: BigInt(taskId) },
+                where: { id: taskId },
                 data: { status: 'PENDING', startedAt: null, finishedAt: null },
             }),
         ]);
@@ -1471,13 +1469,13 @@ export class DownloadService {
      */
     async resetTask(taskId: number) {
         const task = await this.prisma.downloadTask.findUnique({
-            where: { id: BigInt(taskId) },
+            where: { id: taskId },
             select: { id: true, status: true, targetDir: true },
         });
 
         if (!task) return { success: false, message: '任务不存在' };
 
-        if (this.running && this.currentTaskId === BigInt(taskId)) {
+        if (this.running && this.currentTaskId === taskId) {
             this.logger.warn(`重置正在执行的任务，强制释放锁: taskId=${taskId}`);
             this.forceReleaseLock();
         } else if (this.running) {
@@ -1485,7 +1483,7 @@ export class DownloadService {
         }
 
         const failedItems = await this.prisma.downloadTaskItem.findMany({
-            where: { taskId: BigInt(taskId), status: 'FAILED' },
+            where: { taskId: taskId, status: 'FAILED' },
             select: { id: true, localFilePath: true, extractDir: true, fullName: true },
         });
 
@@ -1497,11 +1495,11 @@ export class DownloadService {
 
         await this.prisma.$transaction([
             this.prisma.downloadTaskItem.updateMany({
-                where: { taskId: BigInt(taskId) },
+                where: { taskId: taskId },
                 data: { status: 'PENDING', errorMessage: null, retryCount: 0 },
             }),
             this.prisma.downloadTask.update({
-                where: { id: BigInt(taskId) },
+                where: { id: taskId },
                 data: { status: 'PENDING', startedAt: null, finishedAt: null },
             }),
         ]);
@@ -1520,11 +1518,11 @@ export class DownloadService {
 
         const [task, item] = await Promise.all([
             this.prisma.downloadTask.findUnique({
-                where: { id: BigInt(taskId) },
+                where: { id: taskId },
                 select: { id: true, targetDir: true },
             }),
             this.prisma.downloadTaskItem.findFirst({
-                where: { taskId: BigInt(taskId), fullName },
+                where: { taskId: taskId, fullName },
             }),
         ]);
 
@@ -1598,7 +1596,7 @@ export class DownloadService {
                     throw new Error('任务项正在执行中或已是待执行状态，无法重试');
                 }
                 await tx.downloadTask.update({
-                    where: { id: BigInt(taskId) },
+                    where: { id: taskId },
                     data: { status: 'PENDING', startedAt: null, finishedAt: null },
                 });
             });
@@ -1619,13 +1617,13 @@ export class DownloadService {
      */
     async extractItemFile(taskId: number, fullName: string): Promise<{ success: boolean; message?: string }> {
         const task = await this.prisma.downloadTask.findUnique({
-            where: { id: BigInt(taskId) },
+            where: { id: taskId },
             select: { targetDir: true },
         });
         if (!task) return { success: false, message: '任务不存在' };
 
         const item = await this.prisma.downloadTaskItem.findFirst({
-            where: { taskId: BigInt(taskId), fullName },
+            where: { taskId: taskId, fullName },
         });
         if (!item) return { success: false, message: '未找到该任务项' };
         if (item.status !== 'COMPLETED') return { success: false, message: '仅可解压已下载完成的压缩包' };
@@ -1696,7 +1694,7 @@ export class DownloadService {
         }
 
         const task = await this.prisma.downloadTask.findUnique({
-            where: { id: BigInt(taskId) },
+            where: { id: taskId },
             select: { id: true, status: true, targetDir: true },
         });
         if (!task) return { success: false, message: '任务不存在' };
@@ -1705,7 +1703,7 @@ export class DownloadService {
         }
 
         const completedItems = await this.prisma.downloadTaskItem.findMany({
-            where: { taskId: BigInt(taskId), status: 'COMPLETED' },
+            where: { taskId: taskId, status: 'COMPLETED' },
             select: { fullName: true, localFilePath: true },
         });
         if (completedItems.length === 0) {
@@ -1973,7 +1971,7 @@ export class DownloadService {
      */
     async deleteItemZipFile(taskId: number, fullName: string): Promise<{ success: boolean; message?: string }> {
         const item = await this.prisma.downloadTaskItem.findFirst({
-            where: { taskId: BigInt(taskId), fullName },
+            where: { taskId: taskId, fullName },
         });
         if (!item) return { success: false, message: '未找到该任务项' };
         if (item.status !== 'COMPLETED') return { success: false, message: '仅可删除已下载完成的压缩包' };
@@ -2025,19 +2023,19 @@ export class DownloadService {
      */
     async deleteTask(taskId: number) {
         const task = await this.prisma.downloadTask.findUnique({
-            where: { id: BigInt(taskId) },
+            where: { id: taskId },
             select: { id: true, status: true },
         });
 
         if (!task) return { success: false, message: '任务不存在' };
 
-        if (task.status === 'PROCESSING' && this.running && this.currentTaskId === BigInt(taskId)) {
+        if (task.status === 'PROCESSING' && this.running && this.currentTaskId !== null && this.currentTaskId === taskId) {
             this.logger.warn(`删除正在执行的任务，强制释放锁: taskId=${taskId}`);
             this.forceReleaseLock();
         }
 
-        await this.prisma.downloadTaskItem.deleteMany({ where: { taskId: BigInt(taskId) } });
-        await this.prisma.downloadTask.delete({ where: { id: BigInt(taskId) } });
+        await this.prisma.downloadTaskItem.deleteMany({ where: { taskId: taskId } });
+        await this.prisma.downloadTask.delete({ where: { id: taskId } });
 
         this.logger.log(`下载任务已删除: taskId=${taskId} previousStatus=${task.status}`);
         return { success: true, taskId, message: '任务已删除' };
@@ -2116,7 +2114,7 @@ export class DownloadService {
      */
     async validateDownloadedFile(taskId: number, fullName: string): Promise<{ success: boolean; message?: string }> {
         const item = await this.prisma.downloadTaskItem.findFirst({
-            where: { taskId: BigInt(taskId), fullName },
+            where: { taskId: taskId, fullName },
         });
 
         if (!item) return { success: false, message: '未找到该任务项' };

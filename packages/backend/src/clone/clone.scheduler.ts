@@ -140,7 +140,7 @@ export class CloneScheduler {
             for (const task of stuckTasks) {
                 this.logger.warn(`检测到卡住的任务: taskId=${Number(task.id)} startedAt=${task.startedAt?.toISOString()}`);
 
-                await this.recoverStuckTask(task.id, '任务超时，自动标记为失败');
+                await this.recoverStuckTask(Number(task.id), '任务超时，自动标记为失败');
             }
 
             // 如果有卡住的任务且锁仍被持有，强制释放锁
@@ -221,7 +221,7 @@ export class CloneScheduler {
      * @param taskId 任务 ID
      * @param reason 失败原因
      */
-    private async recoverStuckTask(taskId: bigint, reason: string) {
+    private async recoverStuckTask(taskId: number, reason: string) {
         if (this.recovering) return;
         this.recovering = true;
 

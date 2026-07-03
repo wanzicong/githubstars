@@ -11,6 +11,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { LoggingService } from './logging/logging.service';
+import { execSync } from 'node:child_process';
+import { resolve } from 'node:path';
 
 /**
  * 应用启动入口函数
@@ -20,6 +22,25 @@ import { LoggingService } from './logging/logging.service';
  * Swagger 文档可通过 /api/docs 访问。
  */
 async function bootstrap() {
+    // 确保数据库表结构存在（桌面端 SQLite 首次启动时创建，Web 端 MySQL 无影响）
+    // 必须在 NestJS 初始化之前执行，否则 onModuleInit 中查询不存在的表会崩溃
+    try {
+        const dbUrl = process.env.DATABASE_URL || '';
+        if (dbUrl.startsWith('file:')) {
+            console.log('[Bootstrap] 同步 SQLite 数据库表结构...');
+            const prismaCli = require.resolve('prisma/build/index.js');
+            execSync(`"${process.execPath}" "${prismaCli}" db push --skip-generate`, {
+                env: { ...process.env, DATABASE_URL: dbUrl },
+                timeout: 30000,
+                stdio: 'pipe',
+            });
+            console.log('[Bootstrap] SQLite 数据库表结构同步完成');
+        }
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[Bootstrap] 数据库表结构同步失败（不阻塞启动）:', msg);
+    }
+
     const app = await NestFactory.create(AppModule, {
         bufferLogs: true,
     });
@@ -68,4 +89,8 @@ async function bootstrap() {
 }
 
 /** 执行启动流程 */
-bootstrap();
+bootstrap().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[Bootstrap] 启动失败: ${msg}`);
+    process.exit(1);
+});

@@ -34,8 +34,8 @@ export class CloneService {
     private running = false;
     /** 锁获取时间，用于检测锁是否卡住 */
     private lockAcquiredAt: Date | null = null;
-    /** 当前正在执行的任务 ID */
-    private currentTaskId: bigint | null = null;
+    /** 当前正在执行的任务 ID（统一存 number，兼容 SQLite number / MySQL bigint） */
+    private currentTaskId: number | null = null;
     /** 信号量并发控制 */
     private semaphore = 0;
     private maxConcurrent = 5;
@@ -159,7 +159,7 @@ export class CloneService {
 
     private async queryReposByIds(repoIds: number[]) {
         return this.prisma.githubRepo.findMany({
-            where: { id: { in: repoIds.map((id) => BigInt(id)) } },
+            where: { id: { in: repoIds } },
             select: { id: true, fullName: true, htmlUrl: true },
         });
     }
@@ -222,7 +222,7 @@ export class CloneService {
         }
         this.running = true;
         this.lockAcquiredAt = new Date();
-        this.currentTaskId = taskId;
+        this.currentTaskId = Number(taskId);
         try {
             await withTimeout(
                 this.executeTaskInner(taskId),
@@ -237,7 +237,7 @@ export class CloneService {
                 /* 忽略 */
             }
         } finally {
-            if (this.currentTaskId === taskId) {
+            if (this.currentTaskId === Number(taskId)) {
                 this.running = false;
                 this.lockAcquiredAt = null;
                 this.currentTaskId = null;
@@ -384,7 +384,7 @@ export class CloneService {
      */
     async getTaskProgress(taskId: number) {
         const task = await this.prisma.cloneTask.findUnique({
-            where: { id: BigInt(taskId) },
+            where: { id: taskId },
             include: { items: { select: { fullName: true, status: true, localPath: true, errorMessage: true } } },
         });
         if (!task) return { success: false, message: '任务不存在' };
@@ -479,11 +479,11 @@ export class CloneService {
     async retryFailed(taskId: number) {
         if (this.running) return { success: false, message: '当前有任务正在执行，请稍后再试' };
 
-        const task = await this.prisma.cloneTask.findUnique({ where: { id: BigInt(taskId) }, select: { id: true, targetDir: true } });
+        const task = await this.prisma.cloneTask.findUnique({ where: { id: taskId }, select: { id: true, targetDir: true } });
         if (!task) return { success: false, message: '任务不存在' };
 
         const taskTargetDir = task.targetDir;
-        const items = await this.prisma.cloneTaskItem.findMany({ where: { taskId: BigInt(taskId), status: 'FAILED' } });
+        const items = await this.prisma.cloneTaskItem.findMany({ where: { taskId: taskId, status: 'FAILED' } });
         if (!items.length) return { success: false, message: '没有需要重试的项' };
 
         for (const item of items) {
@@ -492,11 +492,11 @@ export class CloneService {
 
         await this.prisma.$transaction([
             this.prisma.cloneTaskItem.updateMany({
-                where: { taskId: BigInt(taskId), status: 'FAILED' },
+                where: { taskId: taskId, status: 'FAILED' },
                 data: { status: 'PENDING', errorMessage: null, retryCount: { increment: 1 } },
             }),
             this.prisma.cloneTask.update({
-                where: { id: BigInt(taskId) },
+                where: { id: taskId },
                 data: { status: 'PENDING', startedAt: null, finishedAt: null, completedItems: 0, failedItems: 0, skippedItems: 0 },
             }),
         ]);
@@ -509,8 +509,8 @@ export class CloneService {
         if (this.running) return { success: false, message: '当前有任务正在执行，请稍后再试' };
 
         const [task, item] = await Promise.all([
-            this.prisma.cloneTask.findUnique({ where: { id: BigInt(taskId) }, select: { id: true, targetDir: true } }),
-            this.prisma.cloneTaskItem.findFirst({ where: { taskId: BigInt(taskId), fullName } }),
+            this.prisma.cloneTask.findUnique({ where: { id: taskId }, select: { id: true, targetDir: true } }),
+            this.prisma.cloneTaskItem.findFirst({ where: { taskId: taskId, fullName } }),
         ]);
         if (!task) return { success: false, message: '任务不存在' };
         if (!item) return { success: false, message: '未找到该任务项' };
@@ -526,7 +526,7 @@ export class CloneService {
                 });
                 if (updated.count === 0) throw new Error('任务项正在执行中或已是待执行状态，无法重试');
                 await tx.cloneTask.update({
-                    where: { id: BigInt(taskId) },
+                    where: { id: taskId },
                     data: { status: 'PENDING', startedAt: null, finishedAt: null },
                 });
             });
@@ -540,19 +540,19 @@ export class CloneService {
 
     async resetTask(taskId: number) {
         const task = await this.prisma.cloneTask.findUnique({
-            where: { id: BigInt(taskId) },
+            where: { id: taskId },
             select: { id: true, status: true, targetDir: true },
         });
         if (!task) return { success: false, message: '任务不存在' };
 
-        if (this.running && this.currentTaskId === BigInt(taskId)) {
+        if (this.running && this.currentTaskId !== null && this.currentTaskId === taskId) {
             this.forceReleaseLock();
         } else if (this.running) {
             this.logger.warn(`重置操作跳过锁释放`);
         }
 
         const failedItems = await this.prisma.cloneTaskItem.findMany({
-            where: { taskId: BigInt(taskId), status: { not: 'COMPLETED' } },
+            where: { taskId: taskId, status: { not: 'COMPLETED' } },
             select: { id: true, localPath: true },
         });
         const taskTargetDir = task.targetDir;
@@ -562,11 +562,11 @@ export class CloneService {
 
         await this.prisma.$transaction([
             this.prisma.cloneTaskItem.updateMany({
-                where: { taskId: BigInt(taskId) },
+                where: { taskId: taskId },
                 data: { status: 'PENDING', errorMessage: null, retryCount: 0 },
             }),
             this.prisma.cloneTask.update({
-                where: { id: BigInt(taskId) },
+                where: { id: taskId },
                 data: { status: 'PENDING', startedAt: null, finishedAt: null, completedItems: 0, failedItems: 0, skippedItems: 0 },
             }),
         ]);
@@ -577,18 +577,18 @@ export class CloneService {
 
     async deleteTask(taskId: number) {
         const task = await this.prisma.cloneTask.findUnique({
-            where: { id: BigInt(taskId) },
+            where: { id: taskId },
             select: { id: true, status: true },
         });
         if (!task) return { success: false, message: '任务不存在' };
 
-        if (this.running && this.currentTaskId === BigInt(taskId)) {
+        if (this.running && this.currentTaskId === taskId) {
             this.forceReleaseLock();
         }
 
         try {
-            await this.prisma.cloneTaskItem.deleteMany({ where: { taskId: BigInt(taskId) } });
-            await this.prisma.cloneTask.delete({ where: { id: BigInt(taskId) } });
+            await this.prisma.cloneTaskItem.deleteMany({ where: { taskId: taskId } });
+            await this.prisma.cloneTask.delete({ where: { id: taskId } });
             this.logger.log(`克隆任务已删除: taskId=${taskId}`);
             return { success: true, message: '任务已删除' };
         } catch (e: unknown) {
@@ -620,7 +620,7 @@ export class CloneService {
         return Date.now() - this.lockAcquiredAt.getTime();
     }
 
-    getCurrentTaskId(): bigint | null {
+    getCurrentTaskId(): number | null {
         return this.currentTaskId;
     }
 

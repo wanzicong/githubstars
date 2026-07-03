@@ -114,7 +114,7 @@ export class TranslateService {
         if (!repo.description) return null;
         const result = await this.callDeepSeek(repo.description, false);
         if (result && result !== RATE_LIMITED) {
-            await this.prisma.githubRepo.update({ where: { id: BigInt(repoId) }, data: { descriptionCn: result, updatedAt: new Date() } });
+            await this.prisma.githubRepo.update({ where: { id: repoId }, data: { descriptionCn: result, updatedAt: new Date() } });
             this.logger.log(`描述翻译成功: ${repo.fullName}`);
         }
         return result === RATE_LIMITED ? null : result;
@@ -165,7 +165,7 @@ export class TranslateService {
         const result = await this.callDeepSeek(readmeOriginal, true);
         if (result && result !== RATE_LIMITED) {
             await this.prisma.githubRepo.update({
-                where: { id: BigInt(repoId) },
+                where: { id: repoId },
                 data: { readmeCn: result, readmeFetched: true, updatedAt: new Date() },
             });
         }
@@ -181,7 +181,7 @@ export class TranslateService {
         if (ghResult.content === null) {
             // 确认无 README，标记 fetched 并返回哨兵值
             await this.prisma.githubRepo.update({
-                where: { id: BigInt(repoId) },
+                where: { id: repoId },
                 data: { readmeFetched: true, readmeCn: null, updatedAt: new Date() },
             });
             this.logger.log(`仓库 ${repo.fullName} 没有 README 文件（已确认）`);
@@ -190,14 +190,14 @@ export class TranslateService {
 
         // 保存原始内容（先不标记 fetched，等翻译成功再标记）
         await this.prisma.githubRepo.update({
-            where: { id: BigInt(repoId) },
+            where: { id: repoId },
             data: { readmeOriginal: ghResult.content, updatedAt: new Date() },
         });
 
         const result = await this.callDeepSeek(ghResult.content, true);
         if (result && result !== RATE_LIMITED) {
             await this.prisma.githubRepo.update({
-                where: { id: BigInt(repoId) },
+                where: { id: repoId },
                 data: { readmeCn: result, readmeFetched: true, updatedAt: new Date() },
             });
             this.logger.log(`README 翻译成功: ${repo.fullName}`);
@@ -224,20 +224,20 @@ export class TranslateService {
         const ghResult = await this.githubApi.fetchReadmeFromGitHub(repo.fullName!);
         if (ghResult.content === null) {
             await this.prisma.githubRepo.update({
-                where: { id: BigInt(repoId) },
+                where: { id: repoId },
                 data: { readmeFetched: true, readmeCn: null, readmeOriginal: null, updatedAt: new Date() },
             });
             const sentinel = ghResult.githubBody ? `${NO_README}|${ghResult.githubBody}` : NO_README;
             return sentinel;
         }
         await this.prisma.githubRepo.update({
-            where: { id: BigInt(repoId) },
+            where: { id: repoId },
             data: { readmeOriginal: ghResult.content, updatedAt: new Date() },
         });
         const result = await this.callDeepSeek(ghResult.content, true);
         if (result && result !== RATE_LIMITED) {
             await this.prisma.githubRepo.update({
-                where: { id: BigInt(repoId) },
+                where: { id: repoId },
                 data: { readmeCn: result, readmeFetched: true, updatedAt: new Date() },
             });
             this.logger.log(`README 强制重新翻译成功: ${repo.fullName}`);

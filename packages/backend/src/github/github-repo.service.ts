@@ -153,7 +153,7 @@ export class GithubRepoService {
      *   - GithubController.getById()
      */
     async findById(id: number) {
-        const repo = await this.prisma.githubRepo.findUnique({ where: { id: BigInt(id) } });
+        const repo = await this.prisma.githubRepo.findUnique({ where: { id } });
         if (!repo) return null;
         return repo;
     }
@@ -219,7 +219,7 @@ export class GithubRepoService {
     async findByIds(ids: number[]) {
         if (!ids || ids.length === 0) return [];
         const repos = await this.prisma.githubRepo.findMany({
-            where: { id: { in: ids.map((id) => BigInt(id)) } },
+            where: { id: { in: ids } },
         });
         return repos;
     }
@@ -392,7 +392,7 @@ export class GithubRepoService {
      * @callers StarsController.detail()
      * @depends GithubApiService.fetchReadmeFromGitHub()
      */
-    async ensureReadmeFetched(repoId: bigint): Promise<any> {
+    async ensureReadmeFetched(repoId: number): Promise<any> {
         try {
             const repo = await this.prisma.githubRepo.findUnique({ where: { id: repoId } });
             if (!repo || repo.readmeFetched) return repo;

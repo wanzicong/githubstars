@@ -452,14 +452,14 @@ export class CategoryService {
         }
 
         // 校验仓库ID存在性
-        const repoIds = data.repoIds.map((id) => BigInt(id));
+        const repoIds = data.repoIds;
         const repos = await this.prisma.githubRepo.findMany({
             where: { id: { in: repoIds } },
             select: { id: true },
         });
 
-        const existingRepoIds = new Set(repos.map((r) => r.id));
-        const missingIds = data.repoIds.filter((id) => !existingRepoIds.has(BigInt(id)));
+        const existingRepoIds = new Set(repos.map((r) => Number(r.id)));
+        const missingIds = data.repoIds.filter((id) => !existingRepoIds.has(id));
         if (missingIds.length > 0) {
             throw new NotFoundException(`仓库ID不存在: ${missingIds.join(', ')}`);
         }

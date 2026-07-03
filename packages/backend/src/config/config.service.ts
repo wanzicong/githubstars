@@ -51,9 +51,15 @@ export class ConfigService implements OnModuleInit {
      */
     async onModuleInit() {
         this.logger.log('ConfigService 初始化: 开始检查默认配置项...');
-        await this.ensureDefaults();
-        await this.loadCache();
-        this.logger.log('ConfigService 初始化完成，缓存项数: ' + this.cache.size);
+        try {
+            await this.ensureDefaults();
+            await this.loadCache();
+            this.logger.log('ConfigService 初始化完成，缓存项数: ' + this.cache.size);
+        } catch (e: unknown) {
+            // 如果数据库表不存在（桌面端首次启动 db push 失败），静默继续不崩溃
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.error('ConfigService 初始化跳过（数据库不可用）: ' + msg);
+        }
     }
 
     /**
