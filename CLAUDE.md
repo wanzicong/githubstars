@@ -1052,3 +1052,104 @@ grep -rn "default_branch\|defaultBranch" packages/frontend/src/
 | 前端溢出修复规范 | 禁止逐层打补丁，一次性检查 flex/minWidth/ellipsis/Card/Row 五层 | P0 |
 | 写完浏览器实测 | 前端改动完成后必须打开浏览器验证，禁止只用编译结果判断 | P0 |
 | 后端新代码确认 | 杀旧进程 → 重新编译 → 重启 → curl 验证 | P1 |
+
+---
+
+## 第十次复盘（2026-07-03）
+
+### 本次暴露的典型问题
+
+| 问题类型 | 数量 | 根因 | 修复方式 |
+|---------|------|------|---------|
+| DesktopInit 60s 超时未清除，后端就绪后仍弹出错误页 | 1 处 | `useEffect` 中创建了 `timeout` 但就绪时没 `clearTimeout`，cleanup 只在 unmount 执行 | 后端就绪时立即 `clearTimeout(timeoutRef.current)` |
+| SQLite schema 缺少 `repo_size`/`default_branch`/`visibility` | 3 个字段 | 改了 MySQL `schema.prisma` 但忘了同步更新 `schema.sqlite.prisma` | 补充字段到 SQLite schema |
+| 错误提示说 "MySQL :3307" 但桌面端用的是 SQLite | 1 处 | 错误文案从 Web 端直接复制，未按桌面端实际数据库类型修改 | 改为 SQLite 相关提示 |
+
+### 根因总结
+
+1. **useEffect 副作用清理不完整** — `DesktopInit` 的 `useEffect` 中创建了两个定时器：`pollTimer`（轮询）和 `timeout`（60s 超时）。代码在 `setState('ready')` 时停止了轮询，但**完全忘了清除超时定时器**。React effect 的 cleanup 只在组件卸载时执行（`[]` deps），所以这个 timeout 就像一个"定时炸弹"——即使应用已正常加载，60s 后仍会触发 `setState('error')` 覆盖整个页面。
+
+   **核心错误**：创建 side-effect 资源（timer/subscription/interval）时，必须在**不再需要它的时机**主动释放，而不仅是等组件卸载。就绪后 timeout 已经没有意义了，就应该立刻清除。
+
+2. **双 Schema 文件又双叒叕漏改** — 第九次复盘刚总结完"改了 A 漏了 B"的问题，第十次就又一次上演：改了 MySQL schema 忘了改 SQLite schema。两个文件名字不同但内容高度相似，天然容易产生不一致。
+
+3. **硬编码文案脱离上下文** — "MySQL :3307" 这个文案在 Web 端是正确的，但在桌面端打包代码中原样保留就是错误的。复制粘贴时没有考虑运行环境的差异。
+
+### 对 AI 助手的新约束
+
+#### P0: useEffect 中创建的定时器必须在业务条件满足时主动清除（新增）
+
+当在 `useEffect` 中创建 `setTimeout`/`setInterval` 做超时保护或轮询时：
+
+- [ ] 超时/轮询的**终止条件**到达后，是否立即 `clearTimeout`/`clearInterval`？
+- [ ] 不仅仅依赖 cleanup 函数（cleanup 只在 unmount 或 deps 变化时执行）
+- [ ] 检查清单：
+  - 轮询成功 → clearInterval
+  - 超时保护的终态到达（成功/失败）→ clearTimeout
+  - 用户手动取消 → clearBoth
+
+**反面案例：**
+```typescript
+// BAD — timeout 在后端就绪后没被清除，60s 后强制 setState('error')
+useEffect(() => {
+  const pollBackend = () => {
+    getStatus().then(status => {
+      if (status.running) setState('ready')
+      // ❌ 忘了 clearTimeout(timeout)！
+      else setTimeout(pollBackend, 2000)
+    })
+  }
+  pollBackend()
+  const timeout = setTimeout(() => setState('error'), 60000) // ← 定时炸弹
+  return () => clearTimeout(timeout) // cleanup 只在 unmount 执行，太晚了
+}, [])
+
+// GOOD — 就绪时主动清除
+useEffect(() => {
+  const timeoutRef = { current: null }
+  const pollBackend = () => {
+    getStatus().then(status => {
+      if (status.running) {
+        clearTimeout(timeoutRef.current) // ✅ 就绪 → 拆弹
+        setState('ready')
+      } else {
+        setTimeout(pollBackend, 2000)
+      }
+    })
+  }
+  pollBackend()
+  timeoutRef.current = setTimeout(() => setState('error'), 60000)
+  return () => clearTimeout(timeoutRef.current)
+}, [])
+```
+
+#### P0: Prisma Schema 变更必须同步两个文件（新增）
+
+本项目有**两个 Prisma schema 文件**，修改任意一个时必须同步修改另一个：
+
+| 文件 | 用途 | 数据库 |
+|------|------|--------|
+| `packages/backend/prisma/schema.prisma` | Web 端开发/生产 | MySQL |
+| `packages/backend/prisma/schema.sqlite.prisma` | 桌面端 Electron 打包 | SQLite |
+
+- [ ] 新增/修改/删除字段 → 两个文件都要改
+- [ ] 新增/修改/删除表 → 两个文件都要改
+- [ ] SQLite 版**不得**包含 `@db.VarChar`、`@db.TinyInt`、`@db.Text`、`@db.DateTime` 等 MySQL 专属类型注解
+- [ ] SQLite 版的 ID 字段类型为 `Int`（不是 `BigInt`）
+- [ ] 改完后 `git diff --stat` 必须同时包含两个 schema 文件
+
+#### P1: 文案必须区分运行环境（新增）
+
+所有面向用户的提示文案（error message、toast、warning）必须考虑运行环境差异：
+
+- [ ] Web 端（MySQL）→ 提示 MySQL 相关信息
+- [ ] 桌面端（SQLite、Electron）→ 提示 SQLite 相关信息，不提及 MySQL
+- [ ] 如果文案在两个环境通用，确保不包含环境特定的技术细节
+
+### 编码约束（第十次更新）
+
+| 规则类别 | 要求 | 强制级别 |
+|---------|------|---------|
+| 定时器生命周期管理 | useEffect 中的 timer 必须在业务终态到达时主动 clear，不依赖 cleanup | P0 |
+| Schema 双文件同步 | 改 `schema.prisma` 必须同步改 `schema.sqlite.prisma`，git diff 必须同时包含两者 | P0 |
+| 文案环境区分 | 用户提示文案必须区分 Web/Desktop 环境，不硬编码 MySQL 等环境特定信息 | P1 |
