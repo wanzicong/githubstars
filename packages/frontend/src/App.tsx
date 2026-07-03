@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { ConfigProvider, App as AntApp, Spin, Typography } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
@@ -18,6 +18,7 @@ function DesktopInit({ children }: { children: React.ReactNode }) {
     isElectron() ? 'loading' : 'ready'
   )
   const [errorMsg, setErrorMsg] = useState('')
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!isElectron()) return
@@ -25,17 +26,21 @@ function DesktopInit({ children }: { children: React.ReactNode }) {
     let cancelled = false
     let pollTimer: ReturnType<typeof setTimeout> | null = null
 
-    // 轮询等待后端就绪（最多 60 秒）
+    // 轮询等待后端就绪
     const pollBackend = () => {
       if (cancelled) return
       window.electronAPI!.backend.getStatus().then((status) => {
         if (cancelled) return
         if (status.running && status.port) {
+          // 后端已就绪 → 清除超时定时器，防止误触错误页
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current)
+            timeoutRef.current = null
+          }
           setBaseURL(`http://localhost:${status.port}`)
           console.log(`[Desktop] 后端已就绪，端口 ${status.port}`)
           setState('ready')
         } else {
-          // 后端还没就绪，继续轮询
           pollTimer = setTimeout(pollBackend, 2000)
         }
       }).catch(() => {
@@ -44,18 +49,20 @@ function DesktopInit({ children }: { children: React.ReactNode }) {
       })
     }
 
-    // 启动轮询 + 超时保护
+    // 启动轮询
     pollBackend()
-    const timeout = setTimeout(() => {
+
+    // 超时保护：60 秒后未就绪 → 错误页
+    timeoutRef.current = setTimeout(() => {
       if (cancelled) return
       setState('error')
-      setErrorMsg('后端服务启动超时，请检查数据库连接（MySQL :3307）是否正常运行')
+      setErrorMsg('后端服务启动超时（已等待 60 秒），请尝试重启应用')
     }, 60000)
 
     return () => {
       cancelled = true
       if (pollTimer) clearTimeout(pollTimer)
-      clearTimeout(timeout)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
   }, [])
 
@@ -73,8 +80,8 @@ function DesktopInit({ children }: { children: React.ReactNode }) {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 12, padding: 32, textAlign: 'center' }}>
         <Text type="danger" style={{ fontSize: 18 }}>❌ {errorMsg}</Text>
         <Text type="secondary" style={{ fontSize: 13, maxWidth: 480 }}>
-          请确保 MySQL 已启动（127.0.0.1:3307），并且数据库 githubstars 已创建。
-          可在系统配置页面查看或修改数据库连接信息。
+          桌面端使用 SQLite 嵌入式数据库，无需额外配置。
+          如果问题持续出现，请尝试退出应用后重新启动。
         </Text>
       </div>
     )
