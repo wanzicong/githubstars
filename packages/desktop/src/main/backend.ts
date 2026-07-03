@@ -256,14 +256,16 @@ export class BackendManager {
     return join(userDataPath, 'githubstars.db')
   }
 
-  /** 首次启动时创建数据库表结构 */
+  /**
+   * 初始化 SQLite 数据库表结构
+   *
+   * 每次启动都运行 prisma db push，确保数据库 Schema 与 Prisma 模型同步。
+   * db push 是幂等操作——已存在的表/列不会重复创建，已有数据不会丢失。
+   * 不检查 existsSync(dbPath)，因为空 SQLite 文件可能存在但无表结构。
+   */
   private initDatabase(): void {
     const dbPath = this.getDatabasePath()
-    if (existsSync(dbPath)) {
-      log.info('[Backend] SQLite 数据库已存在')
-      return
-    }
-    log.info('[Backend] 首次启动，创建数据库表...')
+    log.info('[Backend] 检查数据库表结构...')
     try {
       const backendDir = this.getBackendDir()
       const nodeExe = this.getExecutablePath()
@@ -277,7 +279,7 @@ export class BackendManager {
         timeout: 30000,
         windowsHide: true,
       })
-      log.info('[Backend] 数据库表创建成功')
+      log.info('[Backend] 数据库表结构同步完成')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       log.error(`[Backend] 数据库初始化失败: ${msg}`)

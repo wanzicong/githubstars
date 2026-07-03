@@ -11344,14 +11344,16 @@ var BackendManager = class {
 		if (!(0, node_fs.existsSync)(userDataPath)) (0, node_fs.mkdirSync)(userDataPath, { recursive: true });
 		return (0, node_path.join)(userDataPath, "githubstars.db");
 	}
-	/** 首次启动时创建数据库表结构 */
+	/**
+	* 初始化 SQLite 数据库表结构
+	*
+	* 每次启动都运行 prisma db push，确保数据库 Schema 与 Prisma 模型同步。
+	* db push 是幂等操作——已存在的表/列不会重复创建，已有数据不会丢失。
+	* 不检查 existsSync(dbPath)，因为空 SQLite 文件可能存在但无表结构。
+	*/
 	initDatabase() {
 		const dbPath = this.getDatabasePath();
-		if ((0, node_fs.existsSync)(dbPath)) {
-			import_src.default.info("[Backend] SQLite 数据库已存在");
-			return;
-		}
-		import_src.default.info("[Backend] 首次启动，创建数据库表...");
+		import_src.default.info("[Backend] 检查数据库表结构...");
 		try {
 			const backendDir = this.getBackendDir();
 			(0, node_child_process.execSync)(`"${this.getExecutablePath()}" node_modules/prisma/build/index.js db push --skip-generate`, {
@@ -11364,7 +11366,7 @@ var BackendManager = class {
 				timeout: 3e4,
 				windowsHide: true
 			});
-			import_src.default.info("[Backend] 数据库表创建成功");
+			import_src.default.info("[Backend] 数据库表结构同步完成");
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
 			import_src.default.error(`[Backend] 数据库初始化失败: ${msg}`);
