@@ -941,3 +941,114 @@ MySQL (:3307)  githubstars 库
 对照 `.claude/rules/common/agents.md` 的 P0 强制表，判断当前场景需要调用哪个智能体。
 
 **三步都执行完，才能开始读代码和编码。**
+
+---
+
+## 第九次复盘（2026-07-03）
+
+### 本次暴露的典型问题
+
+| 问题类型 | 数量 | 根因 | 修复方式 |
+|---------|------|------|---------|
+| 数据模型新增字段后漏改关联代码（`estimateSizes`、前端展示、排序） | 3 处 | 只改了入库路径，未系统搜索所有 `repo_size` / `default_branch` 的引用点 | 全局搜索 → 逐处替换 |
+| 前端卡片长文本溢出，修复 5 轮才彻底解决 | 5 轮 | 逐层加 `overflow: hidden` 打补丁，未一次性追到 flex 布局根因（`minWidth: 0`） | Card 双层 overflow + flex 容器 minWidth:0 + Text maxWidth:100% |
+| Tab 标签因 URL 参数变化产生重复标签 | 1 处 | Tab key 用了 `pathname + search`，筛选变化 = 新 key = 新 tab | key 改为仅 `pathname` |
+| 下载文件大小显示"未知" | 1 次 | `estimateSizes` 改完后旧编译缓存没清，实际跑的还是老代码 | 强行 `taskkill` 全部 node 进程 → 重新编译 → 启动 |
+| 写完不自测，依赖用户反馈 | 全程 | 每次改动后只跑 `npm run build`，从未打开浏览器验证 | 写完必须浏览器实测 |
+
+### 根因总结
+
+1. **"改了 A 漏了 B"惯性（最严重）** — 新增 `repo_size`/`default_branch`/`visibility` 三个字段后，只改了：
+   - ✅ Schema、MappedRepoData、mapStarredItem、upsertRepo（入库链路）
+   - ❌ `estimateSizes` — 仍然 HEAD + GitHub API 双重网络请求获取大小
+   - ❌ `executeTaskInner` 里的 `fileSize` — 仍然 HEAD archive URL 获取 Content-Length
+   - ❌ 前端列表页 — 没展示文件大小
+   - ❌ 前端排序 — 没加 `repo_size` 排序选项
+   - ❌ 前端详情页 — 没展示 `default_branch`/`visibility`
+
+   **核心原因**：修改数据模型后，没有执行"全局搜索引用点 → 逐个确认是否需要同步修改"的流程。AI 的大脑里只有"当前这个方法的上下文"，没有"所有受影响的文件列表"这个概念。
+
+2. **前端溢出修复—打补丁模式** — 用户反馈"溢出了" → 加一行 `overflow: hidden` → 用户"还是溢出" → 再加一行 → 反复 5 次。如果第一次就追到根因（flex 子项 `min-width: auto` 阻止收缩 + Ant Design Text ellipsis 需要 `max-width: 100%`），一轮就能修好。
+
+3. **Tab 重复—设计时视角单一** — 写 `addTab({ key: location.pathname + location.search })` 时只考虑了"如何区分不同搜索条件的标签"，没考虑"用户真的需要搜索条件作为独立标签吗？"。
+
+4. **编译缓存导致的"假修复"** — `estimateSizes` 改完后 `npm run build` 通过，但后端实际运行的还是旧代码（`Prisma generate` 文件锁 + 旧进程未重启）。验证闭环里缺了"确认运行的进程确实是新代码"这一步。
+
+5. **写完不自测的习惯根深蒂固** — 7 次复盘积累了大量约束，但"写完打开浏览器看看"这个最基本的动作仍然没做。用户每反馈一个问题我才修一个，相当于用户在帮我做 QA。
+
+### 对 AI 助手的新约束
+
+#### P0: 数据模型变更必须全域引用点搜索（新增）
+
+当修改 Prisma Schema（新增/修改/删除字段）或接口类型（MappedRepoData / GithubRepo 等）时：
+
+- [ ] 立即用 `grep` 或 Serena 全局搜索**新字段名**（如 `repo_size`、`default_branch`）和**对应的 camelCase 名**（如 `repoSize`、`defaultBranch`）
+- [ ] 列出所有引用该字段的文件，逐文件确认是否需要同步修改
+- [ ] 特别关注以下"容易漏"的模式：
+  - API 请求里硬编码了旧字段名
+  - Service 方法里通过网络获取了同样的数据（应该改为从 DB 读）
+  - 前端组件里展示/排序逻辑没包含新字段
+  - 下载/克隆/导出等模块里有独立的获取逻辑
+
+**反面案例：**
+```typescript
+// BAD — 新增了 repo_size 字段入库，但 estimateSizes 仍然走网络获取文件大小
+async estimateSizes(repoIds: number[]) {
+    // ... fetch HEAD archive URL to get Content-Length ← 完全没利用刚入库的 repoSize!
+}
+
+// GOOD — 全局搜索 repo_size / repoSize → 发现 estimateSizes → 改为从 DB 读
+// 全局搜索 default_branch / defaultBranch → 发现 executeTaskInner/retryFailed/retryItem → 改为从 DB 读
+```
+
+**检查清单（改完 Schema 后必须执行）：**
+```bash
+# 搜索后端所有引用
+grep -rn "repo_size\|repoSize" packages/backend/src/
+grep -rn "default_branch\|defaultBranch" packages/backend/src/
+grep -rn "visibility" packages/backend/src/
+
+# 搜索前端所有引用
+grep -rn "repo_size\|repoSize" packages/frontend/src/
+grep -rn "default_branch\|defaultBranch" packages/frontend/src/
+```
+
+#### P0: 前端溢出修复必须追到 flex 根因（新增）
+
+当前端出现文本溢出/内容撑破容器时，**禁止**逐层试加 `overflow: hidden`。
+
+**必须一次性检查的清单：**
+- [ ] **flex 父容器**是否有 `minWidth: 0`？（flex 子项默认 `min-width: auto`，不会收缩到内容宽度以下）
+- [ ] **Ant Design Text/Paragraph ellipsis** 的元素是否加了 `maxWidth: '100%'`？（Ant Design 不一定默认带这个）
+- [ ] **Card** 组件本身的 `style` 是否加了 `overflow: 'hidden'`？（不只 body）
+- [ ] **Card body** 的 `styles.body` 是否加了 `overflow: 'hidden'`？
+- [ ] **外层 Col/Row wrapper** 是否加了 `overflow: 'hidden'`？（Row 的负 margin 会导致溢出）
+- [ ] Text ellipsis 内部是否有多余的 `<span>` 嵌套？（会破坏 ellipsis 效果）
+
+#### P0: 写完前端代码必须浏览器实测（新增）
+
+任何前端代码变更（组件/页面/样式），在 `npm run build` 通过后：
+
+- [ ] 打开浏览器（`http://localhost:10001`）实际查看修改效果
+- [ ] 特别检查：长文本是否溢出、loading/empty/error 三态是否正常
+- [ ] 如果有 Playwright MCP 可用，必须用它执行验证
+- [ ] 禁止只用"编译通过"作为"完成了"的依据
+
+#### P1: 后端代码变更必须确认运行的是新代码（新增）
+
+修改后端代码后，除 `npm run build` 外：
+
+- [ ] 强制关闭旧进程（`taskkill /F /IM node.exe`）
+- [ ] 如果 `prisma generate` 报文件锁错误，必须先杀进程再生成
+- [ ] 重新启动后端
+- [ ] curl 验证新端点/新逻辑返回正确数据
+- [ ] 确认接口返回中包含了新增字段
+
+### 编码约束（第九次更新）
+
+| 规则类别 | 要求 | 强制级别 |
+|---------|------|---------|
+| Schema 变更全域搜索 | 修改 Prisma 模型后，全局搜索新字段名，列出所有引用点并逐个确认 | P0 |
+| 前端溢出修复规范 | 禁止逐层打补丁，一次性检查 flex/minWidth/ellipsis/Card/Row 五层 | P0 |
+| 写完浏览器实测 | 前端改动完成后必须打开浏览器验证，禁止只用编译结果判断 | P0 |
+| 后端新代码确认 | 杀旧进程 → 重新编译 → 重启 → curl 验证 | P1 |
