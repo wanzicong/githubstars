@@ -73,3 +73,7 @@ packages/desktop/build/backend-bundle/
 
 # Agent env
 packages/github-agent/.env
+
+# Agent build output
+packages/github-agent/dist/
+packages/github-agent/tsconfig.tsbuildinfo

@@ -1,64 +1,79 @@
 {
-  "mcpServers": {
-    "playwright": {
-      "command": "npx",
-      "args": [
-        "@playwright/mcp@latest"
-      ]
-    },
-    "sequential-thinking": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
-      ]
-    },
-    "fetch": {
-      "command": "uvx",
-      "args": [
-        "mcp-server-fetch"
-      ]
-    },
-    "context7": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@upstash/context7-mcp@latest"
-      ],
-      "description": "Live documentation lookup — use with /docs command and documentation-lookup skill (resolve-library-id, query-docs)."
-    },
-    "memory": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-memory"
-      ],
-      "description": "Persistent memory across sessions"
-    },
-    "serena": {
-      "type": "stdio",
-      "command": "serena",
-      "args": [
-        "start-mcp-server",
-        "--context=claude-code",
-        "--project-from-cwd"
-      ],
-      "env": {}
-    },
-    "mysql": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@liangshanli/mcp-server-mysql"
-      ],
-      "env": {
-        "MYSQL_HOST": "127.0.0.1",
-        "MYSQL_PORT": "3307",
-        "MYSQL_USER": "root",
-        "MYSQL_PASSWORD": "123456",
-        "MYSQL_DATABASE": "githubstars",
-        "READONLY": "true"
-      }
+    "mcpServers": {
+        "playwright": {
+            "command": "npx",
+            "args": [
+                "@playwright/mcp@latest"
+            ]
+        },
+        "sequential-thinking": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-sequential-thinking"
+            ]
+        },
+        "fetch": {
+            "command": "uvx",
+            "args": [
+                "mcp-server-fetch"
+            ]
+        },
+        "context7": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@upstash/context7-mcp@latest"
+            ],
+            "description": "Live documentation lookup — use with /docs command and documentation-lookup skill (resolve-library-id, query-docs)."
+        },
+        "memory": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-memory"
+            ],
+            "description": "Persistent memory across sessions"
+        },
+        "serena": {
+            "type": "stdio",
+            "command": "serena",
+            "args": [
+                "start-mcp-server",
+                "--context=claude-code",
+                "--project-from-cwd"
+            ],
+            "env": {}
+        },
+        "mysql": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@liangshanli/mcp-server-mysql"
+            ],
+            "env": {
+                "MYSQL_HOST": "127.0.0.1",
+                "MYSQL_PORT": "3307",
+                "MYSQL_USER": "root",
+                "MYSQL_PASSWORD": "123456",
+                "MYSQL_DATABASE": "githubstars",
+                "READONLY": "true"
+            }
+        },
+        "github": {
+            "type": "http",
+            "url": "https://api.githubcopilot.com/mcp/",
+            "headers": {
+                "Authorization": "Bearer ${GITHUB_COPILOT_TOKEN}"
+            }
+        },
+        "antd": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@ant-design/cli",
+                "mcp"
+            ]
+        }
     }
-  }
 }
