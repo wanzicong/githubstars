@@ -20,6 +20,7 @@ const Logs = lazy(() => import('@/pages/Logs'))
 const Clone = lazy(() => import('@/pages/Clone'))
 const Download = lazy(() => import('@/pages/Download'))
 const CategoryManage = lazy(() => import('@/pages/CategoryManage'))
+const AgentChat = lazy(() => import('@/pages/AgentChat'))
 
 /** 所有路由（Layout 子路由） */
 export const appRoutes: RouteObject[] = [
@@ -45,4 +46,6 @@ export const appRoutes: RouteObject[] = [
   // ── 系统 ──
   { path: 'settings', element: <Settings />, handle: { title: '系统配置' } },
   { path: 'logs', element: <Logs />, handle: { title: '系统日志' } },
+  // ── AI Agent ──
+  { path: 'agent', element: <AgentChat />, handle: { title: 'AI Agent' } },
 ]
