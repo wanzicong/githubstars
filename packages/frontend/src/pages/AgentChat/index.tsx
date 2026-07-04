@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Input, Button, Typography, Tag, theme, App, Segmented, Badge, Tooltip, Spin, Avatar, Flex, Card, Layout } from 'antd'
+import { Input, Button, Typography, Tag, theme, App, Segmented, Badge, Tooltip, Spin, Avatar, Flex, Card } from 'antd'
 import {
   SendOutlined,
   RobotOutlined,
@@ -13,10 +13,11 @@ import {
   BranchesOutlined,
   ApiOutlined,
   StarOutlined,
+  BugOutlined,
 } from '@ant-design/icons'
+import MarkdownRenderer from '@/components/common/MarkdownRenderer'
 
-const { Text, Paragraph, Title } = Typography
-const { Header, Content } = Layout
+const { Text, Paragraph } = Typography
 
 // ── Types ──
 
@@ -40,43 +41,38 @@ type SessionMode = 'none' | 'auto'
 
 const SUGGESTIONS = [
   { icon: <StarOutlined />, text: '查看 facebook/react 仓库信息' },
-  { icon: <BranchesOutlined />, text: '搜索最受欢迎的 React 组件库' },
-  { icon: <CodeOutlined />, text: '查看 TypeScript 项目最新动态' },
-  { icon: <ApiOutlined />, text: '搜索类似 axios 的 HTTP 库' },
+  { icon: <BranchesOutlined />, text: '搜索最流行的 React 组件库' },
+  { icon: <BugOutlined />, text: '查看 TypeScript 项目更新动态' },
+  { icon: <CodeOutlined />, text: '搜索类似 axios 的 HTTP 库' },
 ]
 
 const SESSION_OPTIONS: { value: SessionMode; label: string }[] = [
-  { value: 'none', label: '一次性对话' },
-  { value: 'auto', label: '持续对话' },
+  { value: 'none', label: '临时会话' },
+  { value: 'auto', label: '持久会话' },
 ]
 
 // ── Helpers ──
 
 let msgIdCounter = 0
-function nextMsgId(): string {
-  msgIdCounter += 1
-  return `msg_${Date.now()}_${msgIdCounter}`
-}
+const nextMsgId = () => `msg_${Date.now()}_${msgIdCounter++}`
 
-// ── Components ──
+// ── Sub-components ──
 
-/** AI 头像 */
 function AIAvatar({ size = 36 }: { size?: number }) {
   return (
     <Avatar
       size={size}
       icon={<RobotOutlined />}
       style={{
-        background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+        background: 'linear-gradient(135deg, #6366f1, #a855f7)',
         color: '#fff',
         flexShrink: 0,
-        boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
+        boxShadow: '0 2px 8px rgba(99,102,241,0.35)',
       }}
     />
   )
 }
 
-/** 用户头像 */
 function UserAvatar({ size = 36 }: { size?: number }) {
   return (
     <Avatar
@@ -112,7 +108,7 @@ export default function AgentChat() {
   const inputRef = useRef<React.ComponentRef<typeof Input.TextArea>>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  // Auto scroll
+  // Auto scroll to bottom
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
       if (listRef.current) {
@@ -125,7 +121,8 @@ export default function AgentChat() {
     scrollToBottom()
   }, [messages, streamingText, scrollToBottom])
 
-  // Copy
+  // ── Event Handlers ──
+
   const handleCopy = useCallback(async (text: string, id: string) => {
     try {
       await navigator.clipboard.writeText(text)
@@ -136,7 +133,6 @@ export default function AgentChat() {
     }
   }, [antMsg])
 
-  // Clear
   const handleClear = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
@@ -146,7 +142,6 @@ export default function AgentChat() {
     setLoading(false)
   }, [])
 
-  // Send (SSE streaming)
   const handleSend = useCallback(async () => {
     const text = input.trim()
     if (!text || loading) return
@@ -154,6 +149,7 @@ export default function AgentChat() {
     setInput('')
     setLoading(true)
 
+    // Add user message
     const userMsg: ChatMessage = {
       id: nextMsgId(),
       role: 'user',
@@ -162,9 +158,11 @@ export default function AgentChat() {
     }
     setMessages((prev) => [...prev, userMsg])
 
+    // Abort controller for cancellation
     const abortController = new AbortController()
     abortRef.current = abortController
 
+    // Placeholder for assistant response
     const assistantId = nextMsgId()
     setStreamingText('')
     setMessages((prev) => [
@@ -208,33 +206,38 @@ export default function AgentChat() {
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
-          const dataStr = line.slice(6).trim()
-          if (!dataStr) continue
+          const raw = line.slice(6).trim()
+          if (!raw) continue
 
           try {
-            const event = JSON.parse(dataStr) as { type: string; data: unknown; sessionId?: string }
-
+            const event = JSON.parse(raw) as { type: string; data: unknown; sessionId?: string }
             if (event.sessionId) capturedSessionId = event.sessionId
 
-            if (event.type === 'assistant_message') {
-              fullText += event.data as string
-              setStreamingText(fullText)
-            } else if (event.type === 'tool_use') {
-              const td = event.data as { toolName: string; toolInput: unknown }
-              toolCalls.push({
-                name: td.toolName.replace('mcp__github__', ''),
-                input: JSON.stringify(td.toolInput, null, 2),
-              })
-              setMessages((prev) =>
-                prev.map((m) => (m.id === assistantId ? { ...m, toolCalls: [...toolCalls] } : m)),
-              )
-            } else if (event.type === 'connected' && event.sessionId) {
-              capturedSessionId = event.sessionId
+            switch (event.type) {
+              case 'assistant_message':
+                fullText += event.data as string
+                setStreamingText(fullText)
+                break
+              case 'tool_use': {
+                const td = event.data as { toolName: string; toolInput: unknown }
+                toolCalls.push({
+                  name: td.toolName.replace('mcp__github__', ''),
+                  input: JSON.stringify(td.toolInput, null, 2),
+                })
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === assistantId ? { ...m, toolCalls: [...toolCalls] } : m)),
+                )
+                break
+              }
+              case 'connected':
+                if (event.sessionId) capturedSessionId = event.sessionId
+                break
             }
-          } catch { /* skip parse errors */ }
+          } catch { /* skip malformed events */ }
         }
       }
 
+      // Finalize message
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
@@ -244,6 +247,7 @@ export default function AgentChat() {
       )
       setStreamingText('')
 
+      // Update session tracking
       if (capturedSessionId && !currentSessionId) {
         setCurrentSessionId(capturedSessionId)
       }
@@ -251,7 +255,9 @@ export default function AgentChat() {
       if (error instanceof Error && error.name === 'AbortError') return
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId ? { ...m, content: `❌ 请求出错：${error instanceof Error ? error.message : '未知错误'}` } : m,
+          m.id === assistantId
+            ? { ...m, content: `> ❌ **请求出错**：${error instanceof Error ? error.message : '未知错误'}` }
+            : m,
         ),
       )
     } finally {
@@ -267,31 +273,30 @@ export default function AgentChat() {
     if (value === 'none') setCurrentSessionId(null)
   }, [])
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
-        handleSend()
-      }
-    },
-    [handleSend],
-  )
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }, [handleSend])
 
   const handleSuggestion = useCallback((text: string) => {
     setInput(text)
+    inputRef.current?.focus()
   }, [])
 
-  // ── Render message bubble ──
+  // ── Message Bubble Renderer ──
 
   const renderMessage = (msg: ChatMessage) => {
     const isUser = msg.role === 'user'
 
     return (
       <Flex key={msg.id} gap={12} justify={isUser ? 'end' : 'start'} align="start" style={{ marginBottom: 24 }}>
+        {/* Left avatar for AI */}
         {!isUser && <AIAvatar />}
 
-        <Flex vertical gap={4} align={isUser ? 'end' : 'start'} style={{ maxWidth: '72%' }}>
-          {/* Label */}
+        <Flex vertical gap={4} align={isUser ? 'end' : 'start'} style={{ maxWidth: '76%', minWidth: 0 }}>
+          {/* Label row */}
           <Flex gap={6} align="center" style={{ paddingLeft: isUser ? 0 : 4, paddingRight: isUser ? 4 : 0 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>{isUser ? '你' : 'AI Agent'}</Text>
             {msg.sessionId && (
@@ -304,41 +309,54 @@ export default function AgentChat() {
           {/* Bubble */}
           <div
             style={{
-              padding: '10px 16px',
+              padding: isUser ? '8px 16px' : '12px 16px',
               borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
               background: isUser ? token.colorPrimary : token.colorBgElevated,
               boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-              width: '100%',
+              maxWidth: '100%',
+              overflow: 'hidden',
             }}
           >
             {/* Tool calls */}
             {msg.toolCalls && msg.toolCalls.length > 0 && (
-              <div style={{ marginBottom: 8 }}>
+              <Flex wrap="wrap" gap={4} style={{ marginBottom: 8 }}>
                 {msg.toolCalls.map((tc, i) => (
-                  <Tag key={i} color="purple" style={{ marginBottom: 2, fontSize: 11, fontFamily: 'monospace' }}>
+                  <Tag key={i} color="purple" style={{ fontSize: 11, fontFamily: 'monospace', margin: 0 }}>
                     <ApiOutlined /> {tc.name}
                   </Tag>
                 ))}
-              </div>
+              </Flex>
             )}
 
-            {/* Content */}
-            <Paragraph
-              style={{
-                margin: 0,
-                color: isUser ? '#fff' : token.colorText,
-                fontSize: 14,
-                lineHeight: 1.7,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
-              {msg.content}
-            </Paragraph>
+            {/* Content: user plain text, assistant markdown */}
+            {isUser ? (
+              <Paragraph
+                style={{
+                  margin: 0,
+                  color: '#fff',
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  wordBreak: 'break-word',
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {msg.content}
+              </Paragraph>
+            ) : (
+              <MarkdownRenderer
+                content={msg.content}
+                style={{
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  color: token.colorText,
+                  wordBreak: 'break-word',
+                }}
+              />
+            )}
           </div>
 
-          {/* Actions */}
-          {!isUser && msg.content && !/^[❌]/.test(msg.content) && (
+          {/* Action buttons */}
+          {!isUser && msg.content && !/^> ❌/.test(msg.content) && (
             <Flex gap={4} style={{ paddingLeft: 4, marginTop: 2 }}>
               <Tooltip title="复制">
                 <Button
@@ -346,68 +364,112 @@ export default function AgentChat() {
                   size="small"
                   icon={copiedId === msg.id ? <CheckOutlined style={{ color: '#52c41a' }} /> : <CopyOutlined />}
                   onClick={() => handleCopy(msg.content, msg.id)}
-                  style={{ color: token.colorTextTertiary }}
+                  style={{ color: token.colorTextTertiary, fontSize: 12 }}
                 />
               </Tooltip>
             </Flex>
           )}
         </Flex>
 
+        {/* Right avatar for user */}
         {isUser && <UserAvatar />}
       </Flex>
     )
   }
 
-  // ── Streaming indicator ──
+  // ── Streaming bubble ──
 
   const isStreaming = loading && streamingText.length > 0
 
+  const renderStreamingBubble = () => (
+    <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
+      <AIAvatar />
+      <Flex vertical gap={4} style={{ maxWidth: '76%', minWidth: 0 }}>
+        <Text type="secondary" style={{ fontSize: 12, paddingLeft: 4 }}>AI Agent</Text>
+        <div
+          style={{
+            padding: '12px 16px',
+            borderRadius: '18px 18px 18px 4px',
+            background: token.colorBgElevated,
+            boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+          }}
+        >
+          <MarkdownRenderer
+            content={streamingText}
+            style={{ fontSize: 14, lineHeight: 1.7, color: token.colorText }}
+          />
+          <span
+            style={{
+              display: 'inline-block',
+              width: 2,
+              height: 16,
+              background: token.colorPrimary,
+              marginLeft: 2,
+              verticalAlign: 'middle',
+              animation: 'agent-blink 1s step-end infinite',
+            }}
+          />
+        </div>
+      </Flex>
+    </Flex>
+  )
+
   // ── Render ──
 
+  const hasMessages = messages.length > 0
+
   return (
-    <Layout style={{ height: '100%', background: token.colorBgContainer, overflow: 'hidden' }}>
-      {/* Header */}
-      <Header
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        overflow: 'hidden',
+        background: token.colorBgContainer,
+        borderRadius: 8,
+        border: `1px solid ${token.colorBorderSecondary}`,
+      }}
+    >
+      {/* ── Header ── */}
+      <div
         style={{
-          height: 56,
-          lineHeight: '56px',
-          padding: '0 24px',
-          background: token.colorBgContainer,
-          borderBottom: `1px solid ${token.colorBorderSecondary}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          padding: '10px 20px',
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          background: `linear-gradient(135deg, ${token.colorPrimaryBg} 0%, ${token.colorBgContainer} 100%)`,
           flexShrink: 0,
         }}
       >
-        <Flex align="center" gap={12}>
+        <Flex align="center" gap={10}>
           <div
             style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
+              width: 32,
+              height: 32,
+              borderRadius: 8,
               background: 'linear-gradient(135deg, #6366f1, #a855f7)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#fff',
-              fontSize: 18,
+              fontSize: 16,
             }}
           >
             <GithubOutlined />
           </div>
           <div>
-            <Text strong>GitHub AI Agent</Text>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: -2 }}>
+            <Text strong style={{ fontSize: 15 }}>AI Agent</Text>
+            <Flex align="center" gap={4} style={{ marginTop: -1 }}>
               <Badge status={loading ? 'processing' : 'success'} />
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {loading ? '思考中…' : '在线'}
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                {loading ? '思考中…' : hasMessages ? `${messages.filter(m => m.role === 'user').length} 条对话` : '在线'}
               </Text>
-            </div>
+            </Flex>
           </div>
         </Flex>
 
-        <Flex gap={12} align="center">
+        <Flex gap={8} align="center" wrap="wrap">
           <Segmented
             options={SESSION_OPTIONS}
             value={sessionMode}
@@ -416,67 +478,65 @@ export default function AgentChat() {
           />
           {currentSessionId && (
             <Tag color="blue" style={{ fontSize: 11, margin: 0 }}>
-              <ThunderboltOutlined /> 会话 #{currentSessionId.slice(0, 8)}
+              <ThunderboltOutlined /> #{currentSessionId.slice(0, 8)}
             </Tag>
           )}
-          <Tooltip title="清除对话">
-            <Button icon={<ClearOutlined />} size="small" onClick={handleClear} />
-          </Tooltip>
+          {hasMessages && (
+            <Tooltip title="清除对话">
+              <Button icon={<ClearOutlined />} size="small" onClick={handleClear} />
+            </Tooltip>
+          )}
         </Flex>
-      </Header>
+      </div>
 
-      {/* Message list */}
-      <Content
+      {/* ── Message List ── */}
+      <div
         ref={listRef}
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '24px 16px',
+          padding: hasMessages ? '20px 16px' : 0,
           background: token.colorBgLayout,
         }}
       >
         {/* Empty state */}
-        {messages.length === 0 && !isStreaming && !loading && (
-          <Flex vertical align="center" justify="center" style={{ height: '100%', textAlign: 'center', padding: '40px 0' }}>
+        {!hasMessages && !isStreaming && !loading && (
+          <Flex vertical align="center" justify="center" style={{ height: '100%', textAlign: 'center', padding: '0 20px' }}>
             <div
               style={{
-                width: 72,
-                height: 72,
-                borderRadius: 20,
+                width: 64,
+                height: 64,
+                borderRadius: 16,
                 background: 'linear-gradient(135deg, #6366f1, #a855f7)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#fff',
-                fontSize: 32,
-                marginBottom: 20,
+                fontSize: 28,
+                marginBottom: 16,
                 boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
               }}
             >
               <RobotOutlined />
             </div>
-            <Title level={4} style={{ margin: 0 }}>有什么需要帮忙的吗？</Title>
-            <Text type="secondary" style={{ marginTop: 8, maxWidth: 400 }}>
-              我可以帮你搜索 GitHub 仓库、查看项目信息、分析技术趋势
+            <Text strong style={{ fontSize: 18 }}>有什么需要帮忙的吗？</Text>
+            <Text type="secondary" style={{ marginTop: 6, fontSize: 14 }}>
+              搜索 GitHub 仓库、查看项目信息、分析技术趋势
             </Text>
 
-            <Flex wrap="wrap" justify="center" gap={8} style={{ marginTop: 24, maxWidth: 520 }}>
+            {/* Suggested queries */}
+            <Flex wrap="wrap" justify="center" gap={8} style={{ marginTop: 24, maxWidth: 500 }}>
               {SUGGESTIONS.map((s, i) => (
                 <Card
                   key={i}
                   hoverable
                   size="small"
                   onClick={() => handleSuggestion(s.text)}
-                  style={{
-                    width: 240,
-                    borderRadius: 12,
-                    cursor: 'pointer',
-                    border: `1px solid ${token.colorBorderSecondary}`,
-                  }}
-                  styles={{ body: { padding: '10px 14px' } }}
+                  style={{ width: 230, borderRadius: 10, cursor: 'pointer' }}
+                  styles={{ body: { padding: '8px 12px' } }}
                 >
                   <Flex gap={8} align="center">
-                    <span style={{ color: token.colorPrimary, fontSize: 16 }}>{s.icon}</span>
+                    <span style={{ color: token.colorPrimary, fontSize: 15 }}>{s.icon}</span>
                     <Text style={{ fontSize: 13 }}>{s.text}</Text>
                   </Flex>
                 </Card>
@@ -485,54 +545,26 @@ export default function AgentChat() {
           </Flex>
         )}
 
-        {/* Messages */}
-        <div style={{ maxWidth: 860, margin: '0 auto' }}>
-          {messages.map(renderMessage)}
+        {/* Message list */}
+        {hasMessages && (
+          <div style={{ maxWidth: 800, margin: '0 auto' }}>
+            {messages.map(renderMessage)}
 
-          {/* Streaming bubble */}
-          {isStreaming && (
-            <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
-              <AIAvatar />
-              <Flex vertical gap={4} style={{ maxWidth: '72%' }}>
-                <Text type="secondary" style={{ fontSize: 12, paddingLeft: 4 }}>AI Agent</Text>
-                <div
-                  style={{
-                    padding: '10px 16px',
-                    borderRadius: '18px 18px 18px 4px',
-                    background: token.colorBgElevated,
-                    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-                  }}
-                >
-                  <Paragraph style={{ margin: 0, fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                    {streamingText}
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        width: 2,
-                        height: 16,
-                        background: token.colorPrimary,
-                        marginLeft: 2,
-                        verticalAlign: 'middle',
-                        animation: 'blink 1s step-end infinite',
-                      }}
-                    />
-                  </Paragraph>
-                </div>
+            {/* Streaming bubble */}
+            {isStreaming && renderStreamingBubble()}
+
+            {/* Loading skeleton */}
+            {loading && !streamingText && (
+              <Flex gap={12} align="center" style={{ marginBottom: 24, marginLeft: 48 }}>
+                <Spin size="small" />
+                <Text type="secondary" style={{ fontSize: 13 }}>AI 正在分析…</Text>
               </Flex>
-            </Flex>
-          )}
+            )}
+          </div>
+        )}
+      </div>
 
-          {/* Loading skeleton */}
-          {loading && !streamingText && (
-            <Flex gap={12} align="center" style={{ marginBottom: 24, marginLeft: 48 }}>
-              <Spin size="small" />
-              <Text type="secondary" style={{ fontSize: 13 }}>AI 正在分析 …</Text>
-            </Flex>
-          )}
-        </div>
-      </Content>
-
-      {/* Input area */}
+      {/* ── Input Area ── */}
       <div
         style={{
           padding: '12px 16px 16px',
@@ -541,18 +573,18 @@ export default function AgentChat() {
           flexShrink: 0,
         }}
       >
-        <Flex vertical gap={8} style={{ maxWidth: 860, margin: '0 auto' }}>
+        <Flex vertical gap={6} style={{ maxWidth: 800, margin: '0 auto' }}>
           <Flex gap={8}>
             <Input.TextArea
               ref={inputRef as React.Ref<React.ComponentRef<typeof Input.TextArea>>}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={loading ? '等待 AI 回复…' : '输入你想查询的 GitHub 仓库或问题…'}
+              placeholder="输入你想查询的 GitHub 仓库或问题…"
               autoSize={{ minRows: 1, maxRows: 4 }}
               disabled={loading}
               variant="filled"
-              style={{ borderRadius: 12, fontSize: 14 }}
+              style={{ borderRadius: 10, fontSize: 14 }}
             />
             <Button
               type="primary"
@@ -560,24 +592,24 @@ export default function AgentChat() {
               onClick={handleSend}
               loading={loading}
               disabled={!input.trim()}
-              style={{ height: 'auto', borderRadius: 12, paddingInline: 20, minWidth: 80 }}
+              style={{ height: 'auto', borderRadius: 10, paddingInline: 20, minWidth: 76 }}
             >
               发送
             </Button>
           </Flex>
           <Text type="secondary" style={{ fontSize: 11, textAlign: 'center' }}>
-            Enter 发送 · Shift+Enter 换行 · 支持 GitHub 仓库搜索、信息查询、趋势分析
+            Enter 发送 · Shift+Enter 换行 · 基于 Claude Agent SDK + GitHub MCP
           </Text>
         </Flex>
       </div>
 
-      {/* Global keyframe for cursor blink */}
+      {/* Global styles */}
       <style>{`
-        @keyframes blink {
+        @keyframes agent-blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
         }
       `}</style>
-    </Layout>
+    </div>
   )
 }
