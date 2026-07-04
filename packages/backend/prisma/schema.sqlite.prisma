@@ -238,6 +238,44 @@ model DownloadTask {
   @@map("download_task")
 }
 
+// ── Agent 会话 ──
+
+/**
+ * AI Agent 会话表 —— 管理多轮对话。
+ */
+model AgentSession {
+  id           String   @id @default(cuid())
+  type         String   @default("auto") @map("type")
+  sdkSessionId String?  @map("sdk_session_id")
+  status       String   @default("active") @map("status")
+  metadata     String?  @map("metadata")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  messages AgentMessage[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("agent_sessions")
+}
+
+/**
+ * Agent 会话消息表 —— 存储消息历史。
+ */
+model AgentMessage {
+  id        Int      @id @default(autoincrement())
+  sessionId String   @map("session_id")
+  role      String   @map("role")
+  content   String   @map("content")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("agent_messages")
+}
+
 model DownloadTaskItem {
   id             Int    @id @default(autoincrement())
   taskId         Int    @map("task_id")

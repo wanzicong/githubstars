@@ -237,6 +237,47 @@ model DownloadTask {
   @@map("download_task")
 }
 
+// ── Agent 会话 ──
+
+/**
+ * AI Agent 会话表 —— 管理多轮对话。
+ *
+ * session.type: "none" | "auto" | "resume"
+ * sdkSessionId: Claude SDK 内部会话 ID，用于 resume 恢复上下文
+ */
+model AgentSession {
+  id           String   @id @default(cuid())
+  type         String   @default("auto") @map("type") @db.VarChar(20)
+  sdkSessionId String?  @map("sdk_session_id") @db.VarChar(255)
+  status       String   @default("active") @map("status") @db.VarChar(20)
+  metadata     Json?    @map("metadata") @db.Json
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(0)
+
+  messages AgentMessage[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("agent_sessions")
+}
+
+/**
+ * Agent 会话消息表 —— 存储消息历史。
+ */
+model AgentMessage {
+  id        Int      @id @default(autoincrement())
+  sessionId String   @map("session_id")
+  role      String   @map("role") @db.VarChar(20)
+  content   Json     @map("content") @db.Json
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(0)
+
+  session AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("agent_messages")
+}
+
 model DownloadTaskItem {
   id             BigInt    @id @default(autoincrement())
   taskId         BigInt    @map("task_id")
