@@ -110,6 +110,7 @@ export function createRouter(
       }
 
       // 流式调用 Agent
+      let assistantContent = "";
       for await (const { block, raw } of agentClient.streamBlocks({
         prompt: message,
         sessionId: sdkSessionId,
@@ -132,6 +133,7 @@ export function createRouter(
         // 构造 SSE 事件
         const blockType = block.type;
         if (blockType === "text") {
+          assistantContent += block.text ?? "";
           res.write(
             `data: ${JSON.stringify({ type: "assistant_message", data: block.text, sessionId: ourSessionId, timestamp: new Date().toISOString() })}\n\n`,
           );
@@ -156,7 +158,9 @@ export function createRouter(
       // 持久化消息（如果是 auto/resume 模式）
       if (ourSessionId) {
         await sessionManager.saveMessage(ourSessionId, "user", message);
-        // 实际 assistant 消息内容已在流式过程中输出，此处不额外保存
+        if (assistantContent) {
+          await sessionManager.saveMessage(ourSessionId, "assistant", assistantContent);
+        }
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -225,6 +229,9 @@ export function createRouter(
         }
         // 保存消息
         await sessionManager.saveMessage(ourSessionId, "user", message);
+        if (resultText) {
+          await sessionManager.saveMessage(ourSessionId, "assistant", resultText);
+        }
       }
 
       res.json({
@@ -240,6 +247,23 @@ export function createRouter(
         success: false,
         error: errorMsg,
         sessionId: ourSessionId,
+      });
+    }
+  });
+
+  // ── GET /api/agent/sessions — 获取会话列表 ──
+  router.get("/sessions", async (req, res) => {
+    try {
+      const limit = Number.parseInt(req.query.limit as string, 10) || 50;
+      const offset = Number.parseInt(req.query.offset as string, 10) || 0;
+
+      const sessions = await sessionManager.listSessions(limit, offset);
+
+      res.json({ success: true, sessions });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   });

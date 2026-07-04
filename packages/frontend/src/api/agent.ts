@@ -25,6 +25,16 @@ export async function agentQuery(data: AgentRequest): Promise<AgentQueryResponse
   return res.data
 }
 
+/** 获取会话列表 */
+export async function listAgentSessions(limit?: number, offset?: number) {
+  const params = new URLSearchParams()
+  if (limit !== undefined) params.set('limit', String(limit))
+  if (offset !== undefined) params.set('offset', String(offset))
+  const query = params.toString()
+  const res = await api.get(`/api/agent/sessions${query ? `?${query}` : ''}`)
+  return res.data
+}
+
 /** 获取会话历史 */
 export async function getAgentSession(sessionId: string) {
   const res = await api.get(`/api/agent/sessions/${sessionId}`)

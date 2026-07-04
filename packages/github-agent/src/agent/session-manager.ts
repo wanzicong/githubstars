@@ -142,6 +142,67 @@ export class SessionManager {
   }
 
   /**
+   * 获取活跃会话列表（按更新时间倒序）。
+   */
+  async listSessions(
+    limit = 50,
+    offset = 0,
+  ): Promise<
+    Array<{
+      id: string;
+      type: string;
+      status: string;
+      messageCount: number;
+      firstMessage: string | null;
+      lastMessage: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }>
+  > {
+    const sessions = await this.prisma.agentSession.findMany({
+      where: { status: "active" },
+      orderBy: { updatedAt: "desc" },
+      take: limit,
+      skip: offset,
+      include: {
+        _count: { select: { messages: true } },
+        messages: {
+          orderBy: { createdAt: "asc" },
+          take: 1,
+          where: { role: "user" },
+          select: { content: true },
+        },
+      },
+    });
+
+    // 另外获取每条会话的最后一条消息用于预览
+    const lastMessagePromises = sessions.map((s) =>
+      this.prisma.agentMessage.findFirst({
+        where: { sessionId: s.id, role: "user" },
+        orderBy: { createdAt: "desc" },
+        select: { content: true },
+      }),
+    );
+    const lastMessages = await Promise.all(lastMessagePromises);
+
+    return sessions.map((s, index) => {
+      // content 在 MySQL 中是 Json 类型，需要提取字符串
+      const rawFirst = s.messages[0]?.content;
+      const rawLast = lastMessages[index]?.content;
+      return {
+        id: s.id,
+        type: s.type,
+        status: s.status,
+        messageCount: s._count.messages,
+        firstMessage: typeof rawFirst === "string" ? rawFirst : rawFirst !== null && rawFirst !== undefined ? JSON.stringify(rawFirst) : null,
+        lastMessage: typeof rawLast === "string" ? rawLast : rawLast !== null && rawLast !== undefined ? JSON.stringify(rawLast) : null,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+      };
+    });
+  }
+
+  /**
    * 销毁管理器，断开数据库连接。
    */
   async destroy(): Promise<void> {
