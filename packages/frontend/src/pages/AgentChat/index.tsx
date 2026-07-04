@@ -292,7 +292,7 @@ export default function AgentChat() {
       <Flex key={msg.id} gap={12} justify={isUser ? 'end' : 'start'} align="start" style={{ marginBottom: 24 }}>
         {!isUser && <AIAvatar />}
 
-        <Flex vertical gap={4} align={isUser ? 'end' : 'start'} style={{ maxWidth: '76%', minWidth: 0 }}>
+        <Flex vertical gap={4} align={isUser ? 'end' : 'start'} style={{ maxWidth: '85%', minWidth: 0 }}>
           <Flex gap={6} align="center" style={{ paddingLeft: isUser ? 0 : 4, paddingRight: isUser ? 4 : 0 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>{isUser ? '你' : 'AI Agent'}</Text>
             {msg.sessionId && (
@@ -452,14 +452,14 @@ export default function AgentChat() {
               搜索 GitHub 仓库、查看项目信息、分析技术趋势
             </Text>
 
-            <Flex wrap="wrap" justify="center" gap={8} style={{ marginTop: 24, maxWidth: 500 }}>
+            <Flex wrap="wrap" justify="center" gap={8} style={{ marginTop: 24 }}>
               {SUGGESTIONS.map((s, i) => (
                 <Card
                   key={i}
                   hoverable
                   size="small"
                   onClick={() => handleSuggestion(s.text)}
-                  style={{ width: 230, borderRadius: 10, cursor: 'pointer' }}
+                  style={{ width: 260, borderRadius: 10, cursor: 'pointer' }}
                   styles={{ body: { padding: '8px 12px' } }}
                 >
                   <Flex gap={8} align="center">
@@ -474,13 +474,13 @@ export default function AgentChat() {
 
         {/* Messages */}
         {hasMessages && (
-          <div style={{ maxWidth: 800, margin: '0 auto', width: '100%', padding: '20px 24px 0' }}>
+          <div style={{ maxWidth: '80%', margin: '0 auto', width: '100%', padding: '20px 24px 0' }}>
             {messages.map(renderMessage)}
 
             {isStreaming && (
               <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
                 <AIAvatar />
-                <Flex vertical gap={4} style={{ maxWidth: '76%', minWidth: 0 }}>
+                <Flex vertical gap={4} style={{ maxWidth: '85%', minWidth: 0 }}>
                   <Text type="secondary" style={{ fontSize: 12, paddingLeft: 4 }}>AI Agent</Text>
                   <div style={{ padding: '12px 16px', borderRadius: '18px 18px 18px 4px', background: token.colorBgElevated, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
                     <MarkdownRenderer content={streamingText} style={{ fontSize: 14, lineHeight: 1.7, color: token.colorText }} />
@@ -514,7 +514,7 @@ export default function AgentChat() {
           boxShadow: '0 -2px 8px rgba(0,0,0,0.06)',
         }}
       >
-        <Flex vertical gap={6} style={{ maxWidth: 800, margin: '0 auto' }}>
+        <Flex vertical gap={6} style={{ maxWidth: '80%', margin: '0 auto' }}>
           <Flex gap={8}>
             <Input.TextArea
               ref={inputRef as React.Ref<React.ComponentRef<typeof Input.TextArea>>}
