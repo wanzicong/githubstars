@@ -16,6 +16,8 @@ import {
   BugOutlined,
 } from '@ant-design/icons'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer'
+import { useAppStore } from '@/stores'
+import { SIDER_WIDTH, SIDER_COLLAPSED_WIDTH } from '@/layouts/default/constants'
 
 const { Text, Paragraph } = Typography
 
@@ -93,6 +95,7 @@ function UserAvatar({ size = 36 }: { size?: number }) {
 export default function AgentChat() {
   const { token } = theme.useToken()
   const { message: antMsg } = App.useApp()
+  const siderCollapsed = useAppStore((s) => s.siderCollapsed)
 
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -108,7 +111,7 @@ export default function AgentChat() {
   const inputRef = useRef<React.ComponentRef<typeof Input.TextArea>>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  // Auto scroll to bottom
+  // Auto scroll
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
       if (scrollRef.current) {
@@ -230,7 +233,7 @@ export default function AgentChat() {
                 if (event.sessionId) capturedSessionId = event.sessionId
                 break
             }
-          } catch { /* skip malformed events */ }
+          } catch { /* skip */ }
         }
       }
 
@@ -352,31 +355,32 @@ export default function AgentChat() {
   }
 
   const isStreaming = loading && streamingText.length > 0
-
-  // ── Render ──
-
   const hasMessages = messages.length > 0
+
+  // 页面布局：DefaultLayout 的 Content 有 padding: 16px 24px
+  // 用负 margin 抵消 padding，让布局撑满视口宽度
+  // 输入框用 position: fixed 悬浮在视口底部（避开侧边栏和页脚）
+  const siderWidth = siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH
 
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: '100%',
+        height: 'calc(100vh - 56px - 40px - 40px - 32px)', // header(56) + tabs(40) + footer(40) + content padding(16*2)
+        margin: '-16px -24px', // 抵消父 Content 的 padding
         overflow: 'hidden',
         position: 'relative',
         background: token.colorBgContainer,
-        borderRadius: 8,
-        border: `1px solid ${token.colorBorderSecondary}`,
       }}
     >
-      {/* ── HEADER ── */}
+      {/* ── HEADER (固定顶部) ── */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '10px 20px',
+          padding: '10px 24px',
           borderBottom: `1px solid ${token.colorBorderSecondary}`,
           background: `linear-gradient(135deg, ${token.colorPrimaryBg} 0%, ${token.colorBgContainer} 100%)`,
           flexShrink: 0,
@@ -419,26 +423,19 @@ export default function AgentChat() {
         </Flex>
       </div>
 
-      {/* ── SCROLLABLE CONTENT + STICKY INPUT ── */}
-      {/*
-        * 关键布局：消息列表和输入框在同一个滚动容器中。
-        * 消息列表在上，输入框用 position: sticky; bottom: 0 固定在底部。
-        * 这样输入框始终悬浮在视口底部，消息尽可能占用屏幕面积。
-        */}
+      {/* ── 消息列表（可滚动，底部留空给固定输入框） ── */}
       <div
         ref={scrollRef}
         style={{
           flex: 1,
           overflowY: 'auto',
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
           background: token.colorBgLayout,
+          paddingBottom: 80, // 给底部固定输入框留空间
         }}
       >
-        {/* ── Empty State ── */}
+        {/* Empty state */}
         {!hasMessages && !isStreaming && !loading && (
-          <Flex vertical align="center" justify="center" style={{ flex: 1, textAlign: 'center', padding: '0 20px' }}>
+          <Flex vertical align="center" justify="center" style={{ minHeight: 'calc(100vh - 56px - 40px - 40px - 56px - 80px)', textAlign: 'center', padding: '0 20px' }}>
             <div
               style={{
                 width: 64, height: 64, borderRadius: 16,
@@ -475,9 +472,9 @@ export default function AgentChat() {
           </Flex>
         )}
 
-        {/* ── Message List ── */}
+        {/* Messages */}
         {hasMessages && (
-          <div style={{ maxWidth: 800, margin: '0 auto', width: '100%', padding: '20px 16px 0' }}>
+          <div style={{ maxWidth: 800, margin: '0 auto', width: '100%', padding: '20px 24px 0' }}>
             {messages.map(renderMessage)}
 
             {isStreaming && (
@@ -501,51 +498,50 @@ export default function AgentChat() {
             )}
           </div>
         )}
+      </div>
 
-        {/* Spacer so input doesn't overlap last message */}
-        <div style={{ height: 16, flexShrink: 0 }} />
-
-        {/* ── STICKY INPUT (悬浮底部) ── */}
-        <div
-          style={{
-            position: 'sticky',
-            bottom: 0,
-            zIndex: 10,
-            background: token.colorBgContainer,
-            borderTop: `1px solid ${token.colorBorderSecondary}`,
-            padding: '12px 16px 16px',
-            flexShrink: 0,
-          }}
-        >
-          <Flex vertical gap={6} style={{ maxWidth: 800, margin: '0 auto' }}>
-            <Flex gap={8}>
-              <Input.TextArea
-                ref={inputRef as React.Ref<React.ComponentRef<typeof Input.TextArea>>}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="输入你想查询的 GitHub 仓库或问题…"
-                autoSize={{ minRows: 1, maxRows: 4 }}
-                disabled={loading}
-                variant="filled"
-                style={{ borderRadius: 10, fontSize: 14 }}
-              />
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                onClick={handleSend}
-                loading={loading}
-                disabled={!input.trim()}
-                style={{ height: 'auto', borderRadius: 10, paddingInline: 20, minWidth: 76 }}
-              >
-                发送
-              </Button>
-            </Flex>
-            <Text type="secondary" style={{ fontSize: 11, textAlign: 'center' }}>
-              Enter 发送 · Shift+Enter 换行 · 基于 Claude Agent SDK + GitHub MCP
-            </Text>
+      {/* ── INPUT 固定悬浮在视口底部 ── */}
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 40, // 页脚高度
+          left: siderWidth + 24, // 侧边栏 + Content paddingLeft
+          right: 24,  // Content paddingRight
+          zIndex: 1000,
+          background: token.colorBgContainer,
+          borderTop: `1px solid ${token.colorBorderSecondary}`,
+          padding: '12px 16px 16px',
+          boxShadow: '0 -2px 8px rgba(0,0,0,0.06)',
+        }}
+      >
+        <Flex vertical gap={6} style={{ maxWidth: 800, margin: '0 auto' }}>
+          <Flex gap={8}>
+            <Input.TextArea
+              ref={inputRef as React.Ref<React.ComponentRef<typeof Input.TextArea>>}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="输入你想查询的 GitHub 仓库或问题…"
+              autoSize={{ minRows: 1, maxRows: 4 }}
+              disabled={loading}
+              variant="filled"
+              style={{ borderRadius: 10, fontSize: 14 }}
+            />
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              onClick={handleSend}
+              loading={loading}
+              disabled={!input.trim()}
+              style={{ height: 'auto', borderRadius: 10, paddingInline: 20, minWidth: 76 }}
+            >
+              发送
+            </Button>
           </Flex>
-        </div>
+          <Text type="secondary" style={{ fontSize: 11, textAlign: 'center' }}>
+            Enter 发送 · Shift+Enter 换行 · 基于 Claude Agent SDK + GitHub MCP
+          </Text>
+        </Flex>
       </div>
 
       <style>{`
