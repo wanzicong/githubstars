@@ -104,15 +104,15 @@ export default function AgentChat() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   // Refs
-  const listRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<React.ComponentRef<typeof Input.TextArea>>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   // Auto scroll to bottom
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
-      if (listRef.current) {
-        listRef.current.scrollTop = listRef.current.scrollHeight
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
       }
     })
   }, [])
@@ -149,7 +149,6 @@ export default function AgentChat() {
     setInput('')
     setLoading(true)
 
-    // Add user message
     const userMsg: ChatMessage = {
       id: nextMsgId(),
       role: 'user',
@@ -158,11 +157,9 @@ export default function AgentChat() {
     }
     setMessages((prev) => [...prev, userMsg])
 
-    // Abort controller for cancellation
     const abortController = new AbortController()
     abortRef.current = abortController
 
-    // Placeholder for assistant response
     const assistantId = nextMsgId()
     setStreamingText('')
     setMessages((prev) => [
@@ -237,7 +234,6 @@ export default function AgentChat() {
         }
       }
 
-      // Finalize message
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
@@ -247,7 +243,6 @@ export default function AgentChat() {
       )
       setStreamingText('')
 
-      // Update session tracking
       if (capturedSessionId && !currentSessionId) {
         setCurrentSessionId(capturedSessionId)
       }
@@ -285,18 +280,16 @@ export default function AgentChat() {
     inputRef.current?.focus()
   }, [])
 
-  // ── Message Bubble Renderer ──
+  // ── Message Bubble ──
 
   const renderMessage = (msg: ChatMessage) => {
     const isUser = msg.role === 'user'
 
     return (
       <Flex key={msg.id} gap={12} justify={isUser ? 'end' : 'start'} align="start" style={{ marginBottom: 24 }}>
-        {/* Left avatar for AI */}
         {!isUser && <AIAvatar />}
 
         <Flex vertical gap={4} align={isUser ? 'end' : 'start'} style={{ maxWidth: '76%', minWidth: 0 }}>
-          {/* Label row */}
           <Flex gap={6} align="center" style={{ paddingLeft: isUser ? 0 : 4, paddingRight: isUser ? 4 : 0 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>{isUser ? '你' : 'AI Agent'}</Text>
             {msg.sessionId && (
@@ -306,7 +299,6 @@ export default function AgentChat() {
             )}
           </Flex>
 
-          {/* Bubble */}
           <div
             style={{
               padding: isUser ? '8px 16px' : '12px 16px',
@@ -317,7 +309,6 @@ export default function AgentChat() {
               overflow: 'hidden',
             }}
           >
-            {/* Tool calls */}
             {msg.toolCalls && msg.toolCalls.length > 0 && (
               <Flex wrap="wrap" gap={4} style={{ marginBottom: 8 }}>
                 {msg.toolCalls.map((tc, i) => (
@@ -328,34 +319,18 @@ export default function AgentChat() {
               </Flex>
             )}
 
-            {/* Content: user plain text, assistant markdown */}
             {isUser ? (
-              <Paragraph
-                style={{
-                  margin: 0,
-                  color: '#fff',
-                  fontSize: 14,
-                  lineHeight: 1.7,
-                  wordBreak: 'break-word',
-                  whiteSpace: 'pre-wrap',
-                }}
-              >
+              <Paragraph style={{ margin: 0, color: '#fff', fontSize: 14, lineHeight: 1.7, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
                 {msg.content}
               </Paragraph>
             ) : (
               <MarkdownRenderer
                 content={msg.content}
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.7,
-                  color: token.colorText,
-                  wordBreak: 'break-word',
-                }}
+                style={{ fontSize: 14, lineHeight: 1.7, color: token.colorText, wordBreak: 'break-word' }}
               />
             )}
           </div>
 
-          {/* Action buttons */}
           {!isUser && msg.content && !/^> ❌/.test(msg.content) && (
             <Flex gap={4} style={{ paddingLeft: 4, marginTop: 2 }}>
               <Tooltip title="复制">
@@ -371,48 +346,12 @@ export default function AgentChat() {
           )}
         </Flex>
 
-        {/* Right avatar for user */}
         {isUser && <UserAvatar />}
       </Flex>
     )
   }
 
-  // ── Streaming bubble ──
-
   const isStreaming = loading && streamingText.length > 0
-
-  const renderStreamingBubble = () => (
-    <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
-      <AIAvatar />
-      <Flex vertical gap={4} style={{ maxWidth: '76%', minWidth: 0 }}>
-        <Text type="secondary" style={{ fontSize: 12, paddingLeft: 4 }}>AI Agent</Text>
-        <div
-          style={{
-            padding: '12px 16px',
-            borderRadius: '18px 18px 18px 4px',
-            background: token.colorBgElevated,
-            boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-          }}
-        >
-          <MarkdownRenderer
-            content={streamingText}
-            style={{ fontSize: 14, lineHeight: 1.7, color: token.colorText }}
-          />
-          <span
-            style={{
-              display: 'inline-block',
-              width: 2,
-              height: 16,
-              background: token.colorPrimary,
-              marginLeft: 2,
-              verticalAlign: 'middle',
-              animation: 'agent-blink 1s step-end infinite',
-            }}
-          />
-        </div>
-      </Flex>
-    </Flex>
-  )
 
   // ── Render ──
 
@@ -425,12 +364,13 @@ export default function AgentChat() {
         flexDirection: 'column',
         height: '100%',
         overflow: 'hidden',
+        position: 'relative',
         background: token.colorBgContainer,
         borderRadius: 8,
         border: `1px solid ${token.colorBorderSecondary}`,
       }}
     >
-      {/* ── Header ── */}
+      {/* ── HEADER ── */}
       <div
         style={{
           display: 'flex',
@@ -445,15 +385,10 @@ export default function AgentChat() {
         <Flex align="center" gap={10}>
           <div
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
+              width: 32, height: 32, borderRadius: 8,
               background: 'linear-gradient(135deg, #6366f1, #a855f7)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              fontSize: 16,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 16,
             }}
           >
             <GithubOutlined />
@@ -470,12 +405,7 @@ export default function AgentChat() {
         </Flex>
 
         <Flex gap={8} align="center" wrap="wrap">
-          <Segmented
-            options={SESSION_OPTIONS}
-            value={sessionMode}
-            onChange={(val) => handleModeChange(val as SessionMode)}
-            size="small"
-          />
+          <Segmented options={SESSION_OPTIONS} value={sessionMode} onChange={(val) => handleModeChange(val as SessionMode)} size="small" />
           {currentSessionId && (
             <Tag color="blue" style={{ fontSize: 11, margin: 0 }}>
               <ThunderboltOutlined /> #{currentSessionId.slice(0, 8)}
@@ -489,31 +419,32 @@ export default function AgentChat() {
         </Flex>
       </div>
 
-      {/* ── Message List ── */}
+      {/* ── SCROLLABLE CONTENT + STICKY INPUT ── */}
+      {/*
+        * 关键布局：消息列表和输入框在同一个滚动容器中。
+        * 消息列表在上，输入框用 position: sticky; bottom: 0 固定在底部。
+        * 这样输入框始终悬浮在视口底部，消息尽可能占用屏幕面积。
+        */}
       <div
-        ref={listRef}
+        ref={scrollRef}
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: hasMessages ? '20px 16px' : 0,
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
           background: token.colorBgLayout,
         }}
       >
-        {/* Empty state */}
+        {/* ── Empty State ── */}
         {!hasMessages && !isStreaming && !loading && (
-          <Flex vertical align="center" justify="center" style={{ height: '100%', textAlign: 'center', padding: '0 20px' }}>
+          <Flex vertical align="center" justify="center" style={{ flex: 1, textAlign: 'center', padding: '0 20px' }}>
             <div
               style={{
-                width: 64,
-                height: 64,
-                borderRadius: 16,
+                width: 64, height: 64, borderRadius: 16,
                 background: 'linear-gradient(135deg, #6366f1, #a855f7)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fff',
-                fontSize: 28,
-                marginBottom: 16,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 28, marginBottom: 16,
                 boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
               }}
             >
@@ -524,7 +455,6 @@ export default function AgentChat() {
               搜索 GitHub 仓库、查看项目信息、分析技术趋势
             </Text>
 
-            {/* Suggested queries */}
             <Flex wrap="wrap" justify="center" gap={8} style={{ marginTop: 24, maxWidth: 500 }}>
               {SUGGESTIONS.map((s, i) => (
                 <Card
@@ -545,15 +475,24 @@ export default function AgentChat() {
           </Flex>
         )}
 
-        {/* Message list */}
+        {/* ── Message List ── */}
         {hasMessages && (
-          <div style={{ maxWidth: 800, margin: '0 auto' }}>
+          <div style={{ maxWidth: 800, margin: '0 auto', width: '100%', padding: '20px 16px 0' }}>
             {messages.map(renderMessage)}
 
-            {/* Streaming bubble */}
-            {isStreaming && renderStreamingBubble()}
+            {isStreaming && (
+              <Flex gap={12} align="start" style={{ marginBottom: 24 }}>
+                <AIAvatar />
+                <Flex vertical gap={4} style={{ maxWidth: '76%', minWidth: 0 }}>
+                  <Text type="secondary" style={{ fontSize: 12, paddingLeft: 4 }}>AI Agent</Text>
+                  <div style={{ padding: '12px 16px', borderRadius: '18px 18px 18px 4px', background: token.colorBgElevated, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                    <MarkdownRenderer content={streamingText} style={{ fontSize: 14, lineHeight: 1.7, color: token.colorText }} />
+                    <span style={{ display: 'inline-block', width: 2, height: 16, background: token.colorPrimary, marginLeft: 2, verticalAlign: 'middle', animation: 'agent-blink 1s step-end infinite' }} />
+                  </div>
+                </Flex>
+              </Flex>
+            )}
 
-            {/* Loading skeleton */}
             {loading && !streamingText && (
               <Flex gap={12} align="center" style={{ marginBottom: 24, marginLeft: 48 }}>
                 <Spin size="small" />
@@ -562,48 +501,53 @@ export default function AgentChat() {
             )}
           </div>
         )}
-      </div>
 
-      {/* ── Input Area ── */}
-      <div
-        style={{
-          padding: '12px 16px 16px',
-          borderTop: `1px solid ${token.colorBorderSecondary}`,
-          background: token.colorBgContainer,
-          flexShrink: 0,
-        }}
-      >
-        <Flex vertical gap={6} style={{ maxWidth: 800, margin: '0 auto' }}>
-          <Flex gap={8}>
-            <Input.TextArea
-              ref={inputRef as React.Ref<React.ComponentRef<typeof Input.TextArea>>}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="输入你想查询的 GitHub 仓库或问题…"
-              autoSize={{ minRows: 1, maxRows: 4 }}
-              disabled={loading}
-              variant="filled"
-              style={{ borderRadius: 10, fontSize: 14 }}
-            />
-            <Button
-              type="primary"
-              icon={<SendOutlined />}
-              onClick={handleSend}
-              loading={loading}
-              disabled={!input.trim()}
-              style={{ height: 'auto', borderRadius: 10, paddingInline: 20, minWidth: 76 }}
-            >
-              发送
-            </Button>
+        {/* Spacer so input doesn't overlap last message */}
+        <div style={{ height: 16, flexShrink: 0 }} />
+
+        {/* ── STICKY INPUT (悬浮底部) ── */}
+        <div
+          style={{
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 10,
+            background: token.colorBgContainer,
+            borderTop: `1px solid ${token.colorBorderSecondary}`,
+            padding: '12px 16px 16px',
+            flexShrink: 0,
+          }}
+        >
+          <Flex vertical gap={6} style={{ maxWidth: 800, margin: '0 auto' }}>
+            <Flex gap={8}>
+              <Input.TextArea
+                ref={inputRef as React.Ref<React.ComponentRef<typeof Input.TextArea>>}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="输入你想查询的 GitHub 仓库或问题…"
+                autoSize={{ minRows: 1, maxRows: 4 }}
+                disabled={loading}
+                variant="filled"
+                style={{ borderRadius: 10, fontSize: 14 }}
+              />
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                onClick={handleSend}
+                loading={loading}
+                disabled={!input.trim()}
+                style={{ height: 'auto', borderRadius: 10, paddingInline: 20, minWidth: 76 }}
+              >
+                发送
+              </Button>
+            </Flex>
+            <Text type="secondary" style={{ fontSize: 11, textAlign: 'center' }}>
+              Enter 发送 · Shift+Enter 换行 · 基于 Claude Agent SDK + GitHub MCP
+            </Text>
           </Flex>
-          <Text type="secondary" style={{ fontSize: 11, textAlign: 'center' }}>
-            Enter 发送 · Shift+Enter 换行 · 基于 Claude Agent SDK + GitHub MCP
-          </Text>
-        </Flex>
+        </div>
       </div>
 
-      {/* Global styles */}
       <style>{`
         @keyframes agent-blink {
           0%, 100% { opacity: 1; }
