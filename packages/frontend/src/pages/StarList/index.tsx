@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import {
     Card,
@@ -548,7 +548,24 @@ export default function StarList() {
                 return
             }
             params.set('maxCount', String(totalCount))
-            const resp = await fetch(`/export/md?${params.toString()}`)
+
+            const resp = await fetch("/api/export/md", {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                keyword,
+                language: languageStr,
+                sortBy,
+                sortOrder,
+                dateField,
+                startDate: startDateStr,
+                endDate: endDateStr,
+                untranslatedOnly,
+                maxCount: totalCount,
+              }),
+            });
             if (!resp.ok) {
                 const errText = await resp.text().catch(() => '')
                 message.error(`导出失败: HTTP ${resp.status}${errText ? ' — ' + errText.substring(0, 200) : ''}`)
