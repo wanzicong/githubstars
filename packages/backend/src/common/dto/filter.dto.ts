@@ -1,11 +1,11 @@
-import { z } from 'zod';
+﻿import { z } from 'zod';
 import { PaginationSchema } from './pagination.dto';
 
 /**
- * 通用筛选参数 Zod schema
+ * 通用过滤参数 Zod schema
  *
- * 涵盖列表查询中常见的筛选、排序、分页参数，
- * 支持关键词、语言、日期范围、翻译状态等多维度筛选。
+ * 覆盖列表查询中常见的过滤、排序、分页参数，
+ * 支持关键词、语言、日期范围、翻译状态等多维度过滤。
  */
 export const FilterSchema = PaginationSchema.extend({
     keyword: z.string().optional().default(''),
@@ -13,8 +13,8 @@ export const FilterSchema = PaginationSchema.extend({
     sortBy: z.string().optional().default('stars_count'),
     sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
     dateField: z.string().optional().default(''),
-    startDate: z.string().optional().default(''),
-    endDate: z.string().optional().default(''),
+    startDate: z.string().optional().or(z.null()).transform(val => val ?? ''),
+    endDate: z.string().optional().or(z.null()).transform(val => val ?? ''),
     untranslatedOnly: z
         .union([z.boolean(), z.string()])
         .optional()
@@ -24,10 +24,10 @@ export const FilterSchema = PaginationSchema.extend({
 export type FilterDto = z.infer<typeof FilterSchema>;
 
 /**
- * 带 maxCount 的导出筛选参数
+ * 带 maxCount 的导出过滤参数
  */
 export const ExportFilterSchema = FilterSchema.extend({
-    maxCount: z.coerce.number().int().min(1).max(200).optional().default(50),
+    maxCount: z.coerce.number().int().min(1).max(2000).optional().default(50),
 });
 
 export type ExportFilterDto = z.infer<typeof ExportFilterSchema>;
@@ -42,7 +42,7 @@ export const AuthorListSchema = PaginationSchema.extend({
 export type AuthorListDto = z.infer<typeof AuthorListSchema>;
 
 /**
- * 作者仓库列表查询参数
+ * 作者结果列表查询参数
  */
 export const AuthorReposSchema = PaginationSchema.extend({
     ownerName: z.string().min(1, 'ownerName 不能为空'),
