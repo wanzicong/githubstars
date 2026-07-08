@@ -1,12 +1,16 @@
 import { BrowserWindow, ipcMain, dialog, app, shell } from 'electron'
 import { join } from 'node:path'
 import { backendManager } from './backend'
+import type { AgentManager } from './agent'
 import log from 'electron-log'
 
 /**
  * 设置IPC处理器
+ *
+ * @param mainWindow 主窗口
+ * @param agentManager Agent 服务管理器（可能为 null，表示 Agent 未启动）
  */
-export function setupIpcHandlers(mainWindow: BrowserWindow): void {
+export function setupIpcHandlers(mainWindow: BrowserWindow, agentManager: AgentManager | null): void {
   /**
    * 获取应用版本
    */
@@ -142,7 +146,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
       userDataPath: app.getPath('userData'),
       tempPath: app.getPath('temp'),
       downloadsPath: app.getPath('downloads'),
-      backendPort: backendManager.getPort()
+      backendPort: backendManager.getPort(),
+      agentPort: agentManager?.getPort() ?? 0
     }
   })
 
@@ -153,6 +158,16 @@ export function setupIpcHandlers(mainWindow: BrowserWindow): void {
     return {
       running: backendManager.isRunning(),
       port: backendManager.getPort()
+    }
+  })
+
+  /**
+   * 获取 Agent 服务状态
+   */
+  ipcMain.handle('agent:getStatus', () => {
+    return {
+      running: agentManager?.isRunning() ?? false,
+      port: agentManager?.getPort() ?? 0
     }
   })
 

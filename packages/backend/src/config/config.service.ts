@@ -29,6 +29,18 @@ export class ConfigService implements OnModuleInit {
         },
         { key: 'deepseek.model', value: 'deepseek-chat', description: 'DeepSeek 模型名称' },
 
+        // Anthropic/Claude Agent 配置
+        {
+            key: 'anthropic.api_key',
+            value: '',
+            description: 'Anthropic API Key，用于 Agent 对话（桌面端/外置端均需配置）',
+        },
+        {
+            key: 'anthropic.base_url',
+            value: 'https://api.deepseek.com/anthropic',
+            description: 'Anthropic API 基础地址（默认 DeepSeek 代理地址，使用官方 Anthropic 时改为 https://api.anthropic.com）',
+        },
+
         // 克隆代理配置
         {
             key: 'clone.http_proxy',

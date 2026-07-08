@@ -30,6 +30,18 @@ export class AgentClient {
   }
 
   /**
+   * 设置 GitHub Token（运行时注入）。
+   *
+   * 桌面端启动时 GITHUB_TOKEN 环境变量为空，由 index.ts 从数据库
+   * system_config(github.token) 读取后通过此方法注入，供 GitHub MCP 使用。
+   *
+   * @param token GitHub 访问令牌
+   */
+  setGitHubToken(token: string): void {
+    this.config.githubToken = token;
+  }
+
+  /**
    * 流式调用 —— 边迭代边处理 SDK 消息，适合 SSE 实时输出。
    */
   async *stream(

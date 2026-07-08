@@ -68,8 +68,8 @@ githubstars-desktop/
 packages/desktop/out/
 packages/desktop/dist/
 
-# Desktop backend bundle (build artifact)
-packages/desktop/build/backend-bundle/
+# Desktop build bundles (backend / agent 构建产物)
+packages/desktop/build/
 
 # Agent env
 packages/github-agent/.env

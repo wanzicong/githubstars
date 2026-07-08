@@ -1,13 +1,5 @@
 import type { AgentConfig, GitHubMCPConfig } from "../types/index.js";
 
-function getEnv(key: string, defaultValue?: string): string {
-  const value = process.env[key] ?? defaultValue;
-  if (value === undefined) {
-    throw new Error(`环境变量 ${key} 未设置`);
-  }
-  return value;
-}
-
 export function loadConfig(): AgentConfig {
   return {
     port: Number.parseInt(process.env.AGENT_PORT ?? "10003", 10),
@@ -18,7 +10,10 @@ export function loadConfig(): AgentConfig {
       "WebSearch",
       "mcp__github__*",
     ],
-    githubToken: getEnv("GITHUB_TOKEN"),
+    // GITHUB_TOKEN 缺失时降级为空字符串而非抛异常：
+    // 桌面端由 Electron 主进程从数据库 system_config 注入 GitHub Token，
+    // 即使用户未配置，Agent 的 HTTP 服务/会话管理仍应正常启动。
+    githubToken: process.env.GITHUB_TOKEN ?? "",
   };
 }
 

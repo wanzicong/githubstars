@@ -28,6 +28,12 @@ const config = {
       from: 'build/backend-bundle',
       to: 'backend',
       filter: ['**/*']
+    },
+    // Agent 服务（由 bundle-agent.mjs 生成）
+    {
+      from: 'build/agent-bundle',
+      to: 'agent',
+      filter: ['**/*']
     }
   ],
   win: {

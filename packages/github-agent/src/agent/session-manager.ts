@@ -32,6 +32,28 @@ export class SessionManager {
   }
 
   /**
+   * 读取 system_config 表中的单个配置值。
+   *
+   * 与后端共享同一张 system_config 表（Web 端 MySQL / 桌面端 SQLite），
+   * 用于在启动时读取 github.token 等凭据，避免在主进程侧重复读库。
+   *
+   * @param key 配置键，如 "github.token"
+   * @returns 配置值；不存在或查询失败时返回 null
+   */
+  async getConfigValue(key: string): Promise<string | null> {
+    try {
+      const row = await this.prisma.systemConfig.findUnique({
+        where: { configKey: key },
+        select: { configValue: true },
+      });
+      return row?.configValue ?? null;
+    } catch (error) {
+      console.error(`[SessionManager] 读取配置 ${key} 失败:`, error);
+      return null;
+    }
+  }
+
+  /**
    * 创建新会话。
    */
   async createSession(type: SessionType, sdkSessionId?: string): Promise<string> {

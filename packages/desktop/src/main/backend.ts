@@ -35,6 +35,13 @@ export class BackendManager {
     return this.port
   }
 
+  /**
+   * 获取 SQLite 数据库文件路径（供 Agent 服务共享同一个库）。
+   */
+  getDatabaseFilePath(): string {
+    return this.getDatabasePath()
+  }
+
   /** 后端是否正在运行（进程存活 + HTTP 可响应） */
   isRunning(): boolean {
     return this.process !== null && this.process.exitCode === null

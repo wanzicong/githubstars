@@ -104,11 +104,13 @@ writeFileSync(targetSchema, sqliteContent)
 console.log("[bundle-backend] SQLite schema 已写入 prisma/schema.prisma")
 
 // Check if prisma client already generated
-const prismaClientGenerated = existsSync(resolve(BUNDLE_DIR, "node_modules/.prisma/client/index.js"))
+const prismaClientGenerated = existsSync(resolve(BUNDLE_DIR, "node_modules/.prisma/client/query_engine-windows.dll.node"))
 if (prismaClientGenerated) {
-  console.log("[bundle-backend] Prisma Client already generated, skipping...")
+  console.log("[bundle-backend] Prisma Client (SQLite engine) already generated, skipping...")
 } else {
   // 重新生成 Prisma Client (SQLite 驱动)
+  // 注意：不能只判断 index.js 是否存在——npm install 会创建无引擎的 stub，
+  // 必须检查 query engine (.node) 才能确认是真正可用的 Client。
   execSync("npx prisma generate", { cwd: BUNDLE_DIR, stdio: "inherit" })
 }
 

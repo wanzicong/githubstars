@@ -22,6 +22,7 @@ import MarkdownRenderer from '@/components/common/MarkdownRenderer'
 import { useAppStore } from '@/stores'
 import { SIDER_WIDTH, SIDER_COLLAPSED_WIDTH } from '@/layouts/default/constants'
 import { listAgentSessions, getAgentSession, deleteAgentSession } from '@/api/agent'
+import { resolveAgentBaseURL } from '@/api/agentBase'
 
 const { Text, Paragraph } = Typography
 
@@ -364,7 +365,7 @@ export default function AgentChat() {
     toolCalls: ToolCallInfo[]
     capturedSessionId: string | null
   }> => {
-    const response = await fetch('/api/agent/chat', {
+    const response = await fetch(`${await resolveAgentBaseURL()}/api/agent/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,

@@ -13,8 +13,16 @@ export const FilterSchema = PaginationSchema.extend({
     sortBy: z.string().optional().default('stars_count'),
     sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
     dateField: z.string().optional().default(''),
-    startDate: z.string().optional().or(z.null()).transform(val => val ?? ''),
-    endDate: z.string().optional().or(z.null()).transform(val => val ?? ''),
+    startDate: z
+        .string()
+        .optional()
+        .or(z.null())
+        .transform((val) => val ?? ''),
+    endDate: z
+        .string()
+        .optional()
+        .or(z.null())
+        .transform((val) => val ?? ''),
     untranslatedOnly: z
         .union([z.boolean(), z.string()])
         .optional()

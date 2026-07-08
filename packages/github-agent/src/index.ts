@@ -22,8 +22,45 @@ async function main(): Promise<void> {
     console.log("[GitHub Agent] 数据库连接成功");
   } catch (error) {
     console.error("[GitHub Agent] 数据库连接失败:", error);
-    console.error("[GitHub Agent] 请确保 MySQL 服务已启动且 DATABASE_URL 配置正确");
+    console.error("[GitHub Agent] 请确保数据库服务已启动且 DATABASE_URL 配置正确");
     process.exit(1);
+  }
+
+  // Anthropic API Key 优先级：环境变量 > 数据库 system_config(anthropic.api_key)
+  // 桌面端 Electron 子进程不继承终端环境变量，必须从 DB 读取后注入 process.env
+  // Claude Agent SDK 及子进程均通过 process.env 读取凭据
+  if (!process.env.ANTHROPIC_API_KEY) {
+    const dbApiKey = await sessionManager.getConfigValue("anthropic.api_key");
+    if (dbApiKey) {
+      process.env.ANTHROPIC_API_KEY = dbApiKey;
+      console.log("[GitHub Agent] 已从数据库加载 Anthropic API Key");
+    } else {
+      console.log("[GitHub Agent] 未配置 Anthropic API Key，Agent 对话可能失败");
+    }
+  } else {
+    console.log("[GitHub Agent] 使用环境变量中的 Anthropic API Key");
+  }
+
+  // Anthropic Base URL 优先级：环境变量 > 数据库 system_config(anthropic.base_url)
+  if (!process.env.ANTHROPIC_BASE_URL) {
+    const dbBaseUrl = await sessionManager.getConfigValue("anthropic.base_url");
+    if (dbBaseUrl) {
+      process.env.ANTHROPIC_BASE_URL = dbBaseUrl;
+      console.log("[GitHub Agent] 已从数据库加载 Anthropic Base URL:", dbBaseUrl);
+    }
+  }
+
+  // GitHub Token 优先级：环境变量 > 数据库 system_config(github.token)
+  // 桌面端不注入 GITHUB_TOKEN 环境变量，改由此处从共享的 system_config 表读取，
+  // 与后端 github.token 配置保持一致，用户在设置页配置一次即可全局生效。
+  if (!config.githubToken) {
+    const dbToken = await sessionManager.getConfigValue("github.token");
+    if (dbToken) {
+      agentClient.setGitHubToken(dbToken);
+      console.log("[GitHub Agent] 已从数据库加载 GitHub Token");
+    } else {
+      console.log("[GitHub Agent] 未配置 GitHub Token，GitHub MCP 调用可能失败");
+    }
   }
 
   // 启动 HTTP 服务
