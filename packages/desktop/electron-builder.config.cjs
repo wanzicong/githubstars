@@ -1,7 +1,3 @@
-// @ts-check
-const { Configuration } = require('electron-builder')
-
-/** @type {import('electron-builder').Configuration} */
 const config = {
   appId: 'com.githubstars.desktop',
   // monorepo 中 electron 提升到根 node_modules，需显式指定版本
