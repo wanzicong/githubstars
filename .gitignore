@@ -35,6 +35,9 @@ packages/shared/dist/
 # Turbo
 .turbo/
 
+# npm 本地私服认证（含 token，禁止提交）
+.npmrc
+
 # Legacy directories (migrated to packages/)
 /backend-nestjs/
 /frontend/

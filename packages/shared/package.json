@@ -1,7 +1,6 @@
 {
   "name": "@githubstars/shared",
   "version": "0.0.1",
-  "private": true,
   "description": "GitHub Stars 前后端共享类型与工具",
   "type": "module",
   "main": "./src/index.ts",
@@ -10,9 +9,29 @@
     ".": "./src/index.ts",
     "./types": "./src/types/index.ts"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/"
+  },
+  "publishConfig": {
+    "registry": "http://localhost:4873/",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./types": {
+        "types": "./dist/types/index.d.ts",
+        "import": "./dist/types/index.js"
+      }
+    }
   },
   "peerDependencies": {
     "typescript": "^5.0.0"

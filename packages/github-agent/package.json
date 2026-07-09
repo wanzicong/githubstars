@@ -1,14 +1,20 @@
 {
   "name": "@githubstars/github-agent",
   "version": "0.1.0",
-  "private": true,
   "description": "GitHub Stars AI Agent — 基于 Claude Agent SDK 的智能仓库浏览与搜索代理",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "http://localhost:4873/"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -b",
+    "prepublishOnly": "tsc -b",
     "start": "node dist/index.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
