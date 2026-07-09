@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     dev-start.ps1 — 一键启动 前端 / 后端 / Agent 三个开发服务
