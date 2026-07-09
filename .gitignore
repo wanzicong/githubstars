@@ -80,3 +80,14 @@ packages/github-agent/.env
 # Agent build output
 packages/github-agent/dist/
 packages/github-agent/tsconfig.tsbuildinfo
+
+# Agent env backup (含敏感信息，禁止提交)
+packages/github-agent/.env.bak
+
+# Knip 死代码分析输出（临时产物）
+knip-*.json
+knip-*.txt
+analyze-knip.js
+
+# ESLint 输出（临时产物）
+*-eslint.txt

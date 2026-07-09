@@ -12,7 +12,7 @@
     "registry": "http://localhost:4873/"
   },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "node --import tsx --watch src/index.ts",
     "build": "tsc -b",
     "prepublishOnly": "tsc -b",
     "start": "node dist/index.js",

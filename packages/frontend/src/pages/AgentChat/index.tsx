@@ -201,7 +201,7 @@ export default function AgentChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sessionMode, setSessionMode] = useState<SessionMode>('none')
+  const [sessionMode, setSessionMode] = useState<SessionMode>('auto')
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [streamingText, setStreamingText] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
