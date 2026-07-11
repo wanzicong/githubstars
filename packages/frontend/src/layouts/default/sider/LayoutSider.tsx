@@ -1,11 +1,15 @@
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, theme } from 'antd'
 import { StarOutlined } from '@ant-design/icons'
+import type { MenuProps } from 'antd'
 import { useAppStore } from '@/stores'
-import { menuItems } from '@/router/menu'
+import { menuGroups, getSelectedMenuKey, getOpenGroupKeys } from '@/router/menu'
 import { SIDER_WIDTH, SIDER_COLLAPSED_WIDTH } from '../constants'
 
-/** 侧边栏 —— Logo + 菜单 */
+type MenuItem = NonNullable<MenuProps['items']>[number]
+
+/** 侧边栏 -- Logo + 二级可折叠菜单 */
 export default function LayoutSider() {
   const { token } = theme.useToken()
   const navigate = useNavigate()
@@ -13,8 +17,34 @@ export default function LayoutSider() {
   const siderCollapsed = useAppStore((s) => s.siderCollapsed)
   const toggleSiderCollapsed = useAppStore((s) => s.toggleSiderCollapsed)
 
-  const selectedKey = '/' + (location.pathname.split('/').filter(Boolean)[0] ?? '')
+  const selectedKey = getSelectedMenuKey(location.pathname)
   const width = siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH
+
+  // 展开分组状态 -- 路由切换时自动展开包含当前页面的分组
+  const [openKeys, setOpenKeys] = useState<string[]>(() => getOpenGroupKeys(location.pathname))
+
+  useEffect(() => {
+    const autoOpen = getOpenGroupKeys(location.pathname)
+    setOpenKeys((prev) => {
+      const merged = new Set(prev)
+      for (const k of autoOpen) merged.add(k)
+      return Array.from(merged)
+    })
+  }, [location.pathname])
+
+  // 构建二级菜单 items -- 分组 -> SubMenu，子项 -> MenuItem
+  const items: MenuItem[] = menuGroups
+    .slice()
+    .sort((a, b) => a.orderNo - b.orderNo)
+    .map((group) => ({
+      key: group.key,
+      icon: group.icon,
+      label: group.label,
+      children: group.children.map((child) => ({
+        key: child.key,
+        label: child.label,
+      })),
+    }))
 
   return (
     <div
@@ -53,8 +83,10 @@ export default function LayoutSider() {
           <Menu
             mode='inline'
             selectedKeys={[selectedKey]}
+            openKeys={siderCollapsed ? undefined : openKeys}
+            onOpenChange={setOpenKeys}
             inlineCollapsed={siderCollapsed}
-            items={menuItems.map((item) => ({ key: item.key, icon: item.icon, label: item.label }))}
+            items={items}
             onClick={({ key }) => navigate(key)}
             style={{ border: 'none' }}
           />

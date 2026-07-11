@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Layout, theme, Space, Button, Tooltip, Breadcrumb, Menu } from 'antd'
 import { MenuFoldOutlined, MenuUnfoldOutlined, SettingOutlined } from '@ant-design/icons'
 import { useAppStore } from '@/stores'
-import { menuItems, getMenuTitle } from '@/router/menu'
+import { menuItems, getMenuTitle, getSelectedMenuKey } from '@/router/menu'
 
 interface Props { onOpenSetting?: () => void }
 
@@ -33,7 +33,7 @@ export default function LayoutHeader({ onOpenSetting }: Props) {
     </Tooltip>
   )
 
-  const selectedKey = '/' + location.pathname.split('/').filter(Boolean)[0] || '/'
+  const selectedKey = getSelectedMenuKey(location.pathname)
 
   // ── 侧边栏模式 ──
   if (layoutMode === 'side') {

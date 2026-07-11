@@ -56,6 +56,8 @@ export default function DefaultLayout() {
       .ant-menu-inline .ant-menu-item-selected::after { border-right-color: ${token.colorPrimary} !important; }
       .ant-menu-inline .ant-menu-item { border-radius: 8px; margin: 2px 8px; width: auto !important; }
       .ant-menu-inline .ant-menu-item:hover { color: ${token.colorPrimary} !important; background: ${token.colorFillSecondary} !important; }
+      .ant-menu-inline .ant-menu-submenu-title { border-radius: 8px; margin: 2px 8px; width: auto !important; }
+      .ant-menu-inline .ant-menu-submenu-title:hover { color: ${token.colorPrimary} !important; background: ${token.colorFillSecondary} !important; }
       .ant-menu-inline .ant-menu-submenu-selected > .ant-menu-submenu-title { color: ${token.colorPrimary} !important; }
       .ant-menu-vertical .ant-menu-item-selected { background: ${token.colorPrimaryBg} !important; color: ${token.colorPrimary} !important; border-radius: 8px; }
     `}</style>
