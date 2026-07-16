@@ -11,6 +11,7 @@ import {
     CategoryReposSchema,
     CategoryBindSchema,
     CategoryUnbindSchema,
+    CategoryBatchIdsSchema,
 } from './category.dto';
 import type {
     CategoryListDto,
@@ -21,6 +22,7 @@ import type {
     CategoryReposDto,
     CategoryBindDto,
     CategoryUnbindDto,
+    CategoryBatchIdsDto,
 } from './category.dto';
 
 /**
@@ -119,5 +121,21 @@ export class CategoryController {
     @ApiOperation({ summary: '解绑仓库从分类', description: '批量解绑仓库从指定分类' })
     async unbind(@Body(new ZodValidationPipe(CategoryUnbindSchema)) body: CategoryUnbindDto) {
         return this.service.unbindReposFromCategory(body);
+    }
+
+    /**
+     * 获取分类下所有仓库 ID（用于批量克隆/下载）
+     *
+     * 返回当前分类（可选包含子分类）下的所有仓库 ID，已去重。
+     * 前端用于批量克隆/下载操作时获取仓库列表。
+     *
+     * @callers CategoryRepoPanel 批量克隆/下载按钮
+     * @depends CategoryService.getCategoryRepoIds()
+     */
+    @Post('batch-ids')
+    @ApiOperation({ summary: '获取分类仓库 ID', description: '获取分类下所有仓库信息（用于批量克隆/下载），支持递归包含子分类' })
+    async batchIds(@Body(new ZodValidationPipe(CategoryBatchIdsSchema)) body: CategoryBatchIdsDto) {
+        const result = await this.service.getCategoryRepoIds(body.categoryId, body.includeChildren);
+        return { success: true, data: result };
     }
 }

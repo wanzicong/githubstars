@@ -161,3 +161,18 @@ export async function bindCategoryRepos(categoryId: number, repoIds: number[]): 
 export async function unbindCategoryRepos(categoryId: number, repoIds: number[]): Promise<void> {
     await api.post('/api/category/unbind', { categoryId, repoIds })
 }
+
+// ── 批量操作 ──
+
+/** 获取分类下所有仓库信息（用于批量克隆/下载） */
+export async function fetchCategoryBatchIds(
+    categoryId: number,
+    includeChildren: boolean = true,
+): Promise<{ repos: CategoryRepo[]; totalCount: number }> {
+    const { data: wrapped } = await api.post<{
+        success: boolean
+        data: { repos: CategoryRepo[]; totalCount: number }
+    }>('/api/category/batch-ids', { categoryId, includeChildren })
+
+    return wrapped.data
+}

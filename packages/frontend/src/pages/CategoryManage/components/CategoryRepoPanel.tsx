@@ -1,11 +1,14 @@
 import { useState, useCallback } from 'react'
-import { Card, Table, Input, Select, Button, Space, Tag, Avatar, Typography, Tooltip, Empty } from 'antd'
-import { SearchOutlined, PlusOutlined, DeleteOutlined, StarFilled, ReloadOutlined } from '@ant-design/icons'
+import { Card, Table, Input, Select, Button, Space, Tag, Avatar, Typography, Tooltip, Empty, App } from 'antd'
+import { SearchOutlined, PlusOutlined, DeleteOutlined, StarFilled, ReloadOutlined, CloudDownloadOutlined, DownloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import type { CategoryNode, CategoryRepo } from '../../../types'
+import type { CategoryNode, CategoryRepo, GithubRepo } from '../../../types'
 import type { UseCategoryReposReturn } from '../hooks/useCategoryRepos'
 import { LANGUAGE_OPTIONS } from '../../../constants'
+import { fetchCategoryBatchIds } from '../../../api/category'
 import AddRepoModal from './AddRepoModal'
+import CloneWizardModal from '@/components/clone/CloneWizardModal'
+import DownloadWizardModal from '@/components/download/DownloadWizardModal'
 
 const { Text, Link } = Typography
 
@@ -16,8 +19,13 @@ interface CategoryRepoPanelProps {
 }
 
 export default function CategoryRepoPanel({ selectedNode, repoState, onCategoryRefresh }: CategoryRepoPanelProps) {
+    const { message } = App.useApp()
     const [addModalOpen, setAddModalOpen] = useState(false)
     const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([])
+    const [cloneWizardOpen, setCloneWizardOpen] = useState(false)
+    const [downloadWizardOpen, setDownloadWizardOpen] = useState(false)
+    const [batchRepos, setBatchRepos] = useState<CategoryRepo[]>([])
+    const [batchLoading, setBatchLoading] = useState(false)
 
     const { repos, total, loading, currentPage, pageSize, filters, setCurrentPage,
         setPageSize, setFilters, resetFilters, refresh, handleUnbind } = repoState
@@ -32,6 +40,25 @@ export default function CategoryRepoPanel({ selectedNode, repoState, onCategoryR
         await handleUnbind(selectedRowKeys)
         setSelectedRowKeys([])
     }, [selectedRowKeys, handleUnbind])
+
+    const handleBatchAction = useCallback(async (type: 'clone' | 'download') => {
+        if (!selectedNode) return
+        setBatchLoading(true)
+        try {
+            const { repos, totalCount } = await fetchCategoryBatchIds(selectedNode.id, true)
+            if (totalCount === 0) {
+                message.warning('该分类下没有仓库')
+                return
+            }
+            setBatchRepos(repos)
+            if (type === 'clone') setCloneWizardOpen(true)
+            else setDownloadWizardOpen(true)
+        } catch {
+            message.error('获取仓库列表失败')
+        } finally {
+            setBatchLoading(false)
+        }
+    }, [selectedNode, message])
 
     const columns: ColumnsType<CategoryRepo> = [
         {
@@ -79,6 +106,8 @@ export default function CategoryRepoPanel({ selectedNode, repoState, onCategoryR
                 <Text type="secondary">({total})</Text></Space>}
             size="small"
             extra={<Space>
+                <Button icon={<CloudDownloadOutlined />} loading={batchLoading} onClick={() => handleBatchAction('clone')}>批量克隆</Button>
+                <Button icon={<DownloadOutlined />} loading={batchLoading} onClick={() => handleBatchAction('download')}>批量下载</Button>
                 <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddModalOpen(true)}>添加仓库</Button>
                 {selectedRowKeys.length > 0 && (
                     <Button danger icon={<DeleteOutlined />} onClick={handleBatchRemove}>移除 ({selectedRowKeys.length})</Button>
@@ -103,6 +132,22 @@ export default function CategoryRepoPanel({ selectedNode, repoState, onCategoryR
                 locale={{ emptyText: <Empty description="该分类下暂无仓库"><Button type="primary" onClick={() => setAddModalOpen(true)}>添加仓库</Button></Empty> }} />
             <AddRepoModal open={addModalOpen} categoryId={selectedNode.id} categoryName={selectedNode.name}
                 onCancel={() => setAddModalOpen(false)} onSuccess={handleBindSuccess} />
+            {cloneWizardOpen && (
+                <CloneWizardModal
+                    open={cloneWizardOpen}
+                    onClose={() => { setCloneWizardOpen(false); setBatchRepos([]) }}
+                    selectedRepos={batchRepos as GithubRepo[]}
+                    onTaskCreated={() => { setCloneWizardOpen(false); setBatchRepos([]); message.success('克隆任务已创建') }}
+                />
+            )}
+            {downloadWizardOpen && (
+                <DownloadWizardModal
+                    open={downloadWizardOpen}
+                    onClose={() => { setDownloadWizardOpen(false); setBatchRepos([]) }}
+                    selectedRepos={batchRepos as GithubRepo[]}
+                    onTaskCreated={() => { setDownloadWizardOpen(false); setBatchRepos([]); message.success('下载任务已创建') }}
+                />
+            )}
         </Card>
     )
 }

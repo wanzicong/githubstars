@@ -5,7 +5,7 @@
   "description": "GitHub Stars 管理系统 — 星标仓库管理、分类、翻译、统计、AI 分析和批量克隆",
   "private": true,
   "bin": {
-    "githubstars": "./packages/cli/bin/githubstars.js"
+    "githubstars": "./packages/cli/dist/index.js"
   },
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w @githubstars/backend\" \"npm run dev -w @githubstars/frontend\"",
@@ -24,6 +24,7 @@
     "build:backend": "npm run build --workspace=@githubstars/backend",
     "build:frontend": "npm run build --workspace=@githubstars/frontend",
     "build:agent": "npm run build --workspace=@githubstars/github-agent",
+    "build:cli": "npm run build --workspace=@githubstars/cli",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

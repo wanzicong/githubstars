@@ -102,3 +102,18 @@ export const CategoryUnbindSchema = z.object({
 });
 
 export type CategoryUnbindDto = z.infer<typeof CategoryUnbindSchema>;
+
+// ── 批量操作 ──
+
+/**
+ * 获取分类下所有仓库 ID（用于批量克隆/下载）
+ *
+ * @callers CategoryController.getCategoryRepoIds()
+ * @depends CategoryService.getCategoryRepoIds()
+ */
+export const CategoryBatchIdsSchema = z.object({
+    categoryId: z.coerce.number().int().positive('分类ID必须为正整数'),
+    includeChildren: z.boolean().optional().default(true),
+});
+
+export type CategoryBatchIdsDto = z.infer<typeof CategoryBatchIdsSchema>;

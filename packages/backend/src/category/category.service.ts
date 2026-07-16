@@ -362,8 +362,13 @@ export class CategoryService {
     /**
      * 查询某分类下的仓库列表（分页 + 筛选）
      *
+     * 如果是一级分类，会递归包含所有子分类下的仓库。
+     *
      * @param params 查询参数
      * @returns 分页后的仓库列表
+     *
+     * @callers CategoryController.repos()
+     * @depends PrismaService.category / categoryRepoLink / github_repo 表操作
      */
     async getCategoryRepos(params: CategoryReposDto) {
         const { categoryId, page, size, keyword, language, sortBy, sortOrder } = params;
@@ -377,10 +382,15 @@ export class CategoryService {
             throw new NotFoundException(`分类 ID ${categoryId} 不存在`);
         }
 
-        // 筛选条件
+        // 收集当前分类和所有子分类 ID
+        const categoryIds: number[] = [categoryId];
+        const childIds = await this.getChildCategoryIds(categoryId);
+        categoryIds.push(...childIds);
+
+        // 筛选条件 — 包含所有子分类下的仓库
         const where: Record<string, unknown> = {
             categories: {
-                some: { categoryId },
+                some: { categoryId: { in: categoryIds } },
             },
         };
 
@@ -530,5 +540,127 @@ export class CategoryService {
         };
 
         return sortMap[sortBy] || 'starsCount';
+    }
+
+    /**
+     * 获取分类下所有仓库信息（递归包含子分类）
+     *
+     * 用于批量克隆/下载操作，返回去重后的仓库完整信息。
+     *
+     * @param categoryId       分类 ID
+     * @param includeChildren  是否包含子分类（默认 true）
+     * @returns 仓库信息数组（已去重）
+     *
+     * @callers CategoryController.getCategoryRepoIds()
+     * @depends PrismaService.category / categoryRepoLink / github_repo 表操作
+     */
+    async getCategoryRepoIds(categoryId: number, includeChildren: boolean) {
+        this.logger.log(`获取分类仓库 ID: categoryId=${categoryId}, includeChildren=${includeChildren}`);
+
+        // 1. 校验分类存在性
+        const category = await this.prisma.category.findUnique({ where: { id: categoryId } });
+        if (!category) {
+            throw new NotFoundException(`分类 ID ${categoryId} 不存在`);
+        }
+
+        // 2. 收集所有要查询的分类 ID
+        const categoryIds: number[] = [categoryId];
+        if (includeChildren) {
+            const childIds = await this.getChildCategoryIds(categoryId);
+            categoryIds.push(...childIds);
+        }
+
+        // 3. 查询所有关联的仓库 ID（去重）
+        const links = await this.prisma.categoryRepoLink.findMany({
+            where: { categoryId: { in: categoryIds } },
+            select: { repoId: true },
+        });
+        const uniqueRepoIds = [...new Set(links.map((l) => Number(l.repoId)))];
+
+        if (uniqueRepoIds.length === 0) {
+            return { repos: [], totalCount: 0 };
+        }
+
+        // 4. 查询完整的仓库信息
+        const repos = await this.prisma.githubRepo.findMany({
+            where: { id: { in: uniqueRepoIds } },
+            select: {
+                id: true,
+                repoName: true,
+                fullName: true,
+                description: true,
+                language: true,
+                ownerName: true,
+                ownerAvatarUrl: true,
+                htmlUrl: true,
+                starsCount: true,
+                forksCount: true,
+                watchersCount: true,
+                openIssuesCount: true,
+                topics: true,
+                licenseName: true,
+                isFork: true,
+                isArchived: true,
+                repoSize: true,
+                defaultBranch: true,
+                visibility: true,
+                repoCreatedAt: true,
+                repoUpdatedAt: true,
+                repoPushedAt: true,
+                starredAt: true,
+            },
+            orderBy: { starsCount: 'desc' },
+        });
+
+        // 5. 转换为前端格式
+        const formattedRepos = repos.map((repo) => ({
+            id: Number(repo.id),
+            repoName: repo.repoName,
+            fullName: repo.fullName,
+            description: repo.description,
+            language: repo.language,
+            ownerName: repo.ownerName,
+            ownerAvatarUrl: repo.ownerAvatarUrl,
+            htmlUrl: repo.htmlUrl,
+            starsCount: repo.starsCount,
+            forksCount: repo.forksCount,
+            watchersCount: repo.watchersCount,
+            openIssuesCount: repo.openIssuesCount,
+            topics: repo.topics,
+            licenseName: repo.licenseName,
+            isFork: repo.isFork,
+            isArchived: repo.isArchived,
+            repoSize: repo.repoSize,
+            defaultBranch: repo.defaultBranch,
+            visibility: repo.visibility,
+            repoCreatedAt: repo.repoCreatedAt,
+            repoUpdatedAt: repo.repoUpdatedAt,
+            repoPushedAt: repo.repoPushedAt,
+            starredAt: repo.starredAt,
+        }));
+
+        this.logger.log(`分类 ${categoryId} 下共 ${formattedRepos.length} 个仓库`);
+        return { repos: formattedRepos, totalCount: formattedRepos.length };
+    }
+
+    /**
+     * 递归获取所有子分类 ID
+     *
+     * @param parentId 父分类 ID
+     * @returns 所有后代分类 ID 数组
+     */
+    private async getChildCategoryIds(parentId: number): Promise<number[]> {
+        const children = await this.prisma.category.findMany({
+            where: { parentId },
+            select: { id: true },
+        });
+
+        const childIds = children.map((c) => Number(c.id));
+        if (childIds.length === 0) return [];
+
+        // 递归查询子分类的子分类
+        const grandChildIds = await Promise.all(childIds.map((id) => this.getChildCategoryIds(id)));
+
+        return [...childIds, ...grandChildIds.flat()];
     }
 }
