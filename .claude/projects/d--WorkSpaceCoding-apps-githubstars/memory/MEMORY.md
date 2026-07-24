@@ -1,3 +1,0 @@
-- [技能加载流程](skills-usage.md) — 对话开始后先读 INDEX.md，用 Skill 工具加载匹配技能
-- [智能体强制使用](agents-usage-workflow.md) — 根据 agents.md 的 P0 强制表调用对应智能体
-- [MCP 工具使用](mcp-tools-usage.md) — 场景→工具硬绑定，搜索用 Serena、查文档用 Context7 等
