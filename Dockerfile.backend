@@ -31,15 +31,23 @@ RUN turbo prune @githubstars/backend --docker
 FROM node:22-alpine AS installer
 WORKDIR /app
 
+# 配置 npm 使用国内镜像源（无需代理）
+ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+
 # 1️⃣ 先复制裁剪后的 package.json 层（命中缓存的概率高）
 COPY --from=pruner /app/out/json/ .
 COPY --from=pruner /app/out/package-lock.json ./package-lock.json
 
 # 安装依赖（--ignore-scripts 避免因 Prisma schema 未就位而报错）
-RUN npm ci --ignore-scripts
+# 添加 npm 缓存清理和重试，避免 "Exit handler never called" npm bug
+RUN npm cache clean --force && \
+    for i in 1 2 3; do npm ci --ignore-scripts && break || sleep 5; done
 
 # 2️⃣ 再复制完整的裁剪后源码（变化频繁，放后面）
 COPY --from=pruner /app/out/full/ .
+
+# 复制根目录共享配置文件（turbo prune 不会自动包含）
+COPY --from=pruner /app/tsconfig.base.json ./tsconfig.base.json
 
 # 生成 Prisma Client
 RUN npx prisma generate --schema=packages/backend/prisma/schema.prisma
@@ -61,8 +69,24 @@ RUN node -e "require('@prisma/client')" && echo "Prisma Client OK"
 # ─── Stage 4: 运行 ─────────────────────────────────────────
 FROM node:22-alpine AS runner
 
+# 配置 apk 使用国内镜像源（使用 HTTP 避免 SSL 问题）
+RUN sed -i 's|https://dl-cdn.alpinelinux.org|http://mirrors.aliyun.com|g' /etc/apk/repositories
+
 # tini — 轻量级 init，正确处理 PID 1 和信号转发
-RUN apk add --no-cache tini
+# git — Claude Code Agent 需要 git 命令（Bash 工具白名单）
+RUN apk add --no-cache tini git
+
+# 配置 npm 使用国内镜像源（使用 HTTP 避免 SSL 问题）
+ENV NPM_CONFIG_REGISTRY=http://registry.npmmirror.com
+
+# ─── 安装 Claude Code CLI ─────────────────────────────────
+# Agent 功能依赖 @anthropic-ai/claude-agent-sdk，SDK 在运行时需要 Claude Code CLI
+# 通过 npm 全局安装，确保 Agent 对话功能在 Docker 容器中正常工作
+# 使用 --ignore-scripts 避免 postinstall 脚本在构建时执行（可能访问网络）
+RUN npm install -g @anthropic-ai/claude-code --ignore-scripts
+
+# 创建 Claude Code 配置目录（运行时通过 volume 映射宿主机配置）
+RUN mkdir -p /root/.claude
 
 WORKDIR /app
 

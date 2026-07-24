@@ -10,8 +10,16 @@
 #   1. 在项目根目录执行:
 #      docker build -t githubstars-backend -f Dockerfile.backend .
 #      docker build -t githubstars-frontend -f Dockerfile.frontend .
-#   2. 创建 .env.production 并填写配置
+#   2. 复制 .env.production.example 为 .env.production 并填写配置
 #   3. 准备 nginx/ 和 docker/ 目录（本仓库已有）
+# ============================================================
+# 端口规划（与本地开发环境隔离）:
+#   - 前端 Nginx:  10003 (HTTP_PORT 可配置)
+#   - 后端 API:    10004 (BACKEND_DEBUG_PORT 可配置，调试用)
+#   - MySQL:       不暴露到宿主机（仅容器间通信）
+#   - 本地开发前端: 10001 (Vite dev server，不受影响)
+#   - 本地开发后端: 10002 (NestJS dev，不受影响)
+#   - 本地开发MySQL: 3307 (docker-compose.yml，不受影响)
 # ============================================================
 
 name: githubstars
@@ -28,7 +36,7 @@ services:
       - "3306"
 
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-githubstars}
       MYSQL_CHARACTER_SET_SERVER: utf8mb4
       MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
@@ -59,9 +67,15 @@ services:
     container_name: githubstars-backend
     restart: unless-stopped
 
-    # 后端端口（仅在容器间通信，不公开到宿主机）
+    # 后端端口
+    # - expose: 容器间通信（Nginx 通过 Docker 网络访问）
+    # - ports:  可选调试端口映射到宿主机（方便 curl 测试）
     expose:
       - "10002"
+    ports:
+      # 调试端口：宿主机 10004 → 容器 10002
+      # 生产环境可注释掉此行，仅通过 Nginx 访问
+      - "${BACKEND_DEBUG_PORT:-10004}:10002"
 
     depends_on:
       mysql:
@@ -75,7 +89,27 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       PORT: 10002
       NODE_ENV: production
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:10003}
+      # 克隆/下载文件在容器内的基础路径（通过卷挂载到宿主机）
+      CLONE_BASE_DIR: /app/data/clones
+      DOWNLOAD_BASE_DIR: /app/data/downloads
+
+    # 数据卷挂载 — 将宿主机目录映射到容器内
+    # 用户可直接在宿主机访问克隆/下载的文件
+    volumes:
+      # 克隆的 Git 仓库（用户指定 targetDir 时，容器内路径前缀为 /app/data/clones）
+      - ${CLONE_DATA_DIR:-./data/clones}:/app/data/clones
+      # 下载的源码压缩包
+      - ${DOWNLOAD_DATA_DIR:-./data/downloads}:/app/data/downloads
+      # 应用日志
+      - ${LOG_DATA_DIR:-./data/logs}:/app/data/logs
+      # ─── Claude Code 配置映射 ─────────────────────────────
+      # 将宿主机 Claude Code 配置映射到容器内，支持本地修改配置
+      # 容器内路径: /root/.claude/
+      - ${CLAUDE_CONFIG_DIR:-./docker/claude-config}/settings.json:/root/.claude/settings.json
+      - ${CLAUDE_CONFIG_DIR:-./docker/claude-config}/settings.local.json:/root/.claude/settings.local.json
+      - ${CLAUDE_CONFIG_DIR:-./docker/claude-config}/config.json:/root/.claude/config.json
+      - ${CLAUDE_CONFIG_DIR:-./docker/claude-config}/CLAUDE.md:/root/.claude/CLAUDE.md
 
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:10002/api/docs-json"]

@@ -39,7 +39,8 @@
     "packages/frontend",
     "packages/shared",
     "packages/desktop",
-    "packages/cli"
+    "packages/cli",
+    "packages/mcp-server"
   ],
   "devDependencies": {
     "concurrently": "^10.0.3",

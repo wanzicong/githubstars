@@ -91,3 +91,13 @@ analyze-knip.js
 
 # ESLint 输出（临时产物）
 *-eslint.txt
+
+# Docker 数据卷目录（克隆/下载/日志，不提交到 Git）
+data/
+
+# Docker 内 Claude Code 个人配置（环境特定，含 API 代理/模型偏好）
+docker/claude-config/
+
+# CLI 构建产物
+packages/cli/dist/
+packages/cli/tsconfig.tsbuildinfo
