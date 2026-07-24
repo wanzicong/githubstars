@@ -78,6 +78,7 @@ async function bootstrap() {
         .addTag('classify', 'AI 分类')
         .addTag('similar', '相似仓库')
         .addTag('logs', '日志管理')
+        .addTag('agent', 'AI Agent 对话')
         .build();
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup('api/docs', app, document);

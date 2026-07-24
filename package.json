@@ -9,21 +9,17 @@
   },
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w @githubstars/backend\" \"npm run dev -w @githubstars/frontend\"",
-    "dev:all": "concurrently -n backend,frontend,agent -c blue,green,yellow \"npm run dev -w @githubstars/backend\" \"npm run dev -w @githubstars/frontend\" \"npm run dev:agent\"",
     "dev:desktop": "npm run dev --workspace=@githubstars/desktop",
     "dev:desktop:full": "concurrently -n frontend,desktop -c green,yellow \"npm run dev -w @githubstars/frontend\" \"wait-on http://localhost:10001 && npm run dev -w @githubstars/desktop\"",
     "dev:backend": "npm run dev --workspace=@githubstars/backend",
-    "dev:agent": "npm run dev --workspace=@githubstars/github-agent",
     "dev:frontend": "npm run dev --workspace=@githubstars/frontend",
     "stop:frontend": "npx --yes kill-port 10001",
     "stop:backend": "npx --yes kill-port 10002",
-    "stop:agent": "npx --yes kill-port 10003",
-    "stop": "npm run stop:frontend && npm run stop:backend && npm run stop:agent",
+    "stop": "npm run stop:frontend && npm run stop:backend",
     "build": "turbo run build",
     "build:desktop": "npm run build --workspace=@githubstars/desktop",
     "build:backend": "npm run build --workspace=@githubstars/backend",
     "build:frontend": "npm run build --workspace=@githubstars/frontend",
-    "build:agent": "npm run build --workspace=@githubstars/github-agent",
     "build:cli": "npm run build --workspace=@githubstars/cli",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
@@ -39,7 +35,11 @@
     "postinstall": "npm run prisma:generate"
   },
   "workspaces": [
-    "packages/*"
+    "packages/backend",
+    "packages/frontend",
+    "packages/shared",
+    "packages/desktop",
+    "packages/cli"
   ],
   "devDependencies": {
     "concurrently": "^10.0.3",

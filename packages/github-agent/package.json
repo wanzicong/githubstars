@@ -1,7 +1,7 @@
 {
   "name": "@githubstars/github-agent",
   "version": "0.1.0",
-  "description": "GitHub Stars AI Agent — 基于 Claude Agent SDK 的智能仓库浏览与搜索代理",
+  "description": "[已废弃] GitHub Stars AI Agent — 已合并到 packages/backend/src/agent/，不再独立维护",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

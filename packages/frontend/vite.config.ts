@@ -16,11 +16,6 @@ export default defineConfig({
   server: {
     port: 10001,
     proxy: {
-      // Agent API — 转发到 Agent 服务 (:10003，必须在 /api 通用规则之前)
-      '/api/agent': {
-        target: 'http://localhost:10003',
-        changeOrigin: true,
-      },
       // API 请求代理 — 所有 /api/* 都转发到后端
       '/api': {
         target: 'http://localhost:10002',

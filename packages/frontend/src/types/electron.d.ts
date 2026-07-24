@@ -17,7 +17,6 @@ interface ElectronDesktopAPI {
     tempPath: string
     downloadsPath: string
     backendPort: number
-    agentPort: number
   }>
 }
 
@@ -29,10 +28,6 @@ interface ElectronWindowAPI {
 }
 
 interface ElectronBackendAPI {
-  getStatus(): Promise<{ running: boolean; port: number }>
-}
-
-interface ElectronAgentAPI {
   getStatus(): Promise<{ running: boolean; port: number }>
 }
 
@@ -54,7 +49,6 @@ interface ElectronAPI {
   desktop: ElectronDesktopAPI
   window: ElectronWindowAPI
   backend: ElectronBackendAPI
-  agent: ElectronAgentAPI
   update: ElectronUpdateAPI
 }
 

@@ -59,17 +59,11 @@ export interface ElectronAPI {
       tempPath: string
       downloadsPath: string
       backendPort: number
-      agentPort: number
     }>
   }
 
   // 后端服务
   backend: {
-    getStatus: () => Promise<{ running: boolean; port: number }>
-  }
-
-  // Agent 服务
-  agent: {
     getStatus: () => Promise<{ running: boolean; port: number }>
   }
 
@@ -126,10 +120,6 @@ const electronAPI: ElectronAPI = {
 
   backend: {
     getStatus: () => ipcRenderer.invoke('backend:getStatus')
-  },
-
-  agent: {
-    getStatus: () => ipcRenderer.invoke('agent:getStatus')
   },
 
   update: {

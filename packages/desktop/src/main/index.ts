@@ -5,7 +5,6 @@ import { setupIpcHandlers } from './ipc'
 import { createTray } from './tray'
 import { setupAutoUpdater } from './updater'
 import { backendManager } from './backend'
-import { AgentManager } from './agent'
 import log from 'electron-log'
 
 // 配置日志
@@ -21,9 +20,6 @@ if (process.platform === 'win32') {
 }
 
 let mainWindow: BrowserWindow | null = null
-
-/** Agent 服务管理器（在后端就绪后初始化，与后端共享同一个 SQLite 库） */
-let agentManager: AgentManager | null = null
 
 /**
  * 应用准备就绪时初始化
@@ -45,22 +41,13 @@ app.whenReady().then(async () => {
     log.error('[App] 后端服务启动失败，应用将以有限模式运行')
   } else {
     log.info(`[App] 后端服务已启动，端口: ${backendManager.getPort()}`)
-
-    // 后端就绪后启动 Agent 服务（复用后端的 SQLite 库）
-    agentManager = new AgentManager(backendManager.getDatabaseFilePath())
-    const agentStarted = await agentManager.start()
-    if (agentStarted) {
-      log.info(`[App] Agent 服务已启动，端口: ${agentManager.getPort()}`)
-    } else {
-      log.error('[App] Agent 服务启动失败，AI Agent 功能将不可用')
-    }
   }
 
   // 创建主窗口
   mainWindow = createMainWindow()
 
   // 设置IPC处理器
-  setupIpcHandlers(mainWindow, agentManager)
+  setupIpcHandlers(mainWindow)
 
   // 创建系统托盘
   createTray(mainWindow)
@@ -72,7 +59,7 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       mainWindow = createMainWindow()
-      setupIpcHandlers(mainWindow, agentManager)
+      setupIpcHandlers(mainWindow)
       createTray(mainWindow)
       setupAutoUpdater(mainWindow)
     }
@@ -85,11 +72,8 @@ app.whenReady().then(async () => {
  * 应用退出时停止后端
  */
 app.on('before-quit', async () => {
-  log.info('[App] 应用退出，停止后端与 Agent 服务')
-  await Promise.allSettled([
-    backendManager.stop(),
-    agentManager?.stop() ?? Promise.resolve(),
-  ])
+  log.info('[App] 应用退出，停止后端服务')
+  await backendManager.stop()
 })
 
 /**

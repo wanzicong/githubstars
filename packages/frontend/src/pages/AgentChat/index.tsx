@@ -17,12 +17,13 @@ import {
   HistoryOutlined,
   PlusOutlined,
   DeleteOutlined,
+  StopOutlined,
 } from '@ant-design/icons'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer'
+import ThinkingBlock from './ThinkingBlock'
 import { useAppStore } from '@/stores'
 import { SIDER_WIDTH, SIDER_COLLAPSED_WIDTH } from '@/layouts/default/constants'
-import { listAgentSessions, getAgentSession, deleteAgentSession } from '@/api/agent'
-import { resolveAgentBaseURL } from '@/api/agentBase'
+import { listAgentSessions, getAgentSession, deleteAgentSession, getAgentBaseURL } from '@/api/agent'
 
 const { Text, Paragraph } = Typography
 
@@ -38,6 +39,8 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  /** AI 思考过程（thinking 块内容） */
+  thinking?: string
   toolCalls?: ToolCallInfo[]
   sessionId?: string
 }
@@ -158,6 +161,53 @@ async function* readSSEStream(reader: ReadableStreamDefaultReader<Uint8Array>): 
   }
 }
 
+/** 流式累积状态（跨事件共享） */
+interface StreamAccum {
+  fullText: string
+  fullThinking: string
+  toolCallsList: ToolCallInfo[]
+  capturedSessionId: string | null
+}
+
+/** 处理单条 SSE 事件并更新累积状态（模块级函数，避免 fetchAndProcessStream 认知复杂度超标） */
+function processStreamEvent(
+  event: SSEEvent,
+  accum: StreamAccum,
+  onStreamText: (text: string) => void,
+  onStreamThinking: (thinking: string) => void,
+  updateToolCalls: (list: ToolCallInfo[]) => void,
+): void {
+  if (event.sessionId) accum.capturedSessionId = event.sessionId
+
+  if (event.type === 'text_delta') {
+    accum.fullText += event.data as string
+    onStreamText(accum.fullText)
+    return
+  }
+  if (event.type === 'thinking_delta') {
+    accum.fullThinking += event.data as string
+    onStreamThinking(accum.fullThinking)
+    return
+  }
+  if (event.type === 'tool_use') {
+    const td = event.data as { toolName: string; toolInput: unknown }
+    accum.toolCallsList.push({
+      name: td.toolName.replace('mcp__github__', ''),
+      input: JSON.stringify(td.toolInput, null, 2),
+    })
+    updateToolCalls([...accum.toolCallsList])
+    return
+  }
+  if (event.type === 'error') {
+    throw new Error(typeof event.data === 'string' ? event.data : 'Agent 处理失败')
+  }
+}
+
+/** 返回更新了指定消息 toolCalls 的新消息列表（供 setMessages 函数式更新使用） */
+function withToolCalls(messages: ChatMessage[], messageId: string, list: ToolCallInfo[]): ChatMessage[] {
+  return messages.map((m) => (m.id === messageId ? { ...m, toolCalls: list } : m))
+}
+
 // ── Sub-components ──
 
 function AIAvatar({ size = 36 }: { size?: number }) {
@@ -204,6 +254,7 @@ export default function AgentChat() {
   const [sessionMode, setSessionMode] = useState<SessionMode>('auto')
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [streamingText, setStreamingText] = useState('')
+  const [streamingThinking, setStreamingThinking] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   // 对话列表状态
@@ -229,7 +280,7 @@ export default function AgentChat() {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages, streamingText, scrollToBottom])
+  }, [messages, streamingText, streamingThinking, scrollToBottom])
 
   // ── Event Handlers ──
 
@@ -249,7 +300,13 @@ export default function AgentChat() {
     setMessages([])
     setCurrentSessionId(null)
     setStreamingText('')
+    setStreamingThinking('')
     setLoading(false)
+  }, [])
+
+  /** 停止生成（中止当前 SSE 流） */
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort()
   }, [])
 
   // ── 对话列表管理 ──
@@ -308,6 +365,7 @@ export default function AgentChat() {
     setMessages([])
     setCurrentSessionId(null)
     setStreamingText('')
+    setStreamingThinking('')
     setLoading(false)
     setSessionMode('auto')
     setDrawerOpen(false)
@@ -334,9 +392,14 @@ export default function AgentChat() {
     }
   }, [currentSessionId, antMsg])
 
-  // 首次加载获取会话列表
+  // 首次加载获取会话列表（延迟到宏任务，避免 effect 体内同步 setState 触发级联渲染）
   useEffect(() => {
-    fetchSessions()
+    const timer = setTimeout(() => {
+      void fetchSessions()
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+    }
   }, [fetchSessions])
 
   // 当 currentSessionId 变化时（新建/切换会话），刷新会话列表
@@ -353,19 +416,23 @@ export default function AgentChat() {
 
   /**
    * 发送聊天请求并处理 SSE 流式响应。
-   * 独立函数降低 handleSend 的认知复杂度。
+   * 事件协议：thinking_delta（思考增量）/ text_delta（正文逐字增量）/ tool_use / error。
+   * 用户中止时在内部捕获 AbortError，返回已累积的部分内容。
    */
   const fetchAndProcessStream = useCallback(async (
     body: string,
     assistantId: string,
     abortController: AbortController,
     onStreamText: (text: string) => void,
+    onStreamThinking: (thinking: string) => void,
   ): Promise<{
     fullText: string
+    fullThinking: string
     toolCalls: ToolCallInfo[]
     capturedSessionId: string | null
+    aborted: boolean
   }> => {
-    const response = await fetch(`${await resolveAgentBaseURL()}/api/agent/chat`, {
+    const response = await fetch(`${getAgentBaseURL()}/api/agent/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
@@ -377,29 +444,33 @@ export default function AgentChat() {
     const reader = response.body?.getReader()
     if (!reader) throw new Error('无法读取响应流')
 
-    let fullText = ''
-    const toolCallsList: ToolCallInfo[] = []
-    let capturedSessionId: string | null = null
+    const accum: StreamAccum = { fullText: '', fullThinking: '', toolCallsList: [], capturedSessionId: null }
+    let aborted = false
 
-    for await (const event of readSSEStream(reader)) {
-      if (event.sessionId) capturedSessionId = event.sessionId
-
-      if (event.type === 'assistant_message') {
-        fullText += event.data as string
-        onStreamText(fullText)
-      } else if (event.type === 'tool_use') {
-        const td = event.data as { toolName: string; toolInput: unknown }
-        toolCallsList.push({
-          name: td.toolName.replace('mcp__github__', ''),
-          input: JSON.stringify(td.toolInput, null, 2),
-        })
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantId ? { ...m, toolCalls: [...toolCallsList] } : m)),
+    try {
+      for await (const event of readSSEStream(reader)) {
+        processStreamEvent(event, accum, onStreamText, onStreamThinking, (list) =>
+          setMessages((prev) => withToolCalls(prev, assistantId, list)),
         )
+      }
+    } catch (e: unknown) {
+      if (!(e instanceof Error && e.name === 'AbortError')) throw e
+      aborted = true
+    } finally {
+      try {
+        await reader.cancel()
+      } catch {
+        /* 流已关闭时忽略 */
       }
     }
 
-    return { fullText, toolCalls: toolCallsList, capturedSessionId }
+    return {
+      fullText: accum.fullText,
+      fullThinking: accum.fullThinking,
+      toolCalls: accum.toolCallsList,
+      capturedSessionId: accum.capturedSessionId,
+      aborted,
+    }
   }, [])
 
   const handleSend = useCallback(async () => {
@@ -422,6 +493,7 @@ export default function AgentChat() {
 
     const assistantId = nextMsgId()
     setStreamingText('')
+    setStreamingThinking('')
     setMessages((prev) => [
       ...prev,
       { id: assistantId, role: 'assistant', content: '', timestamp: new Date(), toolCalls: [] },
@@ -435,22 +507,31 @@ export default function AgentChat() {
           : { type: sessionMode },
       })
 
-      const { fullText, toolCalls: tCalls, capturedSessionId } = await fetchAndProcessStream(
+      const { fullText, fullThinking, toolCalls: tCalls, capturedSessionId, aborted } = await fetchAndProcessStream(
         body,
         assistantId,
         abortController,
         setStreamingText,
+        setStreamingThinking,
       )
 
       const finalToolCalls = tCalls.length > 0 ? tCalls : undefined
+      const finalContent = aborted && !fullText ? '> ⏹ *已停止生成*' : fullText
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
-            ? { ...m, content: fullText, toolCalls: finalToolCalls, sessionId: capturedSessionId ?? undefined }
+            ? {
+                ...m,
+                content: finalContent,
+                thinking: fullThinking || undefined,
+                toolCalls: finalToolCalls,
+                sessionId: capturedSessionId ?? undefined,
+              }
             : m,
         ),
       )
       setStreamingText('')
+      setStreamingThinking('')
 
       if (capturedSessionId && !currentSessionId) {
         setCurrentSessionId(capturedSessionId)
@@ -468,6 +549,7 @@ export default function AgentChat() {
     } finally {
       setLoading(false)
       setStreamingText('')
+      setStreamingThinking('')
       abortRef.current = null
       inputRef.current?.focus()
     }
@@ -519,6 +601,8 @@ export default function AgentChat() {
               overflow: 'hidden',
             }}
           >
+            {!isUser && msg.thinking && <ThinkingBlock content={msg.thinking} />}
+
             {msg.toolCalls && msg.toolCalls.length > 0 && (
               <Flex wrap="wrap" gap={4} style={{ marginBottom: 8 }}>
                 {msg.toolCalls.map((tc, i) => (
@@ -561,7 +645,7 @@ export default function AgentChat() {
     )
   }
 
-  const isStreaming = loading && streamingText.length > 0
+  const isStreaming = loading && (streamingText.length > 0 || streamingThinking.length > 0)
   const hasMessages = messages.length > 0
 
   // 页面布局：DefaultLayout 的 Content 有 padding: 16px 24px
@@ -702,14 +786,17 @@ export default function AgentChat() {
                 <Flex vertical gap={4} style={{ maxWidth: '85%', minWidth: 0 }}>
                   <Text type="secondary" style={{ fontSize: 12, paddingLeft: 4 }}>AI Agent</Text>
                   <div style={{ padding: '12px 16px', borderRadius: '18px 18px 18px 4px', background: token.colorBgElevated, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                    <MarkdownRenderer content={streamingText} style={{ fontSize: 14, lineHeight: 1.7, color: token.colorText }} />
+                    {streamingThinking && <ThinkingBlock content={streamingThinking} streaming />}
+                    {streamingText && (
+                      <MarkdownRenderer content={streamingText} style={{ fontSize: 14, lineHeight: 1.7, color: token.colorText }} />
+                    )}
                     <span style={{ display: 'inline-block', width: 2, height: 16, background: token.colorPrimary, marginLeft: 2, verticalAlign: 'middle', animation: 'agent-blink 1s step-end infinite' }} />
                   </div>
                 </Flex>
               </Flex>
             )}
 
-            {loading && !streamingText && (
+            {loading && !isStreaming && (
               <Flex gap={12} align="center" style={{ marginBottom: 24, marginLeft: 48 }}>
                 <Spin size="small" />
                 <Text type="secondary" style={{ fontSize: 13 }}>AI 正在分析…</Text>
@@ -742,20 +829,29 @@ export default function AgentChat() {
               onKeyDown={handleKeyDown}
               placeholder="输入你想查询的 GitHub 仓库或问题…"
               autoSize={{ minRows: 1, maxRows: 4 }}
-              disabled={loading}
               variant="filled"
               style={{ borderRadius: 10, fontSize: 14 }}
             />
-            <Button
-              type="primary"
-              icon={<SendOutlined />}
-              onClick={handleSend}
-              loading={loading}
-              disabled={!input.trim()}
-              style={{ height: 'auto', borderRadius: 10, paddingInline: 20, minWidth: 76 }}
-            >
-              发送
-            </Button>
+            {loading ? (
+              <Button
+                danger
+                icon={<StopOutlined />}
+                onClick={handleStop}
+                style={{ height: 'auto', borderRadius: 10, paddingInline: 20, minWidth: 76 }}
+              >
+                停止
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                onClick={handleSend}
+                disabled={!input.trim()}
+                style={{ height: 'auto', borderRadius: 10, paddingInline: 20, minWidth: 76 }}
+              >
+                发送
+              </Button>
+            )}
           </Flex>
           <Text type="secondary" style={{ fontSize: 11, textAlign: 'center' }}>
             Enter 发送 · Shift+Enter 换行 · 基于 Claude Agent SDK + GitHub MCP
@@ -781,7 +877,7 @@ export default function AgentChat() {
         placement="left"
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={340}
+        size={340}
         styles={{
           header: { padding: '12px 16px', borderBottom: `1px solid ${token.colorBorderSecondary}` },
           body: { padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' },

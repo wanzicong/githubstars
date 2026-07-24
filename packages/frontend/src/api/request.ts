@@ -28,6 +28,15 @@ const api = axios.create({
     timeout: 60000, // 60 秒超时（长任务如翻译/克隆应通过轮询获取进度）
 })
 
+/**
+ * Agent 专用 axios 实例（超时 300s，适应长对话）。
+ * baseURL 初始与主实例一致，DesktopInit 设置后通过 setBaseURL 同步。
+ */
+const agentApi = axios.create({
+    baseURL: resolveBaseURL(),
+    timeout: 300000,
+})
+
 // 请求拦截器：附加公共头
 api.interceptors.request.use(
     (config) => {
@@ -85,12 +94,16 @@ api.interceptors.response.use(
 )
 
 export default api
+export { agentApi }
 
 /** 获取当前环境是否为桌面端 */
 export const isDesktopEnvironment = (): boolean => isElectron()
 
-/** 动态设置 API baseURL */
-export const setBaseURL = (url: string) => { api.defaults.baseURL = url }
+/** 动态设置 API baseURL（同步更新所有派生实例） */
+export const setBaseURL = (url: string) => {
+    api.defaults.baseURL = url
+    agentApi.defaults.baseURL = url
+}
 
 /** 获取当前 API baseURL */
 export const getCurrentBaseURL = () => api.defaults.baseURL
