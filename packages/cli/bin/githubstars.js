@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * GitHub Stars CLI — 一键启动/停止前后端与 Agent 服务。
+ * GitHub Stars CLI — 一键启动/停止前后端服务。
  *
  * 用法：
- *   githubstars             启动全部服务（前端 + 后端 + Agent，默认）
- *   githubstars agent        仅启动 Agent
+ *   githubstars             启动全部服务（前端 + 后端，默认）
  *   githubstars backend      仅启动后端
  *   githubstars frontend     仅启动前端
  *   githubstars stop         停止所有服务
@@ -17,9 +16,8 @@
  *
  * @depends
  *   - concurrently — 并行进程管理
- *   - packages/backend — NestJS 后端
+ *   - packages/backend — NestJS 后端（含 AI Agent 模块）
  *   - packages/frontend — Vite 前端
- *   - packages/github-agent — Express AI Agent
  */
 
 import { spawn, execSync } from 'node:child_process';
@@ -65,8 +63,7 @@ function showHelp() {
 GitHub Stars — GitHub 星标仓库管理系统
 
 用法:
-  githubstars              一键启动全部服务（前端 + 后端 + Agent）
-  githubstars agent         仅启动 Agent (:10003)
+  githubstars              一键启动全部服务（前端 + 后端）
   githubstars backend       仅启动后端
   githubstars frontend      仅启动前端
   githubstars stop          停止所有服务
@@ -78,7 +75,6 @@ GitHub Stars — GitHub 星标仓库管理系统
 快速链接:
   前端:    http://localhost:10001
   后端:    http://localhost:10002
-  Agent:   http://localhost:10003
   Swagger: http://localhost:10002/api/docs
 `);
 }
@@ -96,7 +92,6 @@ function showVersion() {
 const PORTS = [
   { name: '前端 (Vite)', port: 10001 },
   { name: '后端 (NestJS)', port: 10002 },
-  { name: 'Agent (AI)', port: 10003 },
 ];
 
 /** 查找占用指定端口的 PID */
@@ -183,7 +178,6 @@ function status() {
   console.log('\n快速链接:');
   console.log('  前端:    http://localhost:10001');
   console.log('  后端:    http://localhost:10002');
-  console.log('  Agent:   http://localhost:10003');
   console.log('  Swagger: http://localhost:10002/api/docs');
 }
 
@@ -232,14 +226,12 @@ async function main() {
     await run('npm run dev -w @githubstars/backend');
   } else if (arg === 'frontend') {
     await run('npm run dev -w @githubstars/frontend');
-  } else if (arg === 'agent') {
-    await run('npm run dev:agent');
   } else if (arg === 'build') {
     await run('npm run build');
     console.log('✅ 构建完成');
   } else {
-    // 默认 / all: 一键启动全部服务（前端 + 后端 + Agent）
-    await run('npm run dev:all');
+    // 默认 / all: 一键启动全部服务（前端 + 后端）
+    await run('npm run dev');
   }
 }
 
