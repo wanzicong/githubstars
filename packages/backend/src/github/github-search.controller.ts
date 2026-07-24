@@ -2,8 +2,8 @@ import { Controller, Post, Logger, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubSearchService } from './github-search.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
-import { GithubSearchSchema } from '../common/dto/filter.dto';
-import type { GithubSearchDto } from '../common/dto/filter.dto';
+import { GithubSearchSchema, GithubStarSchema } from '../common/dto/filter.dto';
+import type { GithubSearchDto, GithubStarDto } from '../common/dto/filter.dto';
 
 /**
  * GitHub 搜索与 Star 操作控制器
@@ -53,13 +53,10 @@ export class GithubSearchController {
     @ApiBody({
         schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] },
     })
-    async star(@Body() body: { owner: string; repo: string }) {
-        if (!body.owner?.trim() || !body.repo?.trim()) {
-            return { success: false, message: 'owner 和 repo 不能为空' };
-        }
+    async star(@Body(new ZodValidationPipe(GithubStarSchema)) body: GithubStarDto) {
         this.logger.log('Star 操作: ' + body.owner + '/' + body.repo);
         const starred = await this.service.starRepo(body.owner, body.repo);
-        return { success: true, starred, message: starred ? '已Star' : 'Star 失败' };
+        return { success: starred, starred, message: starred ? '已 Star' : 'Star 失败' };
     }
 
     /**
@@ -73,13 +70,10 @@ export class GithubSearchController {
     @ApiBody({
         schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] },
     })
-    async unstar(@Body() body: { owner: string; repo: string }) {
-        if (!body.owner?.trim() || !body.repo?.trim()) {
-            return { success: false, message: 'owner 和 repo 不能为空' };
-        }
+    async unstar(@Body(new ZodValidationPipe(GithubStarSchema)) body: GithubStarDto) {
         this.logger.log('取消 Star 操作: ' + body.owner + '/' + body.repo);
-        const ok = await this.service.unstarRepo(body.owner, body.repo);
-        return { success: true, message: ok ? '已取消Star' : '取消 Star 失败' };
+        const unstarred = await this.service.unstarRepo(body.owner, body.repo);
+        return { success: unstarred, unstarred, message: unstarred ? '已取消 Star' : '取消 Star 失败' };
     }
 
     /**
@@ -93,10 +87,7 @@ export class GithubSearchController {
     @ApiBody({
         schema: { type: 'object', properties: { owner: { type: 'string' }, repo: { type: 'string' } }, required: ['owner', 'repo'] },
     })
-    async checkStarred(@Body() body: { owner: string; repo: string }) {
-        if (!body.owner?.trim() || !body.repo?.trim()) {
-            return { success: false, message: 'owner 和 repo 不能为空' };
-        }
+    async checkStarred(@Body(new ZodValidationPipe(GithubStarSchema)) body: GithubStarDto) {
         const starred = await this.service.checkStarred(body.owner, body.repo);
         return { success: true, starred };
     }

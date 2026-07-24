@@ -85,6 +85,25 @@ export const GithubSearchSchema = z.object({
 export type GithubSearchDto = z.infer<typeof GithubSearchSchema>;
 
 /**
+ * GitHub Star 操作参数（owner/repo 格式）
+ */
+export const GithubStarSchema = z.object({
+    owner: z.string().min(1, 'owner 不能为空').max(200),
+    repo: z.string().min(1, 'repo 不能为空').max(200),
+});
+
+export type GithubStarDto = z.infer<typeof GithubStarSchema>;
+
+/**
+ * 按仓库 ID Star 操作参数
+ */
+export const StarByIdSchema = z.object({
+    id: z.coerce.number().int().positive('仓库 ID 必须为正整数'),
+});
+
+export type StarByIdDto = z.infer<typeof StarByIdSchema>;
+
+/**
  * Trending 查询参数
  */
 export const TrendingSchema = z.object({

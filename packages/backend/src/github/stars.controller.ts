@@ -2,16 +2,20 @@ import { Controller, Post, Logger, Body, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubRepoService } from './github-repo.service';
+import { GithubSearchService } from './github-search.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
-import { FilterSchema } from '../common/dto/filter.dto';
-import type { FilterDto } from '../common/dto/filter.dto';
+import { FilterSchema, StarByIdSchema } from '../common/dto/filter.dto';
+import type { FilterDto, StarByIdDto } from '../common/dto/filter.dto';
 
 @ApiTags('stars')
 @Controller('api/stars')
 export class StarsController {
     private readonly logger = new Logger(StarsController.name);
 
-    constructor(private readonly service: GithubRepoService) {}
+    constructor(
+        private readonly service: GithubRepoService,
+        private readonly githubSearch: GithubSearchService,
+    ) {}
 
     /**
      * 获取星标仓库分页列表
@@ -185,5 +189,67 @@ export class StarsController {
         this.logger.log(`批量获取仓库详情: ${body.ids.length} 个`);
         const repos = await this.service.findByIds(body.ids);
         return { success: true, data: repos };
+    }
+
+    /**
+     * 按仓库 ID Star 仓库
+     *
+     * 通过数据库中的仓库 ID 查找 full_name，然后调用 GitHub API 添加 Star。
+     *
+     * @param body { id } 仓库 ID
+     * @returns 操作结果
+     */
+    @Post('star')
+    @ApiOperation({ summary: '按 ID Star 仓库', description: '通过数据库仓库 ID 查找 full_name 后调用 GitHub API 添加 Star' })
+    @ApiBody({ schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } })
+    async starById(@Body(new ZodValidationPipe(StarByIdSchema)) body: StarByIdDto) {
+        this.logger.log(`按 ID Star 仓库: id=${body.id}`);
+        const repo = await this.service.findById(body.id);
+        if (!repo?.fullName) return { success: false, message: '仓库不存在或全名为空' };
+        const [owner, repoName] = repo.fullName.split('/');
+        if (!owner || !repoName) return { success: false, message: '仓库全名格式异常' };
+        const starred = await this.githubSearch.starRepo(owner, repoName);
+        return { success: starred, starred, message: starred ? `已 Star ${repo.fullName}` : 'Star 失败' };
+    }
+
+    /**
+     * 按仓库 ID 取消 Star 仓库
+     *
+     * 通过数据库中的仓库 ID 查找 full_name，然后调用 GitHub API 取消 Star。
+     *
+     * @param body { id } 仓库 ID
+     * @returns 操作结果
+     */
+    @Post('unstar')
+    @ApiOperation({ summary: '按 ID 取消 Star 仓库', description: '通过数据库仓库 ID 查找 full_name 后调用 GitHub API 取消 Star' })
+    @ApiBody({ schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } })
+    async unstarById(@Body(new ZodValidationPipe(StarByIdSchema)) body: StarByIdDto) {
+        this.logger.log(`按 ID 取消 Star 仓库: id=${body.id}`);
+        const repo = await this.service.findById(body.id);
+        if (!repo?.fullName) return { success: false, message: '仓库不存在或全名为空' };
+        const [owner, repoName] = repo.fullName.split('/');
+        if (!owner || !repoName) return { success: false, message: '仓库全名格式异常' };
+        const unstarred = await this.githubSearch.unstarRepo(owner, repoName);
+        return { success: unstarred, unstarred, message: unstarred ? `已取消 Star ${repo.fullName}` : '取消 Star 失败' };
+    }
+
+    /**
+     * 按仓库 ID 检查 Star 状态
+     *
+     * 通过数据库中的仓库 ID 查找 full_name，然后调用 GitHub API 检查是否已 Star。
+     *
+     * @param body { id } 仓库 ID
+     * @returns 星标状态
+     */
+    @Post('starred')
+    @ApiOperation({ summary: '按 ID 检查 Star 状态', description: '通过数据库仓库 ID 查找 full_name 后调用 GitHub API 检查 Star 状态' })
+    @ApiBody({ schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } })
+    async checkStarredById(@Body(new ZodValidationPipe(StarByIdSchema)) body: StarByIdDto) {
+        const repo = await this.service.findById(body.id);
+        if (!repo?.fullName) return { success: false, message: '仓库不存在或全名为空' };
+        const [owner, repoName] = repo.fullName.split('/');
+        if (!owner || !repoName) return { success: false, message: '仓库全名格式异常' };
+        const starred = await this.githubSearch.checkStarred(owner, repoName);
+        return { success: true, starred, fullName: repo.fullName };
     }
 }
