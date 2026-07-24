@@ -1,5 +1,6 @@
 import { Button, Tag, Typography, Avatar, Badge, theme } from 'antd'
-import { GithubOutlined, LinkOutlined, TranslationOutlined, ReloadOutlined, CheckCircleOutlined, BugOutlined } from '@ant-design/icons'
+import { GithubOutlined, LinkOutlined, TranslationOutlined, ReloadOutlined, CheckCircleOutlined, BugOutlined, CodeOutlined } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import type { GithubRepo } from '../../types'
 
 const { Title, Text, Paragraph } = Typography
@@ -23,6 +24,7 @@ export interface RepoHeaderProps {
  */
 export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onRetranslateDesc }: RepoHeaderProps) {
     const { token } = useToken()
+    const navigate = useNavigate()
     const hasTranslation = Boolean(repo.descriptionCn)
     const hasOriginal = Boolean(repo.description)
 
@@ -164,6 +166,14 @@ export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onR
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0, minWidth: 150, paddingLeft: 8 }}>
                 <Button
                     type='primary'
+                    icon={<CodeOutlined />}
+                    onClick={() => navigate(`/code-browser?repo=${encodeURIComponent(repo.fullName)}`)}
+                    block
+                    size='small'
+                >
+                    在线浏览代码
+                </Button>
+                <Button
                     icon={<GithubOutlined />}
                     onClick={() => window.open(repo.htmlUrl, '_blank', 'noopener,noreferrer')}
                     block

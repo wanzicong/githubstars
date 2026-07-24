@@ -1,7 +1,7 @@
 import { memo, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Row, Col, Tag, Typography, Avatar } from 'antd'
-import { StarFilled, ForkOutlined, ReadOutlined } from '@ant-design/icons'
+import { Card, Row, Col, Tag, Typography, Avatar, Tooltip } from 'antd'
+import { StarFilled, ForkOutlined, ReadOutlined, CodeOutlined } from '@ant-design/icons'
 import { formatNumberCn, formatDate, formatSize, daysSince, getStalenessColor } from '@/utils/format'
 import type { GithubRepo } from '@/types'
 
@@ -95,6 +95,16 @@ const RepoRow = memo(function RepoRow({ repo }: RepoRowProps) {
                 </Col>
                 <Col xs={24} sm={12} md={10}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+                        {/* 代码浏览入口 — 阻止冒泡避免触发卡片跳转详情 */}
+                        <Tooltip title='在线浏览代码'>
+                            <CodeOutlined
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    navigate(`/code-browser?repo=${encodeURIComponent(repo.fullName)}`)
+                                }}
+                                style={{ fontSize: 15, color: '#1677ff', cursor: 'pointer' }}
+                            />
+                        </Tooltip>
                         <span>
                             <StarFilled style={{ color: '#faad14', fontSize: 14 }} />{' '}
                             <Text style={{ fontSize: 15 }}>{repo.starsCount}</Text>

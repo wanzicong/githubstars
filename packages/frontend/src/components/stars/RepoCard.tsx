@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Card, Tag, Typography, Avatar, Tooltip, theme } from 'antd'
 import {
     StarFilled, ForkOutlined, ReadOutlined,
-    ClockCircleOutlined,
+    ClockCircleOutlined, CodeOutlined,
 } from '@ant-design/icons'
 import { formatNumberCn, formatDate, formatSize, daysSince, getStalenessColor } from '@/utils/format'
 import type { GithubRepo } from '@/types'
@@ -165,6 +165,17 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
                         {repo.language}
                     </span>
                 )}
+
+                {/* 代码浏览入口 — 阻止冒泡避免触发卡片跳转详情 */}
+                <Tooltip title='在线浏览代码'>
+                    <CodeOutlined
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            navigate(`/code-browser?repo=${encodeURIComponent(repo.fullName)}`)
+                        }}
+                        style={{ fontSize: 13, color: token.colorPrimary, cursor: 'pointer' }}
+                    />
+                </Tooltip>
 
                 {/* Fork */}
                 {repo.forksCount > 0 && (
