@@ -33,11 +33,22 @@ export default function Logs() {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [message])
 
     useEffect(() => {
-        loadFiles()
-    }, [loadFiles])
+        const init = async () => {
+            setLoading(true)
+            try {
+                const data = await logsApi.fetchLogFiles()
+                setFiles(data)
+            } catch {
+                message.error('加载日志文件列表失败')
+            } finally {
+                setLoading(false)
+            }
+        }
+        void init()
+    }, [message])
 
     /** 查看日志内容 */
     const handleView = async (fileName: string) => {

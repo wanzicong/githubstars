@@ -14,6 +14,13 @@ interface CategorySelectPopoverProps {
     children: React.ReactNode
 }
 
+function arraysEqual(a: number[], b: number[]): boolean {
+    if (a.length !== b.length) return false
+    const sa = [...a].sort((x, y) => x - y)
+    const sb = [...b].sort((x, y) => x - y)
+    return sa.every((v, i) => v === sb[i])
+}
+
 function toTreeData(nodes: CategoryNode[]): DataNode[] {
     return nodes.map((n) => ({
         key: n.id,
@@ -28,8 +35,15 @@ export default function CategorySelectPopover({ repoId, categoryIds = [], onChan
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
     const [treeData, setTreeData] = useState<CategoryNode[]>([])
-    const [checkedKeys, setCheckedKeys] = useState<number[]>(categoryIds)
     const [submitting, setSubmitting] = useState(false)
+
+    // 渲染期派生：categoryIds prop 内容变化时同步 checkedKeys
+    const [prevCategoryIds, setPrevCategoryIds] = useState(categoryIds)
+    const [checkedKeys, setCheckedKeys] = useState<number[]>(categoryIds)
+    if (!arraysEqual(prevCategoryIds, categoryIds)) {
+        setPrevCategoryIds(categoryIds)
+        setCheckedKeys(categoryIds)
+    }
 
     const loadTreeData = useCallback(async () => {
         setLoading(true)
@@ -45,11 +59,9 @@ export default function CategorySelectPopover({ repoId, categoryIds = [], onChan
 
     useEffect(() => {
         if (open && treeData.length === 0) {
-            loadTreeData()
+            Promise.resolve().then(() => loadTreeData())
         }
     }, [open, treeData.length, loadTreeData])
-
-    useEffect(() => { setCheckedKeys(categoryIds) }, [categoryIds])
 
     const treeNodes: DataNode[] = useMemo(() => toTreeData(treeData), [treeData])
 

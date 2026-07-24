@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Modal, Input, List, Avatar, Checkbox, Space, Tag, Typography, Empty, Spin, App } from 'antd'
-import { SearchOutlined, StarFilled } from '@ant-design/icons'
+import { SearchOutlined, StarFilled, CheckCircleFilled } from '@ant-design/icons'
 import { fetchStarList, bindCategoryRepos } from '../../../api'
+import { fetchCategoryBatchIds } from '../../../api/category'
 import type { GithubRepo } from '../../../types'
 
 const { Text } = Typography
@@ -30,7 +31,16 @@ export default function AddRepoModal({ open, categoryId, categoryName, onCancel,
     const [total, setTotal] = useState(0)
     const [page, setPage] = useState(1)
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+    const [existingIds, setExistingIds] = useState<Set<number>>(new Set())
     const [submitting, setSubmitting] = useState(false)
+    // 渲染期派生：open 变化时重置表单状态
+    const [prevOpen, setPrevOpen] = useState(open)
+    if (prevOpen !== open) {
+        setPrevOpen(open)
+        setKeyword('')
+        setSelectedIds(new Set())
+        setPage(1)
+    }
 
     const doSearch = useCallback(async (p: number, kw: string) => {
         setLoading(true)
@@ -45,14 +55,27 @@ export default function AddRepoModal({ open, categoryId, categoryName, onCancel,
         }
     }, [message])
 
+    // 打开时：加载第一页 + 当前分类已有的 repoIds（keyword/selectedIds/page 在渲染期派生中重置）
     useEffect(() => {
-        if (open) {
-            setKeyword('')
-            setSelectedIds(new Set())
-            setPage(1)
-            doSearch(1, '')
+        if (!open) return
+        const init = async () => {
+            setLoading(true)
+            try {
+                const [stars, existing] = await Promise.all([
+                    fetchStarList({ page: 1, size: 20, keyword: undefined }),
+                    fetchCategoryBatchIds(categoryId, true),
+                ])
+                setRepos(stars.records)
+                setTotal(stars.total)
+                setExistingIds(new Set(existing.repos.map((r) => r.id)))
+            } catch {
+                message.error('加载失败')
+            } finally {
+                setLoading(false)
+            }
         }
-    }, [open, doSearch])
+        init().catch(() => { /* 错误已在内部 message.error */ })
+    }, [open, categoryId, message])
 
     const toggleSelect = useCallback((id: number) => {
         setSelectedIds((prev) => {
@@ -113,30 +136,47 @@ export default function AddRepoModal({ open, categoryId, categoryName, onCancel,
                             size: 'small',
                             onChange: (p) => { setPage(p); doSearch(p, keyword) },
                         }}
-                        renderItem={(repo) => (
-                            <List.Item key={repo.id} style={{ cursor: 'pointer', padding: '8px 4px' }}
-                                onClick={() => toggleSelect(repo.id)}>
-                                <Checkbox checked={selectedIds.has(repo.id)} style={{ marginRight: 12 }} />
-                                <List.Item.Meta
-                                    avatar={<Avatar src={repo.ownerAvatarUrl} size="small" />}
-                                    title={
-                                        <Space>
-                                            <Text strong>{repo.fullName}</Text>
-                                            {repo.language && <Tag color="blue">{repo.language}</Tag>}
-                                            <Space size={4}>
-                                                <StarFilled style={{ color: '#faad14', fontSize: 12 }} />
-                                                <Text type="secondary" style={{ fontSize: 12 }}>{fmtCompact(repo.starsCount)}</Text>
+                        renderItem={(repo) => {
+                            const isExisting = existingIds.has(repo.id)
+                            return (
+                                <List.Item
+                                    key={repo.id}
+                                    style={{
+                                        cursor: isExisting ? 'not-allowed' : 'pointer',
+                                        padding: '8px 4px',
+                                        opacity: isExisting ? 0.55 : 1,
+                                    }}
+                                    onClick={() => { if (!isExisting) toggleSelect(repo.id) }}
+                                >
+                                    {isExisting ? (
+                                        <CheckCircleFilled style={{ color: '#52c41a', fontSize: 16, marginRight: 12 }} />
+                                    ) : (
+                                        <Checkbox checked={selectedIds.has(repo.id)} style={{ marginRight: 12 }} />
+                                    )}
+                                    <List.Item.Meta
+                                        avatar={<Avatar src={repo.ownerAvatarUrl} size="small" />}
+                                        title={
+                                            <Space>
+                                                <Text strong={!isExisting} delete={false} type={isExisting ? 'secondary' : undefined}>
+                                                    {repo.fullName}
+                                                </Text>
+                                                {repo.language && <Tag color="blue">{repo.language}</Tag>}
+                                                <Space size={4}>
+                                                    <StarFilled style={{ color: '#faad14', fontSize: 12 }} />
+                                                    <Text type="secondary" style={{ fontSize: 12 }}>{fmtCompact(repo.starsCount)}</Text>
+                                                </Space>
+                                                {isExisting && <Text type="success" style={{ fontSize: 12 }}>已添加</Text>}
                                             </Space>
-                                        </Space>
-                                    }
-                                    description={repo.description ? (
-                                        <Text type="secondary" ellipsis style={{ maxWidth: 480, fontSize: 12 }}>
-                                            {repo.description}
-                                        </Text>
-                                    ) : null}
-                                />
-                            </List.Item>
-                        )}
+                                        }
+                                        description={repo.description ? (
+                                            <Text type="secondary" ellipsis style={{ maxWidth: 480, fontSize: 12 }}>
+                                                {repo.description}
+                                            </Text>
+                                        ) : null}
+                                    />
+                                </List.Item>
+                            )
+                        }}
                     />
                 )}
             </Spin>

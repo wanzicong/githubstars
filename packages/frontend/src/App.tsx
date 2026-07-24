@@ -114,6 +114,11 @@ export default function App() {
     borderRadius: 8,
   })
 
+  // 同步主题色到 CSS 变量，供 index.css 中的菜单覆盖样式使用
+  useEffect(() => {
+    document.documentElement.style.setProperty('--primary-color', primaryColor)
+  }, [primaryColor])
+
   return (
     <ConfigProvider locale={zhCN} theme={themeConfig}>
       <AntApp>

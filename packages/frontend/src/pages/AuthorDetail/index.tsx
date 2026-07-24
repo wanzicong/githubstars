@@ -136,7 +136,7 @@ export default function AuthorDetail() {
         } catch {
             message.error('导出失败')
         }
-    }, [ownerName, sortBy, sortOrder])
+    }, [ownerName, sortBy, sortOrder, message])
 
     const { records: repos } = pageResult
 

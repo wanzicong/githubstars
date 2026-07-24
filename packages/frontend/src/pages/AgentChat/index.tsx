@@ -21,8 +21,6 @@ import {
 } from '@ant-design/icons'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer'
 import ThinkingBlock from './ThinkingBlock'
-import { useAppStore } from '@/stores'
-import { SIDER_WIDTH, SIDER_COLLAPSED_WIDTH } from '@/layouts/default/constants'
 import { listAgentSessions, getAgentSession, deleteAgentSession, getAgentBaseURL } from '@/api/agent'
 
 const { Text, Paragraph } = Typography
@@ -245,7 +243,6 @@ function UserAvatar({ size = 36 }: { size?: number }) {
 export default function AgentChat() {
   const { token } = theme.useToken()
   const { message: antMsg } = App.useApp()
-  const siderCollapsed = useAppStore((s) => s.siderCollapsed)
 
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -648,11 +645,6 @@ export default function AgentChat() {
   const isStreaming = loading && (streamingText.length > 0 || streamingThinking.length > 0)
   const hasMessages = messages.length > 0
 
-  // 页面布局：DefaultLayout 的 Content 有 padding: 16px 24px
-  // 用负 margin 抵消 padding，让布局撑满视口宽度
-  // 输入框用 position: fixed 悬浮在视口底部（避开侧边栏和页脚）
-  const siderWidth = siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH
-
   return (
     <div
       style={{
@@ -726,14 +718,13 @@ export default function AgentChat() {
         </Flex>
       </div>
 
-      {/* ── 消息列表（可滚动，底部留空给固定输入框） ── */}
+      {/* ── 消息列表（可滚动） ── */}
       <div
         ref={scrollRef}
         style={{
           flex: 1,
           overflowY: 'auto',
           background: token.colorBgLayout,
-          paddingBottom: 80, // 给底部固定输入框留空间
         }}
       >
         {/* Empty state */}
@@ -806,21 +797,17 @@ export default function AgentChat() {
         )}
       </div>
 
-      {/* ── INPUT 固定悬浮在视口底部 ── */}
+      {/* ── INPUT（文档流内 flex 布局，不再 fixed 悬浮） ── */}
       <div
         style={{
-          position: 'fixed',
-          bottom: 40, // 页脚高度
-          left: siderWidth + 24, // 侧边栏 + Content paddingLeft
-          right: 24,  // Content paddingRight
-          zIndex: 1000,
+          flexShrink: 0,
           background: token.colorBgContainer,
           borderTop: `1px solid ${token.colorBorderSecondary}`,
           padding: '12px 16px 16px',
           boxShadow: '0 -2px 8px rgba(0,0,0,0.06)',
         }}
       >
-        <Flex vertical gap={6} style={{ maxWidth: '80%', margin: '0 auto' }}>
+        <Flex vertical gap={6} style={{ maxWidth: '80%', margin: '0 auto', width: '100%' }}>
           <Flex gap={8}>
             <Input.TextArea
               ref={inputRef as React.Ref<React.ComponentRef<typeof Input.TextArea>>}

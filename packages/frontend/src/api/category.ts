@@ -176,3 +176,12 @@ export async function fetchCategoryBatchIds(
 
     return wrapped.data
 }
+
+/** 查询某仓库所属的分类 ID 列表（用于"管理分类"弹窗初始化勾选） */
+export async function fetchRepoCategories(repoId: number): Promise<number[]> {
+    const { data: wrapped } = await api.post<{ success: boolean; data: number[] }>(
+        '/api/category/repo-categories',
+        { repoId },
+    )
+    return wrapped.data
+}

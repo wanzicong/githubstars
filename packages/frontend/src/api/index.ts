@@ -52,5 +52,6 @@ export {
   fetchCategoryRepos,
   bindCategoryRepos,
   unbindCategoryRepos,
+  fetchRepoCategories,
 } from './category'
 export type { CategoryListParams, CategoryListResult, CategorySaveParams, CategoryReposParams } from './category'

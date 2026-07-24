@@ -40,7 +40,8 @@ export async function listAgentSessions(limit?: number, offset?: number) {
   if (limit !== undefined) params.set('limit', String(limit))
   if (offset !== undefined) params.set('offset', String(offset))
   const query = params.toString()
-  const res = await agentApi.get(`/api/agent/sessions${query ? `?${query}` : ''}`)
+  const suffix = query ? `?${query}` : ''
+  const res = await agentApi.get(`/api/agent/sessions${suffix}`)
   return res.data
 }
 

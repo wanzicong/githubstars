@@ -38,10 +38,18 @@ export function useCategoryRepos(categoryId: number | null): UseCategoryReposRet
     const [repos, setRepos] = useState<CategoryRepo[]>([])
     const [total, setTotal] = useState(0)
     const [loading, setLoading] = useState(false)
-    const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(CATEGORY_REPO_PAGE_SIZE)
-    const [filters, setFiltersState] = useState<RepoFilters>(INITIAL_FILTERS)
     const abortRef = useRef<AbortController | null>(null)
+
+    // 渲染期派生：categoryId 变化时重置分页和筛选
+    const [prevCategoryId, setPrevCategoryId] = useState(categoryId)
+    const [currentPage, setCurrentPage] = useState(1)
+    const [filters, setFiltersState] = useState<RepoFilters>(INITIAL_FILTERS)
+    if (prevCategoryId !== categoryId) {
+        setPrevCategoryId(categoryId)
+        setCurrentPage(1)
+        setFiltersState(INITIAL_FILTERS)
+    }
 
     const refresh = useCallback(async () => {
         if (!categoryId) {
@@ -74,14 +82,9 @@ export function useCategoryRepos(categoryId: number | null): UseCategoryReposRet
     }, [categoryId, currentPage, pageSize, filters, message])
 
     useEffect(() => {
-        refresh()
+        Promise.resolve().then(() => refresh().catch(() => { /* 错误已在内部 message.error */ }))
         return () => abortRef.current?.abort()
     }, [refresh])
-
-    useEffect(() => {
-        setCurrentPage(1)
-        setFiltersState(INITIAL_FILTERS)
-    }, [categoryId])
 
     const setFilters = useCallback((partial: Partial<RepoFilters>) => {
         setFiltersState((prev) => ({ ...prev, ...partial }))

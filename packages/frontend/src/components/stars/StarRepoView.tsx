@@ -1,7 +1,8 @@
-import { Card, Row, Col, Spin, Empty, Button, Pagination, Checkbox } from 'antd'
+import { Card, Row, Col, Empty, Button, Pagination, Checkbox } from 'antd'
 import type { GithubRepo, PageResult } from '../../types'
 import RepoCard from './RepoCard'
 import RepoRow from './RepoRow'
+import { SkeletonCard } from '../common/Skeletons'
 import { PAGE_SIZE_OPTIONS_SMALL } from '../../constants'
 
 export interface StarRepoViewProps {
@@ -73,102 +74,103 @@ export default function StarRepoView({
     }
     return (
         <>
-            <Spin spinning={loading}>
-                {selectionEnabled && repos.length > 0 && (
-                    <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <Checkbox checked={allSelected} onChange={toggleSelectAll}>
-                            全选当页
-                        </Checkbox>
-                        {onSelectAllPages && (
-                            <Button
-                                size="small"
-                                type="link"
-                                loading={loadingAllIds}
-                                onClick={allPagesSelected ? onDeselectAll : onSelectAllPages}
-                            >
-                                {allPagesSelected ? '取消全选' : `全选所有 (${pageResult.total})`}
-                            </Button>
-                        )}
-                        {selectedIds && selectedIds.length > 0 && (
-                            <span style={{ color: '#1677ff', fontSize: 13 }}>已选 {selectedIds.length} 个</span>
-                        )}
-                    </div>
-                )}
-                {(() => {
-                    if (repos.length > 0) {
-                        if (viewMode === 'list') {
-                            return (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                    {repos.map((repo) => (
-                                        <div key={repo.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                                            {selectionEnabled && (
-                                                <Checkbox
-                                                    checked={selectedIds?.includes(repo.id)}
-                                                    onChange={() => toggleSelect(repo.id)}
-                                                    style={{ marginTop: 12 }}
-                                                />
-                                            )}
-                                            <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
-                                                <RepoRow repo={repo} />
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )
-                        }
+            {selectionEnabled && repos.length > 0 && (
+                <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <Checkbox checked={allSelected} onChange={toggleSelectAll}>
+                        全选当页
+                    </Checkbox>
+                    {onSelectAllPages && (
+                        <Button
+                            size="small"
+                            type="link"
+                            loading={loadingAllIds}
+                            onClick={allPagesSelected ? onDeselectAll : onSelectAllPages}
+                        >
+                            {allPagesSelected ? '取消全选' : `全选所有 (${pageResult.total})`}
+                        </Button>
+                    )}
+                    {selectedIds && selectedIds.length > 0 && (
+                        <span style={{ color: '#1677ff', fontSize: 13 }}>已选 {selectedIds.length} 个</span>
+                    )}
+                </div>
+            )}
+            {(() => {
+                // 加载中：骨架屏（替代 Spin，更接近最终布局，减少布局跳动）
+                if (loading) {
+                    return <SkeletonCard count={viewMode === 'grid' ? 8 : 3} />
+                }
+                if (repos.length > 0) {
+                    if (viewMode === 'list') {
                         return (
-                            <div style={{ overflow: 'hidden', width: '100%' }}>
-                                <Row gutter={[16, 16]}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                                 {repos.map((repo) => (
-                                    <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
-                                        <div style={{ position: 'relative', overflow: 'hidden', width: '100%' }}>
-                                            {selectionEnabled && (
-                                                <Checkbox
-                                                    checked={selectedIds?.includes(repo.id)}
-                                                    onChange={() => toggleSelect(repo.id)}
-                                                    style={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
-                                                />
-                                            )}
-                                            <RepoCard repo={repo} />
+                                    <div key={repo.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                        {selectionEnabled && (
+                                            <Checkbox
+                                                checked={selectedIds?.includes(repo.id)}
+                                                onChange={() => toggleSelect(repo.id)}
+                                                style={{ marginTop: 12 }}
+                                            />
+                                        )}
+                                        <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
+                                            <RepoRow repo={repo} />
                                         </div>
-                                    </Col>
+                                    </div>
                                 ))}
-                            </Row>
                             </div>
                         )
                     }
-                    let emptyDescription: string
-                    if (loading) emptyDescription = '加载中...'
-                    else if (pageResult.total === 0) emptyDescription = '暂无仓库数据，请先同步'
-                    else emptyDescription = '筛选无结果，请尝试调整筛选条件'
                     return (
-                        <Card>
-                            <Empty description={emptyDescription}>
-                                {hasActiveFilters && (
-                                    <Button type='primary' onClick={onClearFilters}>
-                                        清除所有筛选
-                                    </Button>
-                                )}
-                            </Empty>
-                        </Card>
+                        <div style={{ overflow: 'hidden', width: '100%' }}>
+                            <Row gutter={[16, 16]}>
+                            {repos.map((repo) => (
+                                <Col key={repo.id} xs={24} sm={12} md={8} lg={6}>
+                                    <div style={{ position: 'relative', overflow: 'hidden', width: '100%' }}>
+                                        {selectionEnabled && (
+                                            <Checkbox
+                                                checked={selectedIds?.includes(repo.id)}
+                                                onChange={() => toggleSelect(repo.id)}
+                                                style={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
+                                            />
+                                        )}
+                                        <RepoCard repo={repo} />
+                                    </div>
+                                </Col>
+                            ))}
+                        </Row>
+                        </div>
                     )
-                })()}
+                }
+                let emptyDescription: string
+                if (pageResult.total === 0) emptyDescription = '暂无仓库数据，请先同步'
+                else emptyDescription = '筛选无结果，请尝试调整筛选条件'
+                return (
+                    <Card>
+                        <Empty description={emptyDescription}>
+                            {hasActiveFilters && (
+                                <Button type='primary' onClick={onClearFilters}>
+                                    清除所有筛选
+                                </Button>
+                            )}
+                        </Empty>
+                    </Card>
+                )
+            })()}
 
-                {pageResult.total > pageSize && (
-                    <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
-                        <Pagination
-                            current={currentPage}
-                            pageSize={pageSize}
-                            total={pageResult.total}
-                            showSizeChanger
-                            pageSizeOptions={PAGE_SIZE_OPTIONS_SMALL.map(String)}
-                            showQuickJumper
-                            showTotal={(total) => `共 ${total} 条 / ${pageResult.pages} 页`}
-                            onChange={onPageChange}
-                        />
-                    </div>
-                )}
-            </Spin>
+            {pageResult.total > pageSize && (
+                <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
+                    <Pagination
+                        current={currentPage}
+                        pageSize={pageSize}
+                        total={pageResult.total}
+                        showSizeChanger
+                        pageSizeOptions={PAGE_SIZE_OPTIONS_SMALL.map(String)}
+                        showQuickJumper
+                        showTotal={(total) => `共 ${total} 条 / ${pageResult.pages} 页`}
+                        onChange={onPageChange}
+                    />
+                </div>
+            )}
         </>
     )
 }

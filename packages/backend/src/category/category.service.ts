@@ -644,6 +644,20 @@ export class CategoryService {
     }
 
     /**
+     * 查询某仓库所属的分类 ID 列表
+     *
+     * @callers 前端"管理分类"弹窗初始化勾选状态
+     */
+    async getRepoCategoryIds(repoId: number): Promise<number[]> {
+        this.logger.log(`查询仓库所属分类: repoId=${repoId}`);
+        const links = await this.prisma.categoryRepoLink.findMany({
+            where: { repoId },
+            select: { categoryId: true },
+        });
+        return links.map((l) => Number(l.categoryId));
+    }
+
+    /**
      * 递归获取所有子分类 ID
      *
      * @param parentId 父分类 ID

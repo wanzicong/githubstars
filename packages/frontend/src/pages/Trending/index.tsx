@@ -73,23 +73,22 @@ export default function Trending() {
         }
     }, [])
 
-    const load = useCallback(async (s: string, lang: string) => {
-        setLoading(true)
-        try {
-            const data = await fetchTrending(s, lang || undefined, 20)
-            setRepos(data.repos || [])
-            setTotal(data.total || 0)
-            setDateRange(data.dateRange || '')
-        } catch {
-            message.error('加载趋势数据失败')
-        } finally {
-            setLoading(false)
-        }
-    }, [])
-
     useEffect(() => {
-        load(since, language)
-    }, [since, language, load])
+        const doLoad = async () => {
+            setLoading(true)
+            try {
+                const data = await fetchTrending(since, language || undefined, 20)
+                setRepos(data.repos || [])
+                setTotal(data.total || 0)
+                setDateRange(data.dateRange || '')
+            } catch {
+                message.error('加载趋势数据失败')
+            } finally {
+                setLoading(false)
+            }
+        }
+        void doLoad()
+    }, [since, language, message])
 
     /** 触发翻译未缓存的描述 */
     const handleTranslate = useCallback(async () => {
@@ -114,7 +113,7 @@ export default function Trending() {
         } finally {
             setTranslating(false)
         }
-    }, [since, language, load])
+    }, [since, language, message])
 
     /** 打开下载配置弹窗 */
     const handleOpenDownloadConfig = useCallback(async () => {

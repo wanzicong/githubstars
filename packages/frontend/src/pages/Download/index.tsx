@@ -77,11 +77,21 @@ export default function Download() {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [message])
 
     useEffect(() => {
-        loadTasks()
-    }, [loadTasks])
+        const init = async () => {
+            try {
+                const res = await getRecentDownloadTasks()
+                if (res.success) setTasks(res.tasks)
+            } catch {
+                message.error('加载任务列表失败')
+            } finally {
+                setLoading(false)
+            }
+        }
+        void init()
+    }, [message])
 
     // 任务列表自动轮询
     const listPolling = usePolling(async () => {
@@ -104,10 +114,10 @@ export default function Download() {
     }, [tasks, listPolling])
 
     // 轮询活跃任务进度
-    const polling = usePolling(async () => {
+    const polling = usePolling(async ({ stop }) => {
         const taskId = activeTaskIdRef.current
         if (!taskId) {
-            polling.stop()
+            stop()
             return
         }
         try {
@@ -115,7 +125,7 @@ export default function Download() {
             if (res.success) {
                 setProgress(res)
                 if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
-                    polling.stop()
+                    stop()
                     loadTasks()
                 }
             }
@@ -148,7 +158,7 @@ export default function Download() {
         } catch {
             message.error('重试失败')
         }
-    }, [activeTaskId, polling])
+    }, [activeTaskId, polling, message])
 
     const handleRetryItem = useCallback(
         async (fullName: string) => {
@@ -166,7 +176,7 @@ export default function Download() {
                 message.error('重试失败')
             }
         },
-        [activeTaskId],
+        [activeTaskId, message],
     )
 
     const handleDeleteTask = useCallback(async () => {
@@ -178,14 +188,14 @@ export default function Download() {
                 polling.stop()
                 setProgressOpen(false)
                 setActiveTaskId(null)
-                loadTasks()
+                void loadTasks()
             } else {
                 message.error(result.message || '删除失败')
             }
         } catch {
             message.error('删除失败')
         }
-    }, [activeTaskId, polling, loadTasks])
+    }, [activeTaskId, polling, loadTasks, message])
 
     const handleExtract = useCallback(
         async (fullName: string) => {
@@ -222,11 +232,11 @@ export default function Download() {
     )
 
     // 解压进度轮询（支持同时跟踪多个任务的解压进度）
-    const extractPolling = usePolling(async () => {
+    const extractPolling = usePolling(async ({ stop }) => {
         const tasks = extractingTasksRef.current
         const taskIds = Object.keys(tasks)
         if (taskIds.length === 0) {
-            extractPolling.stop()
+            stop()
             return
         }
 
@@ -239,7 +249,7 @@ export default function Download() {
                 if (res.status === 'completed') {
                     // 从进行中移除
                     delete extractingTasksRef.current[taskId]
-                    loadTasks()
+                    void loadTasks()
                     if ((res.failed ?? 0) > 0 && res.details) {
                         setExtractResult({
                             visible: true,

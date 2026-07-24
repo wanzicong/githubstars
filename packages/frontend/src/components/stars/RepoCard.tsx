@@ -57,6 +57,7 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
     return (
         <Card
             hoverable
+            className='hoverable-card'
             style={{
                 height: '100%',
                 width: '100%',

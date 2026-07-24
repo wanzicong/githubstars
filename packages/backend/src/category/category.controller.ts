@@ -12,6 +12,7 @@ import {
     CategoryBindSchema,
     CategoryUnbindSchema,
     CategoryBatchIdsSchema,
+    RepoCategoriesSchema,
 } from './category.dto';
 import type {
     CategoryListDto,
@@ -23,6 +24,7 @@ import type {
     CategoryBindDto,
     CategoryUnbindDto,
     CategoryBatchIdsDto,
+    RepoCategoriesDto,
 } from './category.dto';
 
 /**
@@ -137,5 +139,18 @@ export class CategoryController {
     async batchIds(@Body(new ZodValidationPipe(CategoryBatchIdsSchema)) body: CategoryBatchIdsDto) {
         const result = await this.service.getCategoryRepoIds(body.categoryId, body.includeChildren);
         return { success: true, data: result };
+    }
+
+    /**
+     * 查询某仓库所属的分类 ID 列表
+     *
+     * @callers 前端"管理分类"弹窗初始化勾选状态
+     * @depends CategoryService.getRepoCategoryIds()
+     */
+    @Post('repo-categories')
+    @ApiOperation({ summary: '查询仓库所属分类', description: '返回某仓库当前所属的分类 ID 列表' })
+    async repoCategories(@Body(new ZodValidationPipe(RepoCategoriesSchema)) body: RepoCategoriesDto) {
+        const categoryIds = await this.service.getRepoCategoryIds(body.repoId);
+        return { success: true, data: categoryIds };
     }
 }

@@ -147,6 +147,10 @@ export default function MultipleTabs() {
         borderBottom: `1px solid ${token.colorBorderSecondary}`,
         padding: '0 8px',
         overflow: 'hidden',
+        // 固定在 header 下方：header 高度 56px、z-index 100；tabs 用 z-index 99 让 Dropdown 不被遮挡
+        position: 'sticky',
+        top: 56,
+        zIndex: 99,
       }}
     >
       <Tabs

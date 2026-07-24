@@ -33,9 +33,21 @@ export default function Clone() {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [message])
 
-    useEffect(() => { loadTasks() }, [loadTasks])
+    useEffect(() => {
+        const init = async () => {
+            try {
+                const res = await getRecentCloneTasks()
+                if (res.success) setTasks(res.tasks)
+            } catch {
+                message.error('加载任务列表失败')
+            } finally {
+                setLoading(false)
+            }
+        }
+        void init()
+    }, [message])
 
     // 任务列表自动轮询 — 有执行中/等待中的任务时每 2 秒刷新
     const listPolling = usePolling(async () => {
@@ -58,15 +70,15 @@ export default function Clone() {
     }, [tasks, listPolling])
 
     // 轮询活跃任务进度
-    const polling = usePolling(async () => {
+    const polling = usePolling(async ({ stop }) => {
         const taskId = activeTaskIdRef.current
-        if (!taskId) { polling.stop(); return }
+        if (!taskId) { stop(); return }
         try {
             const res = await getCloneTaskProgress(taskId)
             if (res.success) {
                 setProgress(res)
                 if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
-                    polling.stop()
+                    stop()
                     loadTasks()
                 }
             }
@@ -94,7 +106,7 @@ export default function Clone() {
         } catch {
             message.error('重试失败')
         }
-    }, [activeTaskId, polling])
+    }, [activeTaskId, polling, message])
 
     const handleRetryItem = useCallback(async (fullName: string) => {
         if (!activeTaskId) return
@@ -111,7 +123,7 @@ export default function Clone() {
         } catch {
             message.error('重试失败')
         }
-    }, [activeTaskId])
+    }, [activeTaskId, message])
 
     const handleDeleteTask = useCallback(async () => {
         if (!activeTaskId) return
@@ -122,14 +134,14 @@ export default function Clone() {
                 polling.stop()
                 setProgressOpen(false)
                 setActiveTaskId(null)
-                loadTasks()
+                void loadTasks()
             } else {
                 message.error(result.message || '删除失败')
             }
         } catch {
             message.error('删除失败')
         }
-    }, [activeTaskId, polling, loadTasks])
+    }, [activeTaskId, polling, loadTasks, message])
 
     const handleCloseProgress = () => {
         polling.stop()

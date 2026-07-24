@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, Button, Table, Tag, Statistic, Row, Col, Alert, Typography, Spin } from 'antd'
 import { SyncOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import * as syncApi from '../../api'
@@ -22,47 +22,27 @@ export default function Sync() {
     const [logs, setLogs] = useState<SyncLog[]>([])
     const [total, setTotal] = useState(0)
     const [loading, setLoading] = useState(true)
-    const [pageNum, setPageNum] = useState(1)
-    const [pageSize, setPageSize] = useState(10)
     const [syncError, setSyncError] = useState<string | null>(null)
 
+    // 分页状态 + ref（ref 供轮询回调读取最新值，在 onChange 中同步）
+    const [pageNum, setPageNum] = useState(1)
+    const [pageSize, setPageSize] = useState(10)
     const pageNumRef = useRef(pageNum)
     const pageSizeRef = useRef(pageSize)
 
-    useEffect(() => {
-        pageNumRef.current = pageNum
-    }, [pageNum])
-    useEffect(() => {
-        pageSizeRef.current = pageSize
-    }, [pageSize])
-
-    const fetchLogs = useCallback(async (page: number, size: number) => {
-        try {
-            const res = await syncApi.fetchSyncLogs(page, size)
-            setLogs(res.records)
-            setTotal(res.total)
-        } catch {
-            /* ignore */
-        }
-    }, [])
-
-    const polling = usePolling(async () => {
+    const polling = usePolling(async ({ stop }) => {
         try {
             const s = await syncApi.fetchSyncStatus()
             setStatus(s)
             if (!s.syncing) {
-                polling.stop()
+                stop()
                 try {
                     const res = await syncApi.fetchSyncLogs(pageNumRef.current, pageSizeRef.current)
                     setLogs(res.records)
                     setTotal(res.total)
-                } catch {
-                    /* ignore */
-                }
+                } catch { /* ignore */ }
             }
-        } catch {
-            /* keep polling */
-        }
+        } catch { /* keep polling */ }
     }, 2000)
 
     const handleSync = async () => {
@@ -87,21 +67,24 @@ export default function Sync() {
             try {
                 const s = await syncApi.fetchSyncStatus()
                 setStatus(s)
-                if (s.syncing) {
-                    polling.start()
-                }
-            } catch {
-                /* ignore */
-            }
+                if (s.syncing) polling.start()
+            } catch { /* ignore */ }
             setLoading(false)
         }
-        init()
+        void init()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     useEffect(() => {
-        fetchLogs(pageNum, pageSize)
-    }, [pageNum, pageSize, fetchLogs])
+        const load = async () => {
+            try {
+                const res = await syncApi.fetchSyncLogs(pageNum, pageSize)
+                setLogs(res.records)
+                setTotal(res.total)
+            } catch { /* ignore */ }
+        }
+        void load()
+    }, [pageNum, pageSize])
 
     const columns = [
         { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
@@ -235,8 +218,8 @@ export default function Sync() {
                             showTotal: (t: number) => `共 ${t} 条`,
                         }}
                         onChange={(pagination) => {
-                            if (pagination.current) setPageNum(pagination.current)
-                            if (pagination.pageSize) setPageSize(pagination.pageSize)
+                            if (pagination.current) { setPageNum(pagination.current); pageNumRef.current = pagination.current }
+                            if (pagination.pageSize) { setPageSize(pagination.pageSize); pageSizeRef.current = pagination.pageSize }
                         }}
                         scroll={{ x: 980 }}
                         size='small'

@@ -278,17 +278,17 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
         } catch { /* ignore */ }
     }, [])
 
-    const polling = usePolling(async () => {
+    const polling = usePolling(async ({ stop }) => {
         const taskId = taskIdRef.current
-        if (!taskId) { polling.stop(); return }
+        if (!taskId) { stop(); return }
         try {
             const res = await translateApi.getTaskProgress(taskId)
             if (res.success) {
                 setTaskProgress(res)
                 if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
-                    polling.stop()
-                    loadCoverage()
-                    loadRecentTasks()
+                    stop()
+                    void loadCoverage()
+                    void loadRecentTasks()
                     onRefreshList()
                 }
             }
@@ -296,8 +296,20 @@ export default function TranslatePanel({ open, onClose, filters, hasActiveFilter
     }, 2000)
 
     useEffect(() => {
-        if (open) { loadCoverage(); loadRecentTasks() }
-    }, [open, loadCoverage, loadRecentTasks])
+        if (open) {
+            const load = async () => {
+                try {
+                    const res = await translateApi.getTranslationStatus(normalizeFilters(filters))
+                    if (res.success) setCoverage(res)
+                } catch { /* ignore */ }
+                try {
+                    const res = await translateApi.getRecentTasks()
+                    if (res.success) setRecentTasks((res.tasks || []) as unknown as TaskSummary[])
+                } catch { /* ignore */ }
+            }
+            void load()
+        }
+    }, [open, filters])
 
     const handleStartTranslate = async (type: 'description' | 'readme' | 'both') => {
         setLoading(type)

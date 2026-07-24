@@ -69,19 +69,22 @@ export default function DownloadWizardModal({ open, onClose, selectedRepos, onTa
     // 打开模态框时自动拉取下载大小预估
     useEffect(() => {
         if (!open || selectedRepos.length === 0) return
-        setSizeEstimating(true)
-        setSizeEstimates(new Map())
-        estimateDownloadSizes(selectedRepos.map((r) => r.id))
-            .then((result) => {
+        const loadEstimates = async () => {
+            try {
+                const result = await estimateDownloadSizes(selectedRepos.map((r) => r.id))
                 if (result.success && result.items.length > 0) {
                     setSizeEstimates(new Map(result.items.map((item) => [item.repoId, item])))
                 }
-            })
-            .catch(() => {
-                // 预估失败不影响主流程，静默处理
-            })
-            .finally(() => setSizeEstimating(false))
-    }, [open])
+            } catch { /* 预估失败不影响主流程 */ } finally {
+                setSizeEstimating(false)
+            }
+        }
+        Promise.resolve().then(() => {
+            setSizeEstimating(true)
+            setSizeEstimates(new Map())
+            void loadEstimates()
+        })
+    }, [open, selectedRepos])
 
     const handleNext = () => {
         if (currentStep === 0 && selectedIds.length === 0) {

@@ -1,8 +1,10 @@
 import { useState, useEffect, Suspense } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
-import { Layout, theme, Spin } from 'antd'
+import { Layout, theme, Spin, Grid } from 'antd'
 import { useAppStore, useMultipleTabStore } from '@/stores'
+import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts'
 import LayoutSider from './sider/LayoutSider'
+import MobileSiderDrawer from './sider/MobileSiderDrawer'
 import LayoutHeader from './header/LayoutHeader'
 import MultipleTabs from './tabs/MultipleTabs'
 import SettingDrawer from './setting/SettingDrawer'
@@ -19,6 +21,7 @@ function useScrollToTop() {
 /** 默认布局 —— Sider + Header + Tabs + Content + Footer */
 export default function DefaultLayout() {
   useScrollToTop()
+  useGlobalShortcuts()
   const { token } = theme.useToken()
   const layoutMode = useAppStore((s) => s.layoutMode)
   const showTabs = useAppStore((s) => s.showTabs)
@@ -28,12 +31,17 @@ export default function DefaultLayout() {
   const refreshKey = useMultipleTabStore((s) => s.refreshKey)
   const tabs = useMultipleTabStore((s) => s.tabs)
   const [settingOpen, setSettingOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // Ant Design 断点：md = ≥768px。screens.md 为 false 即手机端
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
 
-  // 平板端（769-1024px）自动折叠侧边栏，用户可手动展开（CSS 不再使用 !important）
+  // 平板端（769-1024px）自动折叠侧边栏，用户可手动展开
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 769px) and (max-width: 1024px)')
     const handler = (e: MediaQueryListEvent | MediaQueryList) => {
@@ -46,22 +54,13 @@ export default function DefaultLayout() {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
-  // Menu 样式覆盖
-  const menuStyles = (
-    <style>{`
-      .ant-menu-horizontal .ant-menu-item-selected { color: ${token.colorPrimary} !important; }
-      .ant-menu-horizontal .ant-menu-item-selected::after { border-bottom-color: ${token.colorPrimary} !important; }
-      .ant-menu-horizontal .ant-menu-item:hover { color: ${token.colorPrimary} !important; }
-      .ant-menu-inline .ant-menu-item-selected { background: ${token.colorPrimaryBg} !important; color: ${token.colorPrimary} !important; border-radius: 8px; margin: 2px 8px; width: auto !important; }
-      .ant-menu-inline .ant-menu-item-selected::after { border-right-color: ${token.colorPrimary} !important; }
-      .ant-menu-inline .ant-menu-item { border-radius: 8px; margin: 2px 8px; width: auto !important; }
-      .ant-menu-inline .ant-menu-item:hover { color: ${token.colorPrimary} !important; background: ${token.colorFillSecondary} !important; }
-      .ant-menu-inline .ant-menu-submenu-title { border-radius: 8px; margin: 2px 8px; width: auto !important; }
-      .ant-menu-inline .ant-menu-submenu-title:hover { color: ${token.colorPrimary} !important; background: ${token.colorFillSecondary} !important; }
-      .ant-menu-inline .ant-menu-submenu-selected > .ant-menu-submenu-title { color: ${token.colorPrimary} !important; }
-      .ant-menu-vertical .ant-menu-item-selected { background: ${token.colorPrimaryBg} !important; color: ${token.colorPrimary} !important; border-radius: 8px; }
-    `}</style>
-  )
+  // 路由变化时关闭移动端抽屉（渲染期间派生状态，避免 effect 内 setState）
+  const { pathname } = useLocation()
+  const [prevPathname, setPrevPathname] = useState(pathname)
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname)
+    if (mobileMenuOpen) setMobileMenuOpen(false)
+  }
 
   const isSideMode = layoutMode === 'side'
   const sideMargin = siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH
@@ -71,14 +70,14 @@ export default function DefaultLayout() {
 
   const content = (
     <Content className={isSideMode ? 'layout-content-side' : undefined} style={{
-      padding: '16px 24px',
+      padding: isMobile ? '12px 12px' : '16px 24px',
       maxWidth: contentWidth === 'fixed' ? 1400 : 'none',
       width: '100%', margin: '0 auto',
       minHeight,
       background: 'var(--content-bg)',
     }}>
       <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh' }}><Spin size='large' /></div>}>
-        <div key={refreshKey}>
+        <div key={refreshKey} className='page-enter'>
           <Outlet />
         </div>
       </Suspense>
@@ -99,12 +98,16 @@ export default function DefaultLayout() {
   if (layoutMode === 'top') {
     return (
       <Layout style={{ minHeight: '100vh' }}>
-        {menuStyles}
-        <LayoutHeader onOpenSetting={() => setSettingOpen(true)} />
+        <LayoutHeader
+          isMobile={isMobile}
+          onOpenMobileMenu={() => setMobileMenuOpen(true)}
+          onOpenSetting={() => setSettingOpen(true)}
+        />
         {showTabs && <MultipleTabs />}
         {content}
         {footer}
         {drawer}
+        <MobileSiderDrawer open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
       </Layout>
     )
   }
@@ -112,21 +115,25 @@ export default function DefaultLayout() {
   // 侧边栏模式（默认）
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      {menuStyles}
-      <LayoutSider />
+      {!isMobile && <LayoutSider />}
       <Layout
         className='layout-inner-side'
         style={{
-          marginLeft: sideMargin,
+          marginLeft: isMobile ? 0 : sideMargin,
           transition: `margin-left var(--transition-duration) var(--transition-timing)`,
         }}
       >
-        <LayoutHeader onOpenSetting={() => setSettingOpen(true)} />
+        <LayoutHeader
+          isMobile={isMobile}
+          onOpenMobileMenu={() => setMobileMenuOpen(true)}
+          onOpenSetting={() => setSettingOpen(true)}
+        />
         {showTabs && <MultipleTabs />}
         {content}
         {footer}
       </Layout>
       {drawer}
+      <MobileSiderDrawer open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
     </Layout>
   )
 }

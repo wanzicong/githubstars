@@ -67,7 +67,7 @@ export default function GithubSearch() {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [message])
 
     const handleSearch = useCallback(() => {
         setPage(1)
@@ -116,7 +116,7 @@ export default function GithubSearch() {
         } catch {
             message.error('Star 操作失败，请稍后重试')
         }
-    }, [])
+    }, [message])
 
     const handleCheckStar = useCallback(async (repo: GithubSearchRepo) => {
         const fullName = repo.fullName

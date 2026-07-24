@@ -58,10 +58,10 @@ export default function StarDetail() {
         repoIdRef.current = repo?.id ?? null
     }, [repo?.id])
 
-    const polling = usePolling(async () => {
+    const polling = usePolling(async ({ stop }) => {
         const taskId = translateTaskIdRef.current
         if (!taskId) {
-            polling.stop()
+            stop()
             return
         }
         elapsedRef.current += 2000
@@ -70,7 +70,7 @@ export default function StarDetail() {
             if (res.success) {
                 setTranslateProgress(res)
                 if (res.status === 'COMPLETED' || res.status === 'FAILED' || res.status === 'PARTIAL') {
-                    polling.stop()
+                    stop()
                     const rid = repoIdRef.current
                     if (rid) {
                         const updated = await translateApi.fetchRepoDetail(rid)
@@ -79,7 +79,7 @@ export default function StarDetail() {
                 }
             }
             if (elapsedRef.current >= 10 * 60 * 1000) {
-                polling.stop()
+                stop()
                 setTranslateProgress((prev) => (prev ? { ...prev, status: 'FAILED' } : null))
                 message.warning('翻译超时，请稍后重试')
             }
@@ -144,7 +144,7 @@ export default function StarDetail() {
         return () => {
             cancelled = true
         }
-    }, [id])
+    }, [id, message])
 
     /** 翻译前校验 API Key 是否已配置 */
     const ensureApiKey = async (): Promise<boolean> => {

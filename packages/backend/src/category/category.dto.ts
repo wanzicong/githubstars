@@ -117,3 +117,15 @@ export const CategoryBatchIdsSchema = z.object({
 });
 
 export type CategoryBatchIdsDto = z.infer<typeof CategoryBatchIdsSchema>;
+
+/**
+ * 查询仓库所属分类 Schema
+ *
+ * @callers CategoryController.repoCategories()
+ * @depends CategoryService.getRepoCategoryIds()
+ */
+export const RepoCategoriesSchema = z.object({
+    repoId: z.coerce.number().int().positive('仓库ID必须为正整数'),
+});
+
+export type RepoCategoriesDto = z.infer<typeof RepoCategoriesSchema>;

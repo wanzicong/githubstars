@@ -164,3 +164,112 @@ html, body {
     height: 0;
   }
 }
+
+/* ================================================================
+   Ant Design Menu 覆盖（替代原 DefaultLayout 内联 <style> 标签）
+   选中/hover 颜色由 CSS 变量 --primary-color 驱动，
+   App.tsx 在主题色变化时同步该变量。
+   ================================================================ */
+.ant-menu-horizontal .ant-menu-item-selected,
+.ant-menu-horizontal .ant-menu-item:hover {
+  color: var(--primary-color) !important;
+}
+.ant-menu-horizontal .ant-menu-item-selected::after {
+  border-bottom-color: var(--primary-color) !important;
+}
+.ant-menu-inline .ant-menu-item,
+.ant-menu-inline .ant-menu-submenu-title {
+  border-radius: 8px;
+  margin: 2px 8px;
+  width: auto !important;
+}
+.ant-menu-inline .ant-menu-item:hover,
+.ant-menu-inline .ant-menu-submenu-title:hover {
+  color: var(--primary-color) !important;
+  background: var(--menu-hover-bg, rgba(0, 0, 0, 0.04)) !important;
+}
+:root[data-theme='dark'] {
+  --menu-hover-bg: rgba(255, 255, 255, 0.08);
+}
+.ant-menu-inline .ant-menu-item-selected {
+  background: var(--primary-color-bg, rgba(22, 119, 255, 0.1)) !important;
+  color: var(--primary-color) !important;
+}
+.ant-menu-inline .ant-menu-item-selected::after {
+  border-right-color: var(--primary-color) !important;
+}
+.ant-menu-inline .ant-menu-submenu-selected > .ant-menu-submenu-title {
+  color: var(--primary-color) !important;
+}
+.ant-menu-vertical .ant-menu-item-selected {
+  background: var(--primary-color-bg, rgba(22, 119, 255, 0.1)) !important;
+  color: var(--primary-color) !important;
+  border-radius: 8px;
+}
+
+/* ================================================================
+   微交互（Phase 3）
+   ================================================================ */
+
+/* 按钮/可点击元素按下反馈 */
+.pressable {
+  transition: transform 0.1s var(--transition-timing);
+}
+.pressable:active {
+  transform: scale(0.97);
+}
+
+/* 卡片悬停抬升 + 按下反馈 */
+.hoverable-card {
+  transition: transform 0.2s var(--transition-timing), box-shadow 0.2s var(--transition-timing);
+}
+.hoverable-card:hover {
+  transform: translateY(-2px);
+}
+.hoverable-card:active {
+  transform: scale(0.98);
+}
+
+/* 路由页面淡入上移动画
+ * 注意：动画终态不能保留 transform（fill-mode=forwards/both 会让 transform 永久存在），
+ * 否则会成为 sticky/fixed 后代的包含块，破坏其定位。
+ * 用 backwards 只在动画开始前应用 from 状态，结束后元素回到无 transform 的初始状态。 */
+.page-enter {
+  animation: page-enter 0.25s var(--transition-timing) backwards;
+}
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 列表项选中态 */
+.selectable-item {
+  transition: box-shadow 0.15s var(--transition-timing);
+}
+.selectable-item.selected {
+  box-shadow: 0 0 0 2px var(--primary-color);
+  border-radius: var(--card-radius, 12px);
+}
+
+/* ── 分类树节点 hover 显示操作按钮 ── */
+.category-tree-node .category-node-action {
+  opacity: 0;
+  transition: opacity 0.15s var(--transition-timing);
+}
+.category-tree-node:hover .category-node-action {
+  opacity: 1;
+}
+/* 拖拽把手默认微弱显示，hover 时加深 */
+.category-tree-wrapper .ant-tree-draggable-icon {
+  opacity: 0.4;
+  transition: opacity 0.15s var(--transition-timing);
+}
+.category-tree-wrapper .ant-tree-treenode:hover .ant-tree-draggable-icon {
+  opacity: 1;
+}

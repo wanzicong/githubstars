@@ -28,11 +28,27 @@ export default function Settings() {
         } finally {
             setLoading(false)
         }
-    }, [form])
+    }, [form, message])
 
     useEffect(() => {
-        loadConfig()
-    }, [loadConfig])
+        const init = async () => {
+            setLoading(true)
+            try {
+                const data = await configApi.fetchAllConfig()
+                setConfigs(data)
+                const initial: Record<string, string> = {}
+                data.forEach((item) => {
+                    initial[item.configKey] = item.configValue || ''
+                })
+                form.setFieldsValue(initial)
+            } catch {
+                message.error('加载配置失败')
+            } finally {
+                setLoading(false)
+            }
+        }
+        void init()
+    }, [form, message])
 
     const handleSave = async (values: Record<string, string>) => {
         setSaving(true)

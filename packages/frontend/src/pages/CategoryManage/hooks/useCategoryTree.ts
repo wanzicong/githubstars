@@ -91,8 +91,19 @@ export function useCategoryTree(): UseCategoryTreeReturn {
     }, [message])
 
     useEffect(() => {
-        refresh()
-    }, [refresh])
+        const load = async () => {
+            setLoading(true)
+            try {
+                const data = await fetchCategoryTree()
+                setRawTree(data)
+            } catch {
+                message.error('加载分类树失败')
+            } finally {
+                setLoading(false)
+            }
+        }
+        load().catch(() => { /* 错误已在内部 message.error */ })
+    }, [message])
 
     const expandAll = useCallback(() => setExpandedKeys(flattenKeys(rawTree)), [rawTree])
     const collapseAll = useCallback(() => setExpandedKeys([]), [])

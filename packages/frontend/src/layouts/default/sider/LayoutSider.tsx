@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, theme } from 'antd'
 import { StarOutlined } from '@ant-design/icons'
@@ -22,29 +22,33 @@ export default function LayoutSider() {
 
   // 展开分组状态 -- 路由切换时自动展开包含当前页面的分组
   const [openKeys, setOpenKeys] = useState<string[]>(() => getOpenGroupKeys(location.pathname))
-
-  useEffect(() => {
+  // 渲染期间派生状态：路由变化时合并需要自动展开的分组（避免在 effect 中 setState）
+  const [prevPathname, setPrevPathname] = useState(location.pathname)
+  if (prevPathname !== location.pathname) {
+    setPrevPathname(location.pathname)
     const autoOpen = getOpenGroupKeys(location.pathname)
-    setOpenKeys((prev) => {
-      const merged = new Set(prev)
-      for (const k of autoOpen) merged.add(k)
-      return Array.from(merged)
-    })
-  }, [location.pathname])
+    if (autoOpen.some((k) => !openKeys.includes(k))) {
+      setOpenKeys(Array.from(new Set([...openKeys, ...autoOpen])))
+    }
+  }
 
-  // 构建二级菜单 items -- 分组 -> SubMenu，子项 -> MenuItem
-  const items: MenuItem[] = menuGroups
-    .slice()
-    .sort((a, b) => a.orderNo - b.orderNo)
-    .map((group) => ({
-      key: group.key,
-      icon: group.icon,
-      label: group.label,
-      children: group.children.map((child) => ({
-        key: child.key,
-        label: child.label,
-      })),
-    }))
+  // 构建二级菜单 items -- 分组 -> SubMenu，子项 -> MenuItem（缓存避免每次渲染重建）
+  const items: MenuItem[] = useMemo(
+    () =>
+      menuGroups
+        .slice()
+        .sort((a, b) => a.orderNo - b.orderNo)
+        .map((group) => ({
+          key: group.key,
+          icon: group.icon,
+          label: group.label,
+          children: group.children.map((child) => ({
+            key: child.key,
+            label: child.label,
+          })),
+        })),
+    [],
+  )
 
   return (
     <div
