@@ -2,6 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { SDKMessage, SDKPartialAssistantMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { BetaRawContentBlockDeltaEvent, BetaRawContentBlockStartEvent } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs';
 import { AgentCredentialService } from './agent-credential.service';
+import { createSystemMcpServer } from './mcp/system-tools';
+import { GithubRepoService } from '../github/github-repo.service';
+import { CategoryService } from '../category/category.service';
+import { StatsService } from '../stats/stats.service';
+import { TranslateService } from '../translate/translate.service';
+import { TranslateTaskService } from '../translate/translate-task.service';
+import { CloneService } from '../clone/clone.service';
+import { DownloadService } from '../download/download.service';
+import { SyncService } from '../sync/sync.service';
+import { TrendingService } from '../trending/trending.service';
+import { AuthorService } from '../author/author.service';
+import { ConfigService } from '../config/config.service';
+import { ExportService } from '../export/export.service';
+import { LoggingService } from '../logging/logging.service';
+import { GithubSearchService } from '../github/github-search.service';
 import {
     AGENT_ALLOWED_TOOLS,
     AGENT_DEFAULT_MAX_TURNS,
@@ -48,7 +63,23 @@ export class AgentClientService {
     private readonly logger = new Logger(AgentClientService.name);
     private sdkPromise: Promise<AgentSdk> | null = null;
 
-    constructor(private readonly credentials: AgentCredentialService) {}
+    constructor(
+        private readonly credentials: AgentCredentialService,
+        private readonly githubRepo: GithubRepoService,
+        private readonly category: CategoryService,
+        private readonly stats: StatsService,
+        private readonly translate: TranslateService,
+        private readonly translateTask: TranslateTaskService,
+        private readonly clone: CloneService,
+        private readonly download: DownloadService,
+        private readonly sync: SyncService,
+        private readonly trending: TrendingService,
+        private readonly author: AuthorService,
+        private readonly config: ConfigService,
+        private readonly exportService: ExportService,
+        private readonly logging: LoggingService,
+        private readonly githubSearch: GithubSearchService,
+    ) {}
 
     /** 懒加载 SDK 模块并缓存 Promise（并发调用共享同一次加载） */
     private loadSdk(): Promise<AgentSdk> {
@@ -80,6 +111,22 @@ export class AgentClientService {
                     args: ['-y', '@modelcontextprotocol/server-github'],
                     env: { GITHUB_TOKEN: this.credentials.getGitHubToken() },
                 },
+                system: createSystemMcpServer({
+                    githubRepo: this.githubRepo,
+                    category: this.category,
+                    stats: this.stats,
+                    translate: this.translate,
+                    translateTask: this.translateTask,
+                    clone: this.clone,
+                    download: this.download,
+                    sync: this.sync,
+                    trending: this.trending,
+                    author: this.author,
+                    config: this.config,
+                    exportService: this.exportService,
+                    logging: this.logging,
+                    githubSearch: this.githubSearch,
+                }),
             },
         };
         if (options.sessionId) mergedOptions.resume = options.sessionId;

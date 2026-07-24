@@ -16,5 +16,6 @@ import { DownloadModule } from '../download/download.module';
     imports: [GithubModule, TranslateModule, DownloadModule],
     controllers: [TrendingController],
     providers: [TrendingService],
+    exports: [TrendingService],
 })
 export class TrendingModule {}
