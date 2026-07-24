@@ -1,0 +1,31 @@
+{
+  "name": "@githubstars/mcp-server",
+  "version": "1.0.0",
+  "description": "GitHub Stars MCP Server — 将 GitHub Stars 后端 API 封装为 MCP 工具供外部 AI 调用",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "githubstars-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --packages=external",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "lint": "eslint \"src/**/*.ts\" --fix",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.1",
+    "eslint": "^9.18.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  }
+}

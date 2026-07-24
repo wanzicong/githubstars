@@ -101,3 +101,6 @@ docker/claude-config/
 # CLI 构建产物
 packages/cli/dist/
 packages/cli/tsconfig.tsbuildinfo
+
+# MCP Server 构建产物
+packages/mcp-server/dist/
