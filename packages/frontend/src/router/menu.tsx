@@ -52,6 +52,7 @@ export const menuGroups: MenuGroup[] = [
     key: 'group-stars', icon: <StarOutlined />, label: '星标仓库', orderNo: 0,
     children: [
       { key: '/', label: 'Star列表' },
+      { key: '/code-browser', label: '代码浏览' },
       { key: '/categories', label: '分类管理' },
     ],
   },

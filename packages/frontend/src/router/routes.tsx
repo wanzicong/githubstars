@@ -21,6 +21,7 @@ const Clone = lazy(() => import('@/pages/Clone'))
 const Download = lazy(() => import('@/pages/Download'))
 const CategoryManage = lazy(() => import('@/pages/CategoryManage'))
 const AgentChat = lazy(() => import('@/pages/AgentChat'))
+const CodeBrowser = lazy(() => import('@/pages/CodeBrowser'))
 
 /** 所有路由（Layout 子路由） */
 export const appRoutes: RouteObject[] = [
@@ -28,6 +29,8 @@ export const appRoutes: RouteObject[] = [
   { index: true, element: <StarList />, handle: { title: 'Star列表' } },
   // ── Star ──
   { path: 'stars/:id', element: <StarDetail />, handle: { title: 'Star详情' } },
+  // ── 代码浏览 ──
+  { path: 'code-browser', element: <CodeBrowser />, handle: { title: '代码浏览' } },
   // ── 搜索 / 趋势 ──
   { path: 'trending', element: <Trending />, handle: { title: '趋势排行' } },
   { path: 'search', element: <GithubSearch />, handle: { title: 'GitHub搜索' } },
