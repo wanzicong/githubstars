@@ -83,14 +83,21 @@ export class GithubSearchService {
      */
     async starRepo(owner: string, repo: string): Promise<boolean> {
         this.logger.log('Star 仓库: ' + owner + '/' + repo);
+        const token = await this.config.getValueDefault('github.token', '');
+        if (!token) {
+            this.logger.error('Star 仓库失败: 未配置 github.token');
+            return false;
+        }
         try {
             const res = await fetch(`${GITHUB_API}/user/starred/${owner}/${repo}`, {
                 method: 'PUT',
                 headers: { ...(await this.buildHeaders()), 'Content-Length': '0' },
             });
-            return res.status === 204 || res.status === 304;
+            if (res.status === 204 || res.status === 304) return true;
+            this.logger.error(`Star 仓库失败: ${owner}/${repo}, GitHub 响应 status=${res.status}`);
+            return false;
         } catch (e) {
-            this.logger.error(`Star 仓库失败: ${owner}/${repo}`, e instanceof Error ? e : undefined);
+            this.logger.error(`Star 仓库异常: ${owner}/${repo}`, e instanceof Error ? e : undefined);
             return false;
         }
     }

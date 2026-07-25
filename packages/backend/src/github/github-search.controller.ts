@@ -1,6 +1,7 @@
 import { Controller, Post, Logger, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubSearchService } from './github-search.service';
+import { ConfigService } from '../config/config.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { GithubSearchSchema, GithubStarSchema } from '../common/dto/filter.dto';
 import type { GithubSearchDto, GithubStarDto } from '../common/dto/filter.dto';
@@ -15,7 +16,10 @@ import type { GithubSearchDto, GithubStarDto } from '../common/dto/filter.dto';
 export class GithubSearchController {
     private readonly logger = new Logger(GithubSearchController.name);
 
-    constructor(private readonly service: GithubSearchService) {}
+    constructor(
+        private readonly service: GithubSearchService,
+        private readonly config: ConfigService,
+    ) {}
 
     /**
      * 搜索 GitHub 仓库
@@ -55,8 +59,12 @@ export class GithubSearchController {
     })
     async star(@Body(new ZodValidationPipe(GithubStarSchema)) body: GithubStarDto) {
         this.logger.log('Star 操作: ' + body.owner + '/' + body.repo);
+        const token = await this.config.getValueDefault('github.token', '');
+        if (!token) {
+            return { success: false, starred: false, message: '请先在系统设置中配置 GitHub Token' };
+        }
         const starred = await this.service.starRepo(body.owner, body.repo);
-        return { success: starred, starred, message: starred ? '已 Star' : 'Star 失败' };
+        return { success: starred, starred, message: starred ? '已 Star' : 'Star 失败（请检查 Token 权限或网络）' };
     }
 
     /**
@@ -72,6 +80,10 @@ export class GithubSearchController {
     })
     async unstar(@Body(new ZodValidationPipe(GithubStarSchema)) body: GithubStarDto) {
         this.logger.log('取消 Star 操作: ' + body.owner + '/' + body.repo);
+        const token = await this.config.getValueDefault('github.token', '');
+        if (!token) {
+            return { success: false, unstarred: false, message: '请先在系统设置中配置 GitHub Token' };
+        }
         const unstarred = await this.service.unstarRepo(body.owner, body.repo);
         return { success: unstarred, unstarred, message: unstarred ? '已取消 Star' : '取消 Star 失败' };
     }

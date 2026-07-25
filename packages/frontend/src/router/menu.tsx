@@ -84,7 +84,7 @@ export const menuGroups: MenuGroup[] = [
     ],
   },
   {
-    key: 'group-ai', icon: <RobotOutlined />, label: 'AI', orderNo: 40,
+    key: 'group-ai', icon: <RobotOutlined />, label: 'AI', orderNo: -1,
     children: [
       { key: '/agent', label: 'AI Agent' },
     ],
