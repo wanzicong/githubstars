@@ -33,6 +33,7 @@ export type AgentBlock =
     | { type: 'thinking_start' }
     | { type: 'text_start' }
     | { type: 'tool_use'; toolName: string; toolInput: unknown; toolId?: string }
+    | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean }
     | { type: 'system' };
 
 export interface AgentQueryOptions {
@@ -139,44 +140,76 @@ export class AgentClientService {
     /** 扩展流式迭代器，将 SDK message 解析为块格式 */
     async *streamBlocks(options: AgentQueryOptions): AsyncGenerator<{ block: AgentBlock; raw: SDKMessage }> {
         for await (const message of this.stream(options)) {
-            // stream_event：SDK 的 partial 流式事件，包含逐字增量
-            if (message.type === 'stream_event') {
-                yield { block: this.parseStreamEvent(message), raw: message };
-                continue;
-            }
-            if (message.type !== 'assistant' || !message.message?.content) {
-                yield { block: { type: 'system' }, raw: message };
-                continue;
-            }
-            const content: unknown = message.message.content;
-            if (typeof content === 'string') {
-                yield { block: { type: 'text', text: content }, raw: message };
-                continue;
-            }
-            if (Array.isArray(content)) {
-                for (const block of this.parseContentBlocks(content)) {
-                    yield { block, raw: message };
-                }
+            for (const block of this.messageToBlocks(message)) {
+                yield { block, raw: message };
             }
         }
     }
 
-    /** 解析 SDK assistant 消息的内容块数组（非流式完整块） */
+    /** 将单条 SDK 消息解析为块序列 */
+    private *messageToBlocks(message: SDKMessage): Generator<AgentBlock> {
+        // stream_event：SDK 的 partial 流式事件，包含逐字增量
+        if (message.type === 'stream_event') {
+            yield this.parseStreamEvent(message);
+            return;
+        }
+        if (message.type !== 'assistant' || !message.message?.content) {
+            // user 消息的 content 数组中可能携带 tool_result（工具执行结果回传），需转发并持久化
+            yield* this.extractToolResults(message);
+            yield { type: 'system' };
+            return;
+        }
+        const content: unknown = message.message.content;
+        if (typeof content === 'string') {
+            yield { type: 'text', text: content };
+            return;
+        }
+        if (Array.isArray(content)) {
+            yield* this.parseContentBlocks(content);
+        }
+    }
+
+    /** 从 user 消息的 content 数组中提取 tool_result 块 */
+    private *extractToolResults(message: SDKMessage): Generator<AgentBlock> {
+        const userContent: unknown = message.type === 'user' ? message.message?.content : undefined;
+        if (!Array.isArray(userContent)) return;
+        for (const block of this.parseContentBlocks(userContent)) {
+            if (block.type === 'tool_result') yield block;
+        }
+    }
+
+    /** 解析 SDK 消息的内容块数组（assistant 完整块 / user 携带的 tool_result） */
     private *parseContentBlocks(content: unknown[]): Generator<AgentBlock> {
         for (const item of content) {
-            if (typeof item !== 'object' || item === null) continue;
-            const block = item as Record<string, unknown>;
-            if (block.type === 'text' && typeof block.text === 'string') {
-                yield { type: 'text', text: block.text };
-            } else if (block.type === 'tool_use' && typeof block.name === 'string') {
-                yield {
-                    type: 'tool_use',
-                    toolName: block.name,
-                    toolInput: block.input,
-                    toolId: typeof block.id === 'string' ? block.id : undefined,
-                };
-            }
+            const block = this.toAgentBlock(item);
+            if (block) yield block;
         }
+    }
+
+    /** 将单个 SDK 内容块转换为 AgentBlock；无法识别返回 null */
+    private toAgentBlock(item: unknown): AgentBlock | null {
+        if (typeof item !== 'object' || item === null) return null;
+        const block = item as Record<string, unknown>;
+        if (block.type === 'text' && typeof block.text === 'string') {
+            return { type: 'text', text: block.text };
+        }
+        if (block.type === 'tool_use' && typeof block.name === 'string') {
+            return {
+                type: 'tool_use',
+                toolName: block.name,
+                toolInput: block.input,
+                toolId: typeof block.id === 'string' ? block.id : undefined,
+            };
+        }
+        if (block.type === 'tool_result' && typeof block.tool_use_id === 'string') {
+            return {
+                type: 'tool_result',
+                toolUseId: block.tool_use_id,
+                content: typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
+                isError: block.is_error === true,
+            };
+        }
+        return null;
     }
 
     /** 解析 stream_event 为 AgentBlock（逐字增量事件） */

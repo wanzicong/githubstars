@@ -13,11 +13,23 @@ interface ThinkingBlockProps {
 /**
  * 思考过程展示块 —— 对齐 Claude Code 的 thinking 展示体验。
  * 流式时展开实时滚动；完成后默认折叠，点击标题展开。
+ * 展开时测量整体高度，折叠后以 minHeight 占位，避免条件渲染导致列表高度突变抖动。
  */
 export default function ThinkingBlock({ content, streaming = false }: ThinkingBlockProps) {
   const { token } = theme.useToken()
   const [expanded, setExpanded] = useState(false)
+  const [expandedHeight, setExpandedHeight] = useState(0)
+  const rootRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
+
+  const showContent = streaming || expanded
+
+  // 非流式展开时测量整体高度（含标题行），折叠后用作 minHeight 占位防止抖动
+  useEffect(() => {
+    if (showContent && !streaming && rootRef.current) {
+      setExpandedHeight(rootRef.current.offsetHeight)
+    }
+  }, [showContent, streaming, content])
 
   // 流式输出时内容区自动滚到底部
   useEffect(() => {
@@ -26,16 +38,18 @@ export default function ThinkingBlock({ content, streaming = false }: ThinkingBl
     }
   }, [content, streaming])
 
-  const showContent = streaming || expanded
+  const collapsedMinHeight = expandedHeight > 0 ? expandedHeight : undefined
 
   return (
     <div
+      ref={rootRef}
       style={{
         marginBottom: 10,
         borderLeft: `3px solid ${token.colorPrimaryBorder}`,
         background: token.colorFillQuaternary,
         borderRadius: 8,
         overflow: 'hidden',
+        minHeight: showContent ? undefined : collapsedMinHeight,
       }}
     >
       <div

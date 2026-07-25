@@ -14,6 +14,19 @@ export interface AgentSessionSummary {
     updatedAt: Date;
 }
 
+/** 结构化消息块 —— assistant 回复持久化为 blocks 数组，完整保留 thinking/tool_use/tool_result */
+export interface MessageBlock {
+    type: 'text' | 'thinking' | 'tool_use' | 'tool_result';
+    text?: string;
+    thinking?: string;
+    toolName?: string;
+    toolInput?: unknown;
+    toolId?: string;
+    toolUseId?: string;
+    content?: string;
+    isError?: boolean;
+}
+
 /**
  * Agent 会话服务 —— 使用全局 PrismaService 持久化 Agent 会话。
  *
@@ -50,21 +63,25 @@ export class AgentSessionService {
 
     /**
      * 保存一条消息。
-     * content 为字符串：MySQL Json 列与 SQLite String 列均可直接写入，
+     * content 为字符串时原样存储（向后兼容）；为 MessageBlock[] 时 JSON 序列化后存储。
+     * MySQL Json 列与 SQLite String 列均可直接写入字符串，
      * 无需 isSqlite() 分支（Prisma.InputJsonValue 接受 string）。
      */
-    async saveMessage(sessionId: string, role: string, content: string): Promise<void> {
-        await this.prisma.agentMessage.create({ data: { sessionId, role, content } });
+    async saveMessage(sessionId: string, role: string, content: string | MessageBlock[]): Promise<void> {
+        const data = typeof content === 'string' ? content : JSON.stringify(content);
+        await this.prisma.agentMessage.create({ data: { sessionId, role, content: data } });
     }
 
-    /** 获取会话消息历史（按时间正序） */
+    /** 获取会话消息历史（取最新 N 条，按时间正序返回）；content 尝试解析为结构化 blocks，失败保持原文 */
     async getMessages(sessionId: string, limit = 50) {
-        return this.prisma.agentMessage.findMany({
+        const messages = await this.prisma.agentMessage.findMany({
             where: { sessionId },
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: 'desc' },
             take: limit,
             select: { role: true, content: true, createdAt: true },
         });
+        // desc 取最新 N 条后反转为正序，保证长会话展示最新消息而非最旧消息
+        return messages.reverse().map((m) => ({ ...m, content: this.tryParseJson(m.content) }));
     }
 
     /** 关闭会话 */
@@ -129,5 +146,15 @@ export class AgentSessionService {
     private extractText(raw: unknown): string | null {
         if (raw === null || raw === undefined) return null;
         return typeof raw === 'string' ? raw : JSON.stringify(raw);
+    }
+
+    /** 尝试将字符串解析为 JSON（结构化 blocks）；非字符串或解析失败时返回原值 */
+    private tryParseJson(raw: unknown): unknown {
+        if (typeof raw !== 'string') return raw;
+        try {
+            return JSON.parse(raw) as unknown;
+        } catch {
+            return raw;
+        }
     }
 }

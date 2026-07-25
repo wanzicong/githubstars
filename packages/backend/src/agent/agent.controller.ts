@@ -6,6 +6,7 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { AgentClientService } from './agent-client.service';
 import type { AgentBlock } from './agent-client.service';
 import { AgentSessionService } from './agent-session.service';
+import type { MessageBlock } from './agent-session.service';
 import { AgentRequestSchema } from './dto/agent-request.dto';
 import type { AgentRequestDto, SessionModeDto } from './dto/agent-request.dto';
 
@@ -13,6 +14,12 @@ import type { AgentRequestDto, SessionModeDto } from './dto/agent-request.dto';
 interface ChatSessionContext {
     ourSessionId?: string;
     sdkSessionId?: string;
+}
+
+/** 流式增量合并为完整块前的暂存草稿（任一时刻最多一项非空） */
+interface BlockDraft {
+    text: string;
+    thinking: string;
 }
 
 @ApiTags('agent')
@@ -55,12 +62,12 @@ export class AgentController {
         });
 
         try {
-            const assistantContent = await this.streamAgentToClient(body, ctx, res, () => closed);
+            const assistantBlocks = await this.streamAgentToClient(body, ctx, res, () => closed);
             if (!closed && !res.destroyed) {
                 this.writeSse(res, 'result', { sessionId: ctx.ourSessionId }, ctx.ourSessionId);
                 res.end();
             }
-            await this.persistMessages(ctx.ourSessionId, body.message, assistantContent);
+            await this.persistMessages(ctx.ourSessionId, body.message, assistantBlocks);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.error(`Agent chat 失败: ${msg}`);
@@ -88,7 +95,7 @@ export class AgentController {
 
         if (ctx.ourSessionId) {
             await this.captureSdkSessionIdFromMessages(result.messages, ctx.ourSessionId);
-            await this.persistMessages(ctx.ourSessionId, body.message, resultText);
+            await this.persistMessages(ctx.ourSessionId, body.message, this.extractBlocks(result.messages));
         }
         return { success: true, result: resultText, sessionId: ctx.ourSessionId, cost: result.cost, duration: result.duration };
     }
@@ -177,12 +184,13 @@ export class AgentController {
     }
 
     /**
-     * 流式转发 Agent 消息到 SSE 客户端，返回拼接的 assistant 全文。
+     * 流式转发 Agent 消息到 SSE 客户端，返回收集的结构化 blocks（用于持久化）。
      *
      * 事件协议（前端按 type 消费）：
      * - thinking_start / thinking_delta：思考块开始 / 思考内容增量
      * - text_start / text_delta：正文块开始 / 正文逐字增量（打字机效果）
      * - tool_use：工具调用（完整块）
+     * - tool_result：工具执行结果（user 消息回传）
      * 完整 text 块仅用于持久化累加，不再单独推送（增量已覆盖实时展示）。
      */
     private async streamAgentToClient(
@@ -190,8 +198,9 @@ export class AgentController {
         ctx: ChatSessionContext,
         res: Response,
         isClosed: () => boolean,
-    ): Promise<string> {
-        let assistantContent = '';
+    ): Promise<MessageBlock[]> {
+        const blocks: MessageBlock[] = [];
+        const draft: BlockDraft = { text: '', thinking: '' };
         for await (const { block, raw } of this.agentClient.streamBlocks({
             prompt: body.message,
             sessionId: ctx.sdkSessionId,
@@ -201,9 +210,63 @@ export class AgentController {
             if (isClosed()) break; // 客户端断开：for-await break 会逐层调用 async generator 的 return()，确定性取消 SDK 子进程
             await this.captureSdkSessionId(raw, ctx);
             this.forwardBlockToSse(block, res, ctx.ourSessionId);
-            if (block.type === 'text') assistantContent += block.text;
+            this.collectBlock(blocks, draft, block);
         }
-        return assistantContent;
+        // 收尾：flush 剩余草稿（任一时刻最多一项非空，顺序不影响结果）
+        this.flushDraftThinking(blocks, draft);
+        this.flushDraftText(blocks, draft);
+        return blocks;
+    }
+
+    /** 将流式消息块收集为结构化 blocks，增量内容先暂存草稿再合并为完整块 */
+    private collectBlock(blocks: MessageBlock[], draft: BlockDraft, block: AgentBlock): void {
+        switch (block.type) {
+            case 'text':
+                this.flushDraftThinking(blocks, draft);
+                this.flushDraftText(blocks, draft);
+                blocks.push({ type: 'text', text: block.text });
+                break;
+            case 'text_delta':
+                this.flushDraftThinking(blocks, draft);
+                draft.text += block.text;
+                break;
+            case 'thinking_delta':
+                this.flushDraftText(blocks, draft);
+                draft.thinking += block.thinking;
+                break;
+            case 'thinking_start':
+                this.flushDraftText(blocks, draft);
+                break;
+            case 'text_start':
+                this.flushDraftThinking(blocks, draft);
+                break;
+            case 'tool_use':
+                this.flushDraftText(blocks, draft);
+                this.flushDraftThinking(blocks, draft);
+                blocks.push({ type: 'tool_use', toolName: block.toolName, toolInput: block.toolInput, toolId: block.toolId });
+                break;
+            case 'tool_result':
+                blocks.push({ type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError });
+                break;
+            default:
+                break; // system：无需收集
+        }
+    }
+
+    /** 草稿中的正文增量落为完整 text 块 */
+    private flushDraftText(blocks: MessageBlock[], draft: BlockDraft): void {
+        if (draft.text) {
+            blocks.push({ type: 'text', text: draft.text });
+            draft.text = '';
+        }
+    }
+
+    /** 草稿中的思考增量落为完整 thinking 块 */
+    private flushDraftThinking(blocks: MessageBlock[], draft: BlockDraft): void {
+        if (draft.thinking) {
+            blocks.push({ type: 'thinking', thinking: draft.thinking });
+            draft.thinking = '';
+        }
     }
 
     /** 将解析后的消息块按类型转发为 SSE 事件 */
@@ -222,7 +285,20 @@ export class AgentController {
                 this.writeSse(res, 'text_delta', block.text, sessionId);
                 break;
             case 'tool_use':
-                this.writeSse(res, 'tool_use', { toolName: block.toolName, toolInput: block.toolInput }, sessionId);
+                this.writeSse(
+                    res,
+                    'tool_use',
+                    { toolName: block.toolName, toolInput: block.toolInput, toolId: block.toolId },
+                    sessionId,
+                );
+                break;
+            case 'tool_result':
+                this.writeSse(
+                    res,
+                    'tool_result',
+                    { toolUseId: block.toolUseId, content: block.content, isError: block.isError },
+                    sessionId,
+                );
                 break;
             default:
                 break; // text / system：无需推送
@@ -275,10 +351,58 @@ export class AgentController {
         }
     }
 
-    /** auto/resume 模式持久化用户消息与 assistant 回复 */
-    private async persistMessages(ourSessionId: string | undefined, userMessage: string, assistantContent: string): Promise<void> {
+    /** query 模式：从收集的 SDK 消息中提取结构化 blocks（用于持久化） */
+    private extractBlocks(messages: SDKMessage[]): MessageBlock[] {
+        const blocks: MessageBlock[] = [];
+        for (const msg of messages) {
+            if (msg.type !== 'assistant' || !msg.message?.content) continue;
+            const content: unknown = msg.message.content;
+            if (typeof content === 'string') {
+                blocks.push({ type: 'text', text: content });
+            } else if (Array.isArray(content)) {
+                blocks.push(...this.toMessageBlocks(content));
+            }
+        }
+        return blocks;
+    }
+
+    /** 将 SDK 内容块数组转换为 MessageBlock 数组（跳过无法识别的块） */
+    private toMessageBlocks(content: unknown[]): MessageBlock[] {
+        const blocks: MessageBlock[] = [];
+        for (const item of content) {
+            const block = this.toMessageBlock(item);
+            if (block) blocks.push(block);
+        }
+        return blocks;
+    }
+
+    /** 将单个 SDK 内容块转换为 MessageBlock；无法识别返回 null */
+    private toMessageBlock(item: unknown): MessageBlock | null {
+        if (typeof item !== 'object' || item === null) return null;
+        const block = item as Record<string, unknown>;
+        if (block.type === 'text' && typeof block.text === 'string') {
+            return { type: 'text', text: block.text };
+        }
+        if (block.type === 'thinking' && typeof block.thinking === 'string') {
+            return { type: 'thinking', thinking: block.thinking };
+        }
+        if (block.type === 'tool_use' && typeof block.name === 'string') {
+            return {
+                type: 'tool_use',
+                toolName: block.name,
+                toolInput: block.input,
+                toolId: typeof block.id === 'string' ? block.id : undefined,
+            };
+        }
+        return null;
+    }
+
+    /** auto/resume 模式持久化用户消息与 assistant 结构化回复 */
+    private async persistMessages(ourSessionId: string | undefined, userMessage: string, assistantBlocks: MessageBlock[]): Promise<void> {
         if (!ourSessionId) return;
         await this.sessionService.saveMessage(ourSessionId, 'user', userMessage);
-        if (assistantContent) await this.sessionService.saveMessage(ourSessionId, 'assistant', assistantContent);
+        if (assistantBlocks.length > 0) {
+            await this.sessionService.saveMessage(ourSessionId, 'assistant', assistantBlocks);
+        }
     }
 }
