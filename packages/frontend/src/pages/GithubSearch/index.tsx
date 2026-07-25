@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Input, Select, Card, Pagination, Spin, Empty, Typography, Tag, Button, Space, Row, Col, App } from 'antd'
-import { SearchOutlined, StarFilled, StarOutlined, ForkOutlined, GithubOutlined } from '@ant-design/icons'
+import { SearchOutlined, StarFilled, StarOutlined, ForkOutlined, GithubOutlined, CodeOutlined } from '@ant-design/icons'
 import { searchRepos, starRepo, checkStarred } from '../../api'
 import type { GithubSearchRepo } from '../../types'
 import { LANGUAGE_OPTIONS } from '../../constants'
 import { formatNumberShort, getRelativeTime, parseFullName } from '../../utils/format'
+import CodePreviewDrawer from '../../components/repo/CodePreviewDrawer'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -45,6 +46,7 @@ export default function GithubSearch() {
     const [loading, setLoading] = useState(false)
     const [searched, setSearched] = useState(false)
     const [starredMap, setStarredMap] = useState<Record<string, boolean>>({})
+    const [previewRepo, setPreviewRepo] = useState<string | null>(null)
 
     const doSearch = useCallback(async (searchPage: number, overridePerPage?: number) => {
         setLoading(true)
@@ -255,17 +257,27 @@ export default function GithubSearch() {
                                                 </Text>
                                             </div>
 
-                                            <Button
-                                                type={isStarred ? 'default' : 'primary'}
-                                                icon={isStarred ? <StarFilled /> : <StarOutlined />}
-                                                onClick={() => !isStarred && handleStar(repo)}
-                                                block
-                                                style={
-                                                    isStarred ? { color: '#52c41a', borderColor: '#52c41a', cursor: 'default' } : undefined
-                                                }
-                                            >
-                                                {isStarred ? '已Star ✅' : 'Star ⭐'}
-                                            </Button>
+                                            <Space.Compact block>
+                                                <Button
+                                                    type={isStarred ? 'default' : 'primary'}
+                                                    icon={isStarred ? <StarFilled /> : <StarOutlined />}
+                                                    onClick={() => !isStarred && handleStar(repo)}
+                                                    style={
+                                                        isStarred
+                                                            ? { flex: 1, color: '#52c41a', borderColor: '#52c41a', cursor: 'default' }
+                                                            : { flex: 1 }
+                                                    }
+                                                >
+                                                    {isStarred ? '已Star ✅' : 'Star ⭐'}
+                                                </Button>
+                                                <Button
+                                                    icon={<CodeOutlined />}
+                                                    onClick={() => setPreviewRepo(fullName)}
+                                                    style={{ flex: 1 }}
+                                                >
+                                                    代码预览
+                                                </Button>
+                                            </Space.Compact>
                                         </Card>
                                     </Col>
                                 )
@@ -287,6 +299,8 @@ export default function GithubSearch() {
                     </>
                 )})()}
             </Spin>
+
+            <CodePreviewDrawer fullName={previewRepo} onClose={() => setPreviewRepo(null)} />
         </div>
     )
 }

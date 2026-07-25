@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Segmented, Select, Spin, Empty, Typography, Tag, Space, Button, App, Modal, Input, theme } from 'antd'
-import { StarFilled, ForkOutlined, FireOutlined, TranslationOutlined, DownloadOutlined } from '@ant-design/icons'
+import { StarFilled, ForkOutlined, FireOutlined, TranslationOutlined, DownloadOutlined, CodeOutlined } from '@ant-design/icons'
 import { fetchTrending, translateTrending, downloadTrending } from '../../api'
 import {
     getDownloadTaskProgress,
@@ -16,6 +16,7 @@ import type { GithubSearchRepo } from '../../types'
 import { LANGUAGE_OPTIONS, RANK_BADGE_COLORS } from '../../constants'
 import { formatNumberShort, getRelativeTime } from '../../utils/format'
 import DownloadProgressModal from '../../components/download/DownloadProgressModal'
+import CodePreviewDrawer from '../../components/repo/CodePreviewDrawer'
 
 const { Title, Text } = Typography
 
@@ -29,6 +30,7 @@ export default function Trending() {
     const [dateRange, setDateRange] = useState('')
     const [loading, setLoading] = useState(false)
     const [translating, setTranslating] = useState(false)
+    const [previewRepo, setPreviewRepo] = useState<string | null>(null)
 
     // ── 下载相关状态 ──
     const [downloadConfigOpen, setDownloadConfigOpen] = useState(false)
@@ -406,6 +408,14 @@ export default function Trending() {
                                         <Text type='secondary' style={{ fontSize: 10 }}>
                                             {getRelativeTime(repo.pushedAt)}
                                         </Text>
+                                        <Button
+                                            size='small'
+                                            icon={<CodeOutlined />}
+                                            onClick={() => setPreviewRepo(repo.fullName)}
+                                            style={{ marginTop: 4 }}
+                                        >
+                                            代码预览
+                                        </Button>
                                     </div>
                                 </div>
                             )
@@ -413,6 +423,8 @@ export default function Trending() {
                     </div>
                 )}
             </Spin>
+
+            <CodePreviewDrawer fullName={previewRepo} onClose={() => setPreviewRepo(null)} />
 
             {/* 下载配置弹窗 */}
             <Modal
