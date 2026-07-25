@@ -272,3 +272,83 @@ export interface TaskListResult {
     }>
 }
 
+
+// ── 学习收藏 ──
+
+export type LearnStatus = 'WANT' | 'LEARNING' | 'DONE' | 'SHELVED'
+export type LearnPriority = 'LOW' | 'MEDIUM' | 'HIGH'
+
+export interface LearnTag {
+    id: number
+    name: string
+    color: string | null
+    usageCount?: number
+    createdAt?: string
+    updatedAt?: string
+}
+
+export interface LearnRepoBrief {
+    id: number
+    repoName: string | null
+    fullName: string | null
+    description: string | null
+    descriptionCn: string | null
+    language: string | null
+    ownerName: string | null
+    ownerAvatarUrl: string | null
+    htmlUrl: string | null
+    starsCount: number
+    forksCount: number
+    starredAt: string | null
+}
+
+export interface LearnRecord {
+    id: number
+    repoId: number
+    status: LearnStatus
+    priority: LearnPriority
+    notes: string | null
+    startedAt: string | null
+    finishedAt: string | null
+    createdAt: string
+    updatedAt: string
+    repo: LearnRepoBrief
+    tags: LearnTag[]
+}
+
+export interface LearnListParams {
+    page?: number
+    size?: number
+    status?: LearnStatus
+    priority?: LearnPriority
+    categoryId?: number
+    tagIds?: number[]
+    keyword?: string
+    sortBy?: 'createdAt' | 'updatedAt' | 'priority' | 'starsCount' | 'starredAt'
+    sortOrder?: 'asc' | 'desc'
+}
+
+export interface LearnListResult {
+    records: LearnRecord[]
+    total: number
+    size: number
+    current: number
+    pages: number
+}
+
+export interface LearnStats {
+    WANT: number
+    LEARNING: number
+    DONE: number
+    SHELVED: number
+    ALL: number
+}
+
+export interface LearnSaveParams {
+    id?: number
+    repoId?: number
+    status?: LearnStatus
+    priority?: LearnPriority
+    notes?: string | null
+    tagIds?: number[]
+}

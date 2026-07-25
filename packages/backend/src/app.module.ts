@@ -15,6 +15,7 @@ import { CloneModule } from './clone/clone.module';
 import { DownloadModule } from './download/download.module';
 import { CategoryModule } from './category/category.module';
 import { AgentModule } from './agent/agent.module';
+import { LearnModule } from './learn/learn.module';
 
 import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
@@ -44,6 +45,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
         DownloadModule,
         CategoryModule,
         AgentModule,
+        LearnModule,
     ],
     providers: [
         {

@@ -45,6 +45,7 @@ model GithubRepo {
   cloneItems       CloneTaskItem[]
   downloadItems    DownloadTaskItem[]
   categories       CategoryRepoLink[]
+  learnRecord      LearnRecord?
 
   @@index([language])
   @@index([ownerName])
@@ -299,4 +300,51 @@ model DownloadTaskItem {
   @@index([repoId])
   @@index([status])
   @@map("download_task_item")
+}
+
+// ── 学习收藏 ──
+
+model LearnRecord {
+  id         Int       @id @default(autoincrement())
+  repoId     Int       @unique @map("repo_id")
+  status     String    @default("WANT") @map("status")
+  priority   String    @default("MEDIUM") @map("priority")
+  notes      String?   @map("notes")
+  startedAt  DateTime? @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  repo     GithubRepo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  tagLinks LearnTagLink[]
+
+  @@index([status, priority])
+  @@index([createdAt])
+  @@map("learn_record")
+}
+
+model LearnTag {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @map("name")
+  color     String?  @map("color")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  tagLinks LearnTagLink[]
+
+  @@map("learn_tag")
+}
+
+model LearnTagLink {
+  id            Int      @id @default(autoincrement())
+  learnRecordId Int      @map("learn_record_id")
+  tagId         Int      @map("tag_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  learnRecord LearnRecord @relation(fields: [learnRecordId], references: [id], onDelete: Cascade)
+  tag         LearnTag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([learnRecordId, tagId])
+  @@index([tagId])
+  @@map("learn_tag_link")
 }

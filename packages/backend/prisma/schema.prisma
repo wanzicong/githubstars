@@ -44,6 +44,7 @@ model GithubRepo {
   cloneItems       CloneTaskItem[]
   downloadItems    DownloadTaskItem[]
   categories       CategoryRepoLink[]
+  learnRecord      LearnRecord?
 
   @@index([language])
   @@index([ownerName])
@@ -301,4 +302,81 @@ model DownloadTaskItem {
   @@index([repoId])
   @@index([status])
   @@map("download_task_item")
+}
+
+// ── 学习收藏 ──
+
+/**
+ * 学习记录 —— 一个 repo 对应一条学习记录（1:1）。
+ *
+ * 用户从已 star 的 github_repo 中挑选想要学习的项目，
+ * 记录学习状态、优先级、个人笔记和时间戳。
+ *
+ * 状态取值（String 而非 enum，与项目现有惯例一致）：
+ * - WANT      想学（默认）
+ * - LEARNING  在学
+ * - DONE      已学完
+ * - SHELVED   搁置
+ *
+ * 优先级取值：
+ * - LOW / MEDIUM / HIGH
+ *
+ * 时间戳语义：
+ * - startedAt  状态首次变为 LEARNING 时写入
+ * - finishedAt 状态首次变为 DONE 时写入
+ * - 状态回到 WANT 时，两个时间戳清空
+ */
+model LearnRecord {
+  id         BigInt    @id @default(autoincrement())
+  repoId     BigInt    @unique @map("repo_id")
+  status     String    @default("WANT") @map("status") @db.VarChar(20)
+  priority   String    @default("MEDIUM") @map("priority") @db.VarChar(20)
+  notes      String?   @map("notes") @db.Text
+  startedAt  DateTime? @map("started_at") @db.DateTime
+  finishedAt DateTime? @map("finished_at") @db.DateTime
+  createdAt  DateTime  @default(now()) @map("created_at") @db.DateTime
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime
+
+  repo     GithubRepo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  tagLinks LearnTagLink[]
+
+  @@index([status, priority])
+  @@index([createdAt])
+  @@map("learn_record")
+}
+
+/**
+ * 学习标签 —— 平铺的用户自定义标签（无层级，与 category 树形分类互补）。
+ *
+ * 一个 LearnRecord 可挂多个标签；同一标签可被多个 LearnRecord 使用。
+ */
+model LearnTag {
+  id        BigInt   @id @default(autoincrement())
+  name      String   @unique @map("name") @db.VarChar(50)
+  color     String?  @map("color") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime
+
+  tagLinks LearnTagLink[]
+
+  @@map("learn_tag")
+}
+
+/**
+ * 学习记录-标签关联 —— 多对多中间表。
+ *
+ * 模式与 category_repo_link 一致：独立主键 + @@unique 防重 + 两端级联删除。
+ */
+model LearnTagLink {
+  id            BigInt   @id @default(autoincrement())
+  learnRecordId BigInt   @map("learn_record_id")
+  tagId         BigInt   @map("tag_id")
+  createdAt     DateTime @default(now()) @map("created_at") @db.DateTime
+
+  learnRecord LearnRecord @relation(fields: [learnRecordId], references: [id], onDelete: Cascade)
+  tag         LearnTag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([learnRecordId, tagId])
+  @@index([tagId])
+  @@map("learn_tag_link")
 }

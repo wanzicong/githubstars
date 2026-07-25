@@ -6,6 +6,7 @@ import {
   FireOutlined,
   CopyOutlined,
   RobotOutlined,
+  ReadOutlined,
 } from '@ant-design/icons'
 /**
  * 导航菜单项定义 -- 集中管理所有菜单的 key、图标、标题、排序。
@@ -54,6 +55,12 @@ export const menuGroups: MenuGroup[] = [
       { key: '/', label: 'Star列表' },
       { key: '/code-browser', label: '代码浏览' },
       { key: '/categories', label: '分类管理' },
+    ],
+  },
+  {
+    key: 'group-learn', icon: <ReadOutlined />, label: '学习', orderNo: 5,
+    children: [
+      { key: '/learn', label: '学习清单' },
     ],
   },
   {

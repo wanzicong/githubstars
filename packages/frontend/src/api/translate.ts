@@ -9,8 +9,9 @@ export async function translateDescription(repoId: number): Promise<{ success: b
 
 /** 获取仓库详情（从 Star API，translate 模块需要此能力） */
 export async function fetchRepoDetail(repoId: number): Promise<GithubRepo> {
-    const { data } = await api.post<GithubRepo>('/api/stars/detail', { id: repoId })
-    return data
+    // 后端 ResponseInterceptor 将裸 GithubRepo 包装为 { success, data } 信封
+    const { data: envelope } = await api.post<{ success: boolean; data: GithubRepo }>('/api/stars/detail', { id: repoId })
+    return envelope.data
 }
 
 /** 启动单个仓库的 README 翻译（异步，立即返回 taskId） */
