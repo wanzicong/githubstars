@@ -25,41 +25,11 @@
 name: githubstars
 
 services:
-  # ─── MySQL 8.0 数据库 ────────────────────────────────────
-  mysql:
-    image: mysql:8.0
-    container_name: githubstars-db
-    restart: unless-stopped
-
-    # 仅需内部网络，不暴露端口到宿主机（生产安全）
-    expose:
-      - "3306"
-
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-githubstars}
-      MYSQL_CHARACTER_SET_SERVER: utf8mb4
-      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
-
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      - --default-authentication-plugin=mysql_native_password
-      - --max-allowed-packet=64M
-      - --innodb-log-file-size=256M
-
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
-    volumes:
-      - mysql_data:/var/lib/mysql
-
-    networks:
-      - githubstars-network
+  # ─── MySQL 数据库说明 ─────────────────────────────────────
+  # 生产环境与本地开发共用一个 MySQL 实例 githubstars-dev-db，
+  # 由 docker-compose.yml（name: githubstars-dev）维护。
+  # backend 通过 DATABASE_URL（.env.production）直连 githubstars-dev-db:3306，
+  # 不再启动独立的生产 MySQL 容器。
 
   # ─── NestJS 后端 ─────────────────────────────────────────
   backend:
@@ -77,9 +47,11 @@ services:
       # 生产环境可注释掉此行，仅通过 Nginx 访问
       - "${BACKEND_DEBUG_PORT:-10004}:10002"
 
-    depends_on:
-      mysql:
-        condition: service_healthy
+    # 不再依赖独立的生产 MySQL 容器，backend 通过 DATABASE_URL 直连 githubstars-dev-db
+    # githubstars-dev-db 由 docker-compose.yml（name: githubstars-dev）维护，并加入 githubstars-network
+    # depends_on:
+    #   mysql:
+    #     condition: service_healthy
 
     env_file:
       - .env.production
@@ -164,9 +136,7 @@ services:
 
 
 # ─── 持久化卷 ──────────────────────────────────────────────
-volumes:
-  mysql_data:
-    name: githubstars_mysql_data
+# 无共享卷：MySQL 数据由 githubstars-dev 项目管理（githubstars_dev_mysql_data）
 
 
 # ─── 网络 ───────────────────────────────────────────────────

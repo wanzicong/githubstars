@@ -63,6 +63,8 @@ packages/backend/.env.local
 
 # Docker deployment
 .env.production
+# 本地开发 docker-compose.yml 变量（含数据库密码）
+.env
 
 # Desktop (legacy old dir)
 githubstars-desktop/
