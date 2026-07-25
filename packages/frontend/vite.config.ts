@@ -21,38 +21,6 @@ export default defineConfig({
         target: 'http://localhost:10002',
         changeOrigin: true,
       },
-      // 以下路径的前端 SPA 页面会被 Vite 处理（Accept: text/html 不代理）
-      // API 请求（Accept 非 html）会被代理到后端 /api + path
-      '/sync': {
-        target: 'http://localhost:10002',
-        changeOrigin: true,
-        rewrite: (path) => '/api' + path,
-        bypass(req) {
-          if (req.headers.accept?.includes('text/html')) {
-            return '/index.html'
-          }
-        },
-      },
-      '/authors': {
-        target: 'http://localhost:10002',
-        changeOrigin: true,
-        rewrite: (path) => '/api' + path,
-        bypass(req) {
-          if (req.headers.accept?.includes('text/html')) {
-            return '/index.html'
-          }
-        },
-      },
-      '/stars/export': {
-        target: 'http://localhost:10002',
-        changeOrigin: true,
-        rewrite: (path) => '/api' + path,
-      },
-      '/export': {
-        target: 'http://localhost:10002',
-        changeOrigin: true,
-        rewrite: (path) => '/api' + path,
-      },
     },
   },
 })
