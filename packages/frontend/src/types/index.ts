@@ -121,6 +121,8 @@ export interface StarListParams {
     startDate?: string
     endDate?: string
     untranslatedOnly?: boolean
+    /** 分类筛选：分类 ID，后端自动展开含后代分类 */
+    categoryId?: number
 }
 
 export interface ApiResponse<T = unknown> {

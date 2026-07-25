@@ -57,6 +57,7 @@ export class GithubRepoService {
         startDate?: string;
         endDate?: string;
         untranslatedOnly?: boolean;
+        categoryIds?: number[];
     }): Prisma.GithubRepoWhereInput {
         const AND: Prisma.GithubRepoWhereInput[] = [];
         if (params.keyword?.trim()) {
@@ -83,7 +84,28 @@ export class GithubRepoService {
             if (params.endDate) cond.lte = new Date(params.endDate + 'T23:59:59+08:00');
             AND.push({ [f]: cond });
         }
+        // 分类筛选：categoryIds 已含父分类及其所有后代，由调用方展开
+        if (params.categoryIds?.length) {
+            AND.push({ categories: { some: { categoryId: { in: params.categoryIds } } } });
+        }
         return AND.length > 0 ? { AND } : {};
+    }
+
+    /**
+     * 展开分类 ID 列表：包含传入 ID 及其所有后代分类
+     * 若 id 为 undefined/null 则返回 undefined（表示不筛选）
+     */
+    private async expandCategoryIds(id?: number): Promise<number[] | undefined> {
+        if (!id) return undefined;
+        const collect = async (parentId: number): Promise<number[]> => {
+            const children = await this.prisma.category.findMany({ where: { parentId }, select: { id: true } });
+            const childIds = children.map((c) => Number(c.id));
+            if (childIds.length === 0) return [];
+            const grandChildIds = await Promise.all(childIds.map(collect));
+            return [...childIds, ...grandChildIds.flat()];
+        };
+        const descendants = await collect(id);
+        return [id, ...descendants];
     }
 
     /**
@@ -116,6 +138,7 @@ export class GithubRepoService {
         this.logger.log('分页查询仓库列表: page=' + page + ', size=' + size + ', keyword=' + (params.keyword || ''));
         const sortField = resolveSortField(params.sortBy);
         const sortDir = resolveSortDir(params.sortOrder);
+        const categoryIds = await this.expandCategoryIds(params.categoryId);
         const where = this.buildWhere({
             keyword: params.keyword,
             languages: parseLanguages(params.language),
@@ -123,6 +146,7 @@ export class GithubRepoService {
             startDate: params.startDate,
             endDate: params.endDate,
             untranslatedOnly: params.untranslatedOnly,
+            categoryIds,
         });
         const [total, records] = await Promise.all([
             this.prisma.githubRepo.count({ where }),
@@ -169,6 +193,7 @@ export class GithubRepoService {
     async findAllUrls(params: FilterParams) {
         const sortField = resolveSortField(params.sortBy);
         const sortDir = resolveSortDir(params.sortOrder);
+        const categoryIds = await this.expandCategoryIds(params.categoryId);
         const where = this.buildWhere({
             keyword: params.keyword,
             languages: parseLanguages(params.language),
@@ -176,6 +201,7 @@ export class GithubRepoService {
             startDate: params.startDate,
             endDate: params.endDate,
             untranslatedOnly: params.untranslatedOnly,
+            categoryIds,
         });
         const repos = await this.prisma.githubRepo.findMany({ where, select: { htmlUrl: true }, orderBy: { [sortField]: sortDir } });
         return repos.map((r) => r.htmlUrl).filter(Boolean) as string[];
@@ -193,6 +219,7 @@ export class GithubRepoService {
      *   - GithubController.getAllIds()
      */
     async findAllIds(params: FilterParams) {
+        const categoryIds = await this.expandCategoryIds(params.categoryId);
         const where = this.buildWhere({
             keyword: params.keyword,
             languages: parseLanguages(params.language),
@@ -200,6 +227,7 @@ export class GithubRepoService {
             startDate: params.startDate,
             endDate: params.endDate,
             untranslatedOnly: params.untranslatedOnly,
+            categoryIds,
         });
         const repos = await this.prisma.githubRepo.findMany({ where, select: { id: true } });
         return repos.map((r) => Number(r.id));

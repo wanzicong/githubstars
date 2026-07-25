@@ -57,6 +57,7 @@ export class StarsController {
             startDate: body.startDate,
             endDate: body.endDate,
             untranslatedOnly: body.untranslatedOnly,
+            categoryId: body.categoryId,
         });
     }
 
@@ -127,6 +128,7 @@ export class StarsController {
             startDate: body.startDate,
             endDate: body.endDate,
             untranslatedOnly: body.untranslatedOnly,
+            categoryId: body.categoryId,
         });
         res.set({ 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': 'attachment; filename="stars-export.txt"' });
         res.send(urls.join('\n'));
@@ -167,6 +169,7 @@ export class StarsController {
             startDate: body.startDate,
             endDate: body.endDate,
             untranslatedOnly: body.untranslatedOnly,
+            categoryId: body.categoryId,
         });
         return { success: true, ids, total: ids.length };
     }

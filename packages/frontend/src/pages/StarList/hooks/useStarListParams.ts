@@ -21,12 +21,13 @@ export function useStarListParams() {
     const sortBy = searchParams.get('sortBy') || 'stars_count'
     const sortOrder = searchParams.get('sortOrder') || 'desc'
     const dateField = searchParams.get('dateField') || undefined
-    const currentPage = parseInt(searchParams.get('page') || '1', 10)
-    const pageSize = parseInt(searchParams.get('size') || '36', 10)
+    // 瀑布流模式：page 不再写入 URL，由组件内部 state 维护
+    const pageSize = Number.parseInt(searchParams.get('size') || '20', 10)
     const startDateStr = searchParams.get('startDate')
     const endDateStr = searchParams.get('endDate')
     const untranslatedOnly = searchParams.get('untranslatedOnly') === 'true'
-    const viewMode = (searchParams.get('view') || 'list') as 'grid' | 'list'
+    // 默认 grid 瀑布流（项目主视图）
+    const viewMode = (searchParams.get('view') || 'grid') as 'grid' | 'list'
     const timePreset = searchParams.get('timePreset') || ''
 
     const startDate = useMemo(() => {
@@ -42,12 +43,11 @@ export function useStarListParams() {
     }, [endDateStr])
 
     const setUrlParam = useCallback(
-        (key: string, value: string | null | undefined, resetPage = true) => {
+        (key: string, value: string | null | undefined) => {
             setSearchParams((prev) => {
                 const next = new URLSearchParams(prev)
                 if (value === undefined || value === null || value === '') next.delete(key)
                 else next.set(key, value)
-                if (resetPage && key !== 'page') next.delete('page')
                 return next
             })
         },
@@ -58,13 +58,10 @@ export function useStarListParams() {
         (updates: Record<string, string | null | undefined>) => {
             setSearchParams((prev) => {
                 const next = new URLSearchParams(prev)
-                let shouldReset = false
                 for (const [key, value] of Object.entries(updates)) {
                     if (value === undefined || value === null || value === '') next.delete(key)
                     else next.set(key, value)
-                    if (key !== 'page') shouldReset = true
                 }
-                if (shouldReset) next.delete('page')
                 return next
             })
         },
@@ -81,7 +78,7 @@ export function useStarListParams() {
 
     return {
         keyword, languageStr, selectedLanguages,
-        sortBy, sortOrder, dateField, currentPage, pageSize,
+        sortBy, sortOrder, dateField, pageSize,
         startDateStr, endDateStr, startDate, endDate,
         untranslatedOnly, viewMode, timePreset,
         setUrlParam, setUrlParams, clearFilters,

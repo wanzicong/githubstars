@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useLocation, useSearchParams } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { Card, Typography, Space, App, Segmented } from 'antd'
 import { AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons'
 import dayjs from '../../config/setupDayjs'
@@ -13,13 +13,14 @@ import CloneWizardModal from '../../components/clone/CloneWizardModal'
 import CloneProgressModal from '../../components/clone/CloneProgressModal'
 import DownloadWizardModal from '../../components/download/DownloadWizardModal'
 import DownloadProgressModal from '../../components/download/DownloadProgressModal'
-import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, PageResult } from '../../types'
+import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO } from '../../types'
 import type { CloneTaskProgress } from '../../api/clone'
 import { getCloneTaskProgress, retryCloneFailed, retryCloneItem, deleteCloneTask } from '../../api/clone'
 import type { DownloadTaskProgress } from '../../api/download'
 import { getDownloadTaskProgress, retryDownloadFailed, retryDownloadItem, deleteDownloadTask } from '../../api/download'
 import { usePolling } from '../../hooks/usePolling'
 import { useStarListParams } from './hooks/useStarListParams'
+import { useStarListInfinite } from './hooks/useStarListInfinite'
 import { INITIAL_TASK_PROGRESS, type TaskProgress } from '../../constants'
 import StarFilterBar from './components/StarFilterBar'
 import StarTimeFilter from './components/StarTimeFilter'
@@ -29,14 +30,17 @@ const { Title } = Typography
 
 export default function StarList() {
     const { message } = App.useApp()
-    const [searchParams] = useSearchParams()
     const location = useLocation()
 
     const params = useStarListParams()
     const { keyword, languageStr, selectedLanguages, sortBy, sortOrder,
-        dateField, currentPage, pageSize, startDateStr, endDateStr,
+        dateField, pageSize, startDateStr, endDateStr,
         startDate, endDate, untranslatedOnly, viewMode, timePreset,
         setUrlParam, setUrlParams, clearFilters } = params
+
+    // 分类筛选：URL 参数 categoryId（字符串） → number | null
+    const categoryIdStr = new URLSearchParams(location.search).get('categoryId')
+    const categoryId = categoryIdStr ? Number.parseInt(categoryIdStr, 10) : null
 
     const buildFilters = useCallback(() => ({
         keyword: keyword || undefined,
@@ -47,12 +51,20 @@ export default function StarList() {
         startDate: startDateStr || undefined,
         endDate: endDateStr || undefined,
         untranslatedOnly: untranslatedOnly || undefined,
-    }), [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly])
+        categoryId: categoryId ?? undefined,
+    }), [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, categoryId])
 
-    const [pageResult, setPageResult] = useState<PageResult<GithubRepo>>({ records: [], total: 0, size: 12, current: 1, pages: 0 })
+    // 筛选条件签名：任一变化时 hook 内重置 page=1
+    const filterKey = [
+        keyword, languageStr, sortBy, sortOrder, dateField,
+        startDateStr, endDateStr, untranslatedOnly, categoryId,
+    ].map(v => v ?? '').join('|')
+
+    const list = useStarListInfinite(filterKey, buildFilters, pageSize)
+    const { repos, total, loading, loadingMore, error, hasMore, loadMore, reload } = list
+
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
-    const [loading, setLoading] = useState(true)
     const [initialLoading, setInitialLoading] = useState(true)
     const [exportingMd, setExportingMd] = useState(false)
     const [exportingUrls, setExportingUrls] = useState(false)
@@ -76,33 +88,14 @@ export default function StarList() {
         loadMeta()
     }, [])
 
+    // 路由返回时刷新（从详情页返回列表）
+    const prevPathnameRef = useRef(location.pathname)
     useEffect(() => {
-        let cancelled = false
-        const loadPage = async () => {
-            setLoading(true)
-            try {
-                const result = await api.fetchStarList({
-                    page: currentPage,
-                    size: pageSize,
-                    ...buildFilters(),
-                })
-                if (!cancelled) setPageResult(result)
-            } catch {
-                if (!cancelled) message.error('加载列表失败')
-            } finally {
-                if (!cancelled) setLoading(false)
-            }
+        if (prevPathnameRef.current !== location.pathname) {
+            prevPathnameRef.current = location.pathname
+            reload()
         }
-        loadPage()
-        return () => {
-            cancelled = true
-        }
-    }, [
-        currentPage, pageSize, keyword, languageStr, sortBy, sortOrder,
-        dateField, startDateStr, endDateStr, untranslatedOnly,
-        location.pathname, // 从详情页返回列表时触发刷新
-        buildFilters, message,
-    ])
+    }, [location.pathname, reload])
 
     const [translatePanelOpen, setTranslatePanelOpen] = useState(false)
     const [translateModalVisible, setTranslateModalVisible] = useState(false)
@@ -152,12 +145,7 @@ export default function StarList() {
                 })
                 if (res.status === 'COMPLETED' || res.status === 'FAILED') {
                     stop()
-                    const result = await api.fetchStarList({
-                        page: currentPage,
-                        size: pageSize,
-                        ...buildFilters(),
-                    })
-                    setPageResult(result)
+                    reload()
                 }
             }
         } catch {
@@ -341,12 +329,10 @@ export default function StarList() {
         setSelectedRepoIds([])
     }, [])
 
-    const { records: repos } = pageResult
-
-    /** 跨页选择时，若选中仓库不在当前页则拉取完整信息 */
+    /** 跨页选择时，若选中仓库不在已加载列表则拉取完整信息 */
     const resolveSelectedRepos = useCallback(async (): Promise<GithubRepo[] | null> => {
-        const currentPageIds = repos.map((r) => r.id)
-        const missingIds = selectedRepoIds.filter((id) => !currentPageIds.includes(id))
+        const loadedIds = repos.map((r) => r.id)
+        const missingIds = selectedRepoIds.filter((id) => !loadedIds.includes(id))
         if (missingIds.length === 0) {
             return repos.filter((r) => selectedRepoIds.includes(r.id))
         }
@@ -394,9 +380,8 @@ export default function StarList() {
         }
     }, [buildFilters, message])
 
-    const pageTotal = pageResult.total
     const handleExportMd = useCallback(async () => {
-        if (pageTotal === 0) {
+        if (total === 0) {
             message.warning('没有匹配的仓库可导出')
             return
         }
@@ -414,7 +399,8 @@ export default function StarList() {
                     startDate: startDateStr,
                     endDate: endDateStr,
                     untranslatedOnly,
-                    maxCount: pageTotal,
+                    categoryId,
+                    maxCount: total,
                 }),
             })
             if (!resp.ok) {
@@ -436,7 +422,7 @@ export default function StarList() {
         } finally {
             setExportingMd(false)
         }
-    }, [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, pageTotal, message])
+    }, [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, categoryId, total, message])
 
     const hasActiveFilters =
         keyword.trim() !== '' ||
@@ -444,7 +430,8 @@ export default function StarList() {
         dateField !== undefined ||
         !!startDateStr ||
         !!endDateStr ||
-        untranslatedOnly
+        untranslatedOnly ||
+        categoryId !== null
 
     const handleRemoveFilter = useCallback((key: string) => {
         if (key === 'time') {
@@ -471,7 +458,7 @@ export default function StarList() {
                 </Title>
                 <Segmented
                     value={viewMode}
-                    onChange={(val) => setUrlParam('view', val === 'grid' ? null : (val as string), false)}
+                    onChange={(val) => setUrlParam('view', val === 'grid' ? null : (val as string))}
                     options={[
                         { value: 'grid', icon: <AppstoreOutlined /> },
                         { value: 'list', icon: <UnorderedListOutlined /> },
@@ -488,6 +475,7 @@ export default function StarList() {
                         selectedLanguages={selectedLanguages}
                         sortBy={sortBy}
                         sortOrder={sortOrder}
+                        categoryId={categoryId}
                         languageOptions={languageOptions}
                         onParamChange={setUrlParam}
                     />
@@ -524,21 +512,15 @@ export default function StarList() {
 
             <StarRepoView
                 repos={repos}
-                pageResult={pageResult}
+                total={total}
                 viewMode={viewMode}
                 loading={loading}
+                loadingMore={loadingMore}
+                error={error}
+                hasMore={hasMore}
+                onLoadMore={loadMore}
                 hasActiveFilters={hasActiveFilters}
-                currentPage={currentPage}
-                pageSize={pageSize}
                 onClearFilters={clearFilters}
-                onPageChange={(page, size) => {
-                    const currentSize = Number.parseInt(searchParams.get('size') || '36', 10)
-                    if (size !== currentSize) {
-                        setUrlParams({ size: String(size), page: '1' })
-                    } else {
-                        setUrlParam('page', String(page), false)
-                    }
-                }}
                 selectedIds={selectedRepoIds}
                 onSelectionChange={setSelectedRepoIds}
                 onSelectAllPages={handleSelectAllPages}
@@ -590,17 +572,7 @@ export default function StarList() {
                 onClose={() => setTranslatePanelOpen(false)}
                 filters={buildFilters()}
                 hasActiveFilters={hasActiveFilters}
-                onRefreshList={() => {
-                    const fetchList = async () => {
-                        const res = await api.fetchStarList({
-                            page: currentPage,
-                            size: pageSize,
-                            ...buildFilters(),
-                        })
-                        setPageResult(res)
-                    }
-                    fetchList().catch(() => {})
-                }}
+                onRefreshList={reload}
             />
         </div>
     )

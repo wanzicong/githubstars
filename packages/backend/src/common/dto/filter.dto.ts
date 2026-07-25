@@ -27,6 +27,8 @@ export const FilterSchema = PaginationSchema.extend({
         .union([z.boolean(), z.string()])
         .optional()
         .transform((v) => v === true || v === 'true'),
+    /** 分类筛选：传入分类 ID，含其所有后代分类（递归） */
+    categoryId: z.coerce.number().int().positive().optional(),
 });
 
 export type FilterDto = z.infer<typeof FilterSchema>;

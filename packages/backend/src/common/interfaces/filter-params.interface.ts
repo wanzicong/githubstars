@@ -20,9 +20,11 @@ interface DateRangeParams {
     endDate?: string;
 }
 
-/** 完整筛选参数（基础 + 日期 + 翻译状态） */
+/** 完整筛选参数（基础 + 日期 + 翻译状态 + 分类） */
 export interface FilterParams extends BaseFilterParams, DateRangeParams {
     untranslatedOnly?: boolean;
+    /** 分类筛选：分类 ID，含其所有后代分类（service 内自动展开） */
+    categoryId?: number;
 }
 
 /** 带分页的筛选参数 */

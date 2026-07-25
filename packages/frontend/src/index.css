@@ -273,3 +273,36 @@ html, body {
 .category-tree-wrapper .ant-tree-treenode:hover .ant-tree-draggable-icon {
   opacity: 1;
 }
+
+/* ── Star 仓库瀑布流（CSS columns 多列布局）─────────────────────────
+ * 真瀑布流：列优先填充，列宽相等、高度错落。
+ * 列数响应式：xs 1 → sm 2 → md 3 → lg 4 → xl 5
+ * 注意：列优先填充意味着顺序沿列向下再换到下一列，与 Pinterest 行为一致。
+ */
+.star-masonry-grid {
+  column-count: 5;
+  column-gap: 16px;
+  width: 100%;
+}
+@media (max-width: 1600px) {
+  .star-masonry-grid { column-count: 4; }
+}
+@media (max-width: 1200px) {
+  .star-masonry-grid { column-count: 3; }
+}
+@media (max-width: 900px) {
+  .star-masonry-grid { column-count: 2; }
+}
+@media (max-width: 600px) {
+  .star-masonry-grid { column-count: 1; }
+}
+.star-masonry-item {
+  /* break-inside 防止卡片被列切断 */
+  break-inside: avoid;
+  page-break-inside: avoid;
+  margin-bottom: 16px;
+  position: relative;
+  width: 100%;
+  /* columns 内的子元素需要 inline-block 或 overflow 才能正确分列 */
+  display: inline-block;
+}
