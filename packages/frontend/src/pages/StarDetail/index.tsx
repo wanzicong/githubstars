@@ -13,11 +13,14 @@ import {
     Modal,
     Progress,
     Alert,
+    Tabs,
 } from 'antd'
 import {
     ArrowLeftOutlined,
     CheckCircleOutlined,
     CloseCircleOutlined,
+    CodeOutlined,
+    ReadOutlined,
 } from '@ant-design/icons'
 import * as statsApi from '../../api'
 import * as translateApi from '../../api'
@@ -27,6 +30,7 @@ import { parseTopics } from './hooks/helpers'
 import { RepoHeader } from '../../components/repo'
 import { RepoStatsGrid } from '../../components/repo'
 import { RepoReadmeCard } from '../../components/repo'
+import CodePreviewCard from '../../components/repo/CodePreviewCard'
 import { usePolling } from '../../hooks/usePolling'
 import type { GithubRepo, TranslateTaskProgress } from '../../types'
 
@@ -346,13 +350,41 @@ export default function StarDetail() {
                 </Descriptions>
             </Card>
 
-            {/* README 翻译区块 */}
-            <RepoReadmeCard
-                repo={repo}
-                translatingReadme={translatingReadme}
-                onTranslateReadme={handleTranslateReadme}
-                onRetranslateReadme={handleRetranslateReadme}
-            />
+            {/* 代码预览 / README 切换区块 */}
+            <Card>
+                <Tabs
+                    defaultActiveKey='code'
+                    items={[
+                        {
+                            key: 'code',
+                            label: (
+                                <Space>
+                                    <CodeOutlined />
+                                    代码预览
+                                </Space>
+                            ),
+                            children: <CodePreviewCard fullName={repo.fullName} />,
+                        },
+                        {
+                            key: 'readme',
+                            label: (
+                                <Space>
+                                    <ReadOutlined />
+                                    README
+                                </Space>
+                            ),
+                            children: (
+                                <RepoReadmeCard
+                                    repo={repo}
+                                    translatingReadme={translatingReadme}
+                                    onTranslateReadme={handleTranslateReadme}
+                                    onRetranslateReadme={handleRetranslateReadme}
+                                />
+                            ),
+                        },
+                    ]}
+                />
+            </Card>
 
             {/* README 全屏查看弹窗 - 已内置于 RepoReadmeCard */}
 

@@ -57,11 +57,11 @@ export default function RepoReadmeCard({ repo, translatingReadme, onTranslateRea
     // —————— 卡片主体内容 ——————
     let readmeContent: ReactNode
     if (hasReadmeTranslation) {
-        // 场景1：有中文翻译 → 渲染翻译结果
+        // 场景1：有中文翻译 → 渲染翻译结果（内容自然展开，随页面滚动）
         readmeContent = (
             <MarkdownRenderer
                 content={repo.readmeCn ?? ''}
-                style={{ overflow: 'auto', maxHeight: 600, padding: '8px 16px' }}
+                style={{ padding: '8px 16px' }}
             />
         )
     } else if (repo.readmeFetched && hasReadmeOriginal) {
@@ -96,7 +96,7 @@ export default function RepoReadmeCard({ repo, translatingReadme, onTranslateRea
                 />
                 <MarkdownRenderer
                     content={repo.readmeOriginal ?? ''}
-                    style={{ overflow: 'auto', maxHeight: 600, padding: '8px 16px' }}
+                    style={{ padding: '8px 16px' }}
                 />
             </div>
         )
