@@ -51,6 +51,9 @@ FROM installer AS builder
 # 生产模式
 ENV NODE_ENV=production
 
+# Web 部署使用绝对路径资产引用，避免深路由（如 /stars/332）下资产路径拼接错乱
+ENV VITE_BASE=/
+
 # Turborepo 编译 frontend
 # 内部执行: tsc -b (类型检查) → vite build (打包)
 RUN npx turbo run build --filter=@githubstars/frontend
