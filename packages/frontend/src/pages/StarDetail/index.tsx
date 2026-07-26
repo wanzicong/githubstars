@@ -1,26 +1,31 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
+    Button,
     Card,
     Descriptions,
-    Tag,
-    Button,
-    Space,
-    Typography,
-    Spin,
-    Empty,
-    App,
+    Drawer,
+    FloatButton,
     Modal,
     Progress,
-    Alert,
+    Space,
+    Spin,
+    Tag,
     Tabs,
+    Typography,
+    App,
+    Alert,
+    Empty,
 } from 'antd'
 import {
     ArrowLeftOutlined,
     CheckCircleOutlined,
     CloseCircleOutlined,
     CodeOutlined,
+    InfoCircleOutlined,
     ReadOutlined,
+    VerticalAlignTopOutlined,
+    VerticalAlignBottomOutlined,
 } from '@ant-design/icons'
 import * as statsApi from '../../api'
 import * as translateApi from '../../api'
@@ -30,6 +35,7 @@ import { parseTopics } from './hooks/helpers'
 import { RepoHeader } from '../../components/repo'
 import { RepoStatsGrid } from '../../components/repo'
 import { RepoReadmeCard } from '../../components/repo'
+import { RepoReadmeCnCard } from '../../components/repo'
 import CodePreviewCard from '../../components/repo/CodePreviewCard'
 import { usePolling } from '../../hooks/usePolling'
 import type { GithubRepo, TranslateTaskProgress } from '../../types'
@@ -44,6 +50,9 @@ export default function StarDetail() {
     const [repo, setRepo] = useState<GithubRepo | null>(null)
     const [loading, setLoading] = useState(true)
     const [notFound, setNotFound] = useState(false)
+
+    // 详情抽屉
+    const [infoDrawerOpen, setInfoDrawerOpen] = useState(false)
 
     // 翻译状态
     const [translatingDesc, setTranslatingDesc] = useState(false)
@@ -246,8 +255,6 @@ export default function StarDetail() {
         }
     }
 
-    // README 全屏查看 - 已内置于 RepoReadmeCard 组件
-
     const handleCloseTranslateModal = () => {
         polling.stop()
         setTranslateModalVisible(false)
@@ -291,80 +298,30 @@ export default function StarDetail() {
     const topics = parseTopics(repo.topics)
 
     return (
-        <div>
-            <Button icon={<ArrowLeftOutlined />} onClick={handleBack} style={{ marginBottom: 20 }}>
-                返回
-            </Button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* 顶部操作行：返回 + 仓库详情按钮 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <Button icon={<ArrowLeftOutlined />} onClick={handleBack}>
+                    返回
+                </Button>
+                <Button
+                    type='primary'
+                    icon={<InfoCircleOutlined />}
+                    onClick={() => setInfoDrawerOpen(true)}
+                >
+                    仓库详情
+                </Button>
+            </div>
 
-            <Card style={{ marginBottom: 20 }}>
-                <RepoHeader
-                    repo={repo}
-                    translatingDesc={translatingDesc}
-                    onTranslateDesc={handleTranslateDescription}
-                    onRetranslateDesc={handleTranslateDescription}
-                />
-            </Card>
-
-            <RepoStatsGrid
-                starsCount={repo.starsCount}
-                forksCount={repo.forksCount}
-                watchersCount={repo.watchersCount}
-                openIssuesCount={repo.openIssuesCount}
-                repoSize={repo.repoSize}
-            />
-
-            <Card title='详细信息' style={{ marginBottom: 20 }}>
-                <Descriptions column={{ xs: 1, sm: 1, md: 2 }} bordered size='small'>
-                    <Descriptions.Item label='编程语言'>
-                        {repo.language ? <Tag color='blue'>{repo.language}</Tag> : <Text type='secondary'>-</Text>}
-                    </Descriptions.Item>
-                    <Descriptions.Item label='许可证'>
-                        {repo.licenseName ? <Text>{repo.licenseName}</Text> : <Text type='secondary'>-</Text>}
-                    </Descriptions.Item>
-                    <Descriptions.Item label='主题标签' span={2}>
-                        {topics.length > 0 ? (
-                            <Space size={[4, 4]} wrap>
-                                {topics.map((topic) => (
-                                    <Tag key={topic}>{topic}</Tag>
-                                ))}
-                            </Space>
-                        ) : (
-                            <Text type='secondary'>-</Text>
-                        )}
-                    </Descriptions.Item>
-                    <Descriptions.Item label='默认分支'>
-                        {repo.defaultBranch ? <Text>{repo.defaultBranch}</Text> : <Text type='secondary'>-</Text>}
-                    </Descriptions.Item>
-                    <Descriptions.Item label='可见性'>
-                        {repo.visibility ? <Tag>{repo.visibility}</Tag> : <Text type='secondary'>-</Text>}
-                    </Descriptions.Item>
-                    <Descriptions.Item label='Star 时间'>{formatDate(repo.starredAt)}</Descriptions.Item>
-                    <Descriptions.Item label='仓库创建时间'>{formatDate(repo.repoCreatedAt)}</Descriptions.Item>
-                    <Descriptions.Item label='最后更新时间'>{formatDate(repo.repoUpdatedAt)}</Descriptions.Item>
-                    <Descriptions.Item label='最后推送时间'>{formatDate(repo.repoPushedAt)}</Descriptions.Item>
-                    {repo.repoPushedAt && (
-                        <Descriptions.Item label='距上次推送'>
-                            <DaysSinceText dateStr={repo.repoPushedAt} />
-                        </Descriptions.Item>
-                    )}
-                </Descriptions>
-            </Card>
-
-            {/* 代码预览 / README 切换区块 */}
-            <Card>
+            {/* 代码预览 / README / 中文 README 切换区块 */}
+            <Card
+                style={{ height: '70vh', display: 'flex', flexDirection: 'column' }}
+                styles={{ body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } }}
+            >
                 <Tabs
-                    defaultActiveKey='code'
+                    defaultActiveKey='readme'
+                    style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
                     items={[
-                        {
-                            key: 'code',
-                            label: (
-                                <Space>
-                                    <CodeOutlined />
-                                    代码预览
-                                </Space>
-                            ),
-                            children: <CodePreviewCard fullName={repo.fullName} />,
-                        },
                         {
                             key: 'readme',
                             label: (
@@ -382,11 +339,98 @@ export default function StarDetail() {
                                 />
                             ),
                         },
+                        {
+                            key: 'readme-cn',
+                            label: (
+                                <Space>
+                                    <ReadOutlined />
+                                    中文 README
+                                </Space>
+                            ),
+                            children: (
+                                <RepoReadmeCnCard
+                                    repo={repo}
+                                    translatingReadme={translatingReadme}
+                                    onTranslateReadme={handleTranslateReadme}
+                                />
+                            ),
+                        },
+                        {
+                            key: 'code',
+                            label: (
+                                <Space>
+                                    <CodeOutlined />
+                                    代码预览
+                                </Space>
+                            ),
+                            children: <CodePreviewCard fullName={repo.fullName} />,
+                        },
                     ]}
                 />
             </Card>
 
-            {/* README 全屏查看弹窗 - 已内置于 RepoReadmeCard */}
+            {/* 仓库详情抽屉 */}
+            <Drawer
+                title='仓库详情'
+                placement='right'
+                width={720}
+                open={infoDrawerOpen}
+                onClose={() => setInfoDrawerOpen(false)}
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <RepoHeader
+                        repo={repo}
+                        translatingDesc={translatingDesc}
+                        onTranslateDesc={handleTranslateDescription}
+                        onRetranslateDesc={handleTranslateDescription}
+                    />
+
+                    <RepoStatsGrid
+                        starsCount={repo.starsCount}
+                        forksCount={repo.forksCount}
+                        watchersCount={repo.watchersCount}
+                        openIssuesCount={repo.openIssuesCount}
+                        repoSize={repo.repoSize}
+                    />
+
+                    <Card title='详细信息' size='small'>
+                        <Descriptions column={{ xs: 1, sm: 1, md: 2 }} bordered size='small'>
+                            <Descriptions.Item label='编程语言'>
+                                {repo.language ? <Tag color='blue'>{repo.language}</Tag> : <Text type='secondary'>-</Text>}
+                            </Descriptions.Item>
+                            <Descriptions.Item label='许可证'>
+                                {repo.licenseName ? <Text>{repo.licenseName}</Text> : <Text type='secondary'>-</Text>}
+                            </Descriptions.Item>
+                            <Descriptions.Item label='主题标签' span={2}>
+                                {topics.length > 0 ? (
+                                    <Space size={[4, 4]} wrap>
+                                        {topics.map((topic) => (
+                                            <Tag key={topic}>{topic}</Tag>
+                                        ))}
+                                    </Space>
+                                ) : (
+                                    <Text type='secondary'>-</Text>
+                                )}
+                            </Descriptions.Item>
+                            <Descriptions.Item label='默认分支'>
+                                {repo.defaultBranch ? <Text>{repo.defaultBranch}</Text> : <Text type='secondary'>-</Text>}
+                            </Descriptions.Item>
+                            <Descriptions.Item label='可见性'>
+                                {repo.visibility ? <Tag>{repo.visibility}</Tag> : <Text type='secondary'>-</Text>}
+                            </Descriptions.Item>
+                            <Descriptions.Item label='Star 时间'>{formatDate(repo.starredAt)}</Descriptions.Item>
+                            <Descriptions.Item label='仓库创建时间'>{formatDate(repo.repoCreatedAt)}</Descriptions.Item>
+                            <Descriptions.Item label='最后更新时间'>{formatDate(repo.repoUpdatedAt)}</Descriptions.Item>
+                            <Descriptions.Item label='最后推送时间'>{formatDate(repo.repoPushedAt)}</Descriptions.Item>
+                            {repo.repoPushedAt && (
+                                <Descriptions.Item label='距上次推送'>
+                                    <DaysSinceText dateStr={repo.repoPushedAt} />
+                                </Descriptions.Item>
+                            )}
+                        </Descriptions>
+                    </Card>
+                </div>
+            </Drawer>
 
             {/* 异步翻译进度弹窗 */}
             <Modal
@@ -517,6 +561,33 @@ export default function StarDetail() {
                     </div>
                 )}
             </Modal>
+
+            {/* 回到顶部 / 回到底部 悬浮按钮 */}
+            <FloatButton.Group
+                shape='circle'
+                style={{ insetInlineEnd: 24, insetBlockEnd: 24 }}
+            >
+                <FloatButton
+                    icon={<VerticalAlignTopOutlined />}
+                    tooltip='回到顶部'
+                    onClick={() => scrollMainTo('top')}
+                />
+                <FloatButton
+                    icon={<VerticalAlignBottomOutlined />}
+                    tooltip='回到底部'
+                    onClick={() => scrollMainTo('bottom')}
+                />
+            </FloatButton.Group>
         </div>
     )
+}
+
+/** 滚动到顶部或底部。
+ *  本项目全局样式把滚动放在了 <body> 上（overflow-y: auto），
+ *  documentElement 和 window 都不可滚动。直接滚 body。
+ */
+function scrollMainTo(position: 'top' | 'bottom') {
+    const body = document.body
+    const top = position === 'top' ? 0 : body.scrollHeight
+    body.scrollTo({ top, behavior: 'smooth' })
 }
