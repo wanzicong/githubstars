@@ -130,4 +130,64 @@ export function registerTranslateTools(server: McpServer, client: BackendClient)
         },
         createToolHandler(client, '/api/translate/repo-status'),
     );
+
+    server.registerTool(
+        'translate-description-original',
+        {
+            description: '获取指定仓库的 GitHub 原始描述文本',
+            inputSchema: z.object({ id: z.number().int().positive().describe('仓库 ID') }),
+        },
+        createToolHandler(client, '/api/translate/description/original'),
+    );
+
+    server.registerTool(
+        'translate-description-cn',
+        {
+            description: '获取指定仓库描述的中文翻译（未翻译时返回 null）',
+            inputSchema: z.object({ id: z.number().int().positive().describe('仓库 ID') }),
+        },
+        createToolHandler(client, '/api/translate/description/cn'),
+    );
+
+    server.registerTool(
+        'translate-description-update',
+        {
+            description: '手动设置指定仓库描述的中文翻译（空字符串视为清除）',
+            inputSchema: z.object({
+                id: z.number().int().positive().describe('仓库 ID'),
+                content: z.string().describe('新的中文描述，空字符串表示清除'),
+            }),
+        },
+        createToolHandler(client, '/api/translate/description/update'),
+    );
+
+    server.registerTool(
+        'translate-readme-original',
+        {
+            description: '获取指定仓库 README 的原始 Markdown 内容',
+            inputSchema: z.object({ id: z.number().int().positive().describe('仓库 ID') }),
+        },
+        createToolHandler(client, '/api/translate/readme/original'),
+    );
+
+    server.registerTool(
+        'translate-readme-cn',
+        {
+            description: '获取指定仓库 README 的中文翻译（未翻译时返回 null）',
+            inputSchema: z.object({ id: z.number().int().positive().describe('仓库 ID') }),
+        },
+        createToolHandler(client, '/api/translate/readme/cn'),
+    );
+
+    server.registerTool(
+        'translate-readme-update',
+        {
+            description: '手动设置指定仓库 README 的中文翻译（空字符串视为清除）',
+            inputSchema: z.object({
+                id: z.number().int().positive().describe('仓库 ID'),
+                content: z.string().describe('新的中文 README 内容，空字符串表示清除'),
+            }),
+        },
+        createToolHandler(client, '/api/translate/readme/update'),
+    );
 }

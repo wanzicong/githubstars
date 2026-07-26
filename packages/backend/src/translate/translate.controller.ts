@@ -249,4 +249,96 @@ export class TranslateController {
     async taskStream(@Body(new ZodValidationPipe(IdParamSchema)) body: IdParamDto, @Res() res: Response) {
         await this.sseManager.startSseStream(body.id, res);
     }
+
+    // ===== 描述 / README 内容查看与手动更新 =====
+
+    /**
+     * POST /api/translate/description/original — 获取描述原文
+     *
+     * @returns { success, description }
+     */
+    @Post('description/original')
+    @ApiOperation({ summary: '获取描述原文', description: '返回指定仓库的 GitHub 原始描述文本' })
+    @ApiBody({ schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } })
+    async getDescriptionOriginal(@Body(new ZodValidationPipe(IdParamSchema)) body: IdParamDto) {
+        return this.service.getDescriptionOriginal(body.id);
+    }
+
+    /**
+     * POST /api/translate/description/cn — 获取描述中文翻译
+     *
+     * @returns { success, descriptionCn }
+     */
+    @Post('description/cn')
+    @ApiOperation({ summary: '获取描述中文翻译', description: '返回指定仓库描述的中文翻译（未翻译时返回 null）' })
+    @ApiBody({ schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } })
+    async getDescriptionCn(@Body(new ZodValidationPipe(IdParamSchema)) body: IdParamDto) {
+        return this.service.getDescriptionCn(body.id);
+    }
+
+    /**
+     * POST /api/translate/description/update — 手动更新描述中文翻译
+     *
+     * @returns { success, descriptionCn }
+     */
+    @Post('description/update')
+    @ApiOperation({ summary: '更新描述中文翻译', description: '手动设置指定仓库描述的中文翻译（空字符串视为清除）' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: { id: { type: 'number' }, content: { type: 'string' } },
+            required: ['id', 'content'],
+        },
+    })
+    async updateDescriptionCn(@Body() body: { id: number; content: string }) {
+        if (typeof body?.content !== 'string') {
+            return { success: false, message: 'content 必须为字符串' };
+        }
+        return this.service.updateDescriptionCn(Number(body.id), body.content);
+    }
+
+    /**
+     * POST /api/translate/readme/original — 获取 README 原文
+     *
+     * @returns { success, readmeOriginal, readmeFetched }
+     */
+    @Post('readme/original')
+    @ApiOperation({ summary: '获取 README 原文', description: '返回指定仓库的 README 原始 Markdown 内容' })
+    @ApiBody({ schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } })
+    async getReadmeOriginal(@Body(new ZodValidationPipe(IdParamSchema)) body: IdParamDto) {
+        return this.service.getReadmeOriginal(body.id);
+    }
+
+    /**
+     * POST /api/translate/readme/cn — 获取 README 中文翻译
+     *
+     * @returns { success, readmeCn, readmeFetched }
+     */
+    @Post('readme/cn')
+    @ApiOperation({ summary: '获取 README 中文翻译', description: '返回指定仓库 README 的中文翻译（未翻译时返回 null）' })
+    @ApiBody({ schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } })
+    async getReadmeCn(@Body(new ZodValidationPipe(IdParamSchema)) body: IdParamDto) {
+        return this.service.getReadmeCn(body.id);
+    }
+
+    /**
+     * POST /api/translate/readme/update — 手动更新 README 中文翻译
+     *
+     * @returns { success, readmeCn }
+     */
+    @Post('readme/update')
+    @ApiOperation({ summary: '更新 README 中文翻译', description: '手动设置指定仓库 README 的中文翻译（空字符串视为清除）' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: { id: { type: 'number' }, content: { type: 'string' } },
+            required: ['id', 'content'],
+        },
+    })
+    async updateReadmeCn(@Body() body: { id: number; content: string }) {
+        if (typeof body?.content !== 'string') {
+            return { success: false, message: 'content 必须为字符串' };
+        }
+        return this.service.updateReadmeCn(Number(body.id), body.content);
+    }
 }

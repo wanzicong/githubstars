@@ -306,4 +306,93 @@ export class TranslateService {
     }) {
         return this.githubRepo.countTranslationStatus(params);
     }
+
+    /**
+     * 获取仓库描述原文
+     *
+     * @param repoId 仓库 ID
+     * @returns { success, description } 或 { success: false, message }
+     */
+    async getDescriptionOriginal(repoId: number) {
+        const repo = await this.githubRepo.findById(repoId);
+        if (!repo) return { success: false, message: '仓库不存在' };
+        return { success: true, description: repo.description };
+    }
+
+    /**
+     * 获取仓库描述中文翻译
+     *
+     * @param repoId 仓库 ID
+     * @returns { success, descriptionCn } 或 { success: false, message }
+     */
+    async getDescriptionCn(repoId: number) {
+        const repo = await this.githubRepo.findById(repoId);
+        if (!repo) return { success: false, message: '仓库不存在' };
+        return { success: true, descriptionCn: repo.descriptionCn };
+    }
+
+    /**
+     * 手动更新仓库描述中文翻译
+     *
+     * @param repoId 仓库 ID
+     * @param content 新的中文描述（trim 后为空则视为清除）
+     * @returns { success, descriptionCn } 或 { success: false, message }
+     */
+    async updateDescriptionCn(repoId: number, content: string) {
+        const repo = await this.githubRepo.findById(repoId);
+        if (!repo) return { success: false, message: '仓库不存在' };
+        const trimmed = content.trim();
+        const value = trimmed.length > 0 ? trimmed : null;
+        await this.prisma.githubRepo.update({
+            where: { id: repoId },
+            data: { descriptionCn: value, updatedAt: new Date() },
+        });
+        this.logger.log(`描述中文翻译已${value ? '更新' : '清除'}: ${repo.fullName}`);
+        return { success: true, descriptionCn: value };
+    }
+
+    /**
+     * 获取仓库 README 原文
+     *
+     * @param repoId 仓库 ID
+     * @returns { success, readmeOriginal, readmeFetched } 或 { success: false, message }
+     */
+    async getReadmeOriginal(repoId: number) {
+        const repo = await this.githubRepo.findById(repoId);
+        if (!repo) return { success: false, message: '仓库不存在' };
+        return { success: true, readmeOriginal: repo.readmeOriginal, readmeFetched: repo.readmeFetched };
+    }
+
+    /**
+     * 获取仓库 README 中文翻译
+     *
+     * @param repoId 仓库 ID
+     * @returns { success, readmeCn, readmeFetched } 或 { success: false, message }
+     */
+    async getReadmeCn(repoId: number) {
+        const repo = await this.githubRepo.findById(repoId);
+        if (!repo) return { success: false, message: '仓库不存在' };
+        return { success: true, readmeCn: repo.readmeCn, readmeFetched: repo.readmeFetched };
+    }
+
+    /**
+     * 手动更新仓库 README 中文翻译
+     *
+     * @param repoId 仓库 ID
+     * @param content 新的中文 README（trim 后为空则视为清除）
+     * @returns { success, readmeCn } 或 { success: false, message }
+     */
+    async updateReadmeCn(repoId: number, content: string) {
+        const repo = await this.githubRepo.findById(repoId);
+        if (!repo) return { success: false, message: '仓库不存在' };
+        const trimmed = content.trim();
+        const value = trimmed.length > 0 ? trimmed : null;
+        await this.prisma.githubRepo.update({
+            where: { id: repoId },
+            // 手动写入中文 README 视为已完成获取流程
+            data: { readmeCn: value, readmeFetched: true, updatedAt: new Date() },
+        });
+        this.logger.log(`README 中文翻译已${value ? '更新' : '清除'}: ${repo.fullName}`);
+        return { success: true, readmeCn: value };
+    }
 }

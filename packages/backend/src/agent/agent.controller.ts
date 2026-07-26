@@ -285,12 +285,7 @@ export class AgentController {
                 this.writeSse(res, 'text_delta', block.text, sessionId);
                 break;
             case 'tool_use':
-                this.writeSse(
-                    res,
-                    'tool_use',
-                    { toolName: block.toolName, toolInput: block.toolInput, toolId: block.toolId },
-                    sessionId,
-                );
+                this.writeSse(res, 'tool_use', { toolName: block.toolName, toolInput: block.toolInput, toolId: block.toolId }, sessionId);
                 break;
             case 'tool_result':
                 this.writeSse(
