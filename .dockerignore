@@ -7,12 +7,15 @@
 
 # ─── 依赖 ───
 node_modules
+**/node_modules
 .pnp
 .pnp.js
 
 # ─── 构建产物 ───
 dist
+**/dist
 build
+**/build
 .next
 coverage
 .turbo

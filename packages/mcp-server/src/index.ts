@@ -81,7 +81,16 @@ function parseHttpPort(argv: string[]): number {
 }
 
 function startHttp(client: BackendClient, port: number): void {
-    const app = createMcpExpressApp();
+    // 从环境变量读取允许的 Host，默认允许 localhost 和常见内网 IP
+    const allowedHostsEnv = process.env.MCP_ALLOWED_HOSTS;
+    const allowedHosts = allowedHostsEnv
+        ? allowedHostsEnv.split(',').map((h) => h.trim())
+        : ['localhost', '127.0.0.1', '192.168.1.3', '0.0.0.0'];
+
+    const app = createMcpExpressApp({
+        host: '0.0.0.0',
+        allowedHosts,
+    });
 
     // 无状态模式：每个请求独立创建 server + transport，请求结束即关闭
     app.post('/mcp', async (req: Request, res: Response) => {
@@ -119,8 +128,8 @@ function startHttp(client: BackendClient, port: number): void {
     app.get('/mcp', methodNotAllowed);
     app.delete('/mcp', methodNotAllowed);
 
-    app.listen(port, () => {
-        process.stderr.write(`[MCP] GitHub Stars MCP Server 已启动 (http) — http://localhost:${port}/mcp\n`);
+    app.listen(port, '0.0.0.0', () => {
+        process.stderr.write(`[MCP] GitHub Stars MCP Server 已启动 (http) — http://0.0.0.0:${port}/mcp\n`);
     });
 }
 

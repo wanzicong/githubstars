@@ -1,0 +1,76 @@
+# ============================================================
+# GitHub Stars — MCP Server 独立容器（多阶段构建）
+# ============================================================
+# 构建: docker build -t githubstars-mcp -f Dockerfile.mcp .
+# 运行: docker run -p 10005:10004 githubstars-mcp
+# ============================================================
+
+# ─── Stage 1: Turborepo Prune ──────────────────────────────
+FROM node:22-alpine AS pruner
+WORKDIR /app
+
+# 清除所有代理设置，使用国内镜像
+RUN npm config delete proxy 2>/dev/null || true && \
+    npm config delete https-proxy 2>/dev/null || true && \
+    npm config set registry https://registry.npmmirror.com
+
+RUN npm install -g turbo@^2.5.0
+
+# 复制整个 monorepo
+COPY . .
+
+# 裁剪：只保留 @githubstars/mcp-server 及其依赖
+RUN turbo prune @githubstars/mcp-server --docker
+
+
+# ─── Stage 2: 安装依赖 ─────────────────────────────────────
+FROM node:22-alpine AS installer
+WORKDIR /app
+
+# 清除所有代理设置，使用国内镜像
+RUN npm config delete proxy 2>/dev/null || true && \
+    npm config delete https-proxy 2>/dev/null || true && \
+    npm config set registry https://registry.npmmirror.com
+
+# 复制裁剪后的 package.json 层（利用 Docker layer cache）
+COPY --from=pruner /app/out/json/ .
+COPY --from=pruner /app/out/package-lock.json ./package-lock.json
+
+# 安装依赖（带重试机制）
+RUN npm cache clean --force && \
+    for i in 1 2 3; do npm ci --ignore-scripts && break || sleep 5; done
+
+# 复制完整源码
+COPY --from=pruner /app/out/full/ .
+
+
+# ─── Stage 3: 编译 ─────────────────────────────────────────
+FROM installer AS builder
+
+# Turborepo 编译 mcp-server
+RUN npx turbo run build --filter=@githubstars/mcp-server
+
+# 验证构建产物
+RUN test -f packages/mcp-server/dist/index.js && \
+    echo "✅ MCP Server build artifact exists"
+
+
+# ─── Stage 4: 运行 ─────────────────────────────────────────
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+
+# 复制编译产物和 package.json
+COPY --from=builder /app/packages/mcp-server/dist ./dist
+COPY --from=builder /app/packages/mcp-server/package.json ./package.json
+
+# 只复制生产依赖（不复制 devDependencies）
+COPY --from=builder /app/node_modules ./node_modules
+
+# 默认环境变量
+ENV GITHUBSTARS_API_URL=http://host.docker.internal:10002
+ENV MCP_PORT=10004
+
+EXPOSE 10004
+
+CMD ["node", "dist/index.js", "--http", "--port", "10004"]

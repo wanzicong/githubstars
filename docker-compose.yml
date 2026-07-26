@@ -29,6 +29,20 @@ services:
     volumes:
       - dev_mysql_data:/var/lib/mysql
 
+  # MCP Server 独立容器 — 供外部 AI 通过 HTTP 调用
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    container_name: githubstars-mcp
+    restart: unless-stopped
+    ports:
+      - "10005:10004"
+    environment:
+      # 指向宿主机上的后端（开发环境后端通常跑在宿主机）
+      GITHUBSTARS_API_URL: http://host.docker.internal:10002
+      MCP_PORT: 10004
+
 volumes:
   dev_mysql_data:
     # 复用现有卷：之前未指定 name 时卷名为 githubstars_dev_mysql_data
