@@ -1,10 +1,10 @@
 # ============================================================
 # GitHub Stars — 生产环境 Docker Compose 配置
 # ============================================================
-# 使用方式:
-#   docker compose -f docker-compose.prod.yml up -d
-#   docker compose -f docker-compose.prod.yml down
-#   docker compose -f docker-compose.prod.yml logs -f
+# 使用方式（必须带 --env-file，否则 ${VAR} 占位符解析不到）:
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+#   docker compose -f docker-compose.prod.yml --env-file .env.production down
+#   docker compose -f docker-compose.prod.yml --env-file .env.production logs -f
 # ============================================================
 # 前置条件:
 #   1. 在项目根目录执行:
