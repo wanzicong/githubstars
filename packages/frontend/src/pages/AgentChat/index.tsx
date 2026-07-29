@@ -25,6 +25,7 @@ import {
 import MarkdownRenderer from '@/components/common/MarkdownRenderer'
 import ThinkingBlock from './ThinkingBlock'
 import { listAgentSessions, getAgentSession, deleteAgentSession, getAgentBaseURL } from '@/api/agent'
+import { getAgentFriendlyErrorMessage } from '@/utils/agent-error'
 
 const { Text, Paragraph } = Typography
 
@@ -1305,10 +1306,10 @@ export default function AgentChat() {
       }
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') return
-      const errorText = error instanceof Error ? error.message : '未知错误'
+      const errorText = getAgentFriendlyErrorMessage(error)
       // 保留已流式累积的部分内容，错误信息追加其后（getLatest 读 ref，不受节流滞后影响）
       const partialContent = getLatestText()
-      const errorBlock = `> ❌ **请求出错**：${errorText}`
+      const errorBlock = `> ❌ **请求失败**\n>\n> ${errorText}`
       const finalContent = partialContent ? `${partialContent}\n\n${errorBlock}` : errorBlock
       setMessages((prev) =>
         prev.map((m) =>
