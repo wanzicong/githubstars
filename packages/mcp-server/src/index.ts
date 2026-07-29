@@ -31,6 +31,7 @@ import { registerExportTools } from './tools/export.js';
 import { registerConfigTools } from './tools/config.js';
 import { registerLogTools } from './tools/logs.js';
 import { registerAgentTools } from './tools/agent.js';
+import { registerLocalizationTools } from './tools/localization.js';
 
 function buildServer(client: BackendClient): McpServer {
     const server = new McpServer({
@@ -51,6 +52,7 @@ function buildServer(client: BackendClient): McpServer {
     registerConfigTools(server, client);
     registerLogTools(server, client);
     registerAgentTools(server, client);
+    registerLocalizationTools(server, client);
 
     return server;
 }
@@ -117,11 +119,13 @@ function startHttp(client: BackendClient, port: number): void {
     });
 
     const methodNotAllowed = (_req: Request, res: Response) => {
-        res.writeHead(405).end(JSON.stringify({
-            jsonrpc: '2.0',
-            error: { code: -32000, message: 'Method not allowed.' },
-            id: null,
-        }));
+        res.writeHead(405).end(
+            JSON.stringify({
+                jsonrpc: '2.0',
+                error: { code: -32000, message: 'Method not allowed.' },
+                id: null,
+            }),
+        );
     };
     app.get('/mcp', methodNotAllowed);
     app.delete('/mcp', methodNotAllowed);

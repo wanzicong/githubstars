@@ -20,38 +20,38 @@ const Logs = lazy(() => import('@/pages/Logs'))
 const Clone = lazy(() => import('@/pages/Clone'))
 const Download = lazy(() => import('@/pages/Download'))
 const CategoryManage = lazy(() => import('@/pages/CategoryManage'))
-const AgentChat = lazy(() => import('@/pages/AgentChat'))
 const CodeBrowser = lazy(() => import('@/pages/CodeBrowser'))
 const Learn = lazy(() => import('@/pages/Learn'))
 
 /** 所有路由（Layout 子路由） */
 export const appRoutes: RouteObject[] = [
-  // ── 首页 ──
-  { index: true, element: <StarList />, handle: { title: 'Star列表' } },
-  // ── Star ──
-  { path: 'stars/:id', element: <StarDetail />, handle: { title: 'Star详情' } },
-  // ── 代码浏览 ──
-  { path: 'code-browser', element: <CodeBrowser />, handle: { title: '代码浏览' } },
-  // ── 搜索 / 趋势 ──
-  { path: 'trending', element: <Trending />, handle: { title: '趋势排行' } },
-  { path: 'search', element: <GithubSearch />, handle: { title: 'GitHub搜索' } },
-  // ── 克隆 ──
-  { path: 'clone', element: <Clone />, handle: { title: '克隆管理' } },
-  // ── 下载 ──
-  { path: 'download', element: <Download />, handle: { title: '下载管理' } },
-  // ── 分类 ──
-  { path: 'categories', element: <CategoryManage />, handle: { title: '分类管理' } },
-  // ── 同步 / 统计 ──
-  { path: 'sync', element: <Sync />, handle: { title: '同步管理' } },
-  { path: 'stats', element: <Stats />, handle: { title: '数据统计' } },
-  // ── 作者 ──
-  { path: 'authors', element: <AuthorList />, handle: { title: '作者中心' } },
-  { path: 'authors/:ownerName', element: <AuthorDetail />, handle: { title: '作者详情' } },
-  // ── 系统 ──
-  { path: 'settings', element: <Settings />, handle: { title: '系统配置' } },
-  { path: 'logs', element: <Logs />, handle: { title: '系统日志' } },
-  // ── 学习收藏 ──
-  { path: 'learn', element: <Learn />, handle: { title: '学习清单' } },
-  // ── AI Agent ──
-  { path: 'agent', element: <AgentChat />, handle: { title: 'AI Agent' } },
+    // ── 首页 ──
+    { index: true, element: <StarList />, handle: { title: 'Star列表' } },
+    // ── Star ──
+    { path: 'stars/:id', element: <StarDetail />, handle: { title: 'Star详情' } },
+    // ── 代码浏览 ──
+    { path: 'code-browser', element: <CodeBrowser />, handle: { title: '代码浏览' } },
+    // ── 搜索 / 趋势 ──
+    { path: 'trending', element: <Trending />, handle: { title: '趋势排行' } },
+    { path: 'search', element: <GithubSearch />, handle: { title: 'GitHub搜索' } },
+    // ── 克隆 ──
+    { path: 'clone', element: <Clone />, handle: { title: '克隆管理' } },
+    // ── 下载 ──
+    { path: 'download', element: <Download />, handle: { title: '下载管理' } },
+    // ── 分类 ──
+    { path: 'categories', element: <CategoryManage />, handle: { title: '分类管理' } },
+    // ── 同步 / 统计 ──
+    { path: 'sync', element: <Sync />, handle: { title: '同步管理' } },
+    { path: 'stats', element: <Stats />, handle: { title: '数据统计' } },
+    // ── 作者 ──
+    { path: 'authors', element: <AuthorList />, handle: { title: '作者中心' } },
+    { path: 'authors/:ownerName', element: <AuthorDetail />, handle: { title: '作者详情' } },
+    // ── 系统 ──
+    { path: 'settings', element: <Settings />, handle: { title: '系统配置' } },
+    { path: 'logs', element: <Logs />, handle: { title: '系统日志' } },
+    // ── 学习收藏 ──
+    { path: 'learn', element: <Learn />, handle: { title: '学习清单' } },
+    // ── AI Agent ──
+    // Agent 页面由 DefaultLayout 常驻挂载，路由切换时只隐藏，不中断流式会话。
+    { path: 'agent', element: null, handle: { title: 'AI Agent' } },
 ]

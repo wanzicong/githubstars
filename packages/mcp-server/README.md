@@ -60,7 +60,7 @@ npm run build -w @githubstars/mcp-server
 |------|--------|------|
 | `GITHUBSTARS_API_URL` | `http://localhost:10002` | 后端 API 地址 |
 
-## 工具清单（69 个）
+## 工具清单（73 个）
 
 ### Stars 星标仓库（8 个）
 | 工具名 | 说明 |
@@ -83,6 +83,14 @@ npm run build -w @githubstars/mcp-server
 | `stats-overview` | 整体概览 |
 | `stats-top-starred` | Star 排行榜 |
 | `stats-recent-active` | 最近活跃仓库 |
+
+### Localization 仓库中文化（4 个）
+| 工具名 | 说明 |
+|--------|------|
+| `localization-run` | 中文化单个仓库的描述和/或 README |
+| `localization-batch` | 创建批量中文化任务 |
+| `localization-task-detail` | 查询任务进度与明细 |
+| `localization-task-retry` | 重试任务失败项 |
 
 ### Categories 分类管理（10 个）
 | 工具名 | 说明 |

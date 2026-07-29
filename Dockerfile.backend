@@ -82,8 +82,8 @@ ENV NPM_CONFIG_REGISTRY=http://registry.npmmirror.com
 # ─── 安装 Claude Code CLI ─────────────────────────────────
 # Agent 功能依赖 @anthropic-ai/claude-agent-sdk，SDK 在运行时需要 Claude Code CLI
 # 通过 npm 全局安装，确保 Agent 对话功能在 Docker 容器中正常工作
-# 使用 --ignore-scripts 避免 postinstall 脚本在构建时执行（可能访问网络）
-RUN npm install -g @anthropic-ai/claude-code --ignore-scripts
+# 必须执行 postinstall 安装平台原生二进制；--ignore-scripts 会留下无法运行的 CLI 壳。
+RUN npm install -g @anthropic-ai/claude-code
 
 # 创建 Claude Code 配置目录（运行时通过 volume 映射宿主机配置）
 RUN mkdir -p /root/.claude
@@ -93,6 +93,7 @@ WORKDIR /app
 # 复制编译产物
 COPY --from=builder /app/packages/backend/dist ./dist
 COPY --from=builder /app/packages/backend/prisma ./prisma
+COPY --from=builder /app/packages/backend/agent-plugin ./agent-plugin
 COPY --from=builder /app/package.json ./package.json
 
 # 复制生产依赖（npm prune 后的 node_modules）

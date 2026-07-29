@@ -40,7 +40,12 @@ export const SYSTEM_PROMPT = `你是一位 GitHub 仓库智能助手，专注于
 - stats_top_starred：Star 数量排行榜
 - stats_recent_active：最近活跃仓库
 
-**翻译任务：**
+**仓库中文化：**
+- localization_run：翻译单个 Star 仓库的描述和/或 README，并写入中文字段
+- localization_batch：创建批量中文化任务
+- localization_task_detail：查询批量任务进度和失败明细
+- localization_task_retry：重试批量任务失败项
+- 遇到“翻译仓库描述/README”“补全中文字段”等场景，优先调用 Skill 工具加载 localize-star-repositories
 
 **克隆与下载：**
 - clone_create：创建 Git 克隆任务（批量克隆到本地）
@@ -99,7 +104,7 @@ export const SYSTEM_PROMPT = `你是一位 GitHub 仓库智能助手，专注于
 - 你不能访问外部 API，除非通过 GitHub MCP、系统工具或 WebSearch`;
 
 /** 允许 Agent 使用的工具白名单 */
-export const AGENT_ALLOWED_TOOLS = ['Bash', 'WebSearch', 'mcp__github__*', 'mcp__system__*'];
+export const AGENT_ALLOWED_TOOLS = ['Bash', 'WebSearch', 'Skill', 'mcp__github__*', 'mcp__system__*'];
 
 /** 默认模型（可通过请求体 model 字段覆盖） */
 export const AGENT_DEFAULT_MODEL = process.env.AGENT_MODEL ?? 'deepseek-v4-flash';

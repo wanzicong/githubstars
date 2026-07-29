@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { SDKMessage, SDKPartialAssistantMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { BetaRawContentBlockDeltaEvent, BetaRawContentBlockStartEvent } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs';
 import { AgentCredentialService } from './agent-credential.service';
@@ -15,6 +17,7 @@ import { ConfigService } from '../config/config.service';
 import { ExportService } from '../export/export.service';
 import { LoggingService } from '../logging/logging.service';
 import { GithubSearchService } from '../github/github-search.service';
+import { RepositoryLocalizationService } from '../localization/repository-localization.service';
 import {
     AGENT_ALLOWED_TOOLS,
     AGENT_DEFAULT_MAX_TURNS,
@@ -76,6 +79,7 @@ export class AgentClientService {
         private readonly exportService: ExportService,
         private readonly logging: LoggingService,
         private readonly githubSearch: GithubSearchService,
+        private readonly localization: RepositoryLocalizationService,
     ) {}
 
     /** 懒加载 SDK 模块并缓存 Promise（并发调用共享同一次加载） */
@@ -90,6 +94,7 @@ export class AgentClientService {
         await this.credentials.refreshCredentials();
 
         const { query } = await this.loadSdk();
+        const pluginPath = this.resolveAgentPluginPath();
         const mergedOptions: Record<string, unknown> = {
             maxTurns: options.maxTurns ?? AGENT_DEFAULT_MAX_TURNS,
             model: options.model ?? AGENT_DEFAULT_MODEL,
@@ -121,14 +126,30 @@ export class AgentClientService {
                     exportService: this.exportService,
                     logging: this.logging,
                     githubSearch: this.githubSearch,
+                    localization: this.localization,
                 }),
             },
         };
+        if (pluginPath) {
+            mergedOptions.plugins = [{ type: 'local', path: pluginPath }];
+        }
         if (options.sessionId) mergedOptions.resume = options.sessionId;
 
         for await (const message of query({ prompt: options.prompt, options: mergedOptions })) {
             yield message;
         }
+    }
+
+    /** 兼容 monorepo 开发目录与 Docker runner 目录，定位随应用发布的本地 Agent 插件。 */
+    private resolveAgentPluginPath(): string | undefined {
+        const candidates = [
+            process.env.AGENT_PLUGIN_PATH,
+            resolve(process.cwd(), 'agent-plugin'),
+            resolve(process.cwd(), 'packages/backend/agent-plugin'),
+        ].filter((path): path is string => !!path);
+        const pluginPath = candidates.find((path) => existsSync(path));
+        if (!pluginPath) this.logger.warn('未找到本地 Agent 插件，仓库中文化 Skill 将不可用');
+        return pluginPath;
     }
 
     /** 扩展流式迭代器，将 SDK message 解析为块格式 */

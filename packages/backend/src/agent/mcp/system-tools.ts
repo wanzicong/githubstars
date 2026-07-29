@@ -12,6 +12,7 @@ import { ConfigService } from '../../config/config.service';
 import { ExportService } from '../../export/export.service';
 import { LoggingService } from '../../logging/logging.service';
 import { GithubSearchService } from '../../github/github-search.service';
+import { RepositoryLocalizationService } from '../../localization/repository-localization.service';
 
 /** 通用过滤器 shape（与 FilterSchema 对齐，但放宽必填约束供 Agent 灵活使用） */
 const filterShape = {
@@ -32,7 +33,18 @@ const paginationShape = {
 };
 
 function ok(data: unknown) {
-    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+    return {
+        content: [
+            {
+                type: 'text' as const,
+                text: JSON.stringify(
+                    data,
+                    (_key: string, value: unknown): unknown => (typeof value === 'bigint' ? Number(value) : value),
+                    2,
+                ),
+            },
+        ],
+    };
 }
 
 function err(message: string) {
@@ -69,6 +81,7 @@ export interface SystemMcpDeps {
     exportService: ExportService;
     logging: LoggingService;
     githubSearch: GithubSearchService;
+    localization: RepositoryLocalizationService;
 }
 
 /**
@@ -81,7 +94,21 @@ export interface SystemMcpDeps {
  * @depends 各业务 Service（通过构造函数注入）
  */
 export function createSystemMcpServer(deps: SystemMcpDeps) {
-    const { githubRepo, category, stats, clone, download, sync, trending, author, config, exportService, logging, githubSearch } = deps;
+    const {
+        githubRepo,
+        category,
+        stats,
+        clone,
+        download,
+        sync,
+        trending,
+        author,
+        config,
+        exportService,
+        logging,
+        githubSearch,
+        localization,
+    } = deps;
 
     return createSdkMcpServer({
         name: 'system',
@@ -202,6 +229,67 @@ export function createSystemMcpServer(deps: SystemMcpDeps) {
                     try {
                         const repos = await githubRepo.findByIds(args.ids);
                         return ok({ success: true, data: repos, total: repos.length });
+                    } catch (e) {
+                        return err(e instanceof Error ? e.message : String(e));
+                    }
+                },
+            ),
+
+            // ==================== Localization 仓库中文化 ====================
+            tool(
+                'localization_run',
+                '中文化单个 Star 仓库的项目描述和/或 README，并写入数据库中文字段',
+                {
+                    repoId: z.number().int().positive().describe('仓库 ID'),
+                    fields: z.enum(['description', 'readme', 'both']).optional().describe('处理字段，默认 both'),
+                    force: z.boolean().optional().describe('是否覆盖已有中文内容，默认 false'),
+                },
+                async (args) => {
+                    try {
+                        return ok(await localization.localizeRepository(args.repoId, args.fields ?? 'both', args.force ?? false));
+                    } catch (e) {
+                        return err(e instanceof Error ? e.message : String(e));
+                    }
+                },
+            ),
+            tool(
+                'localization_batch',
+                '创建批量仓库中文化任务，异步翻译描述和 README 并写入数据库',
+                {
+                    repoIds: z.array(z.number().int().positive()).min(1).max(2000).describe('仓库 ID 列表'),
+                    fields: z.enum(['description', 'readme', 'both']).optional().describe('处理字段，默认 both'),
+                    force: z.boolean().optional().describe('是否覆盖已有中文内容，默认 false'),
+                    concurrency: z.number().int().min(1).max(5).optional().describe('并发数，默认 2'),
+                },
+                async (args) => {
+                    try {
+                        return ok(
+                            await localization.createBatch(args.repoIds, args.fields ?? 'both', args.force ?? false, args.concurrency ?? 2),
+                        );
+                    } catch (e) {
+                        return err(e instanceof Error ? e.message : String(e));
+                    }
+                },
+            ),
+            tool(
+                'localization_task_detail',
+                '查询仓库中文化批量任务的进度、成功项和失败原因',
+                { taskId: z.number().int().positive().describe('中文化任务 ID') },
+                async (args) => {
+                    try {
+                        return ok(await localization.getTask(args.taskId));
+                    } catch (e) {
+                        return err(e instanceof Error ? e.message : String(e));
+                    }
+                },
+            ),
+            tool(
+                'localization_task_retry',
+                '重试仓库中文化批量任务中的失败项',
+                { taskId: z.number().int().positive().describe('中文化任务 ID') },
+                async (args) => {
+                    try {
+                        return ok(await localization.retryTask(args.taskId));
                     } catch (e) {
                         return err(e instanceof Error ? e.message : String(e));
                     }

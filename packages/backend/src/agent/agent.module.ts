@@ -14,6 +14,7 @@ import { AuthorModule } from '../author/author.module';
 import { ConfigModule } from '../config/config.module';
 import { ExportModule } from '../export/export.module';
 import { LoggingModule } from '../logging/logging.module';
+import { LocalizationModule } from '../localization/localization.module';
 
 /**
  * AI Agent 模块（自 packages/github-agent 合并）
@@ -39,6 +40,7 @@ import { LoggingModule } from '../logging/logging.module';
         ConfigModule,
         ExportModule,
         LoggingModule,
+        LocalizationModule,
     ],
     controllers: [AgentController],
     providers: [AgentClientService, AgentSessionService, AgentCredentialService],

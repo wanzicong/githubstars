@@ -40,7 +40,8 @@ services:
       - "10005:10004"
     environment:
       # 指向宿主机上的后端（开发环境后端通常跑在宿主机）
-      GITHUBSTARS_API_URL: http://host.docker.internal:10002
+      # 默认连接宿主机开发后端 :10002；部署后端映射到 :10004 时可设置 MCP_BACKEND_URL 覆盖。
+      GITHUBSTARS_API_URL: ${MCP_BACKEND_URL:-http://host.docker.internal:10002}
       MCP_PORT: 10004
 
 volumes:
