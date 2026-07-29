@@ -1,6 +1,6 @@
 # GitHub Stars
 
-GitHub Stars 管理系统 — 对自己 Star 过的 GitHub 仓库进行**管理、分类、翻译、统计、AI 分析**和**批量克隆**。
+GitHub Stars 管理系统 — 对自己 Star 过的 GitHub 仓库进行**管理、分类、统计、AI 分析**和**批量克隆**。
 
 <p align="center">
   <img src="https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs" alt="NestJS" />
@@ -23,7 +23,6 @@ GitHub Stars 管理系统 — 对自己 Star 过的 GitHub 仓库进行**管理�
 | 📂 **分类管理** | 树形分类系统，支持拖拽排序、批量归类、AI 智能分类 |
 | 🏷️ **标签系统** | 多维标签面板，支持分组嵌套、关联维度下钻、AI 自动打标 |
 | 🔄 **数据同步** | 全量拉取 GitHub Stars → 本地对比 → 增量 upsert，完整同步日志 |
-| 🌐 **AI 翻译** | DeepSeek AI 批量翻译仓库描述和 README（中译），并发控制 + 失败重试 |
 | 📊 **统计分析** | 语言分布、所有者排行、时间线趋势、Top Starred 仓库 |
 | 🤖 **AI 分析** | AI 驱动的仓库深度分析报告，持久化存储可回溯 |
 | 📋 **批量克隆** | 筛选仓库后批量 git clone，并发控制 + 进度追踪 + 失败重试 |
@@ -54,7 +53,6 @@ githubstars/
 │   │   └── src/
 │   │       ├── sync/            # Star 数据同步
 │   │       ├── category/        # 分类管理
-│   │       ├── translate/       # AI 翻译
 │   │       ├── ai/              # AI 分析与分类
 │   │       ├── clone/           # 批量克隆
 │   │       ├── stats/           # 统计分析
@@ -163,7 +161,7 @@ npm run dev
 | `sync_log` | 同步操作日志 |
 | `system_config` | KV 配置表 |
 | `clone_task` / `clone_task_item` | 克隆任务及子项 |
-| `translation_task` / `translation_task_item` | 翻译任务及子项 |
+| `translation_task` / `translation_task_item` | 历史翻译任务数据（不再提供业务接口） |
 | `ai_analyze_task` | AI 分析任务结果 |
 
 ## 架构说明
@@ -175,7 +173,7 @@ npm run dev
 - **PrismaModule 全局模块**：任意 Service 直接注入 `PrismaService` 访问数据库
 - **BigInt 序列化**：全局 `BigIntInterceptor` 自动将 BigInt ID 转为 Number（HTTP 响应）
 - **配置管理**：`ConfigService` 启动时加载 `system_config` 表到内存缓存
-- **并发控制**：翻译/克隆模块使用自定义信号量限制并发，Prisma 原子计数器防竞态
+- **并发控制**：克隆模块使用自定义信号量限制并发，Prisma 原子计数器防竞态
 - **AI 持久化**：分析结果存储于 `ai_analyze_task` 表，不依赖进程内存
 
 ## License

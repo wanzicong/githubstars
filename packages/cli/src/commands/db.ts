@@ -176,61 +176,6 @@ export async function dbSyncStatus(format?: string): Promise<void> {
   }
 }
 
-// ==================== 翻译统计 ====================
-
-export async function dbTranslateStats(format?: string): Promise<void> {
-  try {
-    const prisma = await getDbClient();
-
-    const [total, descTranslated, readmeTranslated] = await Promise.all([
-      prisma.githubRepo.count(),
-      prisma.githubRepo.count({
-        where: {
-          descriptionCn: { not: null },
-          description: { not: null },
-        },
-      }),
-      prisma.githubRepo.count({
-        where: {
-          readmeCn: { not: null },
-          readmeFetched: true,
-        },
-      }),
-    ]);
-
-    const stats = {
-      total,
-      descCompleted: descTranslated,
-      descPending: total - descTranslated,
-      readmeCompleted: readmeTranslated,
-      readmePending: total - readmeTranslated,
-    };
-
-    if (format === 'json') {
-      printJson(stats);
-      return;
-    }
-
-    printHeader('翻译统计');
-    console.log(`仓库总数: ${formatNumber(stats.total)}`);
-    console.log('');
-    console.log('描述翻译:');
-    console.log(`  已完成: ${formatNumber(stats.descCompleted)}`);
-    console.log(`  待处理: ${formatNumber(stats.descPending)}`);
-    console.log(`  覆盖率: ${stats.total > 0 ? Math.round((stats.descCompleted / stats.total) * 100) : 0}%`);
-    console.log('');
-    console.log('README 翻译:');
-    console.log(`  已完成: ${formatNumber(stats.readmeCompleted)}`);
-    console.log(`  待处理: ${formatNumber(stats.readmePending)}`);
-    console.log(`  覆盖率: ${stats.total > 0 ? Math.round((stats.readmeCompleted / stats.total) * 100) : 0}%`);
-  } catch (error) {
-    printError(`查询失败: ${error instanceof Error ? error.message : error}`);
-    process.exit(1);
-  } finally {
-    await closeDbClient();
-  }
-}
-
 // ==================== 统计信息 ====================
 
 export async function dbStatsOverview(format?: string): Promise<void> {

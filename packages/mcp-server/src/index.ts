@@ -21,7 +21,6 @@ import { BackendClient } from './client.js';
 import { registerStarsTools } from './tools/stars.js';
 import { registerStatsTools } from './tools/stats.js';
 import { registerCategoryTools } from './tools/category.js';
-import { registerTranslateTools } from './tools/translate.js';
 import { registerSyncTools } from './tools/sync.js';
 import { registerGithubTools } from './tools/github.js';
 import { registerTrendingTools } from './tools/trending.js';
@@ -42,7 +41,6 @@ function buildServer(client: BackendClient): McpServer {
     registerStarsTools(server, client);
     registerStatsTools(server, client);
     registerCategoryTools(server, client);
-    registerTranslateTools(server, client);
     registerSyncTools(server, client);
     registerGithubTools(server, client);
     registerTrendingTools(server, client);

@@ -19,16 +19,6 @@
 | GET /api/sync/status | `sync:status` | ✅ 已实现 |
 | GET /api/sync/logs | `sync:logs` | ✅ 已实现 |
 
-### Translate 模块
-| 后端 API | CLI 命令 | 状态 |
-|----------|----------|------|
-| POST /api/translate | `translate <type> <scope>` | ✅ 已实现 |
-| GET /api/translate/:id/progress | `translate:status <id>` | ✅ 已实现 |
-| GET /api/translate | `translate:list` | ✅ 已实现 |
-| POST /api/translate/:id/retry | `translate:retry <id>` | ✅ 已实现 |
-| GET /api/translate/status | `translate:stats` | ✅ 已实现 |
-| GET /api/translate/:id/failures | `translate:failures <id>` | ✅ 已实现 |
-
 ### Clone 模块
 | 后端 API | CLI 命令 | 状态 |
 |----------|----------|------|
@@ -116,7 +106,6 @@
 | `--db stars` | 列出 Star 仓库 |
 | `--db stars <id>` | 查看仓库详情 |
 | `--db sync:status` | 查看同步状态 |
-| `--db translate:stats` | 查看翻译统计 |
 | `--db stats` | 概览统计 |
 | `--db stats:languages` | 语言分布 |
 | `--db stats:owners` | 所有者排行 |
@@ -136,7 +125,6 @@ githubstars --db category list
 # HTTP API 模式（需要先启动服务）
 githubstars start
 githubstars sync
-githubstars translate readme all
 githubstars clone 1 2 3 --target-dir D:/repos
 githubstars trending
 githubstars authors

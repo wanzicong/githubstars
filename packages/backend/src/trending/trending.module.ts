@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { TrendingController } from './trending.controller';
 import { TrendingService } from './trending.service';
 import { GithubModule } from '../github/github.module';
-import { TranslateModule } from '../translate/translate.module';
 import { DownloadModule } from '../download/download.module';
 
 /**
@@ -13,7 +12,7 @@ import { DownloadModule } from '../download/download.module';
  * TrendingService 负责翻译结果的缓存管理，同一仓库描述只翻译一次。
  */
 @Module({
-    imports: [GithubModule, TranslateModule, DownloadModule],
+    imports: [GithubModule, DownloadModule],
     controllers: [TrendingController],
     providers: [TrendingService],
     exports: [TrendingService],

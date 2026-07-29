@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TranslateService } from '../translate/translate.service';
 
 /** 可为空的日期类型，用于仓库日期字段 */
 type NullableDateField = string | Date | null;
@@ -41,28 +40,7 @@ export interface TrendingRepoItem {
 export class TrendingService {
     private readonly logger = new Logger(TrendingService.name);
 
-    /** 正在翻译中的 fullName 集合，防止重复触发 */
-    private translatingSet = new Set<string>();
-
-    constructor(
-        private readonly prisma: PrismaService,
-        private readonly translate: TranslateService,
-    ) {}
-
-    /**
-     * 根据 fullName 列表批量查询本地仓库 ID
-     *
-     * @param fullNames GitHub 仓库全名列表（如 ["owner/repo1", "owner/repo2"]）
-     * @returns 本地数据库中的仓库 ID 数组
-     */
-    async findLocalRepoIds(fullNames: string[]): Promise<number[]> {
-        if (!fullNames.length) return [];
-        const repos = await this.prisma.githubRepo.findMany({
-            where: { fullName: { in: fullNames } },
-            select: { id: true },
-        });
-        return repos.map((r) => Number(r.id));
-    }
+    constructor(private readonly prisma: PrismaService) {}
 
     /**
      * 批量确保趋势仓库在本地 DB 中存在并返回 ID
@@ -132,57 +110,6 @@ export class TrendingService {
                 localRepoId: local?.id ? Number(local.id) : null,
             };
         });
-    }
-
-    /**
-     * 异步翻译趋势仓库中未缓存的描述
-     *
-     * 对未缓存的仓库先 upsert 到 github_repo，再逐个调用翻译。
-     * 翻译结果自动写入 github_repo.description_cn。
-     * 使用 translatingSet 防止同一仓库并发翻译。
-     *
-     * @param repos 补充了 localRepoId 的仓库列表
-     * @returns 翻译统计 { translated, skipped, failed }
-     */
-    async translateUncached(repos: TrendingRepoItem[]): Promise<{ translated: number; skipped: number; failed: number }> {
-        const uncached = repos.filter((r) => !r.descriptionCn && r.description);
-        if (!uncached.length) return { translated: 0, skipped: repos.length, failed: 0 };
-
-        this.logger.log(`趋势翻译: ${uncached.length} 个仓库待翻译（共 ${repos.length} 个）`);
-
-        let translated = 0;
-        let failed = 0;
-
-        for (const repo of uncached) {
-            const fullName = repo.fullName;
-            if (this.translatingSet.has(fullName)) continue;
-            this.translatingSet.add(fullName);
-
-            try {
-                // 确保仓库在本地 DB 中
-                let repoId = repo.localRepoId as number | null;
-                if (!repoId) {
-                    repoId = await this.ensureRepoExists(repo);
-                    if (!repoId) {
-                        failed++;
-                        continue;
-                    }
-                }
-
-                // 调用翻译（幂等：已有 description_cn 则跳过）
-                const result = await this.translate.translateDescription(repoId);
-                if (result) translated++;
-                else failed++;
-            } catch (e) {
-                this.logger.error(`趋势翻译失败: ${fullName}`, e);
-                failed++;
-            } finally {
-                this.translatingSet.delete(fullName);
-            }
-        }
-
-        this.logger.log(`趋势翻译完成: translated=${translated} failed=${failed}`);
-        return { translated, skipped: repos.length - uncached.length, failed };
     }
 
     /**

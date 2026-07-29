@@ -5,10 +5,8 @@ import { AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons'
 import dayjs from '../../config/setupDayjs'
 import * as api from '../../api'
 import { fetchAllStarIds, fetchReposByIds } from '../../api/stars'
-import { TranslatePanel } from '../../components/translate'
 import { StarStatsBar } from '../../components/stars'
 import { StarRepoView } from '../../components/stars'
-import { TranslateProgressModal } from '../../components/translate'
 import CloneWizardModal from '../../components/clone/CloneWizardModal'
 import CloneProgressModal from '../../components/clone/CloneProgressModal'
 import DownloadWizardModal from '../../components/download/DownloadWizardModal'
@@ -21,7 +19,6 @@ import { getDownloadTaskProgress, retryDownloadFailed, retryDownloadItem, delete
 import { usePolling } from '../../hooks/usePolling'
 import { useStarListParams } from './hooks/useStarListParams'
 import { useStarListInfinite } from './hooks/useStarListInfinite'
-import { INITIAL_TASK_PROGRESS, type TaskProgress } from '../../constants'
 import StarFilterBar from './components/StarFilterBar'
 import StarTimeFilter from './components/StarTimeFilter'
 import StarActionBar from './components/StarActionBar'
@@ -97,11 +94,6 @@ export default function StarList() {
         }
     }, [location.pathname, reload])
 
-    const [translatePanelOpen, setTranslatePanelOpen] = useState(false)
-    const [translateModalVisible, setTranslateModalVisible] = useState(false)
-    const [translateTaskId, setTranslateTaskId] = useState<number | null>(null)
-    const [translateProgress, setTranslateProgress] = useState<TaskProgress | null>(null)
-
     // ── 克隆相关状态 ──
     const [selectedRepoIds, setSelectedRepoIds] = useState<number[]>([])
     const [selectedReposForClone, setSelectedReposForClone] = useState<GithubRepo[]>([])
@@ -117,65 +109,6 @@ export default function StarList() {
     const [downloadProgressOpen, setDownloadProgressOpen] = useState(false)
     const [downloadTaskId, setDownloadTaskId] = useState<number | null>(null)
     const [downloadProgress, setDownloadProgress] = useState<DownloadTaskProgress | null>(null)
-
-    const translateTaskIdRef = useRef<number | null>(null)
-
-    const polling = usePolling(async ({ stop }) => {
-        const taskId = translateTaskIdRef.current
-        if (!taskId) {
-            stop()
-            return
-        }
-        try {
-            const res = await api.getTaskProgress(taskId)
-            if (res.success) {
-                setTranslateProgress({
-                    status: res.status,
-                    totalItems: res.totalItems,
-                    completedItems: res.completedItems,
-                    failedItems: res.failedItems,
-                    pendingItems: res.pendingItems,
-                    descTotal: res.descTotal,
-                    descCompleted: res.descCompleted,
-                    descFailed: res.descFailed,
-                    readmeTotal: res.readmeTotal,
-                    readmeCompleted: res.readmeCompleted,
-                    readmeFailed: res.readmeFailed,
-                    progress: res.progress,
-                })
-                if (res.status === 'COMPLETED' || res.status === 'FAILED') {
-                    stop()
-                    reload()
-                }
-            }
-        } catch {
-            /* ignore polling errors */
-        }
-    }, 2000)
-
-    const handleRetryFailed = useCallback(async () => {
-        if (!translateTaskId) return
-        try {
-            const result = await api.retryFailed(translateTaskId)
-            if (result.success && result.taskId) {
-                setTranslateTaskId(result.taskId)
-                setTranslateProgress({ ...INITIAL_TASK_PROGRESS })
-                translateTaskIdRef.current = result.taskId
-                polling.start()
-            } else {
-                message.info(result.message || '没有失败项')
-            }
-        } catch {
-            message.error('重试失败')
-        }
-    }, [translateTaskId, polling, message])
-
-    const handleCloseTranslateModal = useCallback(() => {
-        polling.stop()
-        setTranslateModalVisible(false)
-        setTranslateTaskId(null)
-        setTranslateProgress(null)
-    }, [polling])
 
     // ── 克隆进度轮询 ──
     const cloneTaskIdRef = useRef<number | null>(null)
@@ -491,7 +424,6 @@ export default function StarList() {
                         exportingUrls={exportingUrls}
                         onClearFilters={clearFilters}
                         onRemoveFilter={handleRemoveFilter}
-                        onOpenTranslatePanel={() => setTranslatePanelOpen(true)}
                         onOpenCloneWizard={handleOpenCloneWizard}
                         onOpenDownloadWizard={handleOpenDownloadWizard}
                         onExportMd={handleExportMd}
@@ -528,13 +460,6 @@ export default function StarList() {
                 loadingAllIds={loadingAllIds}
             />
 
-            <TranslateProgressModal
-                open={translateModalVisible}
-                progress={translateProgress}
-                onClose={handleCloseTranslateModal}
-                onRetryFailed={handleRetryFailed}
-            />
-
             <CloneWizardModal
                 open={cloneWizardOpen}
                 onClose={() => setCloneWizardOpen(false)}
@@ -567,13 +492,6 @@ export default function StarList() {
                 onDelete={handleDeleteDownloadTask}
             />
 
-            <TranslatePanel
-                open={translatePanelOpen}
-                onClose={() => setTranslatePanelOpen(false)}
-                filters={buildFilters()}
-                hasActiveFilters={hasActiveFilters}
-                onRefreshList={reload}
-            />
         </div>
     )
 }

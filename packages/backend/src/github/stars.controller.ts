@@ -1,11 +1,12 @@
-import { Controller, Post, Logger, Body, Res } from '@nestjs/common';
+import { Controller, Post, Logger, Body, Res, NotFoundException } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubRepoService } from './github-repo.service';
 import { GithubSearchService } from './github-search.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
-import { FilterSchema, StarByIdSchema } from '../common/dto/filter.dto';
-import type { FilterDto, StarByIdDto } from '../common/dto/filter.dto';
+import { FilterSchema, GithubIssueListSchema, StarByIdSchema } from '../common/dto/filter.dto';
+import type { FilterDto, GithubIssueListDto, StarByIdDto } from '../common/dto/filter.dto';
+import { GithubApiService } from './github-api.service';
 
 @ApiTags('stars')
 @Controller('api/stars')
@@ -15,6 +16,7 @@ export class StarsController {
     constructor(
         private readonly service: GithubRepoService,
         private readonly githubSearch: GithubSearchService,
+        private readonly githubApi: GithubApiService,
     ) {}
 
     /**
@@ -90,6 +92,43 @@ export class StarsController {
         }
 
         return repo;
+    }
+
+    /**
+     * 查询仓库 Issue 列表
+     *
+     * 通过本地仓库 ID 锁定 fullName，再由后端代理 GitHub Search Issues API。
+     */
+    @Post('issues')
+    @ApiOperation({ summary: '获取仓库 Issues', description: '分页查询指定 Star 仓库的 GitHub Issue 列表，自动排除 Pull Request' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            required: ['id'],
+            properties: {
+                id: { type: 'number' },
+                state: { type: 'string', enum: ['open', 'closed', 'all'], default: 'open' },
+                query: { type: 'string', maxLength: 200 },
+                sort: { type: 'string', enum: ['created', 'updated', 'comments'], default: 'updated' },
+                order: { type: 'string', enum: ['asc', 'desc'], default: 'desc' },
+                page: { type: 'number', default: 1 },
+                perPage: { type: 'number', default: 20, maximum: 50 },
+            },
+        },
+    })
+    async issues(@Body(new ZodValidationPipe(GithubIssueListSchema)) body: GithubIssueListDto) {
+        const repo = await this.service.findById(body.id);
+        if (!repo?.fullName) {
+            throw new NotFoundException('仓库不存在');
+        }
+        return this.githubApi.fetchRepoIssues(repo.fullName, {
+            state: body.state,
+            query: body.query,
+            sort: body.sort,
+            order: body.order,
+            page: body.page,
+            perPage: body.perPage,
+        });
     }
 
     /**

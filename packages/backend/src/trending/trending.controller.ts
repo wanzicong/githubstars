@@ -1,7 +1,6 @@
 import { Controller, Post, Body, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubSearchService } from '../github/github-search.service';
-import { TranslateTaskService } from '../translate/translate-task.service';
 import { TrendingService } from './trending.service';
 import { DownloadService } from '../download/download.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -15,17 +14,6 @@ function sinceToDays(since: string): number {
     if (since === 'weekly') return 7;
     if (since === 'monthly') return 30;
     return 1;
-}
-
-/** 构建翻译结果消息 */
-function buildTranslateMessage(translated: number, skipped: number, failed: number): string {
-    if (translated > 0) {
-        return `翻译完成: ${translated} 成功, ${skipped} 已缓存, ${failed} 失败`;
-    }
-    if (skipped > 0) {
-        return `所有描述已缓存 (${skipped} 个)`;
-    }
-    return `翻译完成: ${translated} 成功, ${failed} 失败`;
 }
 
 /** 构建 GitHub Search 查询字符串和日期范围 */
@@ -45,7 +33,6 @@ export class TrendingController {
 
     constructor(
         private readonly search: GithubSearchService,
-        private readonly taskService: TranslateTaskService,
         private readonly trendingService: TrendingService,
         private readonly downloadService: DownloadService,
     ) {}
@@ -79,73 +66,6 @@ export class TrendingController {
             repos: enrichedRepos,
             dateRange: `${dateStr} ~ ${new Date().toISOString().split('T')[0]}`,
         };
-    }
-
-    /**
-     * POST /api/trending/translate — 触发趋势仓库描述翻译
-     *
-     * 异步翻译未缓存的描述，翻译结果写入 github_repo.description_cn。
-     * 前端可在翻译完成后重新请求 /api/trending 获取更新后的中文描述。
-     *
-     * @returns { success, translated, skipped, failed, message }
-     */
-    @Post('translate')
-    @ApiOperation({ summary: '翻译趋势仓库描述', description: '异步翻译未缓存的趋势仓库描述，结果缓存到 github_repo.description_cn' })
-    @ApiBody({
-        schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' }, perPage: { type: 'number' } } },
-    })
-    async translateTrending(@Body(new ZodValidationPipe(TrendingSchema)) body: TrendingDto) {
-        const { since, language, perPage } = body;
-        const { query, dateStr } = buildTrendingQuery(since, language);
-        const result = await this.search.searchRepos(query, '', 'stars', 1, perPage);
-        const enriched = await this.trendingService.enrichWithCachedTranslations(result.repos);
-        const stats = await this.trendingService.translateUncached(enriched);
-
-        // 翻译后重新查询缓存，获取最新的中文描述
-        const repos = await this.trendingService.enrichWithCachedTranslations(result.repos);
-
-        return {
-            success: true,
-            ...stats,
-            repos,
-            total: result.total,
-            dateRange: `${dateStr} ~ ${new Date().toISOString().split('T')[0]}`,
-            message: buildTranslateMessage(stats.translated, stats.skipped, stats.failed),
-        };
-    }
-
-    /**
-     * POST /api/trending/analyze — AI 分析趋势仓库
-     *
-     * 获取当前趋势仓库列表，仅对趋势仓库创建翻译任务，而非全量翻译。
-     *
-     * @returns { success, taskId?, message }
-     */
-    @Post('analyze')
-    @ApiOperation({ summary: 'AI 分析趋势仓库', description: '获取趋势仓库列表，仅对趋势仓库创建批量翻译任务' })
-    @ApiBody({ schema: { type: 'object', properties: { since: { type: 'string' }, language: { type: 'string' } } } })
-    async analyze(@Body() body: { since?: string; language?: string }) {
-        const since = body.since || 'daily';
-        const language = body.language || '';
-        this.logger.log('分析趋势仓库: since=' + since + ', language=' + (language || 'all'));
-
-        // 修复 C1: 查询趋势仓库，仅对趋势仓库创建翻译任务，而非全量翻译
-        const { query } = buildTrendingQuery(since, language);
-        const searchResult = await this.search.searchRepos(query, '', 'stars', 1, 20);
-        const repos = searchResult.repos as Array<{ fullName: string }> | undefined;
-        if (!repos?.length) return { success: false, message: '没有获取到趋势仓库' };
-
-        // 从搜索结果中提取 fullName，查询本地数据库中的 repoId
-        const fullNames = repos.map((r) => r.fullName).filter(Boolean);
-        if (!fullNames.length) return { success: false, message: '趋势仓库数据异常' };
-
-        const localRepoIds = await this.trendingService.findLocalRepoIds(fullNames);
-        if (!localRepoIds.length) return { success: false, message: '趋势仓库尚未同步到本地，请先执行同步' };
-
-        this.logger.log(`趋势分析: 找到 ${localRepoIds.length} 个本地仓库，创建翻译任务`);
-        const taskId = await this.taskService.createBatchTask(localRepoIds, 'both');
-        if (!taskId) return { success: false, message: '没有需要翻译的项目' };
-        return { success: true, taskId: String(taskId), message: '趋势分析翻译任务已启动' };
     }
 
     /**

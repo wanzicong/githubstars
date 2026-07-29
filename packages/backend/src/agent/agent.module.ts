@@ -6,7 +6,6 @@ import { AgentCredentialService } from './agent-credential.service';
 import { GithubModule } from '../github/github.module';
 import { CategoryModule } from '../category/category.module';
 import { StatsModule } from '../stats/stats.module';
-import { TranslateModule } from '../translate/translate.module';
 import { CloneModule } from '../clone/clone.module';
 import { DownloadModule } from '../download/download.module';
 import { SyncModule } from '../sync/sync.module';
@@ -32,7 +31,6 @@ import { LoggingModule } from '../logging/logging.module';
         GithubModule,
         CategoryModule,
         StatsModule,
-        TranslateModule,
         CloneModule,
         DownloadModule,
         SyncModule,

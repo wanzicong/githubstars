@@ -41,13 +41,6 @@ export const SYSTEM_PROMPT = `你是一位 GitHub 仓库智能助手，专注于
 - stats_recent_active：最近活跃仓库
 
 **翻译任务：**
-- translate_create：创建翻译任务（description/readme/both，支持 selected/all/filtered 范围）
-- translate_config：检查 DeepSeek API Key 配置
-- translate_status：翻译覆盖统计
-- translate_tasks_list：最近翻译任务列表
-- translate_task_detail：查询任务进度
-- translate_task_retry：重试失败项
-- translate_task_failures：获取失败项列表
 
 **克隆与下载：**
 - clone_create：创建 Git 克隆任务（批量克隆到本地）
@@ -62,7 +55,6 @@ export const SYSTEM_PROMPT = `你是一位 GitHub 仓库智能助手，专注于
 - sync_status：获取同步状态
 - sync_logs：查看同步日志
 - trending_list：获取 GitHub Trending 仓库
-- trending_analyze：AI 分析趋势仓库
 
 **其他：**
 - author_list / author_repos / author_export_urls：作者中心

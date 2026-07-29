@@ -60,9 +60,9 @@ npm run build -w @githubstars/mcp-server
 |------|--------|------|
 | `GITHUBSTARS_API_URL` | `http://localhost:10002` | 后端 API 地址 |
 
-## 工具清单（82 个）
+## 工具清单（69 个）
 
-### Stars 星标仓库（5 个）
+### Stars 星标仓库（8 个）
 | 工具名 | 说明 |
 |--------|------|
 | `stars-list` | 分页获取 Star 仓库列表 |
@@ -70,6 +70,9 @@ npm run build -w @githubstars/mcp-server
 | `stars-export` | 导出仓库 URL 列表 |
 | `stars-ids` | 获取仓库 ID 列表 |
 | `stars-by-ids` | 批量获取仓库详情 |
+| `stars-star` | 按本地仓库 ID 添加 Star |
+| `stars-unstar` | 按本地仓库 ID 取消 Star |
+| `stars-check-starred` | 按本地仓库 ID 检查 Star 状态 |
 
 ### Stats 统计分析（6 个）
 | 工具名 | 说明 |
@@ -95,23 +98,6 @@ npm run build -w @githubstars/mcp-server
 | `category-unbind` | 解绑仓库从分类 |
 | `category-batch-ids` | 获取分类仓库 ID |
 
-### Translate 翻译（14 个）
-| 工具名 | 说明 |
-|--------|------|
-| `translate-create` | 创建翻译任务 |
-| `translate-config` | 检查翻译配置 |
-| `translate-status` | 翻译覆盖统计 |
-| `translate-tasks-list` | 获取翻译任务列表 |
-| `translate-tasks-detail` | 查询任务进度 |
-| `translate-tasks-retry` | 重试失败翻译 |
-| `translate-tasks-failures` | 获取任务失败项 |
-| `translate-description` | 同步翻译描述（旧） |
-| `translate-readme` | 同步翻译 README（旧） |
-| `translate-readme-async` | 异步翻译 README（旧） |
-| `translate-retranslate` | 强制重新翻译（旧） |
-| `translate-full` | 同步翻译完整仓库（旧） |
-| `translate-repo-status` | 查询单仓库翻译状态（旧） |
-
 ### Sync 数据同步（3 个）
 | 工具名 | 说明 |
 |--------|------|
@@ -128,12 +114,10 @@ npm run build -w @githubstars/mcp-server
 | `github-check-starred` | 检查 Star 状态 |
 | `similar-find` | 查找相似仓库 |
 
-### Trending 趋势（4 个）
+### Trending 趋势（2 个）
 | 工具名 | 说明 |
 |--------|------|
 | `trending-list` | 获取 Trending 仓库 |
-| `trending-translate` | 翻译趋势仓库描述 |
-| `trending-analyze` | AI 分析趋势仓库 |
 | `trending-download` | 下载趋势仓库 |
 
 ### Authors 作者（3 个）
@@ -212,5 +196,5 @@ cd packages/mcp-server && node --max-old-space-size=8192 ../../node_modules/type
 ## 注意事项
 
 1. **后端必须先启动** — MCP Server 不直连数据库，所有数据通过后端 API 获取
-2. **SSE 流式接口不支持** — `/api/translate/tasks/stream` 和 `/api/agent/chat` 是 SSE 长连接，无法通过 stdio 代理
+2. **SSE 流式接口不支持** — `/api/agent/chat` 是 SSE 长连接，无法通过 stdio 代理
 3. **文件下载接口返回 JSON** — `stars-export`、`authors-export`、`export-markdown` 返回的是后端 JSON 响应，不包含文件内容

@@ -37,18 +37,19 @@ describe('ConfigService', () => {
             prisma.systemConfig.findMany.mockResolvedValue([
                 { id: 1n, configKey: 'github.username', configValue: 'testuser', description: 'GitHub用户名' },
                 { id: 2n, configKey: 'github.token', configValue: 'ghp_test12345678', description: 'GitHub Token' },
-                { id: 3n, configKey: 'deepseek.api_key', configValue: 'sk-testkey1234', description: 'API Key' },
+                { id: 3n, configKey: 'deepseek.api_key', configValue: 'sk-testkey1234', description: '已停用 API Key' },
             ]);
 
             const configs = await service.listAll();
-            expect(configs).toHaveLength(3);
+            expect(configs).toHaveLength(2);
+            expect(configs.some((item) => item.configKey.startsWith('deepseek.'))).toBe(false);
         });
 
         it('敏感字段（token/api_key）应脱敏显示', async () => {
             const { service, prisma } = await boot();
             prisma.systemConfig.findMany.mockResolvedValue([
                 { id: 1n, configKey: 'github.token', configValue: 'ghp_test12345678', description: 'GitHub Token' },
-                { id: 2n, configKey: 'deepseek.api_key', configValue: 'sk-testkey1234', description: 'API Key' },
+                { id: 2n, configKey: 'anthropic.api_key', configValue: 'sk-testkey1234', description: 'API Key' },
             ]);
 
             const configs = await service.listAll();
@@ -100,6 +101,16 @@ describe('ConfigService', () => {
             const value = await service.getValue('nonexistent');
             expect(value).toBeUndefined();
         });
+
+        it('已停用的 DeepSeek 配置不可读取', async () => {
+            const { service, prisma } = await boot();
+            const value = await service.getValue('deepseek.api_key');
+            expect(value).toBeUndefined();
+            expect(prisma.systemConfig.findUnique).not.toHaveBeenCalledWith({
+                where: { configKey: 'deepseek.api_key' },
+                select: { configValue: true },
+            });
+        });
     });
 
     describe('getValueDefault', () => {
@@ -135,13 +146,20 @@ describe('ConfigService', () => {
             const val = await service.getValue('new.config');
             expect(val).toBe('value');
         });
+
+        it('应拒绝重新写入已停用的 DeepSeek 配置', async () => {
+            const { service, prisma } = await boot();
+            await expect(service.update('deepseek.api_key', 'k1')).rejects.toThrow('该配置项已停用');
+            expect(prisma.systemConfig.update).not.toHaveBeenCalled();
+            expect(prisma.systemConfig.create).not.toHaveBeenCalled();
+        });
     });
 
     describe('batchUpdate', () => {
         it('应批量更新多个配置项', async () => {
             const { service, prisma } = await boot();
             prisma.systemConfig.findUnique.mockResolvedValue({ configKey: 'github.username' });
-            await service.batchUpdate({ 'github.username': 'u1', 'deepseek.api_key': 'k1' });
+            await service.batchUpdate({ 'github.username': 'u1', 'clone.http_proxy': 'http://127.0.0.1:7897' });
             expect(prisma.systemConfig.update).toHaveBeenCalledTimes(2);
         });
     });

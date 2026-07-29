@@ -3,8 +3,6 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { GithubRepoService } from '../../github/github-repo.service';
 import { CategoryService } from '../../category/category.service';
 import { StatsService } from '../../stats/stats.service';
-import { TranslateService } from '../../translate/translate.service';
-import { TranslateTaskService } from '../../translate/translate-task.service';
 import { CloneService } from '../../clone/clone.service';
 import { DownloadService } from '../../download/download.service';
 import { SyncService } from '../../sync/sync.service';
@@ -58,61 +56,10 @@ function buildTrendingQuery(since: string, language?: string): { query: string; 
     return { query, dateStr };
 }
 
-/** 翻译任务类型 */
-type TranslateType = 'description' | 'readme' | 'both';
-
-/** 翻译筛选条件 */
-interface TranslateFilters {
-    keyword?: string;
-    language?: string;
-    sortBy?: string;
-    sortOrder?: string;
-    dateField?: string;
-    startDate?: string;
-    endDate?: string;
-}
-
-/** 处理 selected 范围翻译 */
-async function handleSelectedTranslate(
-    translate: TranslateService,
-    translateTask: TranslateTaskService,
-    repoIds: number[],
-    type: TranslateType,
-) {
-    if (type === 'description') {
-        const count = await translate.translateDescriptionsBatch(repoIds);
-        return ok({ success: true, translatedCount: count });
-    }
-    const taskId = await translateTask.createBatchTask(repoIds, type === 'both' ? 'both' : 'readme');
-    if (!taskId) return err('创建翻译任务失败');
-    return ok({ success: true, taskId, message: `翻译任务已启动 (${type})` });
-}
-
-/** 处理 all 范围翻译 */
-async function handleAllTranslate(translateTask: TranslateTaskService, type: TranslateType) {
-    if (type === 'readme') {
-        const taskId = await translateTask.createAndStartReadmeBatch();
-        if (!taskId) return err('没有需要翻译的项目');
-        return ok({ success: true, taskId, message: '全量README翻译已启动' });
-    }
-    const taskId = await translateTask.createAndStartFullTranslate();
-    if (!taskId) return err('没有需要翻译的项目');
-    return ok({ success: true, taskId, message: '全量翻译已启动' });
-}
-
-/** 处理 filtered 范围翻译 */
-async function handleFilteredTranslate(translateTask: TranslateTaskService, filters: TranslateFilters, type: TranslateType) {
-    const taskId = await translateTask.createAndStartFilterBatch(filters, type);
-    if (!taskId) return err('没有需要翻译的项目');
-    return ok({ success: true, taskId, message: `筛选翻译已启动 (类型: ${type})` });
-}
-
 export interface SystemMcpDeps {
     githubRepo: GithubRepoService;
     category: CategoryService;
     stats: StatsService;
-    translate: TranslateService;
-    translateTask: TranslateTaskService;
     clone: CloneService;
     download: DownloadService;
     sync: SyncService;
@@ -127,29 +74,14 @@ export interface SystemMcpDeps {
 /**
  * 创建系统 MCP Server —— 将 GitHub Stars 管理系统的全部业务能力暴露给 Agent。
  *
- * 覆盖 12 个领域：stars / category / stats / translate / clone / download /
+ * 覆盖 11 个领域：stars / category / stats / clone / download /
  * sync / trending / author / config / export / logging。
  *
  * @callers AgentClientService.stream() — 每次 Agent 会话启动时挂载
  * @depends 各业务 Service（通过构造函数注入）
  */
 export function createSystemMcpServer(deps: SystemMcpDeps) {
-    const {
-        githubRepo,
-        category,
-        stats,
-        translate,
-        translateTask,
-        clone,
-        download,
-        sync,
-        trending,
-        author,
-        config,
-        exportService,
-        logging,
-        githubSearch,
-    } = deps;
+    const { githubRepo, category, stats, clone, download, sync, trending, author, config, exportService, logging, githubSearch } = deps;
 
     return createSdkMcpServer({
         name: 'system',
@@ -519,115 +451,6 @@ export function createSystemMcpServer(deps: SystemMcpDeps) {
                 },
             ),
 
-            // ==================== Translate 翻译 ====================
-            tool(
-                'translate_create',
-                '创建翻译任务。支持三种 scope：selected（指定仓库）、all（全量）、filtered（筛选条件）；三种 type：description / readme / both',
-                {
-                    type: z.enum(['description', 'readme', 'both']).describe('翻译类型'),
-                    scope: z.enum(['selected', 'all', 'filtered']).describe('范围类型'),
-                    repoIds: z.array(z.number().int().positive()).optional().describe('仓库 ID 列表（scope=selected 时必填）'),
-                    filters: z
-                        .object({
-                            keyword: z.string().optional(),
-                            language: z.string().optional(),
-                            sortBy: z.string().optional(),
-                            sortOrder: z.string().optional(),
-                            dateField: z.string().optional(),
-                            startDate: z.string().optional(),
-                            endDate: z.string().optional(),
-                        })
-                        .optional()
-                        .describe('筛选条件（scope=filtered 时使用）'),
-                },
-                async (args) => {
-                    try {
-                        if (args.scope === 'selected' && args.repoIds?.length) {
-                            return await handleSelectedTranslate(translate, translateTask, args.repoIds, args.type);
-                        }
-                        if (args.scope === 'all') {
-                            return await handleAllTranslate(translateTask, args.type);
-                        }
-                        return await handleFilteredTranslate(translateTask, args.filters || {}, args.type);
-                    } catch (e) {
-                        return err(e instanceof Error ? e.message : String(e));
-                    }
-                },
-            ),
-            tool('translate_config', '检查 DeepSeek API Key 是否已配置', {}, async () => {
-                try {
-                    return ok({ success: true, apiKeyConfigured: await translateTask.isApiKeyConfigured() });
-                } catch (e) {
-                    return err(e instanceof Error ? e.message : String(e));
-                }
-            }),
-            tool(
-                'translate_status',
-                '获取翻译覆盖统计（符合条件的仓库总数及描述/README 翻译覆盖情况）',
-                { ...filterShape },
-                async (args) => {
-                    try {
-                        return ok(
-                            await translate.getTranslationSummary({
-                                keyword: args.keyword,
-                                language: args.language,
-                                dateField: args.dateField,
-                                startDate: args.startDate,
-                                endDate: args.endDate,
-                                untranslatedOnly: args.untranslatedOnly,
-                            }),
-                        );
-                    } catch (e) {
-                        return err(e instanceof Error ? e.message : String(e));
-                    }
-                },
-            ),
-            tool('translate_tasks_list', '获取最近 20 条翻译任务摘要', {}, async () => {
-                try {
-                    return ok(await translateTask.getRecentTasks());
-                } catch (e) {
-                    return err(e instanceof Error ? e.message : String(e));
-                }
-            }),
-            tool(
-                'translate_task_detail',
-                '查询指定翻译任务的详情和进度',
-                { id: z.number().int().positive().describe('任务 ID') },
-                async (args) => {
-                    try {
-                        return ok(await translateTask.getTaskProgress(args.id));
-                    } catch (e) {
-                        return err(e instanceof Error ? e.message : String(e));
-                    }
-                },
-            ),
-            tool(
-                'translate_task_retry',
-                '重试指定翻译任务中的失败项',
-                { id: z.number().int().positive().describe('任务 ID') },
-                async (args) => {
-                    try {
-                        const newId = await translateTask.retryFailed(args.id);
-                        if (!newId) return err('没有失败项需要重试');
-                        return ok({ success: true, taskId: newId, message: '重试任务已启动' });
-                    } catch (e) {
-                        return err(e instanceof Error ? e.message : String(e));
-                    }
-                },
-            ),
-            tool(
-                'translate_task_failures',
-                '获取指定翻译任务的失败项列表',
-                { id: z.number().int().positive().describe('任务 ID') },
-                async (args) => {
-                    try {
-                        return ok(await translateTask.getFailures(args.id));
-                    } catch (e) {
-                        return err(e instanceof Error ? e.message : String(e));
-                    }
-                },
-            ),
-
             // ==================== Clone 克隆 ====================
             tool(
                 'clone_create',
@@ -931,31 +754,6 @@ export function createSystemMcpServer(deps: SystemMcpDeps) {
                     }
                 },
             ),
-            tool(
-                'trending_analyze',
-                'AI 分析趋势仓库（对趋势仓库创建批量翻译任务）',
-                {
-                    since: z.string().optional().describe('时间范围：daily / weekly / monthly，默认 daily'),
-                    language: z.string().optional().describe('编程语言筛选'),
-                },
-                async (args) => {
-                    try {
-                        const { query } = buildTrendingQuery(args.since ?? 'daily', args.language ?? '');
-                        const searchResult = await githubSearch.searchRepos(query, '', 'stars', 1, 20);
-                        const repos = searchResult.repos as TrendingRepoItem[] | undefined;
-                        if (!repos?.length) return err('没有获取到趋势仓库');
-                        const fullNames = repos.map((r) => r.fullName).filter(Boolean);
-                        const localRepoIds = await trending.findLocalRepoIds(fullNames);
-                        if (!localRepoIds.length) return err('趋势仓库尚未同步到本地，请先执行同步');
-                        const taskId = await translateTask.createBatchTask(localRepoIds, 'both');
-                        if (!taskId) return err('没有需要翻译的项目');
-                        return ok({ success: true, taskId: String(taskId), message: '趋势分析翻译任务已启动' });
-                    } catch (e) {
-                        return err(e instanceof Error ? e.message : String(e));
-                    }
-                },
-            ),
-
             // ==================== Author 作者中心 ====================
             tool(
                 'author_list',
@@ -1030,7 +828,7 @@ export function createSystemMcpServer(deps: SystemMcpDeps) {
                 {
                     configs: z
                         .record(z.string(), z.string())
-                        .describe('配置键值对，如 { "github.token": "xxx", "deepseek.api_key": "yyy" }'),
+                        .describe('配置键值对，如 { "github.token": "xxx", "clone.http_proxy": "http://127.0.0.1:7897" }'),
                 },
                 async (args) => {
                     try {

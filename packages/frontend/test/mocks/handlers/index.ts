@@ -75,52 +75,6 @@ export const syncHandlers = [
     }),
 ]
 
-// ============ Translate ============
-
-export const translateHandlers = [
-    http.post('/api/translate/status', () => {
-        return HttpResponse.json({
-            success: true,
-            total: 100,
-            descCompleted: 80,
-            descPending: 20,
-            readmeCompleted: 50,
-            readmePending: 50,
-        })
-    }),
-    http.post('/api/translate/tasks/list', () => {
-        return HttpResponse.json({
-            success: true,
-            tasks: [],
-        })
-    }),
-    http.post('/api/translate', () => {
-        return createSuccess({ taskId: 1, message: '翻译任务已创建' })
-    }),
-    http.post('/api/translate/tasks/detail', () => {
-        return HttpResponse.json({
-            success: true,
-            taskId: 1,
-            status: 'COMPLETED',
-            totalItems: 10,
-            completedItems: 10,
-            failedItems: 0,
-            descTotal: 5,
-            descCompleted: 5,
-            descFailed: 0,
-            readmeTotal: 5,
-            readmeCompleted: 5,
-            readmeFailed: 0,
-            createdAt: '2024-01-01T00:00:00.000Z',
-            finishedAt: '2024-01-01T00:05:00.000Z',
-            progress: 100,
-        })
-    }),
-    http.post('/api/translate/tasks/retry', () => {
-        return createSuccess({ taskId: 2, message: '重试任务已创建' })
-    }),
-]
-
 // ============ Stats ============
 
 export const statsHandlers = [
@@ -173,7 +127,6 @@ export const configHandlers = [
     http.post('/api/config/list', () => {
         return HttpResponse.json([
             { configKey: 'github.token', configValue: 'ghp_****xxxx', description: 'GitHub Token' },
-            { configKey: 'deepseek.api_key', configValue: 'sk_****xxxx', description: 'DeepSeek API Key' },
         ])
     }),
 ]
@@ -216,7 +169,6 @@ export const logsHandlers = [
 export const handlers = [
     ...starsHandlers,
     ...syncHandlers,
-    ...translateHandlers,
     ...statsHandlers,
     ...configHandlers,
     ...authorHandlers,

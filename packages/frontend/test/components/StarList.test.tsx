@@ -81,6 +81,14 @@ describe('StarList', () => {
         expect(screen.getByText('暂无仓库数据，请先同步')).toBeDefined()
       })
     }, 10000)
+
+    it('不应再展示 DeepSeek 翻译入口', async () => {
+      renderStarList()
+      await waitFor(() => {
+        expect(screen.getByText('Star 仓库列表')).toBeDefined()
+      })
+      expect(screen.queryByRole('button', { name: '翻译管理' })).toBeNull()
+    })
   })
 
   describe('搜索筛选', () => {

@@ -130,6 +130,201 @@ html, body {
   padding-left: 8px;
 }
 
+/* ── GitHub 风格 Issues 最大化弹框 ── */
+.repo-issues-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.repo-issues-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding: 12px 16px;
+  border-bottom: 1px solid;
+}
+
+.repo-issues-actions {
+  justify-content: flex-end;
+}
+
+.repo-issues-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: none;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-bottom: 1px solid;
+}
+
+.repo-issues-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.repo-issues-feedback,
+.repo-issues-skeleton {
+  padding: 24px;
+}
+
+.repo-issues-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.repo-issue-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(208, 215, 222, 0.7);
+}
+
+.repo-issue-row:last-child {
+  border-bottom: 0;
+}
+
+.repo-issue-row:hover {
+  background: rgba(208, 215, 222, 0.12);
+}
+
+.repo-issue-state-icon {
+  flex: none;
+  padding-top: 2px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.repo-issue-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.repo-issue-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.repo-issue-title {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-decoration: none;
+}
+
+.repo-issue-title:hover {
+  color: var(--primary-color) !important;
+  text-decoration: underline;
+}
+
+.repo-issue-labels {
+  display: flex;
+  margin-top: 6px;
+}
+
+.repo-issue-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.repo-issue-side {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+  min-height: 28px;
+}
+
+.repo-issue-comments {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 40px;
+  text-decoration: none;
+}
+
+.repo-issues-pagination {
+  display: flex;
+  justify-content: center;
+  flex: none;
+  min-height: 56px;
+  padding: 12px 16px;
+  border-top: 1px solid;
+}
+
+@media (max-width: 900px) {
+  .repo-issues-toolbar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .repo-issues-toolbar > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .repo-issues-toolbar {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .repo-issues-toolbar > :first-child {
+    grid-column: auto;
+  }
+
+  .repo-issues-actions {
+    justify-content: space-between;
+  }
+
+  .repo-issues-actions .ant-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .repo-issues-summary {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+
+  .repo-issue-row {
+    padding: 12px;
+  }
+
+  .repo-issue-side {
+    align-self: flex-end;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .repo-issue-comments {
+    min-width: auto;
+  }
+
+  .repo-issues-pagination {
+    justify-content: flex-start;
+    min-height: 52px;
+    padding: 10px 12px;
+    overflow-x: auto;
+  }
+}
+
 /* ── 仓库详情头部：手机端纵向排列，避免操作区挤压仓库信息 ── */
 @media (max-width: 575.98px) {
   .repo-header {

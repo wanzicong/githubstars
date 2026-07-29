@@ -24,13 +24,6 @@
  *   githubstars stars search <keyword>   搜索仓库
  *   githubstars stars export             导出仓库 URL
  *
- *   # 翻译管理
- *   githubstars translate <type> <scope> 创建翻译任务
- *   githubstars translate:status <id>    查看翻译进度
- *   githubstars translate:list           列出翻译任务
- *   githubstars translate:retry <id>     重试翻译任务
- *   githubstars translate:stats          查看翻译统计
- *
  *   # 克隆管理
  *   githubstars clone <repoIds...>       创建克隆任务
  *   githubstars clone:status <id>        查看克隆进度
@@ -76,13 +69,6 @@ import { printError, printInfo, printJson, printHeader, printSuccess, formatNumb
 import { syncStatus, syncStart, syncLogs } from './commands/sync.js';
 import { starList, starDetail, starSearch, starExport } from './commands/stars.js';
 import {
-  translateCreate,
-  translateStatus,
-  translateList,
-  translateRetry,
-  translateStats,
-} from './commands/translate.js';
-import {
   cloneCreate,
   cloneStatus,
   cloneList,
@@ -127,7 +113,6 @@ import {
   dbStarList,
   dbStarDetail,
   dbSyncStatus,
-  dbTranslateStats,
   dbStatsOverview,
   dbStatsLanguages,
   dbStatsOwners,
@@ -206,18 +191,6 @@ Star 列表:
   githubstars stars search <keyword>   搜索仓库
   githubstars stars export             导出仓库 URL
 
-翻译管理:
-  githubstars translate <type> <scope> 创建翻译任务
-    type: description|readme|both
-    scope: all|selected|filtered
-    --repo-ids <ids>                     仓库 ID (逗号分隔)
-    --keyword <text>                     筛选关键词
-    --language <lang>                    筛选语言
-  githubstars translate:status <id>    查看翻译进度
-  githubstars translate:list [--page N] 列出翻译任务
-  githubstars translate:retry <id>     重试翻译任务
-  githubstars translate:stats          查看翻译统计
-
 克隆管理:
   githubstars clone <repoIds...>       创建克隆任务
     --target-dir <path>                  目标目录
@@ -275,9 +248,6 @@ Star 列表:
   githubstars stars:by-ids <ids...>    批量获取仓库详情
   githubstars stars:ids [--keyword] [--language] 获取仓库 ID 列表
 
-翻译详情:
-  githubstars translate:failures <id>  查看翻译失败详情
-
 Trending:
   githubstars trending [--language] [--since]    查看 Trending 仓库
   githubstars trending:fetch [--language]        抓取 Trending 数据
@@ -302,7 +272,6 @@ Trending:
     githubstars --db stars                    列出 Star 仓库
     githubstars --db stars <id>               查看仓库详情
     githubstars --db sync:status              查看同步状态
-    githubstars --db translate:stats          查看翻译统计
     githubstars --db stats                    查看概览统计
     githubstars --db stats:languages          查看语言分布
     githubstars --db stats:owners             查看所有者排行
@@ -503,10 +472,6 @@ async function main() {
         await dbSyncStatus(format);
         return;
 
-      case 'translate:stats':
-        await dbTranslateStats(format);
-        return;
-
       case 'stats':
         await dbStatsOverview(format);
         return;
@@ -545,7 +510,7 @@ async function main() {
 
       default:
         printError(`数据库模式不支持此命令: ${command}`);
-        printInfo('数据库模式支持的命令: stars, sync:status, translate:stats, stats, stats:languages, stats:owners, category list, clone:list, config:server');
+        printInfo('数据库模式支持的命令: stars, sync:status, stats, stats:languages, stats:owners, category list, clone:list, config:server');
         process.exit(1);
     }
   }
@@ -637,46 +602,6 @@ async function main() {
           format,
         });
       }
-      break;
-
-    // 翻译管理
-    case 'translate':
-      await translateCreate({
-        type: (positional[0] as 'description' | 'readme' | 'both') || 'readme',
-        scope: (positional[1] as 'selected' | 'all' | 'filtered') || 'all',
-        repoIds: flags['repo-ids'] ? (flags['repo-ids'] as string).split(',').map(Number) : undefined,
-        keyword: flags.keyword as string,
-        language: flags.language as string,
-        format,
-      });
-      break;
-
-    case 'translate:status':
-      if (!positional[0]) {
-        console.error('❌ 请指定任务 ID');
-        process.exit(1);
-      }
-      await translateStatus(parseInt(positional[0]), format);
-      break;
-
-    case 'translate:list':
-      await translateList(
-        flags.page ? parseInt(flags.page as string) : 1,
-        flags.size ? parseInt(flags.size as string) : 10,
-        format
-      );
-      break;
-
-    case 'translate:retry':
-      if (!positional[0]) {
-        console.error('❌ 请指定任务 ID');
-        process.exit(1);
-      }
-      await translateRetry(parseInt(positional[0]), format);
-      break;
-
-    case 'translate:stats':
-      await translateStats(format);
       break;
 
     // 克隆管理
@@ -950,36 +875,6 @@ async function main() {
         } else {
           printHeader(`仓库 ID 列表 (共 ${ids.length} 个)`);
           console.log(ids.join(', '));
-        }
-      }
-      break;
-
-    // 翻译失败详情
-    case 'translate:failures':
-      if (!positional[0]) {
-        console.error('❌ 请指定任务 ID');
-        process.exit(1);
-      }
-      {
-        const failures = await (await import('./api.js')).api.getTranslateFailures(parseInt(positional[0]));
-        if (format === 'json') {
-          printJson(failures);
-        } else {
-          printHeader(`翻译失败详情 (任务 ID: ${positional[0]})`);
-          if (failures.length === 0) {
-            console.log('没有失败项');
-          } else {
-            const headers = ['ID', '仓库', '类型', '状态', '重试次数', '错误信息'];
-            const rows = failures.map(item => [
-              String(item.id),
-              item.fullName || String(item.repoId),
-              item.translateType,
-              item.status,
-              String(item.retryCount),
-              (item.errorMessage || '-').substring(0, 50),
-            ]);
-            console.log(formatTable(headers, rows));
-          }
         }
       }
       break;

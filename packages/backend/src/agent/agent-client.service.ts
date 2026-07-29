@@ -6,8 +6,6 @@ import { createSystemMcpServer } from './mcp/system-tools';
 import { GithubRepoService } from '../github/github-repo.service';
 import { CategoryService } from '../category/category.service';
 import { StatsService } from '../stats/stats.service';
-import { TranslateService } from '../translate/translate.service';
-import { TranslateTaskService } from '../translate/translate-task.service';
 import { CloneService } from '../clone/clone.service';
 import { DownloadService } from '../download/download.service';
 import { SyncService } from '../sync/sync.service';
@@ -69,8 +67,6 @@ export class AgentClientService {
         private readonly githubRepo: GithubRepoService,
         private readonly category: CategoryService,
         private readonly stats: StatsService,
-        private readonly translate: TranslateService,
-        private readonly translateTask: TranslateTaskService,
         private readonly clone: CloneService,
         private readonly download: DownloadService,
         private readonly sync: SyncService,
@@ -116,8 +112,6 @@ export class AgentClientService {
                     githubRepo: this.githubRepo,
                     category: this.category,
                     stats: this.stats,
-                    translate: this.translate,
-                    translateTask: this.translateTask,
                     clone: this.clone,
                     download: this.download,
                     sync: this.sync,

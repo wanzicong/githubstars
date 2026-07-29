@@ -52,6 +52,74 @@ export interface GitHubRepoBase {
   pushedAt: string;
 }
 
+// ===================== GitHub Issues =====================
+
+/** Issues 列表状态筛选 */
+export type GithubIssueState = 'open' | 'closed' | 'all';
+
+/** Issues 排序字段 */
+export type GithubIssueSort = 'created' | 'updated' | 'comments';
+
+/** Issues 排序方向 */
+export type GithubIssueOrder = 'asc' | 'desc';
+
+/** Issue 标签 */
+export interface GithubIssueLabel {
+  name: string;
+  color: string;
+  description: string | null;
+}
+
+/** Issue 用户摘要 */
+export interface GithubIssueUser {
+  login: string;
+  avatarUrl: string;
+  htmlUrl: string;
+}
+
+/** GitHub Issue 列表项 */
+export interface GithubIssue {
+  id: number;
+  number: number;
+  state: Exclude<GithubIssueState, 'all'>;
+  stateReason: string | null;
+  title: string;
+  htmlUrl: string;
+  user: GithubIssueUser | null;
+  labels: GithubIssueLabel[];
+  assignees: GithubIssueUser[];
+  comments: number;
+  locked: boolean;
+  milestoneTitle: string | null;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+}
+
+/** 后端 GitHub Issues 查询参数 */
+export interface GithubIssueQueryParams {
+  state?: GithubIssueState;
+  query?: string;
+  sort?: GithubIssueSort;
+  order?: GithubIssueOrder;
+  page?: number;
+  perPage?: number;
+}
+
+/** 前端仓库 Issues 查询参数 */
+export interface GithubIssueListParams extends GithubIssueQueryParams {
+  repoId: number;
+}
+
+/** GitHub Issues 分页结果 */
+export interface GithubIssueListResult {
+  items: GithubIssue[];
+  totalCount: number;
+  incompleteResults: boolean;
+  page: number;
+  perPage: number;
+}
+
 // ===================== 同步状态 =====================
 
 /** 同步操作状态 */
@@ -126,19 +194,4 @@ export interface LanguageStat {
   language: string;
   count: number;
   percentage: number;
-}
-
-// ===================== 翻译状态 =====================
-
-/** 翻译任务状态 */
-export type TranslationTaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL';
-
-/** 单仓库翻译状态 */
-export interface TranslationStatus {
-  descriptionTranslated: boolean;
-  readmeFetched: boolean;
-  readmeTranslated: boolean;
-  descriptionCn: string | null;
-  readmeCn: string | null;
-  readmeOriginal: string | null;
 }

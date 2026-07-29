@@ -106,6 +106,33 @@ export const StarByIdSchema = z.object({
 export type StarByIdDto = z.infer<typeof StarByIdSchema>;
 
 /**
+ * 仓库 Issues 列表查询参数
+ *
+ * GitHub Search API 最多返回前 1000 条结果，因此限制 page * perPage。
+ */
+export const GithubIssueListSchema = z
+    .object({
+        id: z.coerce.number().int().positive('仓库 ID 必须为正整数'),
+        state: z.enum(['open', 'closed', 'all']).optional().default('open'),
+        query: z.string().trim().max(200, '搜索内容不能超过 200 个字符').optional().default(''),
+        sort: z.enum(['created', 'updated', 'comments']).optional().default('updated'),
+        order: z.enum(['asc', 'desc']).optional().default('desc'),
+        page: z.coerce.number().int().min(1).optional().default(1),
+        perPage: z.coerce.number().int().min(1).max(50).optional().default(20),
+    })
+    .superRefine((value, context) => {
+        if (value.page * value.perPage > 1000) {
+            context.addIssue({
+                code: 'custom',
+                path: ['page'],
+                message: 'GitHub Issues 搜索最多支持前 1000 条结果',
+            });
+        }
+    });
+
+export type GithubIssueListDto = z.infer<typeof GithubIssueListSchema>;
+
+/**
  * Trending 查询参数
  */
 export const TrendingSchema = z.object({

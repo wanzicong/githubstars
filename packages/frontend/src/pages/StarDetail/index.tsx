@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
     Button,
+    Badge,
     Card,
     Descriptions,
     Drawer,
@@ -17,6 +18,7 @@ import {
     ArrowLeftOutlined,
     CodeOutlined,
     InfoCircleOutlined,
+    IssuesCloseOutlined,
     VerticalAlignTopOutlined,
     VerticalAlignBottomOutlined,
 } from '@ant-design/icons'
@@ -28,6 +30,7 @@ import { RepoHeader } from '../../components/repo'
 import { RepoStatsGrid } from '../../components/repo'
 import { RepoReadmeCard } from '../../components/repo'
 import { CodePreviewModal } from '../../components/repo'
+import { RepoIssuesModal } from '../../components/repo'
 import type { GithubRepo } from '../../types'
 
 const { Text } = Typography
@@ -44,6 +47,7 @@ export default function StarDetail() {
     // 详情抽屉
     const [infoDrawerOpen, setInfoDrawerOpen] = useState(false)
     const [codePreviewOpen, setCodePreviewOpen] = useState(false)
+    const [issuesOpen, setIssuesOpen] = useState(false)
 
     useEffect(() => {
         let cancelled = false
@@ -111,6 +115,11 @@ export default function StarDetail() {
         }
     }
 
+    const handleOpenIssues = () => {
+        setInfoDrawerOpen(false)
+        setIssuesOpen(true)
+    }
+
     if (loading) {
         return (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
@@ -146,6 +155,11 @@ export default function StarDetail() {
                     返回
                 </Button>
                 <Space wrap>
+                    <Badge count={repo.openIssuesCount} overflowCount={999} offset={[-2, 2]}>
+                        <Button icon={<IssuesCloseOutlined />} onClick={handleOpenIssues}>
+                            Issues
+                        </Button>
+                    </Badge>
                     <Button icon={<CodeOutlined />} onClick={() => setCodePreviewOpen(true)}>
                         代码预览
                     </Button>
@@ -167,6 +181,14 @@ export default function StarDetail() {
                 onClose={() => setCodePreviewOpen(false)}
             />
 
+            <RepoIssuesModal
+                repoId={repo.id}
+                fullName={repo.fullName}
+                htmlUrl={repo.htmlUrl}
+                open={issuesOpen}
+                onClose={() => setIssuesOpen(false)}
+            />
+
             {/* 仓库详情抽屉 */}
             <Drawer
                 title='仓库详情'
@@ -176,7 +198,7 @@ export default function StarDetail() {
                 onClose={() => setInfoDrawerOpen(false)}
             >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                    <RepoHeader repo={repo} />
+                    <RepoHeader repo={repo} onOpenIssues={handleOpenIssues} />
 
                     <RepoStatsGrid
                         starsCount={repo.starsCount}

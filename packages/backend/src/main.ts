@@ -68,7 +68,6 @@ async function bootstrap() {
         .addTag('sync', 'Star 数据同步')
         .addTag('config', '系统配置')
         .addTag('categories', '仓库分类管理（树形结构）')
-        .addTag('translate', '翻译（DeepSeek AI）')
         .addTag('stats', '统计分析')
         .addTag('authors', '作者中心')
         .addTag('trending', 'GitHub Trending')

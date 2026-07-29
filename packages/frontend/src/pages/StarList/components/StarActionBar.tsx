@@ -1,5 +1,5 @@
 import { Button, Switch, Row, Col, Tag, Typography } from 'antd'
-import { ClearOutlined, DownloadOutlined, TranslationOutlined, CopyOutlined } from '@ant-design/icons'
+import { ClearOutlined, DownloadOutlined, CopyOutlined } from '@ant-design/icons'
 
 const { Text } = Typography
 
@@ -15,7 +15,6 @@ export interface StarActionBarProps {
     exportingUrls: boolean
     onClearFilters: () => void
     onRemoveFilter: (key: string) => void
-    onOpenTranslatePanel: () => void
     onOpenCloneWizard: () => void
     onOpenDownloadWizard: () => void
     onExportMd: () => void
@@ -36,7 +35,6 @@ export default function StarActionBar({
     exportingUrls,
     onClearFilters,
     onRemoveFilter,
-    onOpenTranslatePanel,
     onOpenCloneWizard,
     onOpenDownloadWizard,
     onExportMd,
@@ -86,9 +84,6 @@ export default function StarActionBar({
                                 清除
                             </Button>
                         )}
-                        <Button icon={<TranslationOutlined />} onClick={onOpenTranslatePanel}>
-                            翻译管理
-                        </Button>
                         <Button
                             icon={<CopyOutlined />}
                             onClick={onOpenCloneWizard}

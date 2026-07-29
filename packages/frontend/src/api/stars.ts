@@ -38,6 +38,12 @@ export async function fetchStarList(params: StarListParams): Promise<PageResult<
     }
 }
 
+/** 根据本地 ID 获取仓库详情。 */
+export async function fetchRepoDetail(repoId: number): Promise<GithubRepo> {
+    const { data: envelope } = await api.post<{ success: boolean; data: GithubRepo }>('/api/stars/detail', { id: repoId })
+    return envelope.data
+}
+
 /**
  * 按筛选条件导出仓库 URL（返回 Blob 用于下载）
  *

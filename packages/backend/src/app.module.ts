@@ -8,7 +8,6 @@ import { GithubModule } from './github/github.module';
 import { SyncModule } from './sync/sync.module';
 import { StatsModule } from './stats/stats.module';
 import { AuthorModule } from './author/author.module';
-import { TranslateModule } from './translate/translate.module';
 import { TrendingModule } from './trending/trending.module';
 import { ExportModule } from './export/export.module';
 import { CloneModule } from './clone/clone.module';
@@ -38,7 +37,6 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
         SyncModule,
         StatsModule,
         AuthorModule,
-        TranslateModule,
         TrendingModule,
         ExportModule,
         CloneModule,

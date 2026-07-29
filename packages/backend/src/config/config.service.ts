@@ -1,11 +1,11 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * 系统配置服务
  *
  * 负责管理 system_config 表的读写操作，在模块初始化时自动写入默认配置项并加载到内存缓存。
- * 配置项以键值对形式存储，包含 GitHub、DeepSeek 等模块的配置。
+ * 配置项以键值对形式存储，包含 GitHub、Agent 等模块的配置。
  * 敏感字段（token/api_key）在列表查询时自动脱敏显示。
  *
  * 缓存策略：
@@ -16,19 +16,12 @@ import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
 export class ConfigService implements OnModuleInit {
     private readonly logger = new Logger(ConfigService.name);
+    private readonly retiredKeys = new Set(['deepseek.api_key', 'deepseek.api_url', 'deepseek.model']);
     /** 内存缓存：配置键 → 配置值 */
     private readonly cache = new Map<string, string>();
     private readonly defaults: Array<{ key: string; value: string; description: string }> = [
         { key: 'github.username', value: 'wanzicong', description: 'GitHub 用户名，用于同步 Star 仓库' },
         { key: 'github.token', value: '', description: 'GitHub Personal Access Token，用于提高 API 限额' },
-        { key: 'deepseek.api_key', value: '', description: 'DeepSeek API Key，用于 AI 分析、翻译和分类' },
-        {
-            key: 'deepseek.api_url',
-            value: 'https://api.deepseek.com/v1/chat/completions',
-            description: 'DeepSeek Chat Completions API 地址',
-        },
-        { key: 'deepseek.model', value: 'deepseek-chat', description: 'DeepSeek 模型名称' },
-
         // Anthropic/Claude Agent 配置
         {
             key: 'anthropic.api_key',
@@ -81,6 +74,7 @@ export class ConfigService implements OnModuleInit {
         const configs = await this.prisma.systemConfig.findMany({ select: { configKey: true, configValue: true } });
         this.cache.clear();
         for (const c of configs) {
+            if (this.retiredKeys.has(c.configKey)) continue;
             this.cache.set(c.configKey, c.configValue || '');
         }
     }
@@ -121,6 +115,7 @@ export class ConfigService implements OnModuleInit {
      * @returns 配置值，不存在时返回 undefined
      */
     async getValue(key: string): Promise<string | undefined> {
+        if (this.retiredKeys.has(key)) return undefined;
         if (this.cache.has(key)) return this.cache.get(key) || undefined;
         const row = await this.prisma.systemConfig.findUnique({ where: { configKey: key }, select: { configValue: true } });
         if (row) this.cache.set(key, row.configValue || '');
@@ -149,25 +144,30 @@ export class ConfigService implements OnModuleInit {
      * @returns 配置项数组，每个元素包含原始值(configValue)和脱敏后的显示值(displayValue)
      */
     async listAll() {
-        const configs = await this.prisma.systemConfig.findMany({ orderBy: { id: 'asc' } });
-        return configs.map((c) => {
-            const raw = c.configValue || '';
-            let display = raw;
-            let sensitive = false;
-            const key = c.configKey.toLowerCase();
-            if (key.includes('token') || key.includes('api_key')) {
-                sensitive = true;
-                display = raw.length > 8 ? raw.substring(0, 4) + '****' + raw.substring(raw.length - 4) : '****';
-            }
-            return {
-                id: Number(c.id),
-                configKey: c.configKey,
-                configValue: raw,
-                displayValue: display,
-                sensitive,
-                description: c.description,
-            };
+        const configs = await this.prisma.systemConfig.findMany({
+            where: { configKey: { notIn: [...this.retiredKeys] } },
+            orderBy: { id: 'asc' },
         });
+        return configs
+            .filter((c) => !this.retiredKeys.has(c.configKey))
+            .map((c) => {
+                const raw = c.configValue || '';
+                let display = raw;
+                let sensitive = false;
+                const key = c.configKey.toLowerCase();
+                if (key.includes('token') || key.includes('api_key')) {
+                    sensitive = true;
+                    display = raw.length > 8 ? raw.substring(0, 4) + '****' + raw.substring(raw.length - 4) : '****';
+                }
+                return {
+                    id: Number(c.id),
+                    configKey: c.configKey,
+                    configValue: raw,
+                    displayValue: display,
+                    sensitive,
+                    description: c.description,
+                };
+            });
     }
 
     /**
@@ -179,6 +179,9 @@ export class ConfigService implements OnModuleInit {
      * @param value 配置值
      */
     async update(key: string, value: string) {
+        if (this.retiredKeys.has(key)) {
+            throw new BadRequestException('该配置项已停用');
+        }
         const existing = await this.prisma.systemConfig.findUnique({ where: { configKey: key } });
         if (existing) {
             await this.prisma.systemConfig.update({ where: { configKey: key }, data: { configValue: value, updatedAt: new Date() } });
@@ -198,6 +201,10 @@ export class ConfigService implements OnModuleInit {
      * @param updates 键值对集合，key 为配置键名，value 为配置值
      */
     async batchUpdate(updates: Record<string, string>) {
+        const retiredKey = Object.keys(updates).find((key) => this.retiredKeys.has(key));
+        if (retiredKey) {
+            throw new BadRequestException('该配置项已停用');
+        }
         this.logger.log('开始批量更新配置，共 ' + Object.keys(updates).length + ' 项');
         for (const [k, v] of Object.entries(updates)) {
             await this.update(k, v);

@@ -1,5 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+    BadGatewayException,
+    BadRequestException,
+    ForbiddenException,
+    GatewayTimeoutException,
+    HttpException,
+    HttpStatus,
+    Injectable,
+    Logger,
+    NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
+import type { GithubIssueListResult, GithubIssueQueryParams } from '@githubstars/shared';
 import type { MappedRepoData } from './repo-data.interface';
 import {
     buildGithubHeaders,
@@ -9,6 +20,7 @@ import {
     sleep,
     type PaginationLinks,
 } from '../common/utils/github-api.util';
+import { mapGithubIssue, sanitizeIssueSearchText } from './github-issue.util';
 
 const GITHUB_API = 'https://api.github.com';
 
@@ -350,6 +362,106 @@ export class GithubApiService {
             this.logger.error(`JSON 格式 README 请求失败: ${fullName}, ${msg}`);
             return { content: null, status: 0, githubBody: msg };
         }
+    }
+
+    /**
+     * 查询指定仓库的 Issues。
+     *
+     * 使用 Search Issues API，并固定追加 repo + is:issue 限定词，
+     * 避免 GitHub repository issues 接口把 Pull Request 混入结果。
+     */
+    async fetchRepoIssues(fullName: string, params: GithubIssueQueryParams = {}): Promise<GithubIssueListResult> {
+        const [owner, repo, ...extra] = fullName.split('/');
+        if (!owner || !repo || extra.length > 0) {
+            throw new BadRequestException('仓库名称格式无效');
+        }
+
+        const token = await this.config.getValueDefault('github.token', '');
+        const state = params.state || 'open';
+        const page = params.page || 1;
+        const perPage = params.perPage || 20;
+        const sort = params.sort || 'updated';
+        const order = params.order || 'desc';
+        const searchText = sanitizeIssueSearchText(params.query);
+        const qualifiers = [`repo:${owner}/${repo}`, 'is:issue'];
+        if (state !== 'all') qualifiers.push(`state:${state}`);
+        if (searchText) qualifiers.push(searchText);
+
+        const searchParams = new URLSearchParams({
+            q: qualifiers.join(' '),
+            sort,
+            order,
+            page: String(page),
+            per_page: String(perPage),
+        });
+        const url = `${GITHUB_API}/search/issues?${searchParams.toString()}`;
+        const headers = {
+            ...buildGithubHeaders(token),
+            'X-GitHub-Api-Version': '2022-11-28',
+        };
+        const controller = new AbortController();
+        const issueTimeout = setTimeout(() => controller.abort(), 20_000);
+
+        this.logger.log(`查询 Issues: ${fullName}, state=${state}, page=${page}, query="${searchText}"`);
+
+        try {
+            const response = await fetch(url, { headers, signal: controller.signal });
+            const body = await response.text();
+            if (response.status !== 200) {
+                this.throwIssueRequestError(response.status, body);
+            }
+
+            let data: Record<string, unknown>;
+            try {
+                data = JSON.parse(body) as Record<string, unknown>;
+            } catch {
+                throw new BadGatewayException('GitHub Issues 响应格式异常');
+            }
+
+            const rawItems = Array.isArray(data.items) ? data.items : [];
+            const items = rawItems.map(mapGithubIssue).filter((issue) => issue !== null);
+            const totalCount = typeof data.total_count === 'number' ? data.total_count : items.length;
+
+            this.logger.log(`Issues 查询完成: ${fullName}, 返回=${items.length}, 总数=${totalCount}`);
+            return {
+                items,
+                totalCount,
+                incompleteResults: data.incomplete_results === true,
+                page,
+                perPage,
+            };
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            if (error instanceof Error && error.name === 'AbortError') {
+                throw new GatewayTimeoutException('GitHub Issues 请求超时');
+            }
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Issues 查询异常: ${fullName}, ${message}`);
+            throw new BadGatewayException(`GitHub Issues 请求失败: ${message}`);
+        } finally {
+            clearTimeout(issueTimeout);
+        }
+    }
+
+    /**
+     * 将 GitHub Issues API 状态码转换为明确的 HTTP 错误。
+     */
+    private throwIssueRequestError(status: number, body: string): never {
+        const message = body.toLowerCase();
+        if (status === 404) {
+            throw new NotFoundException('GitHub 仓库不存在或无访问权限');
+        }
+        if (status === 403 && !message.includes('rate limit')) {
+            throw new ForbiddenException('当前 GitHub Token 无权访问仓库 Issues');
+        }
+        if (status === 403 || status === 429) {
+            throw new HttpException('GitHub API 请求过于频繁，请稍后重试', HttpStatus.TOO_MANY_REQUESTS);
+        }
+        if (status === 422) {
+            throw new BadRequestException('Issues 搜索条件无效或超出 GitHub 前 1000 条限制');
+        }
+        this.logger.error(`Issues API 请求失败: status=${status}, body=${body.substring(0, 300)}`);
+        throw new BadGatewayException(`GitHub Issues 服务异常 (HTTP ${status})`);
     }
 
     /**

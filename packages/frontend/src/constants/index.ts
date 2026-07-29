@@ -41,43 +41,6 @@ export const AUTHOR_DETAIL_PAGE_SIZE = 12
 /** 默认轮询间隔（毫秒） */
 export const POLLING_INTERVAL_MS = 2000
 
-// ─── 翻译 ───
-
-/** 翻译超时时间（毫秒） */
-export const TRANSLATE_TIMEOUT_MS = 10 * 60 * 1000
-
-/** 翻译任务进度类型 */
-export interface TaskProgress {
-    status: string
-    totalItems: number
-    completedItems: number
-    failedItems: number
-    pendingItems: number
-    descTotal: number
-    descCompleted: number
-    descFailed: number
-    readmeTotal: number
-    readmeCompleted: number
-    readmeFailed: number
-    progress: number
-}
-
-/** 翻译任务进度初始值 */
-export const INITIAL_TASK_PROGRESS: TaskProgress = {
-    status: 'PENDING',
-    totalItems: 0,
-    completedItems: 0,
-    failedItems: 0,
-    pendingItems: 0,
-    descTotal: 0,
-    descCompleted: 0,
-    descFailed: 0,
-    readmeTotal: 0,
-    readmeCompleted: 0,
-    readmeFailed: 0,
-    progress: 0,
-}
-
 // ─── 仓库活跃度 ───
 
 /** 仓库未更新天数阈值：warning=橙色, danger=红色 */

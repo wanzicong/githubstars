@@ -1,7 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { TrendingService, TrendingRepoItem } from '../../src/trending/trending.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { TranslateService } from '../../src/translate/translate.service';
 
 describe('TrendingService', () => {
     let service: TrendingService;
@@ -14,10 +13,6 @@ describe('TrendingService', () => {
             create: jest.fn(),
             count: jest.fn(),
         },
-    };
-
-    const mockTranslate = {
-        translateDescription: jest.fn(),
     };
 
     const sampleRepos: TrendingRepoItem[] = [
@@ -50,11 +45,7 @@ describe('TrendingService', () => {
     beforeEach(async () => {
         jest.clearAllMocks();
         const module = await Test.createTestingModule({
-            providers: [
-                TrendingService,
-                { provide: PrismaService, useValue: mockPrisma },
-                { provide: TranslateService, useValue: mockTranslate },
-            ],
+            providers: [TrendingService, { provide: PrismaService, useValue: mockPrisma }],
         }).compile();
         service = module.get(TrendingService);
         prisma = mockPrisma;
@@ -83,39 +74,6 @@ describe('TrendingService', () => {
             const result = await service.enrichWithCachedTranslations(sampleRepos);
             expect(result[0].descriptionCn).toBeNull();
             expect(result[1].descriptionCn).toBeNull();
-        });
-    });
-
-    describe('translateUncached', () => {
-        it('全部已缓存时应跳过翻译', async () => {
-            const cachedRepos: TrendingRepoItem[] = [
-                {
-                    fullName: 'trending/repo1',
-                    description: 'desc',
-                    descriptionCn: '已翻译',
-                    localRepoId: 1,
-                    language: 'TS',
-                    ownerName: 'a',
-                    ownerAvatarUrl: '',
-                    htmlUrl: '',
-                    starsCount: 1,
-                    forksCount: 0,
-                },
-            ];
-
-            const result = await service.translateUncached(cachedRepos);
-            expect(result.translated).toBe(0);
-            expect(result.skipped).toBe(1);
-            expect(result.failed).toBe(0);
-            expect(mockTranslate.translateDescription).not.toHaveBeenCalled();
-        });
-
-        it('应触发异步翻译未缓存的仓库', async () => {
-            prisma.githubRepo.findFirst.mockResolvedValue({ id: 1n });
-            mockTranslate.translateDescription.mockResolvedValue('翻译结果');
-
-            const result = await service.translateUncached(sampleRepos);
-            expect(result.translated).toBeGreaterThanOrEqual(0);
         });
     });
 });

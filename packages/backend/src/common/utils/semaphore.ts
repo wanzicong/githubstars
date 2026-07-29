@@ -1,11 +1,9 @@
 /**
  * 通用信号量并发控制工具。
  *
- * 从 TranslateTaskService 的私有 acquire/release 模式提取为独立类，
  * 供需要并发限制的模块复用。
  *
  * @callers
- *   - TranslateTaskService — 翻译并发控制（后续迁移至此）
  *   - CloneService — 克隆并发控制（后续迁移至此）
  */
 export class Semaphore {

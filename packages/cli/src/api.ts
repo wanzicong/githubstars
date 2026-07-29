@@ -9,7 +9,6 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   message?: string;
   taskId?: number;
-  translatedCount?: number;
 }
 
 export interface PaginatedResult<T> {
@@ -57,23 +56,6 @@ export interface SyncLog {
   finishedAt: string | null;
   errorMessage: string | null;
   createdAt: string | null;
-}
-
-export interface TranslateTask {
-  taskId: number;
-  status: string;
-  totalItems: number;
-  completedItems: number;
-  failedItems: number;
-  descTotal: number;
-  descCompleted: number;
-  descFailed: number;
-  readmeTotal: number;
-  readmeCompleted: number;
-  readmeFailed: number;
-  progress: number;
-  createdAt: string | null;
-  finishedAt: string | null;
 }
 
 export interface CloneTask {
@@ -225,47 +207,6 @@ class ApiClient {
       body: JSON.stringify(params),
     });
     return response.text();
-  }
-
-  // ==================== 翻译相关 ====================
-
-  async createTranslateTask(params: {
-    type: 'description' | 'readme' | 'both';
-    scope: 'selected' | 'all' | 'filtered';
-    repoIds?: number[];
-    filters?: {
-      keyword?: string;
-      language?: string;
-      sortBy?: string;
-      sortOrder?: string;
-      dateField?: string;
-      startDate?: string;
-      endDate?: string;
-    };
-  }): Promise<ApiResponse> {
-    return this.request<ApiResponse>('POST', '/api/translate', params, { timeout: 60000 });
-  }
-
-  async getTranslateTaskProgress(taskId: number): Promise<TranslateTask> {
-    return this.request<TranslateTask>('GET', `/api/translate/${taskId}/progress`);
-  }
-
-  async getTranslateTaskList(page = 1, size = 10): Promise<PaginatedResult<TranslateTask>> {
-    return this.request<PaginatedResult<TranslateTask>>('GET', `/api/translate?page=${page}&size=${size}`);
-  }
-
-  async retryTranslateFailed(taskId: number): Promise<ApiResponse> {
-    return this.request<ApiResponse>('POST', `/api/translate/${taskId}/retry`);
-  }
-
-  async getTranslationStatus(): Promise<{
-    total: number;
-    descCompleted: number;
-    descPending: number;
-    readmeCompleted: number;
-    readmePending: number;
-  }> {
-    return this.request('GET', '/api/translate/status');
   }
 
   // ==================== 克隆相关 ====================
@@ -423,20 +364,6 @@ class ApiClient {
     sortOrder?: string;
   }): Promise<number[]> {
     return this.request<number[]>('POST', '/api/stars/ids', params);
-  }
-
-  // ==================== 翻译失败详情 ====================
-
-  async getTranslateFailures(taskId: number): Promise<Array<{
-    id: number;
-    repoId: number;
-    fullName: string | null;
-    translateType: string;
-    status: string;
-    errorMessage: string | null;
-    retryCount: number;
-  }>> {
-    return this.request('GET', `/api/translate/${taskId}/failures`);
   }
 
   // ==================== Trending ====================

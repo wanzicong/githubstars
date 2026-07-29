@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Segmented, Select, Spin, Empty, Typography, Tag, Space, Button, App, Modal, Input, theme } from 'antd'
-import { StarFilled, ForkOutlined, FireOutlined, TranslationOutlined, DownloadOutlined, CodeOutlined } from '@ant-design/icons'
-import { fetchTrending, translateTrending, downloadTrending } from '../../api'
+import { StarFilled, ForkOutlined, FireOutlined, DownloadOutlined, CodeOutlined } from '@ant-design/icons'
+import { fetchTrending, downloadTrending } from '../../api'
 import {
     getDownloadTaskProgress,
     getRecentDownloadDirectories,
@@ -29,7 +29,6 @@ export default function Trending() {
     const [total, setTotal] = useState(0)
     const [dateRange, setDateRange] = useState('')
     const [loading, setLoading] = useState(false)
-    const [translating, setTranslating] = useState(false)
     const [previewRepo, setPreviewRepo] = useState<string | null>(null)
 
     // ── 下载相关状态 ──
@@ -90,31 +89,6 @@ export default function Trending() {
             }
         }
         void doLoad()
-    }, [since, language, message])
-
-    /** 触发翻译未缓存的描述 */
-    const handleTranslate = useCallback(async () => {
-        setTranslating(true)
-        try {
-            const result = await translateTrending(since, language || undefined, 20)
-            if (result.success) {
-                // 使用翻译接口返回的仓库数据直接更新显示
-                if (result.repos && result.repos.length > 0) {
-                    setRepos(result.repos)
-                }
-                if (result.translated > 0) {
-                    message.success(result.message)
-                } else if (result.skipped > 0) {
-                    message.success(result.message)
-                } else {
-                    message.info(result.message)
-                }
-            }
-        } catch {
-            message.error('翻译失败')
-        } finally {
-            setTranslating(false)
-        }
     }, [since, language, message])
 
     /** 打开下载配置弹窗 */
@@ -230,9 +204,6 @@ export default function Trending() {
         }
     }, [downloadTaskId, message])
 
-    // 统计未翻译数量
-    const untranslatedCount = repos.filter((r) => r.description && !r.descriptionCn).length
-
     // 最大 Star 数（用于横条宽度计算）
     const maxStars = repos.length > 0 ? Math.max(...repos.map((r) => r.starsCount || 1)) : 1
 
@@ -260,16 +231,6 @@ export default function Trending() {
                             size='small'
                         >
                             下载趋势
-                        </Button>
-                    )}
-                    {untranslatedCount > 0 && (
-                        <Button
-                            icon={<TranslationOutlined />}
-                            onClick={handleTranslate}
-                            loading={translating}
-                            size='small'
-                        >
-                            翻译描述 ({untranslatedCount})
                         </Button>
                     )}
                     <Select

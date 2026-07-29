@@ -7,6 +7,7 @@ const { useToken } = theme
 
 export interface RepoHeaderProps {
     repo: GithubRepo
+    onOpenIssues?: () => void
 }
 
 /**
@@ -18,7 +19,7 @@ export interface RepoHeaderProps {
  * - 操作按钮提供 GitHub / Issues / 项目主页入口
  * - 全部颜色从 Ant Design 主题 token 获取，自动适应亮/暗模式
  */
-export default function RepoHeader({ repo }: RepoHeaderProps) {
+export default function RepoHeader({ repo, onOpenIssues }: RepoHeaderProps) {
     const { token } = useToken()
     const displayDescription = repo.descriptionCn || repo.description
 
@@ -113,11 +114,11 @@ export default function RepoHeader({ repo }: RepoHeaderProps) {
                 </Button>
                 <Button
                     icon={<BugOutlined />}
-                    onClick={() => window.open(`${repo.htmlUrl}/issues`, '_blank', 'noopener,noreferrer')}
+                    onClick={onOpenIssues ?? (() => window.open(`${repo.htmlUrl}/issues`, '_blank', 'noopener,noreferrer'))}
                     block
                     size='small'
                 >
-                    Issues
+                    查看 Issues
                     {repo.openIssuesCount > 0 && (
                         <Badge
                             count={repo.openIssuesCount}

@@ -228,7 +228,6 @@ const SYSTEM_TOOL_PHRASES: Record<string, ToolPhraseFn> = {
   category_repos: (i) => `查看分类仓库: ${String(i.categoryName ?? i.categoryId ?? '')}`,
   stats_languages: () => '查询语言统计',
   stats_overview: () => '查询整体概览',
-  translate: () => 'AI 翻译',
   trending: () => '查询趋势仓库',
   author_list: () => '查询作者列表',
   sync_manual: () => '手动同步',
@@ -259,7 +258,6 @@ function getToolIcon(toolName: string): React.ReactNode {
   if (name.startsWith('stats_')) return <ApiOutlined />
   if (name === 'Bash') return <CodeOutlined />
   if (name === 'WebSearch') return <BugOutlined />
-  if (name === 'translate') return <ThunderboltOutlined />
   if (name === 'clone' || name === 'download') return <CopyOutlined />
   return <ApiOutlined />
 }

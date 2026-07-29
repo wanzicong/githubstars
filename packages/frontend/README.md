@@ -50,12 +50,12 @@ npm run preview --workspace=@githubstars/frontend
 packages/frontend/
 ├── src/
 │   ├── api/           # API 请求层（基于 axios 封装）
-│   ├── components/    # 通用组件（ErrorBoundary、MarkdownRenderer、TranslatePanel 等）
+│   ├── components/    # 通用组件（ErrorBoundary、MarkdownRenderer 等）
 │   ├── hooks/         # 自定义 Hooks（usePolling 等）
 │   ├── layouts/       # 布局组件（顶栏、侧边栏、设置抽屉）
 │   ├── pages/         # 页面组件
-│   │   ├── StarList.tsx       # Star 列表（筛选、搜索、导出、翻译）
-│   │   ├── StarDetail.tsx     # Star 详情（README 翻译、元信息）
+│   │   ├── StarList.tsx       # Star 列表（筛选、搜索、导出）
+│   │   ├── StarDetail.tsx     # Star 详情（README、元信息）
 │   │   ├── Sync.tsx           # GitHub 同步管理
 │   │   ├── Stats.tsx          # 数据统计
 │   │   ├── AuthorList.tsx     # 作者列表
@@ -85,14 +85,13 @@ packages/frontend/
 ## 核心功能
 
 - **Star 管理**: 列表浏览、筛选（关键词/语言/日期/未翻译）、排序、分页
-- **Star 详情**: 查看 README、一键翻译 README、查看仓库元信息
-- **翻译管理**: 描述批量翻译、README 翻译、任务进度监控、失败重试
+- **Star 详情**: 查看 README、仓库元信息、代码和 Issues
 - **GitHub 同步**: 触发同步、查看同步状态与日志
 - **数据统计**: 仓库语言分布、活跃度等统计图表
 - **作者中心**: 按作者浏览仓库、导出仓库链接
 - **GitHub 搜索**: 搜索并收藏仓库
 - **趋势排行**: 查看 GitHub 趋势仓库
-- **系统设置**: GitHub Token、翻译 API Key 等配置
+- **系统设置**: GitHub Token、Agent 和下载等配置
 - **日志查看**: 查看系统运行日志
 
 ## CI/CD
