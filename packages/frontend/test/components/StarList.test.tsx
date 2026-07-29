@@ -89,6 +89,25 @@ describe('StarList', () => {
       })
       expect(screen.queryByRole('button', { name: '翻译管理' })).toBeNull()
     })
+
+    it('不应展示未翻译筛选开关，也不应再传递旧 URL 参数', async () => {
+      let capturedBody: Record<string, unknown> = {}
+      server.use(
+        http.post('/api/stars/list', async ({ request }) => {
+          capturedBody = await request.json() as Record<string, unknown>
+          return HttpResponse.json({ records: [], total: 0, size: 36, current: 1, pages: 0 })
+        }),
+      )
+
+      renderStarList('/stars?untranslatedOnly=true')
+
+      await waitFor(() => {
+        expect(Object.keys(capturedBody).length).toBeGreaterThan(0)
+      })
+      expect(screen.queryByRole('switch')).toBeNull()
+      expect(screen.queryByText('仅未翻译')).toBeNull()
+      expect(capturedBody).not.toHaveProperty('untranslatedOnly')
+    })
   })
 
   describe('搜索筛选', () => {

@@ -10,7 +10,7 @@ import type { GithubRepo, StarListParams, PageResult } from '../types'
 /**
  * 分页获取星标仓库列表
  *
- * 支持多维度筛选（关键词、语言、日期范围、未翻译）、排序和分页。
+ * 支持多维度筛选（关键词、语言、日期范围）、排序和分页。
  *
  * @param params 查询参数
  * @returns 分页结果，包含翻译状态标记
@@ -26,7 +26,6 @@ export async function fetchStarList(params: StarListParams): Promise<PageResult<
     if (params.dateField) body.dateField = params.dateField
     if (params.startDate) body.startDate = params.startDate
     if (params.endDate) body.endDate = params.endDate
-    if (params.untranslatedOnly) body.untranslatedOnly = true
     if (params.categoryId) body.categoryId = params.categoryId
     const { data: wrapped } = await api.post<{ success: boolean; data: GithubRepo[]; meta: { total: number; size: number; current: number; pages: number } }>('/api/stars/list', body)
     return {
@@ -59,7 +58,6 @@ export async function exportStarsUrls(params: StarListParams): Promise<Blob> {
     if (params.dateField) body.dateField = params.dateField
     if (params.startDate) body.startDate = params.startDate
     if (params.endDate) body.endDate = params.endDate
-    if (params.untranslatedOnly) body.untranslatedOnly = true
     if (params.categoryId) body.categoryId = params.categoryId
     const { data } = await api.post('/api/stars/export', body, {
         responseType: 'blob',
@@ -84,7 +82,6 @@ export async function fetchAllStarIds(params: StarListParams): Promise<number[]>
     if (params.dateField) body.dateField = params.dateField
     if (params.startDate) body.startDate = params.startDate
     if (params.endDate) body.endDate = params.endDate
-    if (params.untranslatedOnly) body.untranslatedOnly = true
     if (params.categoryId) body.categoryId = params.categoryId
     const { data } = await api.post<{ success: boolean; ids: number[]; total: number }>('/api/stars/ids', body)
     return data.ids || []

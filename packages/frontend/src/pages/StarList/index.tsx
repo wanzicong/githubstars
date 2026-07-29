@@ -32,7 +32,7 @@ export default function StarList() {
     const params = useStarListParams()
     const { keyword, languageStr, selectedLanguages, sortBy, sortOrder,
         dateField, pageSize, startDateStr, endDateStr,
-        startDate, endDate, untranslatedOnly, viewMode, timePreset,
+        startDate, endDate, viewMode, timePreset,
         setUrlParam, setUrlParams, clearFilters } = params
 
     // 分类筛选：URL 参数 categoryId（字符串） → number | null
@@ -47,14 +47,13 @@ export default function StarList() {
         dateField: dateField || undefined,
         startDate: startDateStr || undefined,
         endDate: endDateStr || undefined,
-        untranslatedOnly: untranslatedOnly || undefined,
         categoryId: categoryId ?? undefined,
-    }), [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, categoryId])
+    }), [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, categoryId])
 
     // 筛选条件签名：任一变化时 hook 内重置 page=1
     const filterKey = [
         keyword, languageStr, sortBy, sortOrder, dateField,
-        startDateStr, endDateStr, untranslatedOnly, categoryId,
+        startDateStr, endDateStr, categoryId,
     ].map(v => v ?? '').join('|')
 
     const list = useStarListInfinite(filterKey, buildFilters, pageSize)
@@ -331,7 +330,6 @@ export default function StarList() {
                     dateField,
                     startDate: startDateStr,
                     endDate: endDateStr,
-                    untranslatedOnly,
                     categoryId,
                     maxCount: total,
                 }),
@@ -355,7 +353,7 @@ export default function StarList() {
         } finally {
             setExportingMd(false)
         }
-    }, [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, untranslatedOnly, categoryId, total, message])
+    }, [keyword, languageStr, sortBy, sortOrder, dateField, startDateStr, endDateStr, categoryId, total, message])
 
     const hasActiveFilters =
         keyword.trim() !== '' ||
@@ -363,7 +361,6 @@ export default function StarList() {
         dateField !== undefined ||
         !!startDateStr ||
         !!endDateStr ||
-        untranslatedOnly ||
         categoryId !== null
 
     const handleRemoveFilter = useCallback((key: string) => {
@@ -416,7 +413,6 @@ export default function StarList() {
                         keyword={keyword}
                         languageStr={languageStr}
                         timeFilterSummary={''}
-                        untranslatedOnly={untranslatedOnly}
                         hasActiveFilters={hasActiveFilters}
                         selectedCount={selectedRepoIds.length}
                         loadingRepos={loadingRepos}
@@ -428,7 +424,6 @@ export default function StarList() {
                         onOpenDownloadWizard={handleOpenDownloadWizard}
                         onExportMd={handleExportMd}
                         onExportUrls={handleExport}
-                        onToggleUntranslated={(checked) => setUrlParam('untranslatedOnly', checked ? 'true' : null)}
                     />
                     <StarTimeFilter
                         dateField={dateField}

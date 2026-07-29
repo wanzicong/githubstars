@@ -25,7 +25,6 @@ export function useStarListParams() {
     const pageSize = Number.parseInt(searchParams.get('size') || '20', 10)
     const startDateStr = searchParams.get('startDate')
     const endDateStr = searchParams.get('endDate')
-    const untranslatedOnly = searchParams.get('untranslatedOnly') === 'true'
     // 默认 grid 瀑布流（项目主视图）
     const viewMode = (searchParams.get('view') || 'grid') as 'grid' | 'list'
     const timePreset = searchParams.get('timePreset') || ''
@@ -72,7 +71,7 @@ export function useStarListParams() {
         setUrlParams({
             keyword: null, languages: null, timePreset: null,
             sortBy: 'stars_count', sortOrder: 'desc',
-            dateField: null, startDate: null, endDate: null, untranslatedOnly: null,
+            dateField: null, startDate: null, endDate: null,
         })
     }, [setUrlParams])
 
@@ -80,7 +79,7 @@ export function useStarListParams() {
         keyword, languageStr, selectedLanguages,
         sortBy, sortOrder, dateField, pageSize,
         startDateStr, endDateStr, startDate, endDate,
-        untranslatedOnly, viewMode, timePreset,
+        viewMode, timePreset,
         setUrlParam, setUrlParams, clearFilters,
     }
 }

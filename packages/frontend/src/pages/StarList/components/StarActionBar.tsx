@@ -1,4 +1,4 @@
-import { Button, Switch, Row, Col, Tag, Typography } from 'antd'
+import { Button, Row, Col, Tag, Typography } from 'antd'
 import { ClearOutlined, DownloadOutlined, CopyOutlined } from '@ant-design/icons'
 
 const { Text } = Typography
@@ -7,7 +7,6 @@ export interface StarActionBarProps {
     keyword: string
     languageStr: string
     timeFilterSummary: string
-    untranslatedOnly: boolean
     hasActiveFilters: boolean
     selectedCount: number
     loadingRepos: boolean
@@ -19,7 +18,6 @@ export interface StarActionBarProps {
     onOpenDownloadWizard: () => void
     onExportMd: () => void
     onExportUrls: () => void
-    onToggleUntranslated: (checked: boolean) => void
 }
 
 /** Star 列表操作栏：筛选摘要 Tag + 批量操作按钮 */
@@ -27,7 +25,6 @@ export default function StarActionBar({
     keyword,
     languageStr,
     timeFilterSummary,
-    untranslatedOnly,
     hasActiveFilters,
     selectedCount,
     loadingRepos,
@@ -39,7 +36,6 @@ export default function StarActionBar({
     onOpenDownloadWizard,
     onExportMd,
     onExportUrls,
-    onToggleUntranslated,
 }: StarActionBarProps) {
     return (
         <>
@@ -62,11 +58,6 @@ export default function StarActionBar({
                             {timeFilterSummary && (
                                 <Tag closable onClose={() => onRemoveFilter('time')} color='purple'>
                                     时间: {timeFilterSummary}
-                                </Tag>
-                            )}
-                            {untranslatedOnly && (
-                                <Tag closable onClose={() => onRemoveFilter('untranslatedOnly')} color='orange'>
-                                    仅未翻译
                                 </Tag>
                             )}
                             <Button size='small' icon={<ClearOutlined />} onClick={onClearFilters} type='link' style={{ padding: '0 4px' }}>
@@ -106,12 +97,6 @@ export default function StarActionBar({
                         <Button type='primary' icon={<DownloadOutlined />} onClick={onExportUrls} loading={exportingUrls}>
                             导出链接
                         </Button>
-                        <Switch
-                            checked={untranslatedOnly}
-                            onChange={onToggleUntranslated}
-                            checkedChildren='仅未翻译'
-                            unCheckedChildren='全部'
-                        />
                     </div>
                 </Col>
             </Row>
