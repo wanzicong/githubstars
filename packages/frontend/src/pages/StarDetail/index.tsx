@@ -36,7 +36,7 @@ import { RepoHeader } from '../../components/repo'
 import { RepoStatsGrid } from '../../components/repo'
 import { RepoReadmeCard } from '../../components/repo'
 import { RepoReadmeCnCard } from '../../components/repo'
-import CodePreviewCard from '../../components/repo/CodePreviewCard'
+import { CodePreviewModal } from '../../components/repo'
 import { usePolling } from '../../hooks/usePolling'
 import type { GithubRepo, TranslateTaskProgress } from '../../types'
 
@@ -53,6 +53,7 @@ export default function StarDetail() {
 
     // 详情抽屉
     const [infoDrawerOpen, setInfoDrawerOpen] = useState(false)
+    const [codePreviewOpen, setCodePreviewOpen] = useState(false)
 
     // 翻译状态
     const [translatingDesc, setTranslatingDesc] = useState(false)
@@ -299,21 +300,26 @@ export default function StarDetail() {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* 顶部操作行：返回 + 仓库详情按钮 */}
+            {/* 顶部操作行：返回 + 代码预览/仓库详情按钮 */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                 <Button icon={<ArrowLeftOutlined />} onClick={handleBack}>
                     返回
                 </Button>
-                <Button
-                    type='primary'
-                    icon={<InfoCircleOutlined />}
-                    onClick={() => setInfoDrawerOpen(true)}
-                >
-                    仓库详情
-                </Button>
+                <Space wrap>
+                    <Button icon={<CodeOutlined />} onClick={() => setCodePreviewOpen(true)}>
+                        代码预览
+                    </Button>
+                    <Button
+                        type='primary'
+                        icon={<InfoCircleOutlined />}
+                        onClick={() => setInfoDrawerOpen(true)}
+                    >
+                        仓库详情
+                    </Button>
+                </Space>
             </div>
 
-            {/* 代码预览 / README / 中文 README 切换区块 */}
+            {/* README / 中文 README 切换区块 */}
             <Card
                 style={{ height: '70vh', display: 'flex', flexDirection: 'column' }}
                 styles={{ body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } }}
@@ -355,19 +361,15 @@ export default function StarDetail() {
                                 />
                             ),
                         },
-                        {
-                            key: 'code',
-                            label: (
-                                <Space>
-                                    <CodeOutlined />
-                                    代码预览
-                                </Space>
-                            ),
-                            children: <CodePreviewCard fullName={repo.fullName} />,
-                        },
                     ]}
                 />
             </Card>
+
+            <CodePreviewModal
+                fullName={repo.fullName}
+                open={codePreviewOpen}
+                onClose={() => setCodePreviewOpen(false)}
+            />
 
             {/* 仓库详情抽屉 */}
             <Drawer

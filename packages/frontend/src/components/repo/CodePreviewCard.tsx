@@ -18,6 +18,8 @@ interface CodePreviewCardProps {
     eager?: boolean
     /** 嵌入区高度（默认撑满一个视口减 48px），Drawer 等场景可传 '100%' 由父容器控制 */
     height?: string
+    /** 是否填满父容器剩余空间，适用于最大化 Modal 等固定高度容器 */
+    fill?: boolean
 }
 
 /**
@@ -27,7 +29,7 @@ interface CodePreviewCardProps {
  * - 详情页：默认非 eager 模式，滚动到可视区才挂载，避免加载完成时浏览器聚焦跳走
  * - Drawer：eager 模式立即挂载，弹层打开即加载
  */
-export default function CodePreviewCard({ fullName, eager = false, height }: CodePreviewCardProps) {
+export default function CodePreviewCard({ fullName, eager = false, height, fill = false }: CodePreviewCardProps) {
     const { token } = theme.useToken()
     const [frameLoading, setFrameLoading] = useState(true)
     const [frameFailed, setFrameFailed] = useState(false)
@@ -82,15 +84,30 @@ export default function CodePreviewCard({ fullName, eager = false, height }: Cod
     }
 
     return (
-        <div>
+        <div
+            style={
+                fill
+                    ? { height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }
+                    : undefined
+            }
+        >
             {/* 工具栏 */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <Space>
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    marginBottom: 12,
+                }}
+            >
+                <Space wrap>
                     <CodeOutlined style={{ color: token.colorPrimary }} />
                     <Text strong>代码预览</Text>
                     <Text type='secondary' style={{ fontSize: 12 }}>VS Code 风格</Text>
                 </Space>
-                <Space size={8}>
+                <Space size={8} wrap>
                     <Button size='small' icon={<ReloadOutlined />} onClick={handleRefresh}>
                         刷新
                     </Button>
@@ -119,7 +136,9 @@ export default function CodePreviewCard({ fullName, eager = false, height }: Cod
                 style={{
                     position: 'relative',
                     borderRadius: 8,
-                    height: height ?? 'max(calc(100vh - 48px), 400px)',
+                    height: fill ? undefined : (height ?? 'max(calc(100vh - 48px), 400px)'),
+                    flex: fill ? 1 : undefined,
+                    minHeight: fill ? 0 : undefined,
                     overflow: 'hidden',
                     border: `1px solid ${token.colorBorderSecondary}`,
                     background: token.colorBgContainer,

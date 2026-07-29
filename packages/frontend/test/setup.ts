@@ -4,6 +4,7 @@
  * - 启动 MSW Server
  * - Mock window.matchMedia (Ant Design 需要)
  * - Mock IntersectionObserver
+ * - Mock ResizeObserver
  */
 import '@testing-library/jest-dom/vitest'
 import { server } from './mocks/server'
@@ -42,6 +43,21 @@ Object.defineProperty(window, 'IntersectionObserver', {
     writable: true,
     value: MockIntersectionObserver,
 })
+
+// Mock ResizeObserver (Ant Design Modal / Typography 需要)
+class MockResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+}
+Object.defineProperty(globalThis, 'ResizeObserver', {
+    writable: true,
+    value: MockResizeObserver,
+})
+
+// jsdom 不支持 getComputedStyle 的 pseudoElt 参数，忽略该参数以兼容 Ant Design 滚动条测量
+const originalGetComputedStyle = window.getComputedStyle
+window.getComputedStyle = (element: Element) => originalGetComputedStyle(element)
 
 // Mock scrollTo
 window.scrollTo = () => {}
