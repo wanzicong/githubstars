@@ -135,6 +135,9 @@ export interface ApiResponse<T = unknown> {
 // ─── GitHub Issues（前后端共享契约）───
 export type {
     GithubIssue,
+    GithubIssueComment,
+    GithubIssueDetail,
+    GithubIssueDetailParams,
     GithubIssueLabel,
     GithubIssueListParams,
     GithubIssueListResult,
@@ -142,6 +145,7 @@ export type {
     GithubIssueQueryParams,
     GithubIssueSort,
     GithubIssueState,
+    GithubIssueReactions,
     GithubIssueUser,
 } from '@githubstars/shared'
 
@@ -223,13 +227,7 @@ export interface SimilarResult {
 }
 
 // ─── 分类（从共享类型包导入）───
-export type {
-  CategoryNode,
-  CategoryRepo,
-  CategoryReposParams,
-  CategorySortItem,
-  PaginatedResponse,
-} from '@githubstars/shared'
+export type { CategoryNode, CategoryRepo, CategoryReposParams, CategorySortItem, PaginatedResponse } from '@githubstars/shared'
 
 export interface CategorySaveParams {
     id?: number

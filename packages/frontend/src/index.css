@@ -5,381 +5,592 @@
    ================================================================ */
 
 :root {
-  /* ── 主题色 ── */
-  --primary-color: #1a1a2e;
+    /* ── 主题色 ── */
+    --primary-color: #1a1a2e;
 
-  /* ── 布局尺寸 ── */
-  --header-height: 56px;
-  --sider-width: 220px;
-  --sider-collapsed-width: 80px;
-  --tabs-height: 40px;
+    /* ── 布局尺寸 ── */
+    --header-height: 56px;
+    --sider-width: 220px;
+    --sider-collapsed-width: 80px;
+    --tabs-height: 40px;
 
-  /* ── 背景色 ── */
-  --content-bg: #f5f5f5;
-  --header-bg: #ffffff;
-  --sider-bg: #ffffff;
+    /* ── 背景色 ── */
+    --content-bg: #f5f5f5;
+    --header-bg: #ffffff;
+    --sider-bg: #ffffff;
 
-  /* ── 阴影 ── */
-  --header-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  --sider-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
+    /* ── 阴影 ── */
+    --header-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    --sider-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
 
-  /* ── 过渡（侧边栏折叠/展开动画时长与缓动函数）── */
-  --transition-duration: 0.2s;
-  --transition-timing: cubic-bezier(0.645, 0.045, 0.355, 1);
+    /* ── 过渡（侧边栏折叠/展开动画时长与缓动函数）── */
+    --transition-duration: 0.2s;
+    --transition-timing: cubic-bezier(0.645, 0.045, 0.355, 1);
 
-  /* ── 滚动条 ── */
-  --scrollbar-width: 6px;
-  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
-  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.2);
+    /* ── 滚动条 ── */
+    --scrollbar-width: 6px;
+    --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.2);
 
-  /* ── 移动端安全区 ── */
-  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-area-inset-top: env(safe-area-inset-top, 0px);
-  --safe-area-inset-left: env(safe-area-inset-left, 0px);
-  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+    /* ── 移动端安全区 ── */
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-inset-top: env(safe-area-inset-top, 0px);
+    --safe-area-inset-left: env(safe-area-inset-left, 0px);
+    --safe-area-inset-right: env(safe-area-inset-right, 0px);
 }
 
 /* ── 深色主题 ── */
 :root[data-theme='dark'] {
-  --content-bg: #141414;
-  --header-bg: #1f1f1f;
-  --sider-bg: #1f1f1f;
-  --scrollbar-thumb: rgba(255, 255, 255, 0.15);
-  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+    --content-bg: #141414;
+    --header-bg: #1f1f1f;
+    --sider-bg: #1f1f1f;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
 }
 
 /* ── 全局重置 ── */
 *,
 *::before,
 *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
 
-html, body {
-  height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  /* 阻止水平溢出滚动（侧边栏+内容区偏移方案可能在窄屏产生横向滚动条） */
-  overflow-x: hidden;
+html,
+body {
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* 阻止水平溢出滚动（侧边栏+内容区偏移方案可能在窄屏产生横向滚动条） */
+    overflow-x: hidden;
 }
 
 #root {
-  height: 100%;
-  /* overflow-x: clip 不创建 scroll container，因此不会破坏 Safari sticky 定位 */
-  /* overflow-x: hidden 在祖先元素上会使 Safari 的 position: sticky 失效 */
-  overflow-x: clip;
+    height: 100%;
+    /* overflow-x: clip 不创建 scroll container，因此不会破坏 Safari sticky 定位 */
+    /* overflow-x: hidden 在祖先元素上会使 Safari 的 position: sticky 失效 */
+    overflow-x: clip;
 }
 
 /* ── Firefox 专用：确保 Antd Typography ellipsis 正常工作 ── */
 @-moz-document url-prefix() {
-  .ant-typography-ellipsis {
-    display: block;
-    width: 100%;
-  }
+    .ant-typography-ellipsis {
+        display: block;
+        width: 100%;
+    }
 }
 
 /* ── 自定义滚动条 ── */
 ::-webkit-scrollbar {
-  width: var(--scrollbar-width);
-  height: var(--scrollbar-width);
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 3px;
+    background: var(--scrollbar-thumb);
+    border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
+    background: var(--scrollbar-thumb-hover);
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+    background: transparent;
 }
 
 /* ── 移动端安全区适配 ── */
 @media (max-width: 768px) {
-  body {
-    padding-bottom: var(--safe-area-inset-bottom);
-  }
+    body {
+        padding-bottom: var(--safe-area-inset-bottom);
+    }
 }
 
 /* ── 响应式断点：移动端隐藏/折叠侧边栏 ── */
 @media (max-width: 767.98px) {
-  .layout-sider-wrapper {
-    display: none;
-  }
+    .layout-sider-wrapper {
+        display: none;
+    }
 
-  .layout-inner-side {
-    margin-left: 0 !important;
-  }
+    .layout-inner-side {
+        margin-left: 0 !important;
+    }
 }
 
 /* ── 响应式断点：平板端默认折叠侧边栏（用户可手动展开，JS 内联样式优先级高于 CSS）── */
 @media (min-width: 768px) and (max-width: 1024px) {
-  .layout-sider-wrapper {
-    width: var(--sider-collapsed-width);
-  }
+    .layout-sider-wrapper {
+        width: var(--sider-collapsed-width);
+    }
 }
 
 .repo-header-actions {
-  min-width: 150px;
-  padding-left: 8px;
+    min-width: 150px;
+    padding-left: 8px;
 }
 
 /* ── GitHub 风格 Issues 最大化弹框 ── */
 .repo-issues-layout {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
 }
 
 .repo-issues-toolbar {
-  display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
-  flex: none;
-  padding: 12px 16px;
-  border-bottom: 1px solid;
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) auto auto;
+    align-items: center;
+    gap: 12px;
+    flex: none;
+    padding: 12px 16px;
+    border-bottom: 1px solid;
 }
 
 .repo-issues-actions {
-  justify-content: flex-end;
+    justify-content: flex-end;
 }
 
 .repo-issues-summary {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex: none;
-  min-height: 44px;
-  padding: 10px 16px;
-  border-bottom: 1px solid;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: none;
+    min-height: 44px;
+    padding: 10px 16px;
+    border-bottom: 1px solid;
 }
 
 .repo-issues-content {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 .repo-issues-feedback,
 .repo-issues-skeleton {
-  padding: 24px;
+    padding: 24px;
 }
 
 .repo-issues-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .repo-issue-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  width: 100%;
-  padding: 14px 16px;
-  border-bottom: 1px solid rgba(208, 215, 222, 0.7);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(208, 215, 222, 0.7);
+    cursor: pointer;
 }
 
 .repo-issue-row:last-child {
-  border-bottom: 0;
+    border-bottom: 0;
 }
 
 .repo-issue-row:hover {
-  background: rgba(208, 215, 222, 0.12);
+    background: rgba(208, 215, 222, 0.12);
+}
+
+.repo-issue-row:focus-visible {
+    position: relative;
+    z-index: 1;
+    outline: 2px solid var(--primary-color);
+    outline-offset: -2px;
 }
 
 .repo-issue-state-icon {
-  flex: none;
-  padding-top: 2px;
-  font-size: 18px;
-  line-height: 1;
+    flex: none;
+    padding-top: 2px;
+    font-size: 18px;
+    line-height: 1;
 }
 
 .repo-issue-main {
-  flex: 1;
-  min-width: 0;
+    flex: 1;
+    min-width: 0;
 }
 
 .repo-issue-title-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
 }
 
 .repo-issue-title {
-  overflow-wrap: anywhere;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.45;
-  text-decoration: none;
+    overflow-wrap: anywhere;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.45;
+    text-decoration: none;
 }
 
 .repo-issue-title:hover {
-  color: var(--primary-color) !important;
-  text-decoration: underline;
+    color: var(--primary-color) !important;
+    text-decoration: underline;
 }
 
 .repo-issue-labels {
-  display: flex;
-  margin-top: 6px;
+    display: flex;
+    margin-top: 6px;
 }
 
 .repo-issue-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  margin-top: 6px;
-  font-size: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin-top: 6px;
+    font-size: 12px;
 }
 
 .repo-issue-side {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex: none;
-  min-height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: none;
+    min-height: 28px;
 }
 
 .repo-issue-comments {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 40px;
-  text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 40px;
+    text-decoration: none;
 }
 
 .repo-issues-pagination {
-  display: flex;
-  justify-content: center;
-  flex: none;
-  min-height: 56px;
-  padding: 12px 16px;
-  border-top: 1px solid;
+    display: flex;
+    justify-content: center;
+    flex: none;
+    min-height: 56px;
+    padding: 12px 16px;
+    border-top: 1px solid;
+}
+
+/* ── Issue 详情视图 ── */
+.repo-issue-detail-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.repo-issue-detail-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: none;
+    min-height: 56px;
+    padding: 10px 16px;
+    border-bottom: 1px solid;
+}
+
+.repo-issue-detail-repo {
+    flex: 1;
+    min-width: 0;
+}
+
+.repo-issue-detail-scroll {
+    flex: 1;
+    min-height: 0;
+    padding: 24px clamp(16px, 4vw, 56px) 40px;
+    overflow-y: auto;
+}
+
+.repo-issue-detail-loading,
+.repo-issue-detail-header,
+.repo-issue-detail-grid,
+.repo-issue-detail-scroll > .ant-divider {
+    width: min(1280px, 100%);
+    margin-right: auto;
+    margin-left: auto;
+}
+
+.repo-issue-detail-loading {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.repo-issue-detail-title.ant-typography {
+    margin-top: 0;
+    margin-bottom: 12px;
+    overflow-wrap: anywhere;
+    font-size: clamp(22px, 3vw, 32px);
+    font-weight: 500;
+}
+
+.repo-issue-detail-state {
+    margin: 0;
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 14px;
+}
+
+.repo-issue-detail-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    align-items: start;
+    gap: 28px;
+}
+
+.repo-issue-conversation {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+}
+
+.repo-issue-comment {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+}
+
+.repo-issue-comment-avatar {
+    width: 40px;
+    height: 40px;
+}
+
+.repo-issue-comment-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid;
+    border-radius: 8px;
+}
+
+.repo-issue-comment-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 46px;
+    padding: 8px 12px;
+    border-bottom: 1px solid;
+}
+
+.repo-issue-comment-body {
+    padding: 16px;
+}
+
+.repo-issue-markdown {
+    overflow-wrap: anywhere;
+}
+
+.repo-issue-markdown > :first-child {
+    margin-top: 0 !important;
+}
+
+.repo-issue-markdown > :last-child {
+    margin-bottom: 0 !important;
+}
+
+.repo-issue-user-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.repo-issue-user-link:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+
+.repo-issue-reactions {
+    display: flex;
+    margin-top: 14px;
+}
+
+.repo-issue-detail-sidebar {
+    position: sticky;
+    top: 0;
+    min-width: 0;
+}
+
+.repo-issue-sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 0;
+    border-bottom: 1px solid rgba(208, 215, 222, 0.7);
+}
+
+.repo-issue-sidebar-section:first-child {
+    padding-top: 0;
 }
 
 @media (max-width: 900px) {
-  .repo-issues-toolbar {
-    grid-template-columns: 1fr auto;
-  }
+    .repo-issues-toolbar {
+        grid-template-columns: 1fr auto;
+    }
 
-  .repo-issues-toolbar > :first-child {
-    grid-column: 1 / -1;
-  }
+    .repo-issues-toolbar > :first-child {
+        grid-column: 1 / -1;
+    }
+
+    .repo-issue-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .repo-issue-detail-sidebar {
+        position: static;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 24px;
+        order: -1;
+    }
 }
 
 @media (max-width: 575.98px) {
-  .repo-issues-toolbar {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 10px 12px;
-  }
+    .repo-issues-toolbar {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 10px 12px;
+    }
 
-  .repo-issues-toolbar > :first-child {
-    grid-column: auto;
-  }
+    .repo-issues-toolbar > :first-child {
+        grid-column: auto;
+    }
 
-  .repo-issues-actions {
-    justify-content: space-between;
-  }
+    .repo-issues-actions {
+        justify-content: space-between;
+    }
 
-  .repo-issues-actions .ant-select {
-    flex: 1;
-    min-width: 0;
-  }
+    .repo-issues-actions .ant-select {
+        flex: 1;
+        min-width: 0;
+    }
 
-  .repo-issues-summary {
-    flex-wrap: wrap;
-    gap: 4px 12px;
-    min-height: 40px;
-    padding: 8px 12px;
-  }
+    .repo-issues-summary {
+        flex-wrap: wrap;
+        gap: 4px 12px;
+        min-height: 40px;
+        padding: 8px 12px;
+    }
 
-  .repo-issue-row {
-    padding: 12px;
-  }
+    .repo-issue-row {
+        padding: 12px;
+    }
 
-  .repo-issue-side {
-    align-self: flex-end;
-    flex-direction: column;
-    gap: 8px;
-  }
+    .repo-issue-side {
+        align-self: flex-end;
+        flex-direction: column;
+        gap: 8px;
+    }
 
-  .repo-issue-comments {
-    min-width: auto;
-  }
+    .repo-issue-comments {
+        min-width: auto;
+    }
 
-  .repo-issues-pagination {
-    justify-content: flex-start;
-    min-height: 52px;
-    padding: 10px 12px;
-    overflow-x: auto;
-  }
+    .repo-issues-pagination {
+        justify-content: flex-start;
+        min-height: 52px;
+        padding: 10px 12px;
+        overflow-x: auto;
+    }
+
+    .repo-issue-detail-toolbar {
+        flex-wrap: wrap;
+        gap: 8px;
+        min-height: 52px;
+        padding: 8px 12px;
+    }
+
+    .repo-issue-detail-repo {
+        order: 3;
+        width: 100%;
+        flex-basis: 100%;
+    }
+
+    .repo-issue-detail-scroll {
+        padding: 16px 12px 28px;
+    }
+
+    .repo-issue-detail-sidebar {
+        grid-template-columns: 1fr;
+    }
+
+    .repo-issue-comment {
+        grid-template-columns: 1fr;
+    }
+
+    .repo-issue-comment-avatar {
+        display: none;
+    }
+
+    .repo-issue-comment-header {
+        align-items: flex-start;
+    }
 }
 
 /* ── 仓库详情头部：手机端纵向排列，避免操作区挤压仓库信息 ── */
 @media (max-width: 575.98px) {
-  .repo-header {
-    flex-direction: column;
-  }
+    .repo-header {
+        flex-direction: column;
+    }
 
-  .repo-header-info,
-  .repo-header-actions {
-    width: 100%;
-  }
+    .repo-header-info,
+    .repo-header-actions {
+        width: 100%;
+    }
 
-  .repo-header-actions {
-    min-width: 0;
-    padding-left: 0;
-  }
+    .repo-header-actions {
+        min-width: 0;
+        padding-left: 0;
+    }
 }
 
 /* ── 页面过渡动画 ── */
 .fade-slide-enter {
-  opacity: 0;
-  transform: translateY(8px);
+    opacity: 0;
+    transform: translateY(8px);
 }
 
 .fade-slide-enter-active {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 0.3s var(--transition-timing), transform 0.3s var(--transition-timing);
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+        opacity 0.3s var(--transition-timing),
+        transform 0.3s var(--transition-timing);
 }
 
 /* ── 多标签页超出时水平滚动 ── */
 .multiple-tabs-container .ant-tabs-nav {
-  margin-bottom: 0 !important;
+    margin-bottom: 0 !important;
 }
 
 .multiple-tabs-container .ant-tabs-tab {
-  flex-shrink: 0;
+    flex-shrink: 0;
 }
 
 /* ── Chart.js 图表容器必需样式 ── */
 .chart-container {
-  position: relative;
-  width: 100%;
+    position: relative;
+    width: 100%;
 }
 
 /* ── 水平菜单在窄屏下保持不换行 ── */
 @media (max-width: 1024px) {
-  .ant-menu-horizontal {
-    white-space: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
+    .ant-menu-horizontal {
+        white-space: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
 
-  .ant-menu-horizontal::-webkit-scrollbar {
-    height: 0;
-  }
+    .ant-menu-horizontal::-webkit-scrollbar {
+        height: 0;
+    }
 }
 
 /* ================================================================
@@ -389,39 +600,39 @@ html, body {
    ================================================================ */
 .ant-menu-horizontal .ant-menu-item-selected,
 .ant-menu-horizontal .ant-menu-item:hover {
-  color: var(--primary-color) !important;
+    color: var(--primary-color) !important;
 }
 .ant-menu-horizontal .ant-menu-item-selected::after {
-  border-bottom-color: var(--primary-color) !important;
+    border-bottom-color: var(--primary-color) !important;
 }
 .ant-menu-inline .ant-menu-item,
 .ant-menu-inline .ant-menu-submenu-title {
-  border-radius: 8px;
-  margin: 2px 8px;
-  width: auto !important;
+    border-radius: 8px;
+    margin: 2px 8px;
+    width: auto !important;
 }
 .ant-menu-inline .ant-menu-item:hover,
 .ant-menu-inline .ant-menu-submenu-title:hover {
-  color: var(--primary-color) !important;
-  background: var(--menu-hover-bg, rgba(0, 0, 0, 0.04)) !important;
+    color: var(--primary-color) !important;
+    background: var(--menu-hover-bg, rgba(0, 0, 0, 0.04)) !important;
 }
 :root[data-theme='dark'] {
-  --menu-hover-bg: rgba(255, 255, 255, 0.08);
+    --menu-hover-bg: rgba(255, 255, 255, 0.08);
 }
 .ant-menu-inline .ant-menu-item-selected {
-  background: var(--primary-color-bg, rgba(22, 119, 255, 0.1)) !important;
-  color: var(--primary-color) !important;
+    background: var(--primary-color-bg, rgba(22, 119, 255, 0.1)) !important;
+    color: var(--primary-color) !important;
 }
 .ant-menu-inline .ant-menu-item-selected::after {
-  border-right-color: var(--primary-color) !important;
+    border-right-color: var(--primary-color) !important;
 }
 .ant-menu-inline .ant-menu-submenu-selected > .ant-menu-submenu-title {
-  color: var(--primary-color) !important;
+    color: var(--primary-color) !important;
 }
 .ant-menu-vertical .ant-menu-item-selected {
-  background: var(--primary-color-bg, rgba(22, 119, 255, 0.1)) !important;
-  color: var(--primary-color) !important;
-  border-radius: 8px;
+    background: var(--primary-color-bg, rgba(22, 119, 255, 0.1)) !important;
+    color: var(--primary-color) !important;
+    border-radius: 8px;
 }
 
 /* ================================================================
@@ -430,21 +641,23 @@ html, body {
 
 /* 按钮/可点击元素按下反馈 */
 .pressable {
-  transition: transform 0.1s var(--transition-timing);
+    transition: transform 0.1s var(--transition-timing);
 }
 .pressable:active {
-  transform: scale(0.97);
+    transform: scale(0.97);
 }
 
 /* 卡片悬停抬升 + 按下反馈 */
 .hoverable-card {
-  transition: transform 0.2s var(--transition-timing), box-shadow 0.2s var(--transition-timing);
+    transition:
+        transform 0.2s var(--transition-timing),
+        box-shadow 0.2s var(--transition-timing);
 }
 .hoverable-card:hover {
-  transform: translateY(-2px);
+    transform: translateY(-2px);
 }
 .hoverable-card:active {
-  transform: scale(0.98);
+    transform: scale(0.98);
 }
 
 /* 路由页面淡入上移动画
@@ -452,43 +665,43 @@ html, body {
  * 否则会成为 sticky/fixed 后代的包含块，破坏其定位。
  * 用 backwards 只在动画开始前应用 from 状态，结束后元素回到无 transform 的初始状态。 */
 .page-enter {
-  animation: page-enter 0.25s var(--transition-timing) backwards;
+    animation: page-enter 0.25s var(--transition-timing) backwards;
 }
 @keyframes page-enter {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* 列表项选中态 */
 .selectable-item {
-  transition: box-shadow 0.15s var(--transition-timing);
+    transition: box-shadow 0.15s var(--transition-timing);
 }
 .selectable-item.selected {
-  box-shadow: 0 0 0 2px var(--primary-color);
-  border-radius: var(--card-radius, 12px);
+    box-shadow: 0 0 0 2px var(--primary-color);
+    border-radius: var(--card-radius, 12px);
 }
 
 /* ── 分类树节点 hover 显示操作按钮 ── */
 .category-tree-node .category-node-action {
-  opacity: 0;
-  transition: opacity 0.15s var(--transition-timing);
+    opacity: 0;
+    transition: opacity 0.15s var(--transition-timing);
 }
 .category-tree-node:hover .category-node-action {
-  opacity: 1;
+    opacity: 1;
 }
 /* 拖拽把手默认微弱显示，hover 时加深 */
 .category-tree-wrapper .ant-tree-draggable-icon {
-  opacity: 0.4;
-  transition: opacity 0.15s var(--transition-timing);
+    opacity: 0.4;
+    transition: opacity 0.15s var(--transition-timing);
 }
 .category-tree-wrapper .ant-tree-treenode:hover .ant-tree-draggable-icon {
-  opacity: 1;
+    opacity: 1;
 }
 
 /* ── Star 仓库瀑布流（CSS columns 多列布局）─────────────────────────
@@ -497,29 +710,37 @@ html, body {
  * 注意：列优先填充意味着顺序沿列向下再换到下一列，与 Pinterest 行为一致。
  */
 .star-masonry-grid {
-  column-count: 5;
-  column-gap: 16px;
-  width: 100%;
+    column-count: 5;
+    column-gap: 16px;
+    width: 100%;
 }
 @media (max-width: 1600px) {
-  .star-masonry-grid { column-count: 4; }
+    .star-masonry-grid {
+        column-count: 4;
+    }
 }
 @media (max-width: 1200px) {
-  .star-masonry-grid { column-count: 3; }
+    .star-masonry-grid {
+        column-count: 3;
+    }
 }
 @media (max-width: 900px) {
-  .star-masonry-grid { column-count: 2; }
+    .star-masonry-grid {
+        column-count: 2;
+    }
 }
 @media (max-width: 600px) {
-  .star-masonry-grid { column-count: 1; }
+    .star-masonry-grid {
+        column-count: 1;
+    }
 }
 .star-masonry-item {
-  /* break-inside 防止卡片被列切断 */
-  break-inside: avoid;
-  page-break-inside: avoid;
-  margin-bottom: 16px;
-  position: relative;
-  width: 100%;
-  /* columns 内的子元素需要 inline-block 或 overflow 才能正确分列 */
-  display: inline-block;
+    /* break-inside 防止卡片被列切断 */
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 16px;
+    position: relative;
+    width: 100%;
+    /* columns 内的子元素需要 inline-block 或 overflow 才能正确分列 */
+    display: inline-block;
 }

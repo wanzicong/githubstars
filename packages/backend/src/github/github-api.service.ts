@@ -10,7 +10,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
-import type { GithubIssueListResult, GithubIssueQueryParams } from '@githubstars/shared';
+import type { GithubIssueComment, GithubIssueDetail, GithubIssueListResult, GithubIssueQueryParams } from '@githubstars/shared';
 import type { MappedRepoData } from './repo-data.interface';
 import {
     buildGithubHeaders,
@@ -20,7 +20,7 @@ import {
     sleep,
     type PaginationLinks,
 } from '../common/utils/github-api.util';
-import { mapGithubIssue, sanitizeIssueSearchText } from './github-issue.util';
+import { mapGithubIssue, mapGithubIssueComment, mapGithubIssueDetail, sanitizeIssueSearchText } from './github-issue.util';
 
 const GITHUB_API = 'https://api.github.com';
 
@@ -441,6 +441,90 @@ export class GithubApiService {
         } finally {
             clearTimeout(issueTimeout);
         }
+    }
+
+    /** 查询单个 Issue 正文及首批评论，供站内详情页展示。 */
+    async fetchRepoIssueDetail(fullName: string, issueNumber: number): Promise<GithubIssueDetail> {
+        const [owner, repo, ...extra] = fullName.split('/');
+        if (!owner || !repo || extra.length > 0) {
+            throw new BadRequestException('仓库名称格式无效');
+        }
+        if (!Number.isInteger(issueNumber) || issueNumber < 1) {
+            throw new BadRequestException('Issue 编号无效');
+        }
+
+        const token = await this.config.getValueDefault('github.token', '');
+        const headers = {
+            ...buildGithubHeaders(token),
+            'X-GitHub-Api-Version': '2022-11-28',
+        };
+        const repoPath = `${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+        const detailUrl = `${GITHUB_API}/repos/${repoPath}/issues/${issueNumber}`;
+        const commentsUrl = `${detailUrl}/comments?per_page=100&page=1`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 20_000);
+
+        this.logger.log(`查询 Issue 详情: ${fullName}#${issueNumber}`);
+
+        try {
+            const rawDetail = await this.fetchIssueJson(detailUrl, headers, controller.signal, 'GitHub Issue 详情响应格式异常');
+            if (!rawDetail || typeof rawDetail !== 'object' || Array.isArray(rawDetail)) {
+                throw new BadGatewayException('GitHub Issue 详情响应格式异常');
+            }
+            const rawIssue = rawDetail as Record<string, unknown>;
+            if (rawIssue.pull_request) {
+                throw new BadRequestException('该编号对应 Pull Request，不是 Issue');
+            }
+
+            const commentCount = typeof rawIssue.comments === 'number' ? rawIssue.comments : 0;
+            const commentItems = await this.fetchIssueComments(commentsUrl, headers, controller.signal, commentCount);
+
+            const detail = mapGithubIssueDetail(rawIssue, commentItems);
+            if (!detail) {
+                throw new BadGatewayException('GitHub Issue 详情字段不完整');
+            }
+            this.logger.log(`Issue 详情查询完成: ${fullName}#${issueNumber}, 评论=${commentItems.length}/${detail.comments}`);
+            return detail;
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            if (error instanceof Error && error.name === 'AbortError') {
+                throw new GatewayTimeoutException('GitHub Issue 详情请求超时');
+            }
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Issue 详情查询异常: ${fullName}#${issueNumber}, ${message}`);
+            throw new BadGatewayException(`GitHub Issue 详情请求失败: ${message}`);
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    /** 请求并解析 GitHub Issue JSON，统一处理状态码和非法响应。 */
+    private async fetchIssueJson(url: string, headers: Record<string, string>, signal: AbortSignal, formatError: string): Promise<unknown> {
+        const response = await fetch(url, { headers, signal });
+        const body = await response.text();
+        if (response.status !== 200) {
+            this.throwIssueRequestError(response.status, body);
+        }
+        try {
+            return JSON.parse(body) as unknown;
+        } catch {
+            throw new BadGatewayException(formatError);
+        }
+    }
+
+    /** 仅在 Issue 存在评论时拉取首批评论。 */
+    private async fetchIssueComments(
+        commentsUrl: string,
+        headers: Record<string, string>,
+        signal: AbortSignal,
+        commentCount: number,
+    ): Promise<GithubIssueComment[]> {
+        if (commentCount <= 0) return [];
+        const rawComments = await this.fetchIssueJson(commentsUrl, headers, signal, 'GitHub Issue 评论响应格式异常');
+        if (!Array.isArray(rawComments)) {
+            throw new BadGatewayException('GitHub Issue 评论响应格式异常');
+        }
+        return rawComments.map(mapGithubIssueComment).filter((comment): comment is GithubIssueComment => comment !== null);
     }
 
     /**

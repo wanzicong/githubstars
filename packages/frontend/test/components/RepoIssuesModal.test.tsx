@@ -2,10 +2,11 @@ import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import RepoIssuesModal from '../../src/components/repo/RepoIssuesModal'
-import { fetchRepoIssues } from '../../src/api'
-import type { GithubIssueListResult } from '../../src/types'
+import { fetchRepoIssueDetail, fetchRepoIssues } from '../../src/api'
+import type { GithubIssueDetail, GithubIssueListResult } from '../../src/types'
 
 vi.mock('../../src/api', () => ({
+    fetchRepoIssueDetail: vi.fn(),
     fetchRepoIssues: vi.fn(),
 }))
 
@@ -27,9 +28,7 @@ const issueResult: GithubIssueListResult = {
                 avatarUrl: 'https://example.com/avatar.png',
                 htmlUrl: 'https://github.com/octocat',
             },
-            labels: [
-                { name: 'bug', color: 'd73a4a', description: 'Something is broken' },
-            ],
+            labels: [{ name: 'bug', color: 'd73a4a', description: 'Something is broken' }],
             assignees: [],
             comments: 3,
             locked: false,
@@ -39,6 +38,51 @@ const issueResult: GithubIssueListResult = {
             closedAt: null,
         },
     ],
+}
+
+const issueDetail: GithubIssueDetail = {
+    ...issueResult.items[0],
+    body: 'Issue body with **important details**.',
+    authorAssociation: 'MEMBER',
+    activeLockReason: null,
+    reactions: {
+        totalCount: 3,
+        plusOne: 2,
+        minusOne: 0,
+        laugh: 0,
+        hooray: 0,
+        confused: 0,
+        heart: 1,
+        rocket: 0,
+        eyes: 0,
+    },
+    commentItems: [
+        {
+            id: 201,
+            body: 'Thanks for the detailed report.',
+            htmlUrl: 'https://github.com/openai/codex/issues/42#issuecomment-201',
+            user: {
+                login: 'maintainer',
+                avatarUrl: 'https://example.com/maintainer.png',
+                htmlUrl: 'https://github.com/maintainer',
+            },
+            authorAssociation: 'MEMBER',
+            reactions: {
+                totalCount: 0,
+                plusOne: 0,
+                minusOne: 0,
+                laugh: 0,
+                hooray: 0,
+                confused: 0,
+                heart: 0,
+                rocket: 0,
+                eyes: 0,
+            },
+            createdAt: '2026-07-03T00:00:00Z',
+            updatedAt: '2026-07-03T00:00:00Z',
+        },
+    ],
+    commentsTruncated: true,
 }
 
 const defaultProps = {
@@ -62,12 +106,9 @@ describe('RepoIssuesModal', () => {
         expect(screen.getByRole('dialog')).toBeInTheDocument()
         expect(screen.getByText('Issues')).toBeInTheDocument()
         expect(screen.getByText('openai/codex')).toBeInTheDocument()
-        expect(await screen.findByRole('link', { name: 'Fix startup crash' })).toHaveAttribute(
-            'href',
-            'https://github.com/openai/codex/issues/42',
-        )
+        expect(await screen.findByRole('button', { name: '查看 Issue #42 详情' })).toBeInTheDocument()
         expect(screen.getByText('bug')).toBeInTheDocument()
-        expect(screen.getByRole('link', { name: '3 条评论' })).toBeInTheDocument()
+        expect(screen.getByLabelText('3 条评论')).toBeInTheDocument()
         expect(screen.getByText(/#42/)).toBeInTheDocument()
         expect(fetchRepoIssues).toHaveBeenCalledWith({
             repoId: 332,
@@ -78,6 +119,22 @@ describe('RepoIssuesModal', () => {
             page: 1,
             perPage: 20,
         })
+    })
+
+    it('点击列表项应进入站内详情并可返回原列表', async () => {
+        vi.mocked(fetchRepoIssues).mockResolvedValue(issueResult)
+        vi.mocked(fetchRepoIssueDetail).mockResolvedValue(issueDetail)
+        render(<RepoIssuesModal {...defaultProps} />)
+
+        fireEvent.click(await screen.findByRole('button', { name: '查看 Issue #42 详情' }))
+
+        expect(await screen.findByText('important details')).toBeInTheDocument()
+        expect(screen.getByText('Thanks for the detailed report.')).toBeInTheDocument()
+        expect(screen.getByText('站内展示前 1 条评论')).toBeInTheDocument()
+        expect(fetchRepoIssueDetail).toHaveBeenCalledWith({ repoId: 332, issueNumber: 42 })
+
+        fireEvent.click(screen.getByRole('button', { name: /返回列表/ }))
+        expect(screen.getByRole('button', { name: '查看 Issue #42 详情' })).toBeInTheDocument()
     })
 
     it('应支持关键词搜索和关闭状态筛选', async () => {
@@ -91,16 +148,12 @@ describe('RepoIssuesModal', () => {
         fireEvent.click(screen.getByRole('button', { name: /搜\s*索/ }))
 
         await waitFor(() => {
-            expect(fetchRepoIssues).toHaveBeenLastCalledWith(
-                expect.objectContaining({ query: 'startup crash', page: 1 }),
-            )
+            expect(fetchRepoIssues).toHaveBeenLastCalledWith(expect.objectContaining({ query: 'startup crash', page: 1 }))
         })
 
         fireEvent.click(screen.getByText('已关闭'))
         await waitFor(() => {
-            expect(fetchRepoIssues).toHaveBeenLastCalledWith(
-                expect.objectContaining({ state: 'closed', page: 1 }),
-            )
+            expect(fetchRepoIssues).toHaveBeenLastCalledWith(expect.objectContaining({ state: 'closed', page: 1 }))
         })
     })
 

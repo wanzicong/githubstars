@@ -132,6 +132,14 @@ export const GithubIssueListSchema = z
 
 export type GithubIssueListDto = z.infer<typeof GithubIssueListSchema>;
 
+/** 仓库 Issue 详情查询参数 */
+export const GithubIssueDetailSchema = z.object({
+    id: z.coerce.number().int().positive('仓库 ID 必须为正整数'),
+    issueNumber: z.coerce.number().int().positive('Issue 编号必须为正整数'),
+});
+
+export type GithubIssueDetailDto = z.infer<typeof GithubIssueDetailSchema>;
+
 /**
  * Trending 查询参数
  */

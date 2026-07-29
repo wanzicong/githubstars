@@ -16,22 +16,11 @@ import {
     Typography,
     theme,
 } from 'antd'
-import {
-    CheckCircleOutlined,
-    CommentOutlined,
-    GithubOutlined,
-    IssuesCloseOutlined,
-    LockOutlined,
-    ReloadOutlined,
-} from '@ant-design/icons'
+import { CheckCircleOutlined, CommentOutlined, GithubOutlined, IssuesCloseOutlined, LockOutlined, ReloadOutlined } from '@ant-design/icons'
 import { fetchRepoIssues } from '../../api'
 import { getRelativeTime } from '../../utils/format'
-import type {
-    GithubIssue,
-    GithubIssueListResult,
-    GithubIssueSort,
-    GithubIssueState,
-} from '../../types'
+import type { GithubIssue, GithubIssueListResult, GithubIssueSort, GithubIssueState } from '../../types'
+import RepoIssueDetail from './RepoIssueDetail'
 
 const { Search } = Input
 const { Text } = Typography
@@ -71,6 +60,7 @@ export default function RepoIssuesModal({ repoId, fullName, htmlUrl, open, onClo
     const [result, setResult] = useState<GithubIssueListResult>(EMPTY_RESULT)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [selectedIssueNumber, setSelectedIssueNumber] = useState<number | null>(null)
 
     useEffect(() => {
         if (!open) return
@@ -164,17 +154,12 @@ export default function RepoIssuesModal({ repoId, fullName, htmlUrl, open, onClo
             )
         }
         if (result.items.length === 0) {
-            return (
-                <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={query ? '没有匹配的 Issue' : '当前筛选下没有 Issue'}
-                />
-            )
+            return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query ? '没有匹配的 Issue' : '当前筛选下没有 Issue'} />
         }
         return (
             <div className='repo-issues-list' role='list' aria-busy={loading}>
                 {result.items.map((issue) => (
-                    <IssueListItem key={issue.id} issue={issue} />
+                    <IssueListItem key={issue.id} issue={issue} onSelect={setSelectedIssueNumber} />
                 ))}
             </div>
         )
@@ -186,14 +171,17 @@ export default function RepoIssuesModal({ repoId, fullName, htmlUrl, open, onClo
             title={
                 <Space size={8} style={{ minWidth: 0, maxWidth: '100%' }}>
                     <IssuesCloseOutlined style={{ color: '#1a7f37' }} />
-                    <span>Issues</span>
+                    <span>{selectedIssueNumber ? `Issue #${selectedIssueNumber}` : 'Issues'}</span>
                     <Text type='secondary' ellipsis={{ tooltip: fullName }} style={{ maxWidth: '42vw', fontWeight: 400 }}>
                         {fullName}
                     </Text>
                 </Space>
             }
             open={open}
-            onCancel={onClose}
+            onCancel={() => {
+                setSelectedIssueNumber(null)
+                onClose()
+            }}
             footer={null}
             width='calc(100vw - 24px)'
             centered
@@ -220,95 +208,94 @@ export default function RepoIssuesModal({ repoId, fullName, htmlUrl, open, onClo
                 },
             }}
         >
-            <div className='repo-issues-layout'>
-                <div className='repo-issues-toolbar' style={{ borderBottomColor: token.colorBorderSecondary }}>
-                    <Search
-                        aria-label='搜索 Issues'
-                        value={searchInput}
-                        placeholder='搜索标题、正文或 GitHub 限定词'
-                        allowClear
-                        enterButton='搜索'
-                        onChange={(event) => setSearchInput(event.target.value)}
-                        onSearch={handleSearch}
-                    />
-                    <Segmented
-                        aria-label='Issue 状态'
-                        value={issueState}
-                        onChange={handleStateChange}
-                        options={[
-                            { label: '开启', value: 'open', icon: <IssuesCloseOutlined /> },
-                            { label: '已关闭', value: 'closed', icon: <CheckCircleOutlined /> },
-                            { label: '全部', value: 'all' },
-                        ]}
-                    />
-                    <Space size={8} className='repo-issues-actions'>
-                        <Select<GithubIssueSort>
-                            aria-label='Issue 排序'
-                            value={sort}
-                            onChange={handleSortChange}
-                            popupMatchSelectWidth={false}
+            {selectedIssueNumber ? (
+                <RepoIssueDetail
+                    repoId={repoId}
+                    issueNumber={selectedIssueNumber}
+                    fullName={fullName}
+                    onBack={() => setSelectedIssueNumber(null)}
+                />
+            ) : (
+                <div className='repo-issues-layout'>
+                    <div className='repo-issues-toolbar' style={{ borderBottomColor: token.colorBorderSecondary }}>
+                        <Search
+                            aria-label='搜索 Issues'
+                            value={searchInput}
+                            placeholder='搜索标题、正文或 GitHub 限定词'
+                            allowClear
+                            enterButton='搜索'
+                            onChange={(event) => setSearchInput(event.target.value)}
+                            onSearch={handleSearch}
+                        />
+                        <Segmented
+                            aria-label='Issue 状态'
+                            value={issueState}
+                            onChange={handleStateChange}
                             options={[
-                                { label: '最近更新', value: 'updated' },
-                                { label: '最新创建', value: 'created' },
-                                { label: '评论最多', value: 'comments' },
+                                { label: '开启', value: 'open', icon: <IssuesCloseOutlined /> },
+                                { label: '已关闭', value: 'closed', icon: <CheckCircleOutlined /> },
+                                { label: '全部', value: 'all' },
                             ]}
                         />
-                        <Tooltip title='刷新 Issues'>
-                            <Button
-                                aria-label='刷新 Issues'
-                                icon={<ReloadOutlined />}
-                                onClick={() => setReloadKey((current) => current + 1)}
+                        <Space size={8} className='repo-issues-actions'>
+                            <Select<GithubIssueSort>
+                                aria-label='Issue 排序'
+                                value={sort}
+                                onChange={handleSortChange}
+                                popupMatchSelectWidth={false}
+                                options={[
+                                    { label: '最近更新', value: 'updated' },
+                                    { label: '最新创建', value: 'created' },
+                                    { label: '评论最多', value: 'comments' },
+                                ]}
                             />
-                        </Tooltip>
-                        <Button
-                            icon={<GithubOutlined />}
-                            href={`${htmlUrl}/issues`}
-                            target='_blank'
-                            rel='noopener noreferrer'
-                        >
-                            GitHub
-                        </Button>
-                    </Space>
-                </div>
+                            <Tooltip title='刷新 Issues'>
+                                <Button
+                                    aria-label='刷新 Issues'
+                                    icon={<ReloadOutlined />}
+                                    onClick={() => setReloadKey((current) => current + 1)}
+                                />
+                            </Tooltip>
+                            <Button icon={<GithubOutlined />} href={`${htmlUrl}/issues`} target='_blank' rel='noopener noreferrer'>
+                                GitHub
+                            </Button>
+                        </Space>
+                    </div>
 
-                <div
-                    className='repo-issues-summary'
-                    style={{
-                        color: token.colorTextSecondary,
-                        background: token.colorFillQuaternary,
-                        borderBottomColor: token.colorBorderSecondary,
-                    }}
-                >
-                    <Text strong>{result.totalCount.toLocaleString()} 个 Issue</Text>
-                    {query && <Text type='secondary'>搜索：{query}</Text>}
-                    {result.incompleteResults && (
-                        <Text type='warning'>GitHub 搜索仍在索引中，结果可能不完整</Text>
-                    )}
-                </div>
+                    <div
+                        className='repo-issues-summary'
+                        style={{
+                            color: token.colorTextSecondary,
+                            background: token.colorFillQuaternary,
+                            borderBottomColor: token.colorBorderSecondary,
+                        }}
+                    >
+                        <Text strong>{result.totalCount.toLocaleString()} 个 Issue</Text>
+                        {query && <Text type='secondary'>搜索：{query}</Text>}
+                        {result.incompleteResults && <Text type='warning'>GitHub 搜索仍在索引中，结果可能不完整</Text>}
+                    </div>
 
-                <div className='repo-issues-content'>{renderIssuesContent()}</div>
+                    <div className='repo-issues-content'>{renderIssuesContent()}</div>
 
-                <div
-                    className='repo-issues-pagination'
-                    style={{ borderTopColor: token.colorBorderSecondary }}
-                >
-                    <Pagination
-                        current={page}
-                        pageSize={PAGE_SIZE}
-                        total={availableTotal}
-                        showSizeChanger={false}
-                        hideOnSinglePage={availableTotal <= PAGE_SIZE}
-                        showTotal={(total, range) => `${range[0]}-${range[1]} / ${total}`}
-                        onChange={setPage}
-                        responsive
-                    />
+                    <div className='repo-issues-pagination' style={{ borderTopColor: token.colorBorderSecondary }}>
+                        <Pagination
+                            current={page}
+                            pageSize={PAGE_SIZE}
+                            total={availableTotal}
+                            showSizeChanger={false}
+                            hideOnSinglePage={availableTotal <= PAGE_SIZE}
+                            showTotal={(total, range) => `${range[0]}-${range[1]} / ${total}`}
+                            onChange={setPage}
+                            responsive
+                        />
+                    </div>
                 </div>
-            </div>
+            )}
         </Modal>
     )
 }
 
-function IssueListItem({ issue }: { issue: GithubIssue }) {
+function IssueListItem({ issue, onSelect }: { issue: GithubIssue; onSelect: (issueNumber: number) => void }) {
     const { token } = theme.useToken()
     const isOpen = issue.state === 'open'
     const actor = issue.user?.login || 'ghost'
@@ -316,21 +303,27 @@ function IssueListItem({ issue }: { issue: GithubIssue }) {
     const stateColor = isOpen ? '#1a7f37' : '#8250df'
 
     return (
-        <div className='repo-issue-row' role='listitem'>
+        <div
+            className='repo-issue-row'
+            role='button'
+            tabIndex={0}
+            aria-label={`查看 Issue #${issue.number} 详情`}
+            onClick={() => onSelect(issue.number)}
+            onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    onSelect(issue.number)
+                }
+            }}
+        >
             <div className='repo-issue-state-icon' style={{ color: stateColor }}>
                 {isOpen ? <IssuesCloseOutlined /> : <CheckCircleOutlined />}
             </div>
             <div className='repo-issue-main'>
                 <div className='repo-issue-title-row'>
-                    <a
-                        className='repo-issue-title'
-                        href={issue.htmlUrl}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                        style={{ color: token.colorText }}
-                    >
+                    <span className='repo-issue-title' style={{ color: token.colorText }}>
                         {issue.title}
-                    </a>
+                    </span>
                     {issue.locked && (
                         <Tooltip title='讨论已锁定'>
                             <LockOutlined style={{ color: token.colorTextTertiary }} />
@@ -363,9 +356,7 @@ function IssueListItem({ issue }: { issue: GithubIssue }) {
                     <Text type='secondary'>
                         #{issue.number} · {stateText} · {actor} 于 {getRelativeTime(issue.createdAt)}创建
                     </Text>
-                    {issue.milestoneTitle && (
-                        <Text type='secondary'>里程碑：{issue.milestoneTitle}</Text>
-                    )}
+                    {issue.milestoneTitle && <Text type='secondary'>里程碑：{issue.milestoneTitle}</Text>}
                 </div>
             </div>
 
@@ -382,17 +373,14 @@ function IssueListItem({ issue }: { issue: GithubIssue }) {
                     </Avatar.Group>
                 )}
                 {issue.comments > 0 && (
-                    <a
+                    <span
                         className='repo-issue-comments'
-                        href={issue.htmlUrl}
-                        target='_blank'
-                        rel='noopener noreferrer'
                         aria-label={`${issue.comments} 条评论`}
                         style={{ color: token.colorTextSecondary }}
                     >
                         <CommentOutlined />
                         <span>{issue.comments}</span>
-                    </a>
+                    </span>
                 )}
             </div>
         </div>

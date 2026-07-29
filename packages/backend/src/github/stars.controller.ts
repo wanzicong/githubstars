@@ -4,8 +4,8 @@ import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { GithubRepoService } from './github-repo.service';
 import { GithubSearchService } from './github-search.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
-import { FilterSchema, GithubIssueListSchema, StarByIdSchema } from '../common/dto/filter.dto';
-import type { FilterDto, GithubIssueListDto, StarByIdDto } from '../common/dto/filter.dto';
+import { FilterSchema, GithubIssueDetailSchema, GithubIssueListSchema, StarByIdSchema } from '../common/dto/filter.dto';
+import type { FilterDto, GithubIssueDetailDto, GithubIssueListDto, StarByIdDto } from '../common/dto/filter.dto';
 import { GithubApiService } from './github-api.service';
 
 @ApiTags('stars')
@@ -129,6 +129,27 @@ export class StarsController {
             page: body.page,
             perPage: body.perPage,
         });
+    }
+
+    /** 通过本地仓库 ID 与 Issue 编号查询正文、评论及侧栏信息。 */
+    @Post('issue-detail')
+    @ApiOperation({ summary: '获取 Issue 详情', description: '查询指定 Star 仓库的 GitHub Issue 正文和首批评论，拒绝 Pull Request' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            required: ['id', 'issueNumber'],
+            properties: {
+                id: { type: 'number' },
+                issueNumber: { type: 'number', minimum: 1 },
+            },
+        },
+    })
+    async issueDetail(@Body(new ZodValidationPipe(GithubIssueDetailSchema)) body: GithubIssueDetailDto) {
+        const repo = await this.service.findById(body.id);
+        if (!repo?.fullName) {
+            throw new NotFoundException('仓库不存在');
+        }
+        return this.githubApi.fetchRepoIssueDetail(repo.fullName, body.issueNumber);
     }
 
     /**
