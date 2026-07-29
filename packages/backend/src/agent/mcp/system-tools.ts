@@ -273,11 +273,14 @@ export function createSystemMcpServer(deps: SystemMcpDeps) {
             ),
             tool(
                 'localization_task_detail',
-                '查询仓库中文化批量任务的进度、成功项和失败原因',
-                { taskId: z.number().int().positive().describe('中文化任务 ID') },
+                '查询仓库中文化批量任务的进度和有限异常明细；返回紧凑结果，适合轮询',
+                {
+                    taskId: z.number().int().positive().describe('中文化任务 ID'),
+                    itemLimit: z.number().int().min(0).max(100).optional().describe('最多返回的失败/处理中明细数，默认 20'),
+                },
                 async (args) => {
                     try {
-                        return ok(await localization.getTask(args.taskId));
+                        return ok(await localization.getTask(args.taskId, args.itemLimit ?? 20));
                     } catch (e) {
                         return err(e instanceof Error ? e.message : String(e));
                     }

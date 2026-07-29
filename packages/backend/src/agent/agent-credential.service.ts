@@ -17,6 +17,7 @@ export class AgentCredentialService implements OnApplicationBootstrap {
     private readonly logger = new Logger(AgentCredentialService.name);
     /** 启动时的环境变量快照（存在则永久优先） */
     private readonly envApiKey = process.env.ANTHROPIC_API_KEY;
+    private readonly envAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
     private readonly envBaseUrl = process.env.ANTHROPIC_BASE_URL;
     private readonly envGithubToken = process.env.GITHUB_TOKEN;
     private githubToken = '';
@@ -36,11 +37,15 @@ export class AgentCredentialService implements OnApplicationBootstrap {
             const dbKey = await this.config.getValue('anthropic.api_key');
             if (dbKey) {
                 process.env.ANTHROPIC_API_KEY = dbKey;
+            } else if (!this.envAuthToken) {
+                delete process.env.ANTHROPIC_API_KEY;
+                this.logger.error('未配置 Anthropic 凭据（anthropic.api_key 或 ANTHROPIC_AUTH_TOKEN），Agent 对话将失败');
             } else {
                 delete process.env.ANTHROPIC_API_KEY;
-                this.logger.error('未配置 Anthropic API Key（anthropic.api_key），Agent 对话将失败');
             }
         }
+
+        if (this.envAuthToken) process.env.ANTHROPIC_AUTH_TOKEN = this.envAuthToken;
 
         if (this.envBaseUrl) {
             process.env.ANTHROPIC_BASE_URL = this.envBaseUrl;

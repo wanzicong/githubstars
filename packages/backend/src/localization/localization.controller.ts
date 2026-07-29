@@ -29,9 +29,9 @@ export class LocalizationController {
     }
 
     @Post('task')
-    @ApiOperation({ summary: '查询仓库中文化任务进度和明细' })
+    @ApiOperation({ summary: '查询仓库中文化任务进度和有限异常明细' })
     getTask(@Body(new ZodValidationPipe(LocalizationTaskSchema)) body: LocalizationTaskDto) {
-        return this.localization.getTask(body.taskId);
+        return this.localization.getTask(body.taskId, body.itemLimit);
     }
 
     @Post('retry')

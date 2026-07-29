@@ -128,6 +128,40 @@ describe('RepositoryLocalizationService', () => {
             ]),
         });
     });
+
+    it('任务详情只返回有限的失败或处理中明细，避免大任务结果撑爆 Agent 上下文', async () => {
+        prisma.translationTask.findUnique.mockResolvedValue({
+            id: 2n,
+            status: 'PROCESSING',
+            totalItems: 1581,
+            completedItems: 10,
+            failedItems: 30,
+        });
+        prisma.translationTaskItem.findMany.mockResolvedValue(
+            Array.from({ length: 20 }, (_, index) => ({ id: BigInt(index + 1), status: 'FAILED' })),
+        );
+        prisma.translationTaskItem.count.mockResolvedValue(2);
+
+        const result = await service.getTask(2);
+
+        expect(prisma.translationTask.findUnique).toHaveBeenCalledWith({ where: { id: 2 } });
+        expect(prisma.translationTaskItem.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: { taskId: 2, status: { in: ['FAILED', 'PROCESSING'] } },
+                take: 20,
+            }),
+        );
+        expect(result).toEqual(
+            expect.objectContaining({
+                progress: 3,
+                pendingItems: 1539,
+                processingItems: 2,
+                returnedItems: 20,
+                attentionItemCount: 32,
+                hasMoreItems: true,
+            }),
+        );
+    });
 });
 
 describe('splitMarkdownIntoChunks', () => {

@@ -171,16 +171,34 @@ export class RepositoryLocalizationService implements OnModuleInit {
         };
     }
 
-    async getTask(taskId: number) {
+    async getTask(taskId: number, itemLimit = 20) {
         const task = await this.prisma.translationTask.findUnique({
             where: { id: taskId },
-            include: { items: { orderBy: { id: 'asc' } } },
         });
         if (!task) throw new NotFoundException(`中文化任务不存在: ${taskId}`);
+
+        const safeItemLimit = Math.min(Math.max(itemLimit, 0), 100);
+        const [items, processingItems] = await Promise.all([
+            safeItemLimit > 0
+                ? this.prisma.translationTaskItem.findMany({
+                      where: { taskId, status: { in: ['FAILED', 'PROCESSING'] } },
+                      orderBy: [{ status: 'asc' }, { id: 'asc' }],
+                      take: safeItemLimit,
+                  })
+                : Promise.resolve([]),
+            this.prisma.translationTaskItem.count({ where: { taskId, status: 'PROCESSING' } }),
+        ]);
         const processedItems = task.completedItems + task.failedItems;
+        const attentionItemCount = task.failedItems + processingItems;
         return {
             ...task,
             progress: task.totalItems ? Math.round((processedItems / task.totalItems) * 100) : 100,
+            pendingItems: Math.max(task.totalItems - processedItems - processingItems, 0),
+            processingItems,
+            items,
+            returnedItems: items.length,
+            attentionItemCount,
+            hasMoreItems: attentionItemCount > items.length,
         };
     }
 

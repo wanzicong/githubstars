@@ -40,9 +40,10 @@ export function registerLocalizationTools(server: McpServer, client: BackendClie
     server.registerTool(
         'localization-task-detail',
         {
-            description: '查询仓库中文化批量任务进度和明细',
+            description: '查询仓库中文化批量任务进度和有限异常明细（紧凑结果）',
             inputSchema: z.object({
                 taskId: z.number().int().positive().describe('任务 ID'),
+                itemLimit: z.number().int().min(0).max(100).optional().describe('最多返回的失败/处理中明细数，默认 20'),
             }),
         },
         createToolHandler(client, '/api/localization/task'),

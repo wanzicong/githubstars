@@ -88,6 +88,8 @@ services:
       - ${CLAUDE_CONFIG_DIR:-./docker/claude-config}/settings.local.json:/root/.claude/settings.local.json
       - ${CLAUDE_CONFIG_DIR:-./docker/claude-config}/config.json:/root/.claude/config.json
       - ${CLAUDE_CONFIG_DIR:-./docker/claude-config}/CLAUDE.md:/root/.claude/CLAUDE.md
+      # 持久化 Agent SDK 会话；容器重建后仍可 resume，避免数据库 sessionId 指向丢失的会话文件
+      - ${CLAUDE_SESSION_DIR:-./data/claude-projects}:/root/.claude/projects
 
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:10002/api/docs-json"]

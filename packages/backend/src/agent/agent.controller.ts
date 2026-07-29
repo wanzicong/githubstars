@@ -7,6 +7,7 @@ import { AgentClientService } from './agent-client.service';
 import type { AgentBlock } from './agent-client.service';
 import { AgentSessionService } from './agent-session.service';
 import type { MessageBlock } from './agent-session.service';
+import { selectResumableSessionId } from './agent-error.utils';
 import { AgentRequestSchema } from './dto/agent-request.dto';
 import type { AgentRequestDto, SessionModeDto } from './dto/agent-request.dto';
 
@@ -300,20 +301,19 @@ export class AgentController {
         }
     }
 
-    /** 从 init 消息捕获 SDK sessionId 并持久化（供 resume 使用） */
+    /** 从 init/result 消息捕获 SDK sessionId；result ID 是最终可恢复的主会话 ID。 */
     private async captureSdkSessionId(raw: SDKMessage, ctx: ChatSessionContext): Promise<void> {
-        if (raw.type === 'system' && raw.subtype === 'init' && 'session_id' in raw) {
+        const isInit = raw.type === 'system' && raw.subtype === 'init';
+        if ((isInit || raw.type === 'result') && raw.session_id !== ctx.sdkSessionId) {
             ctx.sdkSessionId = raw.session_id;
             if (ctx.ourSessionId) await this.sessionService.updateSdkSessionId(ctx.ourSessionId, ctx.sdkSessionId);
         }
     }
 
-    /** query 模式：从收集的消息中找 init 并保存 SDK sessionId */
+    /** query 模式：优先保存最终 result 的主会话 ID，兼容只有 init 的异常响应。 */
     private async captureSdkSessionIdFromMessages(messages: SDKMessage[], ourSessionId: string): Promise<void> {
-        const initMsg = messages.find((m) => m.type === 'system' && m.subtype === 'init');
-        if (initMsg && 'session_id' in initMsg) {
-            await this.sessionService.updateSdkSessionId(ourSessionId, initMsg.session_id);
-        }
+        const sdkSessionId = selectResumableSessionId(messages);
+        if (sdkSessionId) await this.sessionService.updateSdkSessionId(ourSessionId, sdkSessionId);
     }
 
     /** 从消息列表提取 assistant 文本（原 extractResultText 逻辑） */

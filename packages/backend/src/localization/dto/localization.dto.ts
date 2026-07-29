@@ -21,6 +21,7 @@ export type LocalizeBatchDto = z.infer<typeof LocalizeBatchSchema>;
 
 export const LocalizationTaskSchema = z.object({
     taskId: z.number().int().positive(),
+    itemLimit: z.number().int().min(0).max(100).default(20),
 });
 
 export type LocalizationTaskDto = z.infer<typeof LocalizationTaskSchema>;

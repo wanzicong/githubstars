@@ -39,9 +39,8 @@ services:
     ports:
       - "10005:10004"
     environment:
-      # 指向宿主机上的后端（开发环境后端通常跑在宿主机）
-      # 默认连接宿主机开发后端 :10002；部署后端映射到 :10004 时可设置 MCP_BACKEND_URL 覆盖。
-      GITHUBSTARS_API_URL: ${MCP_BACKEND_URL:-http://host.docker.internal:10002}
+      # 默认连接当前 Docker 后端映射端口 :10004；如需连接本地 Nest 开发服务，可用 MCP_BACKEND_URL 覆盖为 :10002。
+      GITHUBSTARS_API_URL: ${MCP_BACKEND_URL:-http://host.docker.internal:10004}
       MCP_PORT: 10004
 
 volumes:

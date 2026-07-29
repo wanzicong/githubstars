@@ -18,6 +18,7 @@ import { ExportService } from '../export/export.service';
 import { LoggingService } from '../logging/logging.service';
 import { GithubSearchService } from '../github/github-search.service';
 import { RepositoryLocalizationService } from '../localization/repository-localization.service';
+import { isMissingConversationError } from './agent-error.utils';
 import {
     AGENT_ALLOWED_TOOLS,
     AGENT_DEFAULT_MAX_TURNS,
@@ -95,6 +96,7 @@ export class AgentClientService {
 
         const { query } = await this.loadSdk();
         const pluginPath = this.resolveAgentPluginPath();
+        let stderrTail = '';
         const mergedOptions: Record<string, unknown> = {
             maxTurns: options.maxTurns ?? AGENT_DEFAULT_MAX_TURNS,
             model: options.model ?? AGENT_DEFAULT_MODEL,
@@ -102,6 +104,9 @@ export class AgentClientService {
             systemPrompt: SYSTEM_PROMPT,
             includePartialMessages: true,
             maxThinkingTokens: AGENT_MAX_THINKING_TOKENS,
+            stderr: (data: string) => {
+                stderrTail = `${stderrTail}${data}`.slice(-8_000);
+            },
             // 强制禁用 ToolSearch 延迟加载：其 tool_reference 内容块会导致第三方网关（DeepSeek）
             // 400 "tokenization failed"，且污染会话记录使后续 resume 全部失败。
             // MCP 工具改为全量内联加载（standard 模式）。注意不能用 ??=——宿主进程可能
@@ -135,9 +140,47 @@ export class AgentClientService {
         }
         if (options.sessionId) mergedOptions.resume = options.sessionId;
 
-        for await (const message of query({ prompt: options.prompt, options: mergedOptions })) {
-            yield message;
+        try {
+            for await (const message of query({ prompt: options.prompt, options: mergedOptions })) {
+                yield message;
+            }
+        } catch (error) {
+            const stderr = this.sanitizeStderr(stderrTail);
+            if (options.sessionId && isMissingConversationError(stderr)) {
+                this.logger.warn(`Claude SDK 会话 ${options.sessionId} 已丢失，自动创建新会话继续处理`);
+                delete mergedOptions.resume;
+                stderrTail = '';
+                try {
+                    for await (const message of query({ prompt: options.prompt, options: mergedOptions })) {
+                        yield message;
+                    }
+                    return;
+                } catch (fallbackError) {
+                    throw this.createExecutionError(fallbackError, stderrTail);
+                }
+            }
+            throw this.createExecutionError(error, stderr);
         }
+    }
+
+    /** 在保留原始异常 cause 的同时，将已脱敏的 CLI stderr 附加到可观测错误。 */
+    private createExecutionError(error: unknown, rawStderr: string): Error {
+        const message = error instanceof Error ? error.message : String(error);
+        const stderr = this.sanitizeStderr(rawStderr);
+        if (!stderr) return error instanceof Error ? error : new Error(message);
+        this.logger.error(`Claude CLI 执行失败: ${stderr}`);
+        return new Error(`${message}：${stderr}`, { cause: error });
+    }
+
+    /** 清理 CLI stderr 中的 ANSI 控制符和可能出现的凭据，仅保留末尾诊断信息。 */
+    private sanitizeStderr(stderr: string): string {
+        const ansiEscapePattern = new RegExp(String.raw`\u001b\[[0-?]*[ -/]*[@-~]`, 'g');
+        return stderr
+            .replace(ansiEscapePattern, '')
+            .replace(/(ANTHROPIC_(?:API_KEY|AUTH_TOKEN)\s*[=:]\s*)\S+/gi, '$1[已隐藏]')
+            .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[已隐藏]')
+            .trim()
+            .slice(-2_000);
     }
 
     /** 兼容 monorepo 开发目录与 Docker runner 目录，定位随应用发布的本地 Agent 插件。 */
