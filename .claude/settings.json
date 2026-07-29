@@ -44,7 +44,6 @@
     ]
   },
   "enabledPlugins": {
-    "githubstars-project-plugin@local-projects-marketplace": true,
-    "remotion-skills-marketplace@claude-community": true
+    "githubstars-project-plugin@local-projects-marketplace": true
   }
 }
