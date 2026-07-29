@@ -108,7 +108,7 @@ html, body {
 }
 
 /* ── 响应式断点：移动端隐藏/折叠侧边栏 ── */
-@media (max-width: 768px) {
+@media (max-width: 767.98px) {
   .layout-sider-wrapper {
     display: none;
   }
@@ -119,9 +119,31 @@ html, body {
 }
 
 /* ── 响应式断点：平板端默认折叠侧边栏（用户可手动展开，JS 内联样式优先级高于 CSS）── */
-@media (min-width: 769px) and (max-width: 1024px) {
+@media (min-width: 768px) and (max-width: 1024px) {
   .layout-sider-wrapper {
     width: var(--sider-collapsed-width);
+  }
+}
+
+.repo-header-actions {
+  min-width: 150px;
+  padding-left: 8px;
+}
+
+/* ── 仓库详情头部：手机端纵向排列，避免操作区挤压仓库信息 ── */
+@media (max-width: 575.98px) {
+  .repo-header {
+    flex-direction: column;
+  }
+
+  .repo-header-info,
+  .repo-header-actions {
+    width: 100%;
+  }
+
+  .repo-header-actions {
+    min-width: 0;
+    padding-left: 0;
   }
 }
 

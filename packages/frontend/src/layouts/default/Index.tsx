@@ -41,9 +41,9 @@ export default function DefaultLayout() {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
 
-  // 平板端（769-1024px）自动折叠侧边栏，用户可手动展开
+  // 平板端（768-1024px）自动折叠侧边栏，用户可手动展开
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 769px) and (max-width: 1024px)')
+    const mq = window.matchMedia('(min-width: 768px) and (max-width: 1024px)')
     const handler = (e: MediaQueryListEvent | MediaQueryList) => {
       if (e.matches) {
         useAppStore.getState().setSiderCollapsed(true)

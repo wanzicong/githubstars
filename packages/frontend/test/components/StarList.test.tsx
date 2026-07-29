@@ -14,6 +14,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
+import { App } from 'antd'
 import { server } from '../mocks/server'
 
 // Mock dayjs
@@ -45,21 +46,24 @@ import StarList from '../../src/pages/StarList'
 // 辅助函数: 创建带路由的渲染环境
 function renderStarList(initialRoute = '/stars') {
   return render(
-    <MemoryRouter initialEntries={[initialRoute]}>
-      <StarList />
-    </MemoryRouter>,
+    <App>
+      <MemoryRouter initialEntries={[initialRoute]}>
+        <StarList />
+      </MemoryRouter>
+    </App>,
   )
 }
 
 describe('StarList', () => {
   beforeEach(() => {
     server.resetHandlers()
+    server.use(http.post('/api/category/tree', () => HttpResponse.json([])))
   })
 
   describe('初始加载', () => {
     it('应展示加载状态', () => {
-      renderStarList()
-      expect(screen.getByText('加载中...')).toBeDefined()
+      const { container } = renderStarList()
+      expect(container.querySelectorAll('.ant-skeleton').length).toBeGreaterThan(0)
     })
 
     it('数据为空时应展示空状态', async () => {

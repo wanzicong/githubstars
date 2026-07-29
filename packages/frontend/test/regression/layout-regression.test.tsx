@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
+import indexCss from '../../src/index.css?raw'
 
 // ================================================================
 // 辅助工具
@@ -47,45 +48,9 @@ function expectStyle(element: Element | null, prop: string, expected: string, ms
 
 describe('全局 CSS — 响应式布局规则', () => {
   it('layout-sider-wrapper 应在移动端隐藏 (display:none)', () => {
-    const div = document.createElement('div')
-    div.className = 'layout-sider-wrapper'
-    document.body.appendChild(div)
-
-    // 模拟移动端匹配
-    const originalMatchMedia = window.matchMedia
-    window.matchMedia = (query: string) =>
-      ({
-        matches: query.includes('max-width: 768px'),
-        media: query,
-        onchange: null,
-        addListener: () => {},
-        removeListener: () => {},
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-      }) as any
-
-    try {
-      // 验证 CSS 规则已加载（通过检查 index.css 已 import）
-      const styleSheets = Array.from(document.styleSheets)
-      const hasCssRules = styleSheets.some((sheet) => {
-        try {
-          return Array.from(sheet.cssRules || []).some(
-            (rule) =>
-              rule instanceof CSSMediaRule &&
-              rule.conditionText.includes('768px') &&
-              rule.cssText.includes('layout-sider-wrapper'),
-          )
-        } catch {
-          return false
-        }
-      })
-      // 由于 jsdom 可能不完全支持 CSS 解析，至少验证全局样式文件已加载
-      expect(hasCssRules || styleSheets.length > 0).toBeTruthy()
-    } finally {
-      window.matchMedia = originalMatchMedia
-      document.body.removeChild(div)
-    }
+    expect(indexCss).toMatch(
+      /@media \(max-width: 767\.98px\)[\s\S]*?\.layout-sider-wrapper\s*\{[\s\S]*?display:\s*none;/,
+    )
   })
 
   it('全局样式应包含 safe-area-inset 变量定义', () => {
@@ -100,9 +65,8 @@ describe('全局 CSS — 响应式布局规则', () => {
   })
 
   it('应包含 Firefox ellipsis 兼容规则', () => {
-    const styleSheets = Array.from(document.styleSheets)
-    // jsdom 中可能不解析 @-moz-document，验证样式表加载即可
-    expect(styleSheets.length > 0).toBeTruthy()
+    expect(indexCss).toContain('@-moz-document url-prefix()')
+    expect(indexCss).toMatch(/\.ant-typography-ellipsis\s*\{[\s\S]*?display:\s*block;/)
   })
 })
 
@@ -145,34 +109,21 @@ describe('LayoutIndex — Content & Footer CSS 类名', () => {
 // ================================================================
 
 describe('响应式断点逻辑', () => {
-  it('移动端断点 (max-width: 768px) 应存在', () => {
-    // 验证 index.css 中定义了 @media (max-width: 768px) 规则
-    // 此测试验证概念层面：项目中使用了 768px 断点
-    const styleSheets = Array.from(document.styleSheets)
-    const hasBreakpointRule = styleSheets.some((sheet) => {
-      try {
-        return Array.from(sheet.cssRules || []).some(
-          (rule) =>
-            rule instanceof CSSMediaRule &&
-            rule.conditionText.includes('768px'),
-        )
-      } catch {
-        return false
-      }
-    })
-    // jsdom 不完全解析 CSS，至少验证样式表可枚举
-    expect(hasBreakpointRule || styleSheets.length > 0).toBeTruthy()
+  it('移动端断点应严格小于 Ant Design md 的 768px', () => {
+    expect(indexCss).toMatch(
+      /@media \(max-width: 767\.98px\)[\s\S]*?\.layout-sider-wrapper\s*\{[\s\S]*?display:\s*none;/,
+    )
   })
 
-  it('平板端断点 (769px-1024px) 应存在', () => {
-    // 验证项目中保留了平板端专用断点区间
-    const minWidth = 769
+  it('平板端断点应从 768px 开始且与移动端无空隙', () => {
+    const minWidth = 768
     const maxWidth = 1024
+    expect(indexCss).toContain('@media (min-width: 768px) and (max-width: 1024px)')
     expect(minWidth).toBeLessThan(maxWidth)
   })
 
   it('桌面端 (> 1024px) 应正常显示侧边栏', () => {
-    // 项目三层断点：mobile(≤768) < tablet(769-1024) < desktop(>1024)
+    // 项目三层断点：mobile(<768) < tablet(768-1024) < desktop(>1024)
     // 验证 jsdom 中 DOM 操作正常工作（测试环境有效性检查）
     const sider = document.createElement('div')
     sider.className = 'layout-sider-wrapper'
@@ -231,9 +182,7 @@ describe('Chart.js — chart-container 类名', () => {
   })
 
   it('chart-container CSS 类应包含 position: relative', () => {
-    // 验证概念：CSS 规则定义了 position: relative 用于 Chart.js
-    // jsdom 限制，验证至少样式表已加载
-    expect(document.styleSheets.length > 0).toBeTruthy()
+    expect(indexCss).toMatch(/\.chart-container\s*\{[\s\S]*?position:\s*relative;/)
   })
 })
 
@@ -346,8 +295,8 @@ describe('布局修复完整性检查', () => {
     { name: 'index.css safe-area 变量', file: 'index.css' },
     { name: 'index.css overflow-x: hidden', file: 'index.css' },
     { name: 'index.css Firefox ellipsis 规则', file: 'index.css' },
-    { name: 'index.css 移动端断点 @media (max-width: 768px)', file: 'index.css' },
-    { name: 'index.css 平板端断点 @media (769px-1024px)', file: 'index.css' },
+    { name: 'index.css 移动端断点 @media (max-width: 767.98px)', file: 'index.css' },
+    { name: 'index.css 平板端断点 @media (768px-1024px)', file: 'index.css' },
     { name: 'index.css chart-container 规则', file: 'index.css' },
     { name: 'index.css multiple-tabs-container 规则', file: 'index.css' },
     { name: 'index.css 水平菜单溢出规则', file: 'index.css' },

@@ -1,5 +1,5 @@
 import { Button, Tag, Typography, Avatar, Badge, theme } from 'antd'
-import { GithubOutlined, LinkOutlined, TranslationOutlined, ReloadOutlined, CheckCircleOutlined, BugOutlined } from '@ant-design/icons'
+import { GithubOutlined, LinkOutlined, BugOutlined } from '@ant-design/icons'
 import type { GithubRepo } from '../../types'
 
 const { Title, Text, Paragraph } = Typography
@@ -7,9 +7,6 @@ const { useToken } = theme
 
 export interface RepoHeaderProps {
     repo: GithubRepo
-    translatingDesc: boolean
-    onTranslateDesc: () => void
-    onRetranslateDesc: () => void
 }
 
 /**
@@ -17,16 +14,15 @@ export interface RepoHeaderProps {
  *
  * 设计要点：
  * - 头像 + 仓库名构成视觉锚点，全平台响应式
- * - 描述区展示中文翻译（优先）或原文，翻译状态用标签清晰标注
- * - 操作按钮（GitHub / 主页）与翻译动作用视觉分隔区分
+ * - 描述区优先展示已有中文内容，缺失时回退 GitHub 原始描述
+ * - 操作按钮提供 GitHub / Issues / 项目主页入口
  * - 全部颜色从 Ant Design 主题 token 获取，自动适应亮/暗模式
  */
-export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onRetranslateDesc }: RepoHeaderProps) {
+export default function RepoHeader({ repo }: RepoHeaderProps) {
     const { token } = useToken()
-    const hasTranslation = Boolean(repo.descriptionCn)
-    const hasOriginal = Boolean(repo.description)
+    const displayDescription = repo.descriptionCn || repo.description
 
-    /** 渲染描述区域的 JSX（已翻译 / 未翻译 / 无描述三个阶段） */
+    /** 渲染已有中文描述，缺失时回退 GitHub 原始描述 */
     const renderDescription = () => {
         const textStyle: React.CSSProperties = {
             width: '100%',
@@ -34,70 +30,11 @@ export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onR
             wordBreak: 'break-word',
             lineHeight: 1.7,
         }
-        if (hasTranslation) {
+        if (displayDescription) {
             return (
-                <div>
-                    <Paragraph style={{ marginBottom: 4, color: token.colorText, ...textStyle }}>
-                        {repo.descriptionCn}
-                        <Tag
-                            bordered={false}
-                            color='purple'
-                            style={{ marginLeft: 8, fontSize: 11, lineHeight: '18px', verticalAlign: 'middle' }}
-                        >
-                            <CheckCircleOutlined style={{ fontSize: 10, marginRight: 2 }} />
-                            已翻译
-                        </Tag>
-                    </Paragraph>
-                    {hasOriginal && repo.description !== repo.descriptionCn && (
-                        <Paragraph
-                            type='secondary'
-                            ellipsis={{ rows: 2 }}
-                            style={{
-                                marginBottom: 0,
-                                fontSize: 12,
-                                lineHeight: 1.6,
-                                paddingTop: 4,
-                                borderTop: `1px dashed ${token.colorBorderSecondary}`,
-                                color: token.colorTextTertiary,
-                                ...textStyle,
-                            }}
-                        >
-                            <Text italic style={{ color: token.colorTextQuaternary, marginRight: 4 }}>
-                                原文：
-                            </Text>
-                            {repo.description}
-                        </Paragraph>
-                    )}
-                    <Button
-                        size='small'
-                        type='link'
-                        icon={<ReloadOutlined />}
-                        loading={translatingDesc}
-                        onClick={onRetranslateDesc}
-                        style={{ padding: 0, marginTop: 4, height: 20, fontSize: 12 }}
-                    >
-                        重新翻译
-                    </Button>
-                </div>
-            )
-        }
-        if (hasOriginal) {
-            return (
-                <div>
-                    <Paragraph type='secondary' style={{ marginBottom: 8, color: token.colorTextSecondary, ...textStyle }}>
-                        {repo.description}
-                    </Paragraph>
-                    <Button
-                        size='small'
-                        icon={<TranslationOutlined />}
-                        loading={translatingDesc}
-                        onClick={onTranslateDesc}
-                        type='primary'
-                        ghost
-                    >
-                        翻译描述
-                    </Button>
-                </div>
+                <Paragraph type='secondary' style={{ marginBottom: 0, color: token.colorTextSecondary, ...textStyle }}>
+                    {displayDescription}
+                </Paragraph>
             )
         }
         return (
@@ -109,6 +46,7 @@ export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onR
 
     return (
         <div
+            className='repo-header'
             style={{
                 display: 'flex',
                 alignItems: 'flex-start',
@@ -133,7 +71,7 @@ export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onR
             />
 
             {/* 主信息区 */}
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div className='repo-header-info' style={{ flex: 1, minWidth: 0 }}>
                 {/* 仓库名 */}
                 <Title level={4} style={{ margin: 0, marginBottom: 4, overflowWrap: 'break-word', lineHeight: 1.4 }}>
                     <span style={{ color: token.colorText }}>{repo.fullName}</span>
@@ -161,7 +99,10 @@ export default function RepoHeader({ repo, translatingDesc, onTranslateDesc, onR
             </div>
 
             {/* 操作按钮区 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0, minWidth: 150, paddingLeft: 8 }}>
+            <div
+                className='repo-header-actions'
+                style={{ display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}
+            >
                 <Button
                     icon={<GithubOutlined />}
                     onClick={() => window.open(repo.htmlUrl, '_blank', 'noopener,noreferrer')}
