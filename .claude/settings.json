@@ -44,6 +44,15 @@
     ]
   },
   "enabledPlugins": {
-    "githubstars-project-plugin@local-projects-marketplace": true
+    "githubstars-project-plugin@local-projects-marketplace": true,
+    "githubstars-agent@githubstars": true
+  },
+  "extraKnownMarketplaces": {
+    "githubstars": {
+      "source": {
+        "source": "github",
+        "repo": "wanzicong/githubstars"
+      }
+    }
   }
 }

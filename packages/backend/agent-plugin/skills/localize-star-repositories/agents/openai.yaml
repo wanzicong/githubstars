@@ -1,4 +1,0 @@
-interface:
-  display_name: "仓库中文化"
-  short_description: "翻译 Star 仓库描述和 README 并更新中文字段"
-  default_prompt: "使用 $localize-star-repositories 将选定的 Star 仓库描述和 README 翻译为中文并更新数据库。"

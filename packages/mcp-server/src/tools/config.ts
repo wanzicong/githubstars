@@ -18,7 +18,7 @@ export function registerConfigTools(server: McpServer, client: BackendClient) {
         'config-save',
         {
             description: '批量保存配置项，接收键值对集合写入 system_config 表',
-            inputSchema: z.record(z.string()).describe('键值对配置数据'),
+            inputSchema: z.record(z.string(), z.string()).describe('键值对配置数据'),
         },
         createToolHandler(client, '/api/config'),
     );

@@ -30,6 +30,26 @@ GitHub Stars 管理系统 — 对自己 Star 过的 GitHub 仓库进行**管理�
 | 📈 **Trending** | GitHub Trending 仓库抓取与分析 |
 | 📝 **Markdown 导出** | 将 Star 列表导出为 Markdown 文件 |
 | ⚙️ **系统配置** | KV 配置管理，运行时动态调整系统参数 |
+| 🧩 **Claude Code 插件** | 通过一个插件安装 73 个 MCP 工具和 5 个 GitHub Stars 业务 Skills |
+
+## Claude Code 插件
+
+仓库内置 `githubstars-agent` 插件。它将 MCP Server 编译为自包含运行包，安装插件后无需再手工配置每个工具。
+项目 `/agent` 页面背后的 Agent SDK 也加载这一个插件，并在每次会话初始化时验证 73 个工具与 5 个 Skills 均可用。
+
+```bash
+npm run build:agent-plugin
+claude plugin marketplace add ./
+claude plugin install githubstars-agent@githubstars --scope project
+```
+
+如果使用 Docker 生产环境，在启动 Claude Code 前设置后端地址：
+
+```powershell
+$env:GITHUBSTARS_API_URL = 'http://localhost:10004'
+```
+
+完整说明见 [`plugins/githubstars-agent/README.md`](plugins/githubstars-agent/README.md)。
 
 ## 技术栈
 

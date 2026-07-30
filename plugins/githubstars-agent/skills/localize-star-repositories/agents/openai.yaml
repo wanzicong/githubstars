@@ -1,0 +1,4 @@
+interface:
+  display_name: "中文化 Star 仓库"
+  short_description: "批量翻译仓库描述与 README 并将中文结果持久化到数据库"
+  default_prompt: "Use $localize-star-repositories to fill missing Chinese descriptions and README content."

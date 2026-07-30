@@ -93,7 +93,8 @@ WORKDIR /app
 # 复制编译产物
 COPY --from=builder /app/packages/backend/dist ./dist
 COPY --from=builder /app/packages/backend/prisma ./prisma
-COPY --from=builder /app/packages/backend/agent-plugin ./agent-plugin
+# 内置 Agent 与外部 Claude 安装共用同一个完整插件，避免工具和 Skills 两套维护。
+COPY --from=pruner /app/plugins/githubstars-agent ./agent-plugin
 COPY --from=builder /app/package.json ./package.json
 
 # 复制生产依赖（npm prune 后的 node_modules）

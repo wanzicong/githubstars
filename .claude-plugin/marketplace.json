@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "githubstars",
+  "description": "GitHub Stars 项目的 Claude Code 插件市场",
+  "owner": {
+    "name": "GitHub Stars Team"
+  },
+  "plugins": [
+    {
+      "name": "githubstars-agent",
+      "source": "./plugins/githubstars-agent",
+      "description": "为 Claude Code 安装 GitHub Stars 管理工具和业务工作流 Skills",
+      "category": "productivity",
+      "tags": [
+        "github",
+        "stars",
+        "mcp",
+        "repository-management"
+      ]
+    }
+  ]
+}

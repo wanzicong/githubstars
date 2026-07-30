@@ -1,0 +1,4 @@
+interface:
+  display_name: "运维 GitHub Stars"
+  short_description: "执行数据同步、配置检查、日志诊断、任务恢复与会话维护"
+  default_prompt: "Use $operate-githubstars to inspect and operate the GitHub Stars service safely."

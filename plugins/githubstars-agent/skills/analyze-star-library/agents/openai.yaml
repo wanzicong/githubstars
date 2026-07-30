@@ -1,0 +1,4 @@
+interface:
+  display_name: "分析 Star 仓库"
+  short_description: "分析仓库统计、语言趋势、作者分布与相似项目并生成报告"
+  default_prompt: "Use $analyze-star-library to analyze trends and structure in my GitHub Stars library."

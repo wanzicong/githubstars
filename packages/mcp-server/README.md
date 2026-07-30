@@ -15,6 +15,24 @@
 - 所有请求通过 HTTP 转发到已运行的 NestJS 后端
 - 后端默认运行在 `http://localhost:10002`
 
+## 推荐：通过 Claude Code 插件安装
+
+仓库根目录的 `githubstars-agent` 插件已经包含编译后的 MCP Server 和业务 Skills。安装插件后，Claude Code 会自动启动 MCP Server，无需手工维护 `.mcp.json`：
+
+```bash
+npm run build:agent-plugin
+claude plugin marketplace add ./
+claude plugin install githubstars-agent@githubstars --scope project
+```
+
+Docker 生产环境的宿主机后端端口为 `10004`，请在启动 Claude Code 前设置：
+
+```powershell
+$env:GITHUBSTARS_API_URL = 'http://localhost:10004'
+```
+
+插件开发和 Skills 说明见 [`../../plugins/githubstars-agent/README.md`](../../plugins/githubstars-agent/README.md)。
+
 ## 快速开始
 
 ### 1. 确保后端已启动

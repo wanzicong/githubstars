@@ -1,6 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import type { SDKMessage, SDKPartialAssistantMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { BetaRawContentBlockDeltaEvent, BetaRawContentBlockStartEvent } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs';
 import { AgentCredentialService } from './agent-credential.service';
@@ -19,6 +17,7 @@ import { LoggingService } from '../logging/logging.service';
 import { GithubSearchService } from '../github/github-search.service';
 import { RepositoryLocalizationService } from '../localization/repository-localization.service';
 import { isMissingConversationError } from './agent-error.utils';
+import { AGENT_PLUGIN_REQUIRED_PATHS, resolveAgentPluginPath } from './agent-plugin.utils';
 import {
     AGENT_ALLOWED_TOOLS,
     AGENT_DEFAULT_MAX_TURNS,
@@ -62,9 +61,10 @@ type AgentSdk = typeof import('@anthropic-ai/claude-agent-sdk');
  * 懒加载同时保证 Jest（ts-jest CommonJS）在不调用 Agent 时可正常加载本模块。
  */
 @Injectable()
-export class AgentClientService {
+export class AgentClientService implements OnModuleInit {
     private readonly logger = new Logger(AgentClientService.name);
     private sdkPromise: Promise<AgentSdk> | null = null;
+    private pluginPath: string | undefined;
 
     constructor(
         private readonly credentials: AgentCredentialService,
@@ -83,6 +83,11 @@ export class AgentClientService {
         private readonly localization: RepositoryLocalizationService,
     ) {}
 
+    onModuleInit(): void {
+        this.pluginPath = this.requireAgentPluginPath();
+        this.logger.log(`GitHub Stars Agent 插件已就绪: ${this.pluginPath}`);
+    }
+
     /** 懒加载 SDK 模块并缓存 Promise（并发调用共享同一次加载） */
     private loadSdk(): Promise<AgentSdk> {
         this.sdkPromise ??= import('@anthropic-ai/claude-agent-sdk');
@@ -95,7 +100,7 @@ export class AgentClientService {
         await this.credentials.refreshCredentials();
 
         const { query } = await this.loadSdk();
-        const pluginPath = this.resolveAgentPluginPath();
+        const pluginPath = this.pluginPath ?? this.requireAgentPluginPath();
         let stderrTail = '';
         const mergedOptions: Record<string, unknown> = {
             maxTurns: options.maxTurns ?? AGENT_DEFAULT_MAX_TURNS,
@@ -135,13 +140,12 @@ export class AgentClientService {
                 }),
             },
         };
-        if (pluginPath) {
-            mergedOptions.plugins = [{ type: 'local', path: pluginPath }];
-        }
+        mergedOptions.plugins = [{ type: 'local', path: pluginPath }];
         if (options.sessionId) mergedOptions.resume = options.sessionId;
 
         try {
             for await (const message of query({ prompt: options.prompt, options: mergedOptions })) {
+                this.assertAgentPluginInitialized(message);
                 yield message;
             }
         } catch (error) {
@@ -152,6 +156,7 @@ export class AgentClientService {
                 stderrTail = '';
                 try {
                     for await (const message of query({ prompt: options.prompt, options: mergedOptions })) {
+                        this.assertAgentPluginInitialized(message);
                         yield message;
                     }
                     return;
@@ -183,16 +188,31 @@ export class AgentClientService {
             .slice(-2_000);
     }
 
-    /** 兼容 monorepo 开发目录与 Docker runner 目录，定位随应用发布的本地 Agent 插件。 */
-    private resolveAgentPluginPath(): string | undefined {
-        const candidates = [
-            process.env.AGENT_PLUGIN_PATH,
-            resolve(process.cwd(), 'agent-plugin'),
-            resolve(process.cwd(), 'packages/backend/agent-plugin'),
-        ].filter((path): path is string => !!path);
-        const pluginPath = candidates.find((path) => existsSync(path));
-        if (!pluginPath) this.logger.warn('未找到本地 Agent 插件，仓库中文化 Skill 将不可用');
-        return pluginPath;
+    /** 插件是内置 Agent 的必需运行依赖，缺失时明确失败，禁止静默降级。 */
+    private requireAgentPluginPath(): string {
+        const pluginPath = resolveAgentPluginPath();
+        if (pluginPath) return pluginPath;
+        throw new Error(`未找到完整的 GitHub Stars Agent 插件；必须包含: ${AGENT_PLUGIN_REQUIRED_PATHS.join(', ')}`);
+    }
+
+    /** SDK 初始化时验证插件、MCP 连接、73 个工具和 5 个 Skills 均已真正加载。 */
+    private assertAgentPluginInitialized(message: SDKMessage): void {
+        if (message.type !== 'system' || message.subtype !== 'init') return;
+
+        const pluginLoaded = message.plugins.some((plugin) => plugin.name === 'githubstars-agent');
+        const mcpConnected = message.mcp_servers.some(
+            (server) => server.name === 'plugin:githubstars-agent:githubstars' && server.status === 'connected',
+        );
+        const pluginTools = message.tools.filter((name) => name.startsWith('mcp__plugin_githubstars-agent_githubstars__'));
+        const pluginSkills = message.skills.filter((name) => name.startsWith('githubstars-agent:'));
+
+        if (!pluginLoaded || !mcpConnected || pluginTools.length !== 73 || pluginSkills.length !== 5) {
+            throw new Error(
+                `GitHub Stars Agent 插件初始化不完整: plugin=${pluginLoaded}, mcp=${mcpConnected}, tools=${pluginTools.length}/73, skills=${pluginSkills.length}/5`,
+            );
+        }
+
+        this.logger.log(`Agent 会话已加载 GitHub Stars 插件: ${pluginTools.length} 个工具, ${pluginSkills.length} 个 Skills`);
     }
 
     /** 扩展流式迭代器，将 SDK message 解析为块格式 */
