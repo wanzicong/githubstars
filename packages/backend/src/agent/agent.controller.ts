@@ -234,6 +234,8 @@ export class AgentController {
         blocks: MessageBlock[],
         draft: BlockDraft,
     ): Promise<void> {
+        // 已推送的 tool_use toolId：SDK 对同一 tool_use 会发「流式 start + 完整块」两次，按 toolId 去重只推一次
+        const pushedToolIds = new Set<string>();
         try {
             for await (const { block, raw } of this.agentClient.streamBlocks({
                 prompt: body.message,
@@ -244,7 +246,7 @@ export class AgentController {
             })) {
                 if (isClosed()) break; // 客户端断开：for-await break 会逐层调用 async generator 的 return()，确定性取消 SDK 子进程
                 await this.captureSdkSessionId(raw, ctx);
-                this.forwardBlockToSse(block, res, ctx.ourSessionId);
+                this.forwardBlockToSse(block, res, ctx.ourSessionId, pushedToolIds);
                 this.collectBlock(blocks, draft, block);
             }
         } finally {
@@ -259,13 +261,26 @@ export class AgentController {
         this.flushDraftText(blocks, draft);
     }
 
-    /** 将流式消息块收集为结构化 blocks，增量内容先暂存草稿再合并为完整块 */
+    /**
+     * 将流式消息块收集为结构化 blocks，增量内容先暂存草稿再合并为完整块。
+     *
+     * 去重关键：SDK 在 includePartialMessages 下对同一内容会发「增量 + 完整块」两套——
+     * text_delta→完整 text、thinking_delta→完整 thinking、content_block_start(tool_use)→完整 assistant 里的 tool_use。
+     * 收到完整块时丢弃该块对应的流式重复，保证同一份 text/thinking/tool_use 只保留一份。
+     */
     private collectBlock(blocks: MessageBlock[], draft: BlockDraft, block: AgentBlock): void {
         switch (block.type) {
             case 'text':
+                // 完整 text 块到达：丢弃已累积的 text 增量草稿（同一份内容，避免重复）
+                draft.text = '';
                 this.flushDraftThinking(blocks, draft);
-                this.flushDraftText(blocks, draft);
                 blocks.push({ type: 'text', text: block.text });
+                break;
+            case 'thinking':
+                // 完整 thinking 块到达：丢弃已累积的 thinking 增量草稿
+                draft.thinking = '';
+                this.flushDraftText(blocks, draft);
+                blocks.push({ type: 'thinking', thinking: block.thinking });
                 break;
             case 'text_delta':
                 this.flushDraftThinking(blocks, draft);
@@ -284,7 +299,10 @@ export class AgentController {
             case 'tool_use':
                 this.flushDraftText(blocks, draft);
                 this.flushDraftThinking(blocks, draft);
-                blocks.push({ type: 'tool_use', toolName: block.toolName, toolInput: block.toolInput, toolId: block.toolId });
+                // 完整 tool_use 与流式 content_block_start(tool_use) 同 toolId 去重，只保留一份
+                if (!block.toolId || !blocks.some((b) => b.type === 'tool_use' && b.toolId === block.toolId)) {
+                    blocks.push({ type: 'tool_use', toolName: block.toolName, toolInput: block.toolInput, toolId: block.toolId });
+                }
                 break;
             case 'tool_result':
                 blocks.push({ type: 'tool_result', toolUseId: block.toolUseId, content: block.content, isError: block.isError });
@@ -310,8 +328,8 @@ export class AgentController {
         }
     }
 
-    /** 将解析后的消息块按类型转发为 SSE 事件 */
-    private forwardBlockToSse(block: AgentBlock, res: Response, sessionId?: string): void {
+    /** 将解析后的消息块按类型转发为 SSE 事件；tool_use 按 toolId 去重（流式 start 与完整块只推一次） */
+    private forwardBlockToSse(block: AgentBlock, res: Response, sessionId?: string, pushedToolIds?: Set<string>): void {
         switch (block.type) {
             case 'thinking_start':
                 this.writeSse(res, 'thinking_start', undefined, sessionId);
@@ -326,6 +344,9 @@ export class AgentController {
                 this.writeSse(res, 'text_delta', block.text, sessionId);
                 break;
             case 'tool_use':
+                // 同一 toolId 只推一次：流式 content_block_start 与完整 assistant 块会重复
+                if (block.toolId && pushedToolIds?.has(block.toolId)) break;
+                if (block.toolId) pushedToolIds?.add(block.toolId);
                 this.writeSse(res, 'tool_use', { toolName: block.toolName, toolInput: block.toolInput, toolId: block.toolId }, sessionId);
                 break;
             case 'tool_result':

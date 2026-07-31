@@ -31,6 +31,7 @@ import {
 export type AgentBlock =
     | { type: 'text'; text: string }
     | { type: 'text_delta'; text: string }
+    | { type: 'thinking'; thinking: string }
     | { type: 'thinking_delta'; thinking: string }
     | { type: 'thinking_start' }
     | { type: 'text_start' }
@@ -380,6 +381,9 @@ export class AgentClientService implements OnModuleInit {
         const block = item as Record<string, unknown>;
         if (block.type === 'text' && typeof block.text === 'string') {
             return { type: 'text', text: block.text };
+        }
+        if (block.type === 'thinking' && typeof block.thinking === 'string') {
+            return { type: 'thinking', thinking: block.thinking };
         }
         if (block.type === 'tool_use' && typeof block.name === 'string') {
             return {
