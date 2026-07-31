@@ -1,137 +1,137 @@
-import { useEffect, useState } from 'react'
-import { Input, Select, TreeSelect, Row, Col } from 'antd'
-import type { LanguageStatsDTO, CategoryNode } from '../../../types'
-import { fetchCategoryTree } from '../../../api'
+import { useCallback, useMemo } from 'react'
+import { Input, Select, Button, Badge, Tooltip } from 'antd'
+import { FilterOutlined, ClockCircleOutlined, SwapOutlined } from '@ant-design/icons'
+import dayjs from '../../../config/setupDayjs'
+import type { LanguageStatsDTO } from '../../../types'
+import { TIME_PRESETS, SORT_COMBO_OPTIONS, sortComboFromParams, parseSortCombo } from '../hooks/useStarListParams'
 
-const SORT_BY_OPTIONS = [
-    { label: 'Star 数量', value: 'stars_count' },
-    { label: 'Star 时间', value: 'starred_at' },
-    { label: 'Fork 数量', value: 'forks_count' },
-    { label: '仓库大小', value: 'repo_size' },
-    { label: '最近更新', value: 'repo_updated_at' },
-    { label: '创建时间', value: 'repo_created_at' },
-    { label: '推送时间', value: 'repo_pushed_at' },
-]
-
-const SORT_ORDER_OPTIONS = [
-    { label: '降序', value: 'desc' },
-    { label: '升序', value: 'asc' },
-]
-
-/** 把 CategoryNode 树转为 TreeSelect 的 treeData（含仓库数徽标） */
-interface CategoryTreeOption {
-    value: number
-    title: string
-    children?: CategoryTreeOption[]
-}
-function toTreeSelectData(nodes: CategoryNode[]): CategoryTreeOption[] {
-    return nodes.map((n) => ({
-        value: n.id,
-        title: n.repoCount > 0 ? `${n.name} (${n.repoCount})` : n.name,
-        children: n.children?.length ? toTreeSelectData(n.children) : undefined,
-    }))
-}
+const CUSTOM_VALUE = '__custom__'
 
 export interface StarFilterBarProps {
     keyword: string
     selectedLanguages: string[]
     sortBy: string
     sortOrder: string
-    categoryId: number | null
+    dateField: string | undefined
+    timePreset: string
+    /** 是否有自定义日期范围（有则时间 Select 显示"自定义"） */
+    hasCustomRange: boolean
     languageOptions: LanguageStatsDTO[]
+    advancedCount: number
+    advancedOpen: boolean
+    onToggleAdvanced: () => void
     onParamChange: (key: string, value: string | null) => void
+    setUrlParams: (updates: Record<string, string | null | undefined>) => void
+    /** 选择"自定义…"时：展开更多筛选并聚焦起始日期 */
+    onCustomTime: () => void
 }
 
-/** Star 列表顶部筛选栏：关键词 + 语言 + 分类 + 排序 */
+/** Star 列表主筛选行：搜索 + 时间预设 + 语言 + 排序（合并） + 更多筛选 */
 export default function StarFilterBar({
     keyword,
     selectedLanguages,
     sortBy,
     sortOrder,
-    categoryId,
+    dateField,
+    timePreset,
+    hasCustomRange,
     languageOptions,
+    advancedCount,
+    advancedOpen,
+    onToggleAdvanced,
     onParamChange,
+    setUrlParams,
+    onCustomTime,
 }: StarFilterBarProps) {
-    const [categoryTree, setCategoryTree] = useState<CategoryTreeOption[]>([])
-
-    // 加载分类树（仅在挂载时一次，分类变化频率低）
-    useEffect(() => {
-        let cancelled = false
-        const load = async () => {
-            try {
-                const tree = await fetchCategoryTree()
-                if (!cancelled) setCategoryTree(toTreeSelectData(tree))
-            } catch {
-                /* 分类加载失败不阻塞其他筛选 */
-            }
+    // ── 时间预设：选中即写入 dateField + 起止日期；自定义交给高级筛选 ──
+    const handleTimePreset = useCallback((value: string) => {
+        if (value === CUSTOM_VALUE) { onCustomTime(); return }
+        if (!value) {
+            setUrlParams({ timePreset: null, dateField: null, startDate: null, endDate: null })
+            return
         }
-        load()
-        return () => { cancelled = true }
+        const preset = TIME_PRESETS.find((p) => p.value === value)
+        if (!preset) return
+        const effectiveField = dateField || 'starred_at'
+        if (preset.value === 'today') {
+            const today = dayjs().format('YYYY-MM-DD')
+            setUrlParams({ timePreset: value, dateField: effectiveField, startDate: today, endDate: today })
+            return
+        }
+        if (preset.days > 0) {
+            const start = dayjs().subtract(preset.days, 'day').format('YYYY-MM-DD')
+            const end = dayjs().format('YYYY-MM-DD')
+            setUrlParams({ timePreset: value, dateField: effectiveField, startDate: start, endDate: end })
+        }
+    }, [dateField, setUrlParams, onCustomTime])
+
+    const timeOptions = useMemo(() => {
+        const presets = TIME_PRESETS.map((p) => ({ label: p.label, value: p.value || '__none__' }))
+        return [...presets, { label: '自定义…', value: CUSTOM_VALUE }]
     }, [])
 
-    const languageSelectOptions = (languageOptions || []).map((lang) => ({
+    // Select 不接受空串 value，'不限' 用 __none__ 占位后再归一化
+    const timeSelectValue = hasCustomRange && !timePreset ? CUSTOM_VALUE : (timePreset || '__none__')
+
+    const handleTimeChange = useCallback((val: string) => {
+        handleTimePreset(val === '__none__' ? '' : val)
+    }, [handleTimePreset])
+
+    const languageSelectOptions = useMemo(() => (languageOptions || []).map((lang) => ({
         label: `${lang.language} (${lang.count})`,
         value: lang.language,
-    }))
+    })), [languageOptions])
+
+    const handleSortChange = useCallback((combo: string) => {
+        const { sortBy: nextSortBy, sortOrder: nextSortOrder } = parseSortCombo(combo)
+        setUrlParams({ sortBy: nextSortBy, sortOrder: nextSortOrder })
+    }, [setUrlParams])
 
     return (
-        <Row gutter={[8, 12]} align='middle' style={{ flexWrap: 'wrap' }}>
-            <Col xs={24} sm={12} md={8} lg={5}>
-                <Input.Search
-                    placeholder='搜索仓库名、描述、作者...'
-                    defaultValue={keyword}
-                    onSearch={(val) => onParamChange('keyword', val || null)}
-                    onChange={(e) => {
-                        if (!e.target.value) onParamChange('keyword', null)
-                    }}
-                    allowClear
-                />
-            </Col>
-            <Col xs={24} sm={12} md={8} lg={5}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Input.Search
+                placeholder='搜索仓库名、描述、作者…'
+                defaultValue={keyword}
+                onSearch={(val) => onParamChange('keyword', val || null)}
+                onChange={(e) => {
+                    if (!e.target.value) onParamChange('keyword', null)
+                }}
+                allowClear
+                style={{ flex: '1 1 220px', minWidth: 220 }}
+            />
+            <Select
+                value={timeSelectValue}
+                onChange={handleTimeChange}
+                options={timeOptions}
+                prefix={<ClockCircleOutlined style={{ color: 'rgba(0,0,0,0.45)' }} />}
+                style={{ flex: '0 0 130px' }}
+            />
+            <Select
+                mode='multiple'
+                placeholder='语言'
+                value={selectedLanguages}
+                onChange={(vals) => onParamChange('languages', vals.length > 0 ? vals.join(',') : null)}
+                options={languageSelectOptions}
+                allowClear
+                showSearch
+                maxTagCount={1}
+                filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
+                style={{ flex: '0 0 160px' }}
+            />
+            <Tooltip title='排序方式'>
                 <Select
-                    mode='multiple'
-                    placeholder='筛选语言'
-                    value={selectedLanguages}
-                    onChange={(vals) => onParamChange('languages', vals.length > 0 ? vals.join(',') : null)}
-                    options={languageSelectOptions}
-                    allowClear
-                    showSearch
-                    maxTagCount={2}
-                    filterOption={(input, option) => (option?.label as string)?.toLowerCase().includes(input.toLowerCase())}
-                    style={{ width: '100%' }}
+                    value={sortComboFromParams(sortBy, sortOrder)}
+                    onChange={handleSortChange}
+                    options={SORT_COMBO_OPTIONS}
+                    prefix={<SwapOutlined style={{ color: 'rgba(0,0,0,0.45)' }} />}
+                    style={{ flex: '0 0 150px' }}
                 />
-            </Col>
-            <Col xs={24} sm={12} md={8} lg={5}>
-                <TreeSelect
-                    placeholder='筛选分类（含子分类）'
-                    value={categoryId ?? undefined}
-                    onChange={(val) => onParamChange('categoryId', val ? String(val) : null)}
-                    treeData={categoryTree}
-                    allowClear
-                    showSearch
-                    treeDefaultExpandAll={false}
-                    treeNodeFilterProp='title'
-                    style={{ width: '100%' }}
-                />
-            </Col>
-            <Col xs={12} sm={8} md={6} lg={5}>
-                <Select
-                    placeholder='排序字段'
-                    value={sortBy}
-                    onChange={(val) => onParamChange('sortBy', val || null)}
-                    options={SORT_BY_OPTIONS}
-                    style={{ width: '100%' }}
-                />
-            </Col>
-            <Col xs={12} sm={8} md={6} lg={4}>
-                <Select
-                    placeholder='排序方向'
-                    value={sortOrder}
-                    onChange={(val) => onParamChange('sortOrder', val || null)}
-                    options={SORT_ORDER_OPTIONS}
-                    style={{ width: '100%' }}
-                />
-            </Col>
-        </Row>
+            </Tooltip>
+            <Badge count={advancedCount} size='small' offset={[-4, 2]}>
+                <Button icon={<FilterOutlined />} onClick={onToggleAdvanced}>
+                    更多筛选{advancedOpen ? ' ▲' : ''}
+                </Button>
+            </Badge>
+        </div>
     )
 }
