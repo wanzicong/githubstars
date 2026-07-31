@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>原型图 · Star 列表页搜索筛选区重设计</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+      'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    background: #f5f5f5;
+    color: rgba(0,0,0,0.88);
+    font-size: 14px;
+    padding: 24px 32px 64px;
+  }
+  .page { max-width: 1440px; margin: 0 auto; }
+
+  .proto-header { margin-bottom: 16px; display: flex; align-items: baseline; gap: 12px; }
+  .proto-header h1 { font-size: 20px; font-weight: 600; }
+  .proto-header .badge {
+    font-size: 12px; color: #1677ff; background: #e6f4ff;
+    border: 1px solid #91caff; border-radius: 4px; padding: 1px 8px;
+  }
+  .toggle-bar { margin-bottom: 20px; display: flex; gap: 8px; }
+  .toggle-bar button {
+    border: 1px solid #d9d9d9; background: #fff; border-radius: 8px;
+    padding: 5px 15px; cursor: pointer; font-size: 14px; color: rgba(0,0,0,0.88);
+  }
+  .toggle-bar button.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+
+  .section-label {
+    font-size: 12px; color: rgba(0,0,0,0.45); margin: 28px 0 8px;
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+  .frame {
+    background: #fff; border-radius: 8px; padding: 20px 24px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 4px 16px rgba(0,0,0,0.06);
+    border: 1px solid #f0f0f0;
+  }
+  .hidden { display: none !important; }
+
+  /* ── 模拟控件 ── */
+  .ctrl {
+    height: 32px; border: 1px solid #d9d9d9; border-radius: 8px;
+    display: inline-flex; align-items: center; padding: 0 11px;
+    background: #fff; font-size: 14px; color: rgba(0,0,0,0.88);
+    gap: 6px; white-space: nowrap; overflow: hidden;
+  }
+  .ctrl .ph { color: rgba(0,0,0,0.25); }
+  .ctrl .caret { margin-left: auto; color: rgba(0,0,0,0.25); font-size: 10px; }
+  .ctrl .icon { color: rgba(0,0,0,0.45); }
+  .btn {
+    height: 32px; border: 1px solid #d9d9d9; border-radius: 8px;
+    display: inline-flex; align-items: center; padding: 0 15px; gap: 6px;
+    background: #fff; font-size: 14px; cursor: default; white-space: nowrap;
+  }
+  .btn.primary { background: #1a1a2e; border-color: #1a1a2e; color: #fff; }
+  .btn.link { border: none; background: none; color: #1677ff; padding: 0 4px; height: auto; font-size: 13px; }
+  .btn.disabled { color: rgba(0,0,0,0.25); background: rgba(0,0,0,0.04); border-color: #d9d9d9; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px; height: 24px;
+    padding: 0 8px; border-radius: 4px; font-size: 12px; line-height: 24px;
+  }
+  .tag .x { cursor: pointer; opacity: 0.55; font-size: 10px; }
+  .tag.blue { color: #1677ff; background: #e6f4ff; border: 1px solid #91caff; }
+  .tag.green { color: #389e0d; background: #f6ffed; border: 1px solid #b7eb8f; }
+  .tag.purple { color: #531dab; background: #f9f0ff; border: 1px solid #d3adf7; }
+  .tag.orange { color: #d46b08; background: #fff7e6; border: 1px solid #ffd591; }
+  .seg {
+    display: inline-flex; background: rgba(0,0,0,0.04); border-radius: 8px; padding: 2px; gap: 2px;
+  }
+  .seg span { padding: 3px 11px; border-radius: 6px; font-size: 13px; color: rgba(0,0,0,0.65); }
+  .seg span.on { background: #fff; color: rgba(0,0,0,0.88); box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 500; }
+
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .stat-chip {
+    display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 12px;
+    background: #fafafa; border: 1px solid #f0f0f0; border-radius: 8px; font-size: 13px;
+  }
+  .stat-chip b { font-size: 16px; }
+
+  /* ── 现状 ── */
+  .before .filter-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .before .filter-row .ctrl { flex: 0 0 19%; }
+
+  /* ── 方案 A 主行 ── */
+  .main-row { display: flex; gap: 8px; align-items: center; }
+  .main-row .search { flex: 1; min-width: 220px; }
+  .main-row .w130 { width: 130px; flex: none; }
+  .main-row .w160 { width: 160px; flex: none; }
+  .main-row .w150 { width: 150px; flex: none; }
+  .more-btn { position: relative; }
+  .more-btn .dot {
+    position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px;
+    background: #1677ff; color: #fff; border-radius: 9px; font-size: 11px;
+    display: flex; align-items: center; justify-content: center; padding: 0 4px;
+    border: 2px solid #fff;
+  }
+  .advanced {
+    margin-top: 12px; border-top: 1px dashed #e8e8e8; padding-top: 14px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .adv-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .adv-label { width: 60px; color: rgba(0,0,0,0.45); font-size: 13px; flex: none; }
+  .adv-row .w170 { width: 170px; flex: none; }
+  .adv-row .w200 { width: 200px; flex: none; }
+  .adv-foot { display: flex; justify-content: flex-end; gap: 8px; }
+
+  .summary-row { margin-top: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .summary-row .lbl { color: rgba(0,0,0,0.45); font-size: 12px; }
+
+  .toolbar {
+    margin-top: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .sel-count { color: rgba(0,0,0,0.65); font-size: 13px; }
+
+  /* 卡片墙占位 */
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+  .repo-card {
+    background: #fff; border: 1px solid #f0f0f0; border-radius: 8px; padding: 14px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .repo-card .name { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+  .repo-card .desc { color: rgba(0,0,0,0.45); font-size: 12px; height: 32px; overflow: hidden; }
+  .repo-card .meta { margin-top: 8px; display: flex; gap: 10px; color: rgba(0,0,0,0.45); font-size: 12px; }
+
+  .note {
+    margin-top: 10px; font-size: 12px; color: rgba(0,0,0,0.45); line-height: 1.8;
+  }
+  .note b { color: #d46b08; }
+  .anno { color: #ff4d4f; font-size: 12px; margin-left: 6px; }
+  h3.sec { font-size: 15px; margin: 30px 0 4px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="proto-header">
+    <h1>Star 仓库列表 · 搜索筛选区重设计原型</h1>
+    <span class="badge">原型图 v1 · 2026-07-31</span>
+  </div>
+
+  <div class="toggle-bar">
+    <button id="btnBefore" onclick="show('before')">① 现状（优化前）</button>
+    <button id="btnAfter1" onclick="show('after1')">② 新设计 · 默认态</button>
+    <button id="btnAfter2" onclick="show('after2')" class="active">③ 新设计 · 筛选激活 + 更多筛选展开</button>
+  </div>
+
+  <!-- ═══════════════ ① 现状 ═══════════════ -->
+  <div id="view-before" class="hidden">
+    <div class="section-label">现状 · 三层堆叠（筛选行 / 操作行 / 时间折叠面板），整高约 300px</div>
+    <div class="frame before">
+      <div class="filter-row">
+        <div class="ctrl"><span class="icon">🔍</span><span class="ph">搜索仓库名、描述、作者…</span></div>
+        <div class="ctrl"><span class="ph">筛选语言</span><span class="caret">▾</span></div>
+        <div class="ctrl"><span class="ph">筛选分类（含子分类）</span><span class="caret">▾</span></div>
+        <div class="ctrl">Star 数量<span class="caret">▾</span></div>
+        <div class="ctrl">降序<span class="caret">▾</span></div>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <span class="lbl" style="color:rgba(0,0,0,0.45);font-size:12px">当前筛选：</span>
+        <span class="tag blue">关键词: react <span class="x">✕</span></span>
+        <span class="tag green">语言: TypeScript <span class="x">✕</span></span>
+        <button class="btn link">⊘ 清除全部</button><span class="anno">← 与下方"清除"按钮重复</span>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <button class="btn">⊘ 清除</button><span class="anno">← 重复</span>
+        <button class="btn disabled">⧉ 批量克隆</button>
+        <button class="btn disabled">⬇ 批量下载</button>
+        <button class="btn">⬇ 导出MD</button>
+        <button class="btn primary">⬇ 导出链接</button><span class="anno">← 低频操作却是视觉重心</span>
+      </div>
+
+      <div class="row" style="margin-top:12px; border-top:1px solid #f0f0f0; padding-top:10px">
+        <span style="font-size:13px;color:#666">▾ 时间筛选</span>
+        <span class="tag purple">Star 时间 · 30天内（2026年7月1日 ~ 2026年7月31日）</span>
+        <span class="anno">← 快捷预设被折叠，需点开才能用</span>
+      </div>
+    </div>
+    <div class="note">
+      <b>问题：</b>操作按钮夹在两个筛选层中间 · 清除按钮重复 · 排序拆成两个 Select · 时间预设被折叠 ·
+      分类筛选不在摘要中 · "导出链接"实心按钮抢视觉重心 · 搜索框与"排序方向"等宽 · 筛选区占首屏 ~300px
+    </div>
+  </div>
+
+  <!-- ═══════════════ ② 新设计 · 默认态 ═══════════════ -->
+  <div id="view-after1" class="hidden">
+    <div class="section-label">新设计 · 默认态 —— 筛选区压缩为一行（56px），无筛选时无摘要行、无工具行</div>
+    <div class="frame">
+      <div class="main-row">
+        <div class="ctrl search"><span class="icon">🔍</span><span class="ph">搜索仓库名、描述、作者…</span></div>
+        <div class="ctrl w130"><span class="icon">🕐</span>不限<span class="caret">▾</span></div>
+        <div class="ctrl w160"><span class="ph">语言</span><span class="caret">▾</span></div>
+        <div class="ctrl w150"><span class="icon">⇅</span>Star 最多<span class="caret">▾</span></div>
+        <button class="btn more-btn">⚙ 更多筛选</button>
+      </div>
+    </div>
+    <div class="cards">
+      <div class="repo-card"><div class="name">facebook / react</div><div class="desc">用于构建用户界面的 JavaScript 库…</div><div class="meta"><span>★ 228k</span><span>JavaScript</span></div></div>
+      <div class="repo-card"><div class="name">vitejs / vite</div><div class="desc">下一代前端构建工具，极速冷启动…</div><div class="meta"><span>★ 71k</span><span>TypeScript</span></div></div>
+      <div class="repo-card"><div class="name">antd / ant-design</div><div class="desc">企业级 UI 设计语言和 React 组件库…</div><div class="meta"><span>★ 93k</span><span>TypeScript</span></div></div>
+      <div class="repo-card"><div class="name">vuejs / core</div><div class="desc">渐进式 JavaScript 框架核心仓库…</div><div class="meta"><span>★ 48k</span><span>TypeScript</span></div></div>
+    </div>
+    <div class="note">无筛选时：没有摘要行、没有工具行、没有时间折叠面板 —— 瀑布流首屏比现状多露出约 1.5 行卡片。</div>
+  </div>
+
+  <!-- ═══════════════ ③ 新设计 · 激活态 ═══════════════ -->
+  <div id="view-after2">
+    <div class="section-label">新设计 · 筛选激活态 —— 摘要行外显全部条件（含分类），更多筛选展开</div>
+    <div class="frame">
+      <div class="main-row">
+        <div class="ctrl search"><span class="icon">🔍</span>react</div>
+        <div class="ctrl w130"><span class="icon">🕐</span>30天内<span class="caret">▾</span></div>
+        <div class="ctrl w160"><span class="tag green" style="height:22px;line-height:20px">TypeScript <span class="x">✕</span></span><span style="color:rgba(0,0,0,0.45);font-size:12px">+1</span><span class="caret">▾</span></div>
+        <div class="ctrl w150"><span class="icon">⇅</span>最近更新<span class="caret">▾</span></div>
+        <button class="btn more-btn">⚙ 更多筛选 ▲<span class="dot">1</span></button>
+      </div>
+
+      <div class="summary-row">
+        <span class="lbl">当前筛选：</span>
+        <span class="tag blue">关键词: react <span class="x">✕</span></span>
+        <span class="tag green">语言: TypeScript, Go <span class="x">✕</span></span>
+        <span class="tag purple">时间: Star 时间 · 30天内 <span class="x">✕</span></span>
+        <span class="tag orange">分类: AI 工具 (12) <span class="x">✕</span></span>
+        <button class="btn link">⊘ 清除全部</button>
+      </div>
+
+      <div class="advanced">
+        <div class="adv-row">
+          <span class="adv-label">时间字段</span>
+          <div class="ctrl w170">Star 时间<span class="caret">▾</span></div>
+          <span class="adv-label" style="width:auto">自定义</span>
+          <div class="ctrl w170"><span class="ph">起始日期</span><span class="caret">📅</span></div>
+          <span style="color:rgba(0,0,0,0.45)">~</span>
+          <div class="ctrl w170"><span class="ph">结束日期</span><span class="caret">📅</span></div>
+        </div>
+        <div class="adv-row">
+          <span class="adv-label">仓库分类</span>
+          <div class="ctrl w200"><span class="tag orange" style="height:22px;line-height:20px">AI 工具 (12) <span class="x">✕</span></span><span class="caret">▾</span></div>
+        </div>
+        <div class="adv-foot">
+          <button class="btn">重 置</button>
+          <button class="btn">收 起 ▲</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <span class="sel-count">已选 <b>3</b> 项</span>
+      <button class="btn primary">⧉ 批量克隆 (3)</button>
+      <button class="btn">⬇ 批量下载 (3)</button>
+      <span class="spacer"></span>
+      <button class="btn">⬇ 导出MD</button>
+      <button class="btn">⬇ 导出链接</button>
+    </div>
+    <div class="note">
+      <b>改进点：</b>排序合并为单选（Star 最多/最近 Star/最近更新…）· 时间预设主行直出 · 分类进入摘要 Tag ·
+      批量操作独立成行且仅在选中时出现 · 导出降级右对齐 · 清除按钮只保留一处 · 更多筛选带激活数徽标
+    </div>
+  </div>
+
+  <h3 class="sec">方案对比（决策依据）</h3>
+  <div class="frame" style="font-size:13px; line-height:2">
+    ✅ <b>方案 A · 主行 + 更多筛选（本原型，推荐）</b>：高频一步可达、默认高度最低、改动集中在 StarList 目录内、URL 参数协议不变。<br>
+    ❌ 方案 B · 左侧筛选栏：筛选空间大但布局伤筋动骨，挤压瀑布流宽度，与现有侧边菜单冲突。<br>
+    ❌ 方案 C · 查询构建器（chip 组合）：表达能力最强但学习成本高，字段仅 5 个属过度设计。
+  </div>
+
+</div>
+
+<script>
+  function show(name) {
+    for (const v of ['before', 'after1', 'after2']) {
+      document.getElementById('view-' + v).classList.toggle('hidden', v !== name);
+    }
+    for (const [id, v] of [['btnBefore','before'],['btnAfter1','after1'],['btnAfter2','after2']]) {
+      document.getElementById(id).classList.toggle('active', v === name);
+    }
+  }
+</script>
+</body>
+</html>

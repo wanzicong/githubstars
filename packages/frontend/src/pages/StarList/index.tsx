@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Card, Typography, Space, App, Segmented } from 'antd'
 import { AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons'
@@ -12,16 +12,17 @@ import CloneWizardModal from '../../components/clone/CloneWizardModal'
 import CloneProgressModal from '../../components/clone/CloneProgressModal'
 import DownloadWizardModal from '../../components/download/DownloadWizardModal'
 import DownloadProgressModal from '../../components/download/DownloadProgressModal'
-import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO } from '../../types'
+import type { GithubRepo, OverviewStatsDTO, LanguageStatsDTO, CategoryNode } from '../../types'
 import type { CloneTaskProgress } from '../../api/clone'
 import { getCloneTaskProgress, retryCloneFailed, retryCloneItem, deleteCloneTask } from '../../api/clone'
 import type { DownloadTaskProgress } from '../../api/download'
 import { getDownloadTaskProgress, retryDownloadFailed, retryDownloadItem, deleteDownloadTask } from '../../api/download'
 import { usePolling } from '../../hooks/usePolling'
-import { useStarListParams } from './hooks/useStarListParams'
+import { useStarListParams, TIME_PRESETS, DATE_FIELD_OPTIONS } from './hooks/useStarListParams'
 import { useStarListInfinite } from './hooks/useStarListInfinite'
 import StarFilterBar from './components/StarFilterBar'
-import StarTimeFilter from './components/StarTimeFilter'
+import StarAdvancedFilter, { type StarAdvancedFilterHandle } from './components/StarAdvancedFilter'
+import { findCategoryLabel } from './components/categoryTreeUtils'
 import StarActionBar from './components/StarActionBar'
 
 const { Title } = Typography
@@ -33,12 +34,8 @@ export default function StarList() {
     const params = useStarListParams()
     const { keyword, languageStr, selectedLanguages, sortBy, sortOrder,
         dateField, pageSize, startDateStr, endDateStr,
-        startDate, endDate, viewMode, timePreset,
+        startDate, endDate, viewMode, timePreset, categoryId,
         setUrlParam, setUrlParams, clearFilters } = params
-
-    // 分类筛选：URL 参数 categoryId（字符串） → number | null
-    const categoryIdStr = new URLSearchParams(location.search).get('categoryId')
-    const categoryId = categoryIdStr ? Number.parseInt(categoryIdStr, 10) : null
 
     const buildFilters = useCallback(() => ({
         keyword: keyword || undefined,
@@ -59,6 +56,56 @@ export default function StarList() {
 
     const list = useStarListInfinite(filterKey, buildFilters, pageSize)
     const { repos, total, loading, loadingMore, error, hasMore, loadMore, reload } = list
+
+    // ── 更多筛选展开区 ──
+    // 高级条件（自定义日期、分类）已激活时自动展开，其余情况默认收起
+    const advancedActive = !!((startDateStr || endDateStr) && !timePreset) || categoryId !== null
+    const [advancedOpen, setAdvancedOpen] = useState(advancedActive)
+    const advancedRef = useRef<StarAdvancedFilterHandle>(null)
+    const [categoryTreeNodes, setCategoryTreeNodes] = useState<CategoryNode[]>([])
+
+    const handleCategoryTreeLoaded = useCallback((tree: CategoryNode[]) => {
+        setCategoryTreeNodes(tree)
+    }, [])
+
+    const categoryLabel = useMemo(
+        () => (categoryId ? findCategoryLabel(categoryTreeNodes, categoryId) : null),
+        [categoryTreeNodes, categoryId],
+    )
+
+    const advancedCount = (startDateStr || endDateStr ? 1 : 0) + (categoryId ? 1 : 0)
+
+    const toggleAdvanced = useCallback(() => setAdvancedOpen((v) => !v), [])
+    const collapseAdvanced = useCallback(() => setAdvancedOpen(false), [])
+    /** 主行选择"自定义…"：展开高级筛选并聚焦起始日期 */
+    const handleCustomTime = useCallback(() => {
+        setAdvancedOpen(true)
+        setTimeout(() => advancedRef.current?.focusStartDate(), 0)
+    }, [])
+
+    // 时间筛选摘要（预设 + 自定义范围）
+    const timeFilterSummary = useMemo(() => {
+        if (!dateField && !timePreset) return ''
+        const fieldLabel = DATE_FIELD_OPTIONS.find((item) => item.value === dateField)?.label
+        const presetLabel = TIME_PRESETS.find((item) => item.value === timePreset)?.label
+        let rangeText: string
+        if (startDate && endDate) {
+            rangeText = `${startDate.format('YYYY年M月D日')} ~ ${endDate.format('YYYY年M月D日')}`
+        } else if (startDate) {
+            rangeText = `${startDate.format('YYYY年M月D日')} 起`
+        } else if (endDate) {
+            rangeText = `至 ${endDate.format('YYYY年M月D日')}`
+        } else {
+            rangeText = ''
+        }
+        if (presetLabel && presetLabel !== '不限') {
+            const rangeSuffix = rangeText ? `（${rangeText}）` : ''
+            return `${fieldLabel || 'Star 时间'} · ${presetLabel}${rangeSuffix}`
+        }
+        if (fieldLabel && rangeText) return `${fieldLabel} · ${rangeText}`
+        if (fieldLabel) return fieldLabel
+        return ''
+    }, [dateField, timePreset, startDate, endDate])
 
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languageOptions, setLanguageOptions] = useState<LanguageStatsDTO[]>([])
@@ -425,20 +472,43 @@ export default function StarList() {
             <StarStatsBar overview={overview} loading={initialLoading} />
 
             <Card style={{ marginBottom: 20 }}>
-                <Space orientation='vertical' size='middle' style={{ width: '100%' }}>
+                <Space orientation='vertical' size={0} style={{ width: '100%' }}>
                     <StarFilterBar
                         keyword={keyword}
                         selectedLanguages={selectedLanguages}
                         sortBy={sortBy}
                         sortOrder={sortOrder}
-                        categoryId={categoryId}
+                        dateField={dateField}
+                        timePreset={timePreset}
+                        hasCustomRange={!!(startDateStr || endDateStr)}
                         languageOptions={languageOptions}
+                        advancedCount={advancedCount}
+                        advancedOpen={advancedOpen}
+                        onToggleAdvanced={toggleAdvanced}
                         onParamChange={setUrlParam}
+                        setUrlParams={setUrlParams}
+                        onCustomTime={handleCustomTime}
                     />
+                    {advancedOpen && (
+                        <StarAdvancedFilter
+                            ref={advancedRef}
+                            dateField={dateField}
+                            startDate={startDate}
+                            endDate={endDate}
+                            startDateStr={startDateStr}
+                            endDateStr={endDateStr}
+                            categoryId={categoryId}
+                            setUrlParams={setUrlParams}
+                            onClearFilters={clearFilters}
+                            onCollapse={collapseAdvanced}
+                            onCategoryTreeLoaded={handleCategoryTreeLoaded}
+                        />
+                    )}
                     <StarActionBar
                         keyword={keyword}
                         languageStr={languageStr}
-                        timeFilterSummary={''}
+                        timeFilterSummary={timeFilterSummary}
+                        categoryLabel={categoryLabel}
                         hasActiveFilters={hasActiveFilters}
                         selectedCount={selectedRepoIds.length}
                         loadingRepos={loadingRepos}
@@ -450,15 +520,6 @@ export default function StarList() {
                         onOpenDownloadWizard={handleOpenDownloadWizard}
                         onExportMd={handleExportMd}
                         onExportUrls={handleExport}
-                    />
-                    <StarTimeFilter
-                        dateField={dateField}
-                        startDate={startDate}
-                        endDate={endDate}
-                        startDateStr={startDateStr}
-                        endDateStr={endDateStr}
-                        timePreset={timePreset}
-                        setUrlParams={setUrlParams}
                     />
                 </Space>
             </Card>

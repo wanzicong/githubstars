@@ -122,7 +122,7 @@ describe('StarList', () => {
       )
 
       renderStarList()
-      const input = screen.getByPlaceholderText('搜索仓库名、描述、作者...')
+      const input = screen.getByPlaceholderText('搜索仓库名、描述、作者…')
       await userEvent.type(input, 'mcp')
       await userEvent.keyboard('{Enter}')
 
