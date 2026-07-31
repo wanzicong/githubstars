@@ -5,6 +5,7 @@ const PERMISSION_ERROR_PATTERN = /(?:status code |http )?403|permission_error|fo
 const CONNECTION_ERROR_PATTERN = /econnrefused|connection refused|fetch failed|network error|socket hang up|代理连接/iu
 const SHELL_ERROR_PATTERN = /no suitable shell found|posix shell environment|未找到可用 shell/iu
 const PROCESS_EXIT_PATTERN = /(?:claude code )?process exited with code \d+/iu
+const PIPE_ERROR_PATTERN = /epipe|write epipe|broken pipe/iu
 
 /**
  * 将 Agent/Claude CLI 的技术错误转换为用户可理解、可执行的提示。
@@ -37,6 +38,9 @@ export function getAgentFriendlyErrorMessage(error: unknown): string {
     }
     if (PROCESS_EXIT_PATTERN.test(raw)) {
         return '模型服务暂时不可用。常见原因是当前渠道额度不足、认证失效或代理连接异常；请在 CC Switch 中检查当前渠道和剩余额度后重试。'
+    }
+    if (PIPE_ERROR_PATTERN.test(raw)) {
+        return '长任务在流式传输中被中断。系统已自动重试；若反复出现，建议把大任务拆小，或分批分步提问以获得更稳定的响应。'
     }
 
     return raw || '智能体处理失败，请稍后重试。'

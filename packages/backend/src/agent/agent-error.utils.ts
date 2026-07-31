@@ -3,6 +3,17 @@ export function isMissingConversationError(stderr: string): boolean {
     return stderr.toLowerCase().includes('no conversation found with session id');
 }
 
+/**
+ * 判断错误是否为「子进程管道破裂」类瞬态错误（EPIPE / 子进程异常退出）。
+ * 这类错误多发生在长任务高频输出时 Claude Code 子进程提前退出、SDK 再写 stdin 触发，
+ * 属于可重试的瞬态故障，重试一次通常可恢复。
+ */
+export function isTransientPipeError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    const lower = message.toLowerCase();
+    return lower.includes('epipe') || lower.includes('exited with code 1') || lower.includes('process aborted');
+}
+
 interface SessionMessage {
     type: string;
     subtype?: string;

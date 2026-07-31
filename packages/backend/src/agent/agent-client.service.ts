@@ -16,7 +16,7 @@ import { ExportService } from '../export/export.service';
 import { LoggingService } from '../logging/logging.service';
 import { GithubSearchService } from '../github/github-search.service';
 import { RepositoryLocalizationService } from '../localization/repository-localization.service';
-import { isMissingConversationError } from './agent-error.utils';
+import { isMissingConversationError, isTransientPipeError } from './agent-error.utils';
 import { AGENT_PLUGIN_REQUIRED_PATHS, resolveAgentPluginPath } from './agent-plugin.utils';
 import {
     AGENT_ALLOWED_TOOLS,
@@ -100,8 +100,79 @@ export class AgentClientService implements OnModuleInit {
         await this.credentials.refreshCredentials();
 
         const { query } = await this.loadSdk();
+        const mergedOptions = this.buildQueryOptions(options);
+
+        try {
+            yield* this.iterateQuery(query, options.prompt, mergedOptions);
+        } catch (error) {
+            const stderr = this.sanitizeStderr(this.stderrTail);
+            // 会话文件丢失：去掉 resume 用新会话重试
+            if (options.sessionId && isMissingConversationError(stderr)) {
+                this.logger.warn(`Claude SDK 会话 ${options.sessionId} 已丢失，自动创建新会话继续处理`);
+                const retryOptions = { ...mergedOptions };
+                delete retryOptions.resume;
+                yield* this.iterateQuery(query, options.prompt, retryOptions);
+                return;
+            }
+            // EPIPE/子进程异常退出等瞬态管道错误：按配置次数自动重试
+            if (isTransientPipeError(error)) {
+                yield* this.retryTransientPipeError(query, options.prompt, mergedOptions, error, stderr);
+                return;
+            }
+            throw this.createExecutionError(error, stderr);
+        }
+    }
+
+    /** 瞬态管道错误的按次重试（同会话/同 prompt）；全部失败抛带诊断信息的错误 */
+    private async *retryTransientPipeError(
+        query: AgentSdk['query'],
+        prompt: string,
+        mergedOptions: Record<string, unknown>,
+        originalError: unknown,
+        stderr: string,
+    ): AsyncGenerator<SDKMessage> {
+        const maxRetry = await this.getPipeRetryCount();
+        for (let attempt = 1; attempt <= maxRetry; attempt++) {
+            this.logger.warn(`Claude SDK 子进程管道瞬态错误，第 ${attempt}/${maxRetry} 次重试: ${stderr.slice(-150)}`);
+            this.stderrTail = '';
+            try {
+                yield* this.iterateQuery(query, prompt, { ...mergedOptions });
+                return;
+            } catch (retryError) {
+                if (attempt === maxRetry || !isTransientPipeError(retryError)) {
+                    throw this.createExecutionError(retryError, this.sanitizeStderr(this.stderrTail));
+                }
+            }
+        }
+        throw this.createExecutionError(originalError, stderr);
+    }
+
+    /** 读取 EPIPE 瞬态错误的重试次数（system_config 的 agent.pipe_retry_count，默认 1，0 表示禁用重试） */
+    private async getPipeRetryCount(): Promise<number> {
+        const raw = await this.config.getValueDefault('agent.pipe_retry_count', '1');
+        const parsed = Number.parseInt(raw, 10);
+        return Number.isNaN(parsed) || parsed < 0 ? 1 : parsed;
+    }
+
+    /** stderr 缓冲（按次重置），供瞬态重试时保留诊断信息 */
+    private stderrTail = '';
+
+    /** 迭代一次 SDK query，逐条产出消息并校验插件初始化 */
+    private async *iterateQuery(
+        query: AgentSdk['query'],
+        prompt: string,
+        mergedOptions: Record<string, unknown>,
+    ): AsyncGenerator<SDKMessage> {
+        for await (const message of query({ prompt, options: mergedOptions })) {
+            this.assertAgentPluginInitialized(message);
+            yield message;
+        }
+    }
+
+    /** 构建 SDK query 的完整选项（含凭据、插件、MCP 服务器、stderr 采集） */
+    private buildQueryOptions(options: AgentQueryOptions): Record<string, unknown> {
         const pluginPath = this.pluginPath ?? this.requireAgentPluginPath();
-        let stderrTail = '';
+        this.stderrTail = '';
         const mergedOptions: Record<string, unknown> = {
             maxTurns: options.maxTurns ?? AGENT_DEFAULT_MAX_TURNS,
             model: options.model ?? AGENT_DEFAULT_MODEL,
@@ -110,7 +181,7 @@ export class AgentClientService implements OnModuleInit {
             includePartialMessages: true,
             maxThinkingTokens: AGENT_MAX_THINKING_TOKENS,
             stderr: (data: string) => {
-                stderrTail = `${stderrTail}${data}`.slice(-8_000);
+                this.stderrTail = `${this.stderrTail}${data}`.slice(-8_000);
             },
             // 强制禁用 ToolSearch 延迟加载：其 tool_reference 内容块会导致第三方网关（DeepSeek）
             // 400 "tokenization failed"，且污染会话记录使后续 resume 全部失败。
@@ -142,30 +213,7 @@ export class AgentClientService implements OnModuleInit {
         };
         mergedOptions.plugins = [{ type: 'local', path: pluginPath }];
         if (options.sessionId) mergedOptions.resume = options.sessionId;
-
-        try {
-            for await (const message of query({ prompt: options.prompt, options: mergedOptions })) {
-                this.assertAgentPluginInitialized(message);
-                yield message;
-            }
-        } catch (error) {
-            const stderr = this.sanitizeStderr(stderrTail);
-            if (options.sessionId && isMissingConversationError(stderr)) {
-                this.logger.warn(`Claude SDK 会话 ${options.sessionId} 已丢失，自动创建新会话继续处理`);
-                delete mergedOptions.resume;
-                stderrTail = '';
-                try {
-                    for await (const message of query({ prompt: options.prompt, options: mergedOptions })) {
-                        this.assertAgentPluginInitialized(message);
-                        yield message;
-                    }
-                    return;
-                } catch (fallbackError) {
-                    throw this.createExecutionError(fallbackError, stderrTail);
-                }
-            }
-            throw this.createExecutionError(error, stderr);
-        }
+        return mergedOptions;
     }
 
     /** 在保留原始异常 cause 的同时，将已脱敏的 CLI stderr 附加到可观测错误。 */
@@ -195,7 +243,7 @@ export class AgentClientService implements OnModuleInit {
         throw new Error(`未找到完整的 GitHub Stars Agent 插件；必须包含: ${AGENT_PLUGIN_REQUIRED_PATHS.join(', ')}`);
     }
 
-    /** SDK 初始化时验证插件、MCP 连接、73 个工具和 5 个 Skills 均已真正加载。 */
+    /** SDK 初始化时验证插件、MCP 连接、71 个工具和 6 个 Skills 均已真正加载。 */
     private assertAgentPluginInitialized(message: SDKMessage): void {
         if (message.type !== 'system' || message.subtype !== 'init') return;
 
@@ -206,9 +254,9 @@ export class AgentClientService implements OnModuleInit {
         const pluginTools = message.tools.filter((name) => name.startsWith('mcp__plugin_githubstars-agent_githubstars__'));
         const pluginSkills = message.skills.filter((name) => name.startsWith('githubstars-agent:'));
 
-        if (!pluginLoaded || !mcpConnected || pluginTools.length !== 73 || pluginSkills.length !== 5) {
+        if (!pluginLoaded || !mcpConnected || pluginTools.length !== 71 || pluginSkills.length !== 6) {
             throw new Error(
-                `GitHub Stars Agent 插件初始化不完整: plugin=${pluginLoaded}, mcp=${mcpConnected}, tools=${pluginTools.length}/73, skills=${pluginSkills.length}/5`,
+                `GitHub Stars Agent 插件初始化不完整: plugin=${pluginLoaded}, mcp=${mcpConnected}, tools=${pluginTools.length}/71, skills=${pluginSkills.length}/6`,
             );
         }
 
