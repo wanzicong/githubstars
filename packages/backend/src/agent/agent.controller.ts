@@ -77,22 +77,19 @@ export class AgentController {
             if (!closed && !res.destroyed) res.write(': heartbeat\n\n');
         }, 30_000);
 
+        // blocks/draft 提升到 chat 作用域：无论流正常结束、被客户端中断、还是中途异常，
+        // 都能把已收集的 assistant 内容持久化，避免最后一条回复整段丢失。
+        const assistantBlocks: MessageBlock[] = [];
+        const draft: BlockDraft = { text: '', thinking: '' };
         try {
-            const assistantBlocks = await this.streamAgentToClient(body, ctx, res, () => closed);
+            await this.streamAgentToClient(body, ctx, res, () => closed, assistantBlocks, draft);
             if (!closed && !res.destroyed) {
                 this.writeSse(res, 'result', { sessionId: ctx.ourSessionId }, ctx.ourSessionId);
                 res.end();
             }
-            // H2: 无论流是否被客户端中断（closed=true），已收集的内容都要持久化
-            await this.persistMessages(ctx.ourSessionId, body.message, assistantBlocks);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.error(`Agent chat 失败: ${msg}`);
-            // H2: 异常时也尝试持久化已收集的内容
-            if (ctx.ourSessionId) {
-                this.logger.log(`异常路径仍持久化消息: sessionId=${ctx.ourSessionId}`);
-                await this.persistMessages(ctx.ourSessionId, body.message, []);
-            }
             if (!closed && !res.destroyed) {
                 this.writeSse(res, 'error', msg);
                 res.end();
@@ -101,6 +98,9 @@ export class AgentController {
             clearInterval(heartbeat);
             if (ctx.ourSessionId) this.activeSessions.delete(ctx.ourSessionId);
         }
+        // H2: 持久化放在 try/catch 之外 —— 正常结束、客户端中断、中途异常三条路径
+        // 都把已收集的 blocks 落库（含中断时的部分回复），保证用户消息不丢、assistant 尽量保留。
+        await this.persistMessages(ctx.ourSessionId, body.message, assistantBlocks);
     }
 
     /** POST /api/agent/query — 一次性查询（JSON 响应） */
@@ -213,7 +213,10 @@ export class AgentController {
     }
 
     /**
-     * 流式转发 Agent 消息到 SSE 客户端，返回收集的结构化 blocks（用于持久化）。
+     * 流式转发 Agent 消息到 SSE 客户端，把结构化 blocks 收集进传入的 blocks 数组（供持久化）。
+     *
+     * blocks/draft 由调用方持有：客户端中断或 SDK 流中途抛错时，本方法可能不完整返回，
+     * 调用方仍能在 finally/异常路径把已收集的部分回复持久化，避免最后一条 assistant 消息丢失。
      *
      * 事件协议（前端按 type 消费）：
      * - thinking_start / thinking_delta：思考块开始 / 思考内容增量
@@ -227,24 +230,31 @@ export class AgentController {
         ctx: ChatSessionContext,
         res: Response,
         isClosed: () => boolean,
-    ): Promise<MessageBlock[]> {
-        const blocks: MessageBlock[] = [];
-        const draft: BlockDraft = { text: '', thinking: '' };
-        for await (const { block, raw } of this.agentClient.streamBlocks({
-            prompt: body.message,
-            sessionId: ctx.sdkSessionId,
-            maxTurns: body.maxTurns,
-            model: body.model,
-        })) {
-            if (isClosed()) break; // 客户端断开：for-await break 会逐层调用 async generator 的 return()，确定性取消 SDK 子进程
-            await this.captureSdkSessionId(raw, ctx);
-            this.forwardBlockToSse(block, res, ctx.ourSessionId);
-            this.collectBlock(blocks, draft, block);
+        blocks: MessageBlock[],
+        draft: BlockDraft,
+    ): Promise<void> {
+        try {
+            for await (const { block, raw } of this.agentClient.streamBlocks({
+                prompt: body.message,
+                sessionId: ctx.sdkSessionId,
+                maxTurns: body.maxTurns,
+                model: body.model,
+            })) {
+                if (isClosed()) break; // 客户端断开：for-await break 会逐层调用 async generator 的 return()，确定性取消 SDK 子进程
+                await this.captureSdkSessionId(raw, ctx);
+                this.forwardBlockToSse(block, res, ctx.ourSessionId);
+                this.collectBlock(blocks, draft, block);
+            }
+        } finally {
+            // 收尾：flush 剩余草稿（正常结束/中断/异常都要把残缺的 text/thinking 落为完整块）
+            this.finalizeDraft(blocks, draft);
         }
-        // 收尾：flush 剩余草稿（任一时刻最多一项非空，顺序不影响结果）
+    }
+
+    /** 把 draft 中残缺的 text/thinking 增量落为完整块（中断时也能保留已收到的部分内容） */
+    private finalizeDraft(blocks: MessageBlock[], draft: BlockDraft): void {
         this.flushDraftThinking(blocks, draft);
         this.flushDraftText(blocks, draft);
-        return blocks;
     }
 
     /** 将流式消息块收集为结构化 blocks，增量内容先暂存草稿再合并为完整块 */
