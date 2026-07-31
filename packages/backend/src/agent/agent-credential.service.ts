@@ -47,6 +47,14 @@ export class AgentCredentialService implements OnApplicationBootstrap {
 
         if (this.envAuthToken) process.env.ANTHROPIC_AUTH_TOKEN = this.envAuthToken;
 
+        // 本地代理模式：ANTHROPIC_BASE_URL 指向本机代理（如 CC Switch），
+        // 无需真实 API Key/Token，设占位符让 SDK 子进程能正常启动。
+        // 代理本身会处理认证，不接受任意 token 也无妨。
+        if (this.isLocalProxyUrl(process.env.ANTHROPIC_BASE_URL) && !process.env.ANTHROPIC_AUTH_TOKEN) {
+            process.env.ANTHROPIC_AUTH_TOKEN = 'PROXY_MANAGED';
+            this.logger.log('检测到本地代理，使用占位 ANTHROPIC_AUTH_TOKEN');
+        }
+
         if (this.envBaseUrl) {
             process.env.ANTHROPIC_BASE_URL = this.envBaseUrl;
         } else {
@@ -67,5 +75,11 @@ export class AgentCredentialService implements OnApplicationBootstrap {
     /** 获取当前生效的 GitHub Token（供 GitHub MCP 使用） */
     getGitHubToken(): string {
         return this.githubToken;
+    }
+
+    /** 判断 URL 是否为本地代理地址（127.0.0.1 / localhost / host.docker.internal） */
+    private isLocalProxyUrl(url: string | undefined): boolean {
+        if (!url) return false;
+        return url.includes('127.0.0.1') || url.includes('localhost') || url.includes('host.docker.internal');
     }
 }
