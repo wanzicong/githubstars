@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, memo } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo, memo, useSyncExternalStore } from 'react'
 import axios from 'axios'
 import { Input, Button, Typography, Tag, theme, App, Segmented, Badge, Tooltip, Spin, Avatar, Flex, Card, Empty, Skeleton, Grid, Drawer } from 'antd'
 import {
@@ -29,6 +29,7 @@ import ThinkingBlock from './ThinkingBlock'
 import { listAgentSessions, getAgentSession, deleteAgentSession, getAgentBaseURL } from '@/api/agent'
 import { getAgentFriendlyErrorMessage } from '@/utils/agent-error'
 import { useAgentChatStore } from '@/stores'
+import { agentStreamManager, type MessageBlock, type SessionStreamState, type ToolResultMap } from '@/stores/modules/agentStreamManager'
 
 const { Text, Paragraph } = Typography
 
@@ -37,19 +38,6 @@ const { Text, Paragraph } = Typography
 interface ToolCallInfo {
   name: string
   input: string
-}
-
-/** 结构化消息块（对应 Claude Agent SDK 的 content blocks） */
-interface MessageBlock {
-  type: 'text' | 'thinking' | 'tool_use' | 'tool_result'
-  text?: string
-  thinking?: string
-  toolName?: string
-  toolInput?: unknown
-  toolId?: string
-  toolUseId?: string
-  content?: string
-  isError?: boolean
 }
 
 interface ChatMessage {
@@ -77,9 +65,6 @@ interface SessionSummary {
 }
 
 type SessionMode = 'none' | 'auto'
-
-/** 工具调用结果映射（toolUseId → result） */
-type ToolResultMap = Map<string, { content: string; isError?: boolean }>
 
 // ── Constants ──
 
@@ -148,6 +133,10 @@ const SESSION_ID_TAG_STYLE: React.CSSProperties = { fontSize: 10, lineHeight: '1
 const TOOL_TAG_STYLE: React.CSSProperties = { fontSize: 11, fontFamily: 'monospace', margin: 0 }
 
 const COPY_BTN_ROW_STYLE: React.CSSProperties = { paddingLeft: 4, marginTop: 2 }
+
+/** 流式派生值的空引用兜底（稳定引用，避免下游 useEffect 误触发） */
+const EMPTY_BLOCKS: MessageBlock[] = []
+const EMPTY_TOOL_RESULTS: ToolResultMap = new Map()
 
 // ── Helpers ──
 
@@ -387,7 +376,7 @@ async function* readSSEStream(reader: ReadableStreamDefaultReader<Uint8Array>): 
   }
 }
 
-/** 流式累积状态（跨事件共享） */
+/** 流式累积状态（单条会话的完整流式结果，存入 streamManager） */
 interface StreamAccum {
   fullText: string
   fullThinking: string
@@ -399,25 +388,16 @@ interface StreamAccum {
   capturedSessionId: string | null
 }
 
-/** 处理单条 SSE 事件并更新累积状态（模块级函数，避免 fetchAndProcessStream 认知复杂度超标） */
-function processStreamEvent(
-  event: SSEEvent,
-  accum: StreamAccum,
-  onStreamText: (text: string) => void,
-  onStreamThinking: (thinking: string) => void,
-  updateToolCalls: (list: ToolCallInfo[]) => void,
-  onToolResult: (toolUseId: string, content: string, isError?: boolean) => void,
-): void {
+/** 处理单条 SSE 事件并累积到 accum（不再经过 React state，全部写入流式累积对象） */
+function processStreamEvent(event: SSEEvent, accum: StreamAccum): void {
   if (event.sessionId) accum.capturedSessionId = event.sessionId
 
   if (event.type === 'text_delta') {
     accum.fullText += event.data as string
-    onStreamText(accum.fullText)
     return
   }
   if (event.type === 'thinking_delta') {
     accum.fullThinking += event.data as string
-    onStreamThinking(accum.fullThinking)
     return
   }
   if (event.type === 'tool_use') {
@@ -425,24 +405,16 @@ function processStreamEvent(
     const name = normalizeToolName(td.toolName)
     accum.toolCallsList.push({ name, input: JSON.stringify(td.toolInput, null, 2) })
     accum.toolBlocks.push({ type: 'tool_use', toolName: name, toolInput: td.toolInput, toolId: td.toolId })
-    updateToolCalls([...accum.toolCallsList])
     return
   }
   if (event.type === 'tool_result') {
     const td = event.data as { toolUseId: string; content: string; isError?: boolean }
     accum.toolResults.set(td.toolUseId, { content: td.content, isError: td.isError })
-    // 通知流式更新（用于实时更新工具卡片的结果）
-    onToolResult(td.toolUseId, td.content, td.isError)
     return
   }
   if (event.type === 'error') {
     throw new Error(typeof event.data === 'string' ? event.data : 'Agent 处理失败')
   }
-}
-
-/** 返回更新了指定消息 toolCalls 的新消息列表（供 setMessages 函数式更新使用） */
-function withToolCalls(messages: ChatMessage[], messageId: string, list: ToolCallInfo[]): ChatMessage[] {
-  return messages.map((m) => (m.id === messageId ? { ...m, toolCalls: list } : m))
 }
 
 /** 中止生成后的最终内容：保留已累积内容，仅在末尾追加停止标记；完全没收到内容时显示占位符 */
@@ -451,38 +423,6 @@ function buildAbortedContent(fullText: string, fullThinking: string, toolBlocks:
   if (fullText) return `${fullText}\n\n${stopMarker}`
   if (fullThinking || toolBlocks.length > 0) return stopMarker
   return '*已停止生成（未收到任何内容）*'
-}
-
-// ── Hooks ──
-
-/**
- * 流式文本节流 state —— SSE delta 事件频率极高（每 token 一次），
- * 用 requestAnimationFrame 合并为一帧一次 setState，避免全页面高频重渲染 + Markdown 重复解析。
- * 返回 [展示值, 设置函数, 获取最新值函数]；getLatest 读取 ref，不受帧节流滞后影响。
- */
-function useThrottledStreamState(): [string, (val: string) => void, () => string] {
-  const [display, setDisplay] = useState('')
-  const pendingRef = useRef('')
-  const rafRef = useRef<number | null>(null)
-
-  const set = useCallback((val: string) => {
-    pendingRef.current = val
-    if (rafRef.current !== null) return
-    rafRef.current = requestAnimationFrame(() => {
-      setDisplay(pendingRef.current)
-      rafRef.current = null
-    })
-  }, [])
-
-  const getLatest = useCallback(() => pendingRef.current, [])
-
-  useEffect(() => {
-    return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-    }
-  }, [])
-
-  return [display, set, getLatest]
 }
 
 // ── Sub-components ──
@@ -1082,12 +1022,19 @@ export default function AgentChat() {
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
-  // 流式文本使用 RAF 节流 state（每帧最多一次 setState），避免高频重渲染
-  const [streamingText, setStreamingText, getLatestText] = useThrottledStreamState()
-  const [streamingThinking, setStreamingThinking] = useThrottledStreamState()
-  const [streamingToolBlocks, setStreamingToolBlocks] = useState<MessageBlock[]>([])
-  const [streamingToolResults, setStreamingToolResults] = useState<ToolResultMap>(new Map())
   const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  // 多会话并行流：订阅全部会话的流式快照，取「当前会话」那一路驱动渲染。
+  // 其它会话的流在后台静默累积，切换回来即可看到实时流式输出。
+  const streamSnapshot = useSyncExternalStore(agentStreamManager.subscribe, agentStreamManager.getSnapshot)
+  const currentStream: SessionStreamState | undefined = currentSessionId ? streamSnapshot.get(currentSessionId) : undefined
+  const streamingText = currentStream?.text ?? ''
+  const streamingThinking = currentStream?.thinking ?? ''
+  // 空数组/Map 用模块级常量兜底，避免每次渲染新建引用导致下游 useEffect 频繁触发
+  const streamingToolBlocks = useMemo(() => currentStream?.toolBlocks ?? EMPTY_BLOCKS, [currentStream])
+  const streamingToolResults = useMemo(() => currentStream?.toolResults ?? EMPTY_TOOL_RESULTS, [currentStream])
+  // 当前会话是否正在流式（loading 仅在发起方视图为 true；切走后该会话流仍在后台，currentStream.status 仍为 streaming）
+  const isCurrentSessionStreaming = currentStream?.status === 'streaming'
 
   // 会话边栏状态
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -1105,12 +1052,9 @@ export default function AgentChat() {
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<React.ComponentRef<typeof Input.TextArea>>(null)
-  const abortRef = useRef<AbortController | null>(null)
   // 会话加载竞态控制：每次加载递增序号 + 独立 AbortController，仅最新请求允许落地
   const loadSeqRef = useRef(0)
   const loadAbortRef = useRef<AbortController | null>(null)
-  // 流式过程累积（供中止时保留已收内容；与 SSE 回调共用同一引用，不经过 React state）
-  const streamAccumRef = useRef<StreamAccum | null>(null)
 
   // Auto scroll
   const scrollToBottom = useCallback(() => {
@@ -1125,10 +1069,9 @@ export default function AgentChat() {
     scrollToBottom()
   }, [messages, streamingText, streamingThinking, streamingToolBlocks, scrollToBottom])
 
-  // 组件卸载时取消进行中的 SSE 流与会话加载请求
+  // 组件卸载时仅取消「会话加载」请求；不中断正在生成的流（流在后台继续，回来后可重连查看）
   useEffect(() => {
     return () => {
-      abortRef.current?.abort()
       loadAbortRef.current?.abort()
     }
   }, [])
@@ -1146,21 +1089,18 @@ export default function AgentChat() {
   }, [antMsg])
 
   const handleClear = useCallback(() => {
-    abortRef.current?.abort()
-    abortRef.current = null
+    // 清除当前会话：中止其流（若在生成）并清空视图
+    if (currentSessionId) agentStreamManager.end(currentSessionId)
     setMessages([])
     setCurrentSessionId(null)
-    setStreamingText('')
-    setStreamingThinking('')
-    setStreamingToolBlocks([])
-    setStreamingToolResults(new Map())
     setLoading(false)
-  }, [setCurrentSessionId, setStreamingText, setStreamingThinking])
+  }, [currentSessionId, setCurrentSessionId])
 
-  /** 停止生成（中止当前 SSE 流） */
+  /** 停止生成（仅中止当前会话的流，其它会话流不受影响） */
   const handleStop = useCallback(() => {
-    abortRef.current?.abort()
-  }, [])
+    if (currentSessionId) agentStreamManager.abort(currentSessionId)
+    setLoading(false)
+  }, [currentSessionId])
 
   const handleToggleSidebar = useCallback(() => {
     setSidebarCollapsed((v) => !v)
@@ -1187,17 +1127,13 @@ export default function AgentChat() {
   }, [])
 
   /**
-   * 加载指定会话的消息（切换前中止进行中的流并清理流式状态，避免旧流污染新会话）。
-   * 竞态控制（最新请求胜出）：每次加载递增序号并取消上一次请求，响应落地前比对序号，过期响应/取消静默丢弃。
+   * 加载指定会话的消息（切换会话）。
+   * 多会话并行流：不再中止正在生成的流——流绑定发起会话，在后台继续累积。
+   * 切到目标会话后，若其仍在流式则显示实时累积输出；已完成则展示入库的完整历史。
+   * 竞态控制（最新请求胜出）：每次加载递增序号并取消上一次请求，过期响应/取消静默丢弃。
    */
   const loadSession = useCallback(async (sessionId: string) => {
-    abortRef.current?.abort()
-    abortRef.current = null
-    streamAccumRef.current = null
-    setStreamingText('')
-    setStreamingThinking('')
-    setStreamingToolBlocks([])
-    setStreamingToolResults(new Map())
+    // 仅停止「当前视图」的发送中状态；目标会话的流由 streamManager 按 sessionId 独立维护
     setLoading(false)
 
     const seq = ++loadSeqRef.current
@@ -1226,24 +1162,18 @@ export default function AgentChat() {
     } finally {
       if (seq === loadSeqRef.current) setLoadingSessionId(null)
     }
-  }, [antMsg, setCurrentSessionId, setStreamingText, setStreamingThinking])
+  }, [antMsg, setCurrentSessionId])
 
-  /** 新建对话（保留会话模式偏好与草稿，仅清空当前会话） */
+  /** 新建对话（保留会话模式偏好与草稿，仅清空当前会话视图；不中断其它会话的后台流） */
   const handleNewConversation = useCallback(() => {
-    abortRef.current?.abort()
-    abortRef.current = null
-    streamAccumRef.current = null
     loadAbortRef.current?.abort()
     loadSeqRef.current += 1
+    restoredSessionIdRef.current = null // 主动切换会话时重置恢复标记，允许重新恢复
     setMessages([])
     clearAgentChat()
-    setStreamingText('')
-    setStreamingThinking('')
-    setStreamingToolBlocks([])
-    setStreamingToolResults(new Map())
     setLoading(false)
     inputRef.current?.focus()
-  }, [clearAgentChat, setStreamingText, setStreamingThinking])
+  }, [clearAgentChat])
 
   /** 移动端：加载会话后自动关闭抽屉 */
   const handleLoadSessionMobile = useCallback((sessionId: string) => {
@@ -1294,10 +1224,15 @@ export default function AgentChat() {
   }, [fetchSessions])
 
   // 刷新/重进页面时恢复上次的会话（延迟到宏任务，避免 effect 体内同步 setState 触发级联渲染）
+  // restoredSessionIdRef 记录已恢复的会话 ID，防止 setCurrentSessionId 触发 effect 导致重复 loadSession
+  const restoredSessionIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (!currentSessionId || messages.length > 0 || loadingSessionId) return
+    if (restoredSessionIdRef.current === currentSessionId) return // 已恢复过，不再重复
+    const capturedId = currentSessionId
     const timer = setTimeout(() => {
-      void loadSession(currentSessionId)
+      restoredSessionIdRef.current = capturedId
+      void loadSession(capturedId)
     }, 0)
     return () => {
       clearTimeout(timer)
@@ -1317,18 +1252,14 @@ export default function AgentChat() {
   }, [currentSessionId, fetchSessions])
 
   /**
-   * 发送聊天请求并处理 SSE 流式响应。
+   * 发送聊天请求并处理 SSE 流式响应，把增量写入 streamManager（绑定 sessionKey，与视图解耦）。
    * 事件协议：thinking_delta（思考增量）/ text_delta（正文逐字增量）/ tool_use / tool_result / error。
-   * 用户中止时在内部捕获 AbortError，返回已累积的部分内容。
+   * 切换会话不中止本流——流在后台继续累积；返回最终累积结果供组装 assistant 消息。
    */
   const fetchAndProcessStream = useCallback(async (
     body: string,
-    assistantId: string,
+    sessionKey: string,
     abortController: AbortController,
-    onStreamText: (text: string) => void,
-    onStreamThinking: (thinking: string) => void,
-    onToolCall: (block: MessageBlock) => void,
-    onToolResult: (toolUseId: string, content: string, isError?: boolean) => void,
   ): Promise<StreamAccum & { aborted: boolean }> => {
     const response = await fetch(`${getAgentBaseURL()}/api/agent/chat`, {
       method: 'POST',
@@ -1350,20 +1281,23 @@ export default function AgentChat() {
       toolResults: new Map(),
       capturedSessionId: null,
     }
-    streamAccumRef.current = accum
     let aborted = false
+
+    // 每次事件把最新累积同步进 streamManager，驱动「正在查看该会话」的组件实时重渲染
+    const syncToManager = () => {
+      agentStreamManager.update(sessionKey, {
+        text: accum.fullText,
+        thinking: accum.fullThinking,
+        toolBlocks: [...accum.toolBlocks],
+        toolResults: new Map(accum.toolResults),
+        capturedSessionId: accum.capturedSessionId,
+      })
+    }
 
     try {
       for await (const event of readSSEStream(reader)) {
-        processStreamEvent(event, accum, onStreamText, onStreamThinking, (list) =>
-          setMessages((prev) => withToolCalls(prev, assistantId, list)),
-          onToolResult,
-        )
-        // tool_use 事件同步通知流式回调（用于流式过程组实时展示）
-        if (event.type === 'tool_use') {
-          const latest = accum.toolBlocks[accum.toolBlocks.length - 1]
-          if (latest) onToolCall(latest)
-        }
+        processStreamEvent(event, accum)
+        syncToManager()
       }
     } catch (e: unknown) {
       if (!(e instanceof Error && e.name === 'AbortError')) throw e
@@ -1377,6 +1311,31 @@ export default function AgentChat() {
     }
 
     return { ...accum, aborted }
+  }, [])
+
+  /** 流结束后把最终累积结果写回 assistant 消息 */
+  const finalizeAssistantMessage = useCallback((
+    assistantId: string,
+    result: { fullText: string; fullThinking: string; toolCallsList: ToolCallInfo[]; toolBlocks: MessageBlock[]; toolResults: ToolResultMap; capturedSessionId: string | null; aborted: boolean },
+  ) => {
+    const { fullText, fullThinking, toolCallsList: tCalls, toolBlocks: tBlocks, toolResults: tResults, capturedSessionId, aborted } = result
+    const finalToolCalls = tCalls.length > 0 ? tCalls : undefined
+    // 中止时保留已累积内容，仅在末尾追加停止标记；完全没收到内容时显示占位符
+    const finalContent = aborted ? buildAbortedContent(fullText, fullThinking, tBlocks) : fullText
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === assistantId
+          ? {
+              ...m,
+              content: finalContent,
+              thinking: fullThinking || undefined,
+              toolCalls: finalToolCalls,
+              sessionId: capturedSessionId ?? undefined,
+              blocks: buildBlocks(finalContent, fullThinking, tBlocks, tResults),
+            }
+          : m,
+      ),
+    )
   }, [])
 
   const handleSend = useCallback(async () => {
@@ -1394,14 +1353,11 @@ export default function AgentChat() {
     }
     setMessages((prev) => [...prev, userMsg])
 
-    const abortController = new AbortController()
-    abortRef.current = abortController
+    // 会话流绑定的 key：已有会话用其 id；auto 新会话先用临时 key，拿到 capturedSessionId 后迁移
+    const streamKey = currentSessionId ?? 'new'
+    const abortController = agentStreamManager.begin(streamKey)
 
     const assistantId = nextMsgId()
-    setStreamingText('')
-    setStreamingThinking('')
-    setStreamingToolBlocks([])
-    setStreamingToolResults(new Map())
     setMessages((prev) => [
       ...prev,
       { id: assistantId, role: 'assistant', content: '', timestamp: new Date(), toolCalls: [] },
@@ -1415,58 +1371,25 @@ export default function AgentChat() {
           : { type: sessionMode },
       })
 
-      const {
-        fullText,
-        fullThinking,
-        toolCallsList: tCalls,
-        toolBlocks: tBlocks,
-        toolResults: tResults,
-        capturedSessionId,
-        aborted,
-      } = await fetchAndProcessStream(
-        body,
-        assistantId,
-        abortController,
-        setStreamingText,
-        setStreamingThinking,
-        (block) => setStreamingToolBlocks((prev) => [...prev, block]),
-        (toolUseId, content, isError) => setStreamingToolResults((prev) => {
-          const next: ToolResultMap = new Map(prev)
-          next.set(toolUseId, { content, isError })
-          return next
-        }),
-      )
+      const result = await fetchAndProcessStream(body, streamKey, abortController)
+      const { capturedSessionId } = result
 
-      const finalToolCalls = tCalls.length > 0 ? tCalls : undefined
-      // 中止时保留已累积内容，仅在末尾追加停止标记；完全没收到内容时显示占位符
-      const finalContent = aborted ? buildAbortedContent(fullText, fullThinking, tBlocks) : fullText
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId
-            ? {
-                ...m,
-                content: finalContent,
-                thinking: fullThinking || undefined,
-                toolCalls: finalToolCalls,
-                sessionId: capturedSessionId ?? undefined,
-                blocks: buildBlocks(finalContent, fullThinking, tBlocks, tResults),
-              }
-            : m,
-        ),
-      )
-      setStreamingText('')
-      setStreamingThinking('')
-      setStreamingToolBlocks([])
-      setStreamingToolResults(new Map())
-
+      // auto 新会话：拿到后端会话 id 后结束临时流，并设为当前会话
+      const effectiveKey = capturedSessionId ?? streamKey
+      if (capturedSessionId && capturedSessionId !== streamKey) {
+        agentStreamManager.end(streamKey)
+      }
       if (capturedSessionId && !currentSessionId) {
         setCurrentSessionId(capturedSessionId)
       }
+
+      finalizeAssistantMessage(assistantId, result)
+      agentStreamManager.end(effectiveKey)
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') return
       const errorText = getAgentFriendlyErrorMessage(error)
-      // 保留已流式累积的部分内容，错误信息追加其后（getLatest 读 ref，不受节流滞后影响）
-      const partialContent = getLatestText()
+      // 保留已流式累积的部分内容，错误信息追加其后（读 manager 中该会话的最终累积值）
+      const partialContent = agentStreamManager.get(streamKey)?.text ?? ''
       const errorBlock = `> ❌ **请求失败**\n>\n> ${errorText}`
       const finalContent = partialContent ? `${partialContent}\n\n${errorBlock}` : errorBlock
       setMessages((prev) =>
@@ -1476,17 +1399,12 @@ export default function AgentChat() {
             : m,
         ),
       )
+      agentStreamManager.end(streamKey)
     } finally {
       setLoading(false)
-      setStreamingText('')
-      setStreamingThinking('')
-      setStreamingToolBlocks([])
-      setStreamingToolResults(new Map())
-      streamAccumRef.current = null
-      abortRef.current = null
       inputRef.current?.focus()
     }
-  }, [draftInput, loading, sessionMode, currentSessionId, fetchAndProcessStream, setDraftInput, setCurrentSessionId, setStreamingText, setStreamingThinking, getLatestText])
+  }, [draftInput, loading, sessionMode, currentSessionId, fetchAndProcessStream, finalizeAssistantMessage, setDraftInput, setCurrentSessionId])
 
   const handleModeChange = useCallback((value: SessionMode) => {
     setSessionMode(value)
@@ -1509,7 +1427,9 @@ export default function AgentChat() {
 
   // ── Render ──
 
-  const isStreaming = loading && (streamingText.length > 0 || streamingThinking.length > 0 || streamingToolBlocks.length > 0)
+  // 流式气泡渲染条件：当前会话有流式内容（text/thinking/tool），无论是否仍在进行（切走后回来也能看到累积输出）
+  const hasStreamContent = streamingText.length > 0 || streamingThinking.length > 0 || streamingToolBlocks.length > 0
+  const isStreaming = hasStreamContent
   const hasMessages = messages.length > 0
 
   // 响应式容器尺寸：与 Layout Content padding 对齐（移动端 12px，桌面端 16px/24px）
@@ -1690,13 +1610,15 @@ export default function AgentChat() {
                       {streamingText && (
                         <MarkdownRenderer content={streamingText} style={MARKDOWN_STYLE} />
                       )}
-                      <span style={{ display: 'inline-block', width: 2, height: 16, background: token.colorPrimary, marginLeft: 2, verticalAlign: 'middle', animation: 'agent-blink 1s step-end infinite' }} />
+                      {isCurrentSessionStreaming && (
+                        <span style={{ display: 'inline-block', width: 2, height: 16, background: token.colorPrimary, marginLeft: 2, verticalAlign: 'middle', animation: 'agent-blink 1s step-end infinite' }} />
+                      )}
                     </div>
                   </Flex>
                 </Flex>
               )}
 
-              {loading && !isStreaming && (
+              {(loading || (isCurrentSessionStreaming && !hasStreamContent)) && !isStreaming && (
                 <Flex gap={12} align="center" style={{ marginBottom: 24, marginLeft: 48 }}>
                   <Spin size="small" />
                   <Text type="secondary" style={{ fontSize: 13 }}>AI 正在分析…</Text>
