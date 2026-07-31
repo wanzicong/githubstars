@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
     Badge,
@@ -10,9 +10,11 @@ import {
     Space,
     Tag,
     Typography,
+    App,
 } from 'antd'
 import {
     ArrowLeftOutlined,
+    BookOutlined,
     CodeOutlined,
     GithubOutlined,
     InfoCircleOutlined,
@@ -28,9 +30,16 @@ import { RepoStatsGrid } from '.'
 import { RepoReadmeCard } from '.'
 import { CodePreviewModal } from '.'
 import { RepoIssuesModal } from '.'
+import { checkLearnRepos, quickAddLearn } from '../../api/learn'
 import type { RepoDetailData } from '../../types'
 
 const { Text } = Typography
+
+function getLearnLabel(inLearn: boolean | null): string {
+    if (inLearn === null) return '…'
+    if (inLearn) return '已在学习清单'
+    return '加入学习清单'
+}
 
 export interface RepoDetailViewProps {
     repo: RepoDetailData
@@ -45,9 +54,39 @@ export interface RepoDetailViewProps {
  */
 export default function RepoDetailView({ repo }: RepoDetailViewProps) {
     const navigate = useNavigate()
+    const { message } = App.useApp()
     const [infoDrawerOpen, setInfoDrawerOpen] = useState(false)
     const [codePreviewOpen, setCodePreviewOpen] = useState(false)
     const [issuesOpen, setIssuesOpen] = useState(false)
+    const [inLearn, setInLearn] = useState<boolean | null>(null)
+    const [addingLearn, setAddingLearn] = useState(false)
+
+    // 检查仓库是否已加入学习清单
+    useEffect(() => {
+        if (!repo.id) return
+        let cancelled = false
+        const run = async () => {
+            const map = await checkLearnRepos([repo.id!])
+            if (!cancelled) setInLearn(repo.id != null && repo.id in map)
+        }
+        run()
+        return () => { cancelled = true }
+    }, [repo.id])
+
+    /** 加入/已加入学习清单 */
+    const handleToggleLearn = async () => {
+        if (!repo.id || inLearn) return
+        setAddingLearn(true)
+        try {
+            await quickAddLearn(repo.id)
+            setInLearn(true)
+            message.success('已加入学习清单')
+        } catch {
+            message.error('加入学习清单失败')
+        } finally {
+            setAddingLearn(false)
+        }
+    }
 
     const handleBack = () => {
         if (window.history.length > 1) {
@@ -80,6 +119,16 @@ export default function RepoDetailView({ repo }: RepoDetailViewProps) {
                     <Button icon={<CodeOutlined />} onClick={() => setCodePreviewOpen(true)}>
                         代码预览
                     </Button>
+                    {repo.id != null && (
+                        <Button
+                            icon={<BookOutlined />}
+                            loading={addingLearn}
+                            onClick={handleToggleLearn}
+                            disabled={inLearn === true}
+                        >
+                            {getLearnLabel(inLearn)}
+                        </Button>
+                    )}
                     <Button
                         icon={<GithubOutlined />}
                         onClick={() => window.open(`https://github.dev/${repo.fullName}`, '_blank', 'noopener,noreferrer')}

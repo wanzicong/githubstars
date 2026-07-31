@@ -5,6 +5,7 @@ import { AppstoreOutlined, UnorderedListOutlined } from '@ant-design/icons'
 import dayjs from '../../config/setupDayjs'
 import * as api from '../../api'
 import { fetchAllStarIds, fetchReposByIds } from '../../api/stars'
+import { checkLearnRepos, quickAddLearn } from '../../api/learn'
 import { StarStatsBar } from '../../components/stars'
 import { StarRepoView } from '../../components/stars'
 import CloneWizardModal from '../../components/clone/CloneWizardModal'
@@ -64,6 +65,31 @@ export default function StarList() {
     const [initialLoading, setInitialLoading] = useState(true)
     const [exportingMd, setExportingMd] = useState(false)
     const [exportingUrls, setExportingUrls] = useState(false)
+
+    // ── 学习清单状态映射（repoId → learnRecordId）──
+    const [learnMap, setLearnMap] = useState<Record<number, number>>({})
+
+    // repos 变化时批量查询学习状态
+    useEffect(() => {
+        if (repos.length === 0) return
+        let cancelled = false
+        const run = async () => {
+            const map = await checkLearnRepos(repos.map((r) => r.id))
+            if (!cancelled) setLearnMap((prev) => ({ ...prev, ...map }))
+        }
+        run()
+        return () => { cancelled = true }
+    }, [repos])
+
+    /** 加入学习清单 */
+    const handleAddLearn = useCallback(async (repoId: number) => {
+        try {
+            const record = await quickAddLearn(repoId)
+            setLearnMap((prev) => ({ ...prev, [repoId]: record.id }))
+        } catch {
+            message.error('加入学习清单失败')
+        }
+    }, [message])
 
     // ── 首次加载概览和语言统计（仅一次）──
     useEffect(() => {
@@ -453,6 +479,8 @@ export default function StarList() {
                 onSelectAllPages={handleSelectAllPages}
                 onDeselectAll={handleDeselectAll}
                 loadingAllIds={loadingAllIds}
+                learnMap={learnMap}
+                onAddLearn={handleAddLearn}
             />
 
             <CloneWizardModal
