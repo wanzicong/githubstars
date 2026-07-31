@@ -29,6 +29,10 @@ export interface StarRepoViewProps {
     onDeselectAll?: () => void
     /** 跨页全选：是否正在加载所有 ID */
     loadingAllIds?: boolean
+    /** 学习清单状态映射：repoId → learnRecordId（null=加载中） */
+    learnMap?: Record<number, number> | null
+    /** 加入学习清单回调 */
+    onAddLearn?: (repoId: number) => void
 }
 
 /**
@@ -55,6 +59,8 @@ export default function StarRepoView({
     onSelectAllPages,
     onDeselectAll,
     loadingAllIds,
+    learnMap,
+    onAddLearn,
 }: StarRepoViewProps) {
     const sentinelRef = useRef<HTMLDivElement | null>(null)
     const selectionEnabled = !!onSelectionChange
@@ -150,7 +156,7 @@ export default function StarRepoView({
                                 />
                             )}
                             <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
-                                <RepoRow repo={repo} />
+                                <RepoRow repo={repo} inLearn={learnMap ? repo.id in learnMap : null} onAddLearn={onAddLearn} />
                             </div>
                         </div>
                     ))}
@@ -168,7 +174,7 @@ export default function StarRepoView({
                                     style={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
                                 />
                             )}
-                            <RepoCard repo={repo} />
+                            <RepoCard repo={repo} inLearn={learnMap ? repo.id in learnMap : null} onAddLearn={onAddLearn} />
                         </div>
                     ))}
                 </div>

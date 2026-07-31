@@ -1,7 +1,7 @@
 import { memo, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Row, Col, Tag, Typography, Avatar, Tooltip } from 'antd'
-import { StarFilled, ForkOutlined, ReadOutlined, CodeOutlined } from '@ant-design/icons'
+import { Card, Row, Col, Tag, Typography, Avatar, Tooltip, App } from 'antd'
+import { StarFilled, ForkOutlined, ReadOutlined, CodeOutlined, BookOutlined } from '@ant-design/icons'
 import { formatNumberCn, formatDate, formatSize, daysSince, getStalenessColor } from '@/utils/format'
 import type { GithubRepo } from '@/types'
 
@@ -9,11 +9,14 @@ const { Text, Paragraph } = Typography
 
 interface RepoRowProps {
     repo: GithubRepo
+    inLearn: boolean | null
+    onAddLearn?: (repoId: number) => void
 }
 
 /** 列表行视图 — 每个仓库展示为横向行卡片（React.memo 避免列表项无效重渲染） */
-const RepoRow = memo(function RepoRow({ repo }: RepoRowProps) {
+const RepoRow = memo(function RepoRow({ repo, inLearn, onAddLearn }: RepoRowProps) {
     const navigate = useNavigate()
+    const { message } = App.useApp()
 
     let readmeTag: ReactNode
     if (repo.readmeFetched && repo.readmeCn) {
@@ -105,6 +108,22 @@ const RepoRow = memo(function RepoRow({ repo }: RepoRowProps) {
                                 style={{ fontSize: 15, color: '#1677ff', cursor: 'pointer' }}
                             />
                         </Tooltip>
+                        {/* 加入学习清单 */}
+                        {onAddLearn && (
+                            <Tooltip title={inLearn ? '已在学习清单' : '加入学习清单'}>
+                                <BookOutlined
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (!inLearn) { onAddLearn(repo.id); message.success('已加入学习清单') }
+                                    }}
+                                    style={{
+                                        fontSize: 15,
+                                        color: inLearn ? '#52c41a' : '#999',
+                                        cursor: inLearn ? 'default' : 'pointer',
+                                    }}
+                                />
+                            </Tooltip>
+                        )}
                         <span>
                             <StarFilled style={{ color: '#faad14', fontSize: 14 }} />{' '}
                             <Text style={{ fontSize: 15 }}>{repo.starsCount}</Text>

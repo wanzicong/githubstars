@@ -1,9 +1,9 @@
 import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Tag, Typography, Avatar, Tooltip, theme } from 'antd'
+import { Card, Tag, Typography, Avatar, Tooltip, theme, App } from 'antd'
 import {
     StarFilled, ForkOutlined, ReadOutlined,
-    ClockCircleOutlined, CodeOutlined,
+    ClockCircleOutlined, CodeOutlined, BookOutlined,
 } from '@ant-design/icons'
 import { formatNumberCn, formatDate, formatSize, daysSince, getStalenessColor } from '@/utils/format'
 import type { GithubRepo } from '@/types'
@@ -13,6 +13,10 @@ const { useToken } = theme
 
 interface RepoCardProps {
     repo: GithubRepo
+    /** 是否已加入学习清单 — 无数据为 null（加载中），有 boolean 值 */
+    inLearn: boolean | null
+    /** 加入学习清单回调 */
+    onAddLearn?: (repoId: number) => void
 }
 
 /** 语言对应的标签色（取 GitHub 常用语言色系） */
@@ -45,9 +49,10 @@ const LANG_COLORS: Record<string, string> = {
  * - 中文翻译状态用优雅标签展示
  * - "未更新"天数通过色阶表达保鲜度
  */
-const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
+const RepoCard = memo(function RepoCard({ repo, inLearn, onAddLearn }: RepoCardProps) {
     const navigate = useNavigate()
     const { token } = useToken()
+    const { message } = App.useApp()
 
     const descriptionText = repo.descriptionCn ?? repo.description
     const hasTranslation = Boolean(repo.descriptionCn)
@@ -177,6 +182,23 @@ const RepoCard = memo(function RepoCard({ repo }: RepoCardProps) {
                         style={{ fontSize: 13, color: token.colorPrimary, cursor: 'pointer' }}
                     />
                 </Tooltip>
+
+                {/* 加入学习清单 */}
+                {onAddLearn && (
+                    <Tooltip title={inLearn ? '已在学习清单' : '加入学习清单'}>
+                        <BookOutlined
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                if (!inLearn) { onAddLearn(repo.id); message.success('已加入学习清单') }
+                            }}
+                            style={{
+                                fontSize: 13,
+                                color: inLearn ? token.colorSuccess : token.colorTextTertiary,
+                                cursor: inLearn ? 'default' : 'pointer',
+                            }}
+                        />
+                    </Tooltip>
+                )}
 
                 {/* Fork */}
                 {repo.forksCount > 0 && (
