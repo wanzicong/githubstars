@@ -918,7 +918,6 @@ MySQL (:3307)  githubstars 库
 | `sync_log`                                   | 同步操作日志                     |                                     |
 | `system_config`                              | KV 配置表                        | `config_key` 唯一                   |
 | `clone_task` / `clone_task_item`             | 克隆任务/子项                    | `task_id`（UUID 格式）关联          |
-| `translation_task` / `translation_task_item` | 翻译任务/子项                    | 关联 `github_repo`                  |
 | `ai_analyze_task`                            | AI 分析任务结果                  |                                     |
 
 ---
@@ -1163,6 +1162,7 @@ useEffect(() => {
 | 场景 | 文档 | 触发时机 |
 |------|------|---------|
 | Docker Compose 环境变量加载失败 | [docs/踩坑记录-DockerCompose环境变量加载失败.md](docs/踩坑记录-DockerCompose环境变量加载失败.md) | 执行 `docker compose up -d` / 重启生产容器 / 部署后端镜像前 |
+| Agent 对话 EPIPE 管道崩溃 | [docs/踩坑记录-Agent对话EPIPE管道崩溃.md](docs/踩坑记录-Agent对话EPIPE管道崩溃.md) | Agent 长任务流式中断、出现 `write EPIPE` / `exited with code 1`、assistant 回复丢失时 |
 
 **新增踩坑记录规范**：
 1. 文档放在 `docs/` 目录，文件名格式 `踩坑记录-<主题>.md`
