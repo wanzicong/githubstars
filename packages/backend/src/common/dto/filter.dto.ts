@@ -141,6 +141,37 @@ export const GithubIssueDetailSchema = z.object({
 export type GithubIssueDetailDto = z.infer<typeof GithubIssueDetailSchema>;
 
 /**
+ * 任意 GitHub 仓库 Issues 列表查询参数（owner/repo 格式，无需本地入库）
+ *
+ * 与 GithubIssueListSchema 参数一致，仅把仓库定位方式从本地 id 换成 owner/repo。
+ */
+export const GithubRepoIssuesSchema = GithubStarSchema.extend({
+    state: z.enum(['open', 'closed', 'all']).optional().default('open'),
+    query: z.string().trim().max(200, '搜索内容不能超过 200 个字符').optional().default(''),
+    sort: z.enum(['created', 'updated', 'comments']).optional().default('updated'),
+    order: z.enum(['asc', 'desc']).optional().default('desc'),
+    page: z.coerce.number().int().min(1).optional().default(1),
+    perPage: z.coerce.number().int().min(1).max(50).optional().default(20),
+}).superRefine((value, context) => {
+    if (value.page * value.perPage > 1000) {
+        context.addIssue({
+            code: 'custom',
+            path: ['page'],
+            message: 'GitHub Issues 搜索最多支持前 1000 条结果',
+        });
+    }
+});
+
+export type GithubRepoIssuesDto = z.infer<typeof GithubRepoIssuesSchema>;
+
+/** 任意 GitHub 仓库 Issue 详情查询参数（owner/repo 格式） */
+export const GithubRepoIssueDetailSchema = GithubStarSchema.extend({
+    issueNumber: z.coerce.number().int().positive('Issue 编号必须为正整数'),
+});
+
+export type GithubRepoIssueDetailDto = z.infer<typeof GithubRepoIssueDetailSchema>;
+
+/**
  * Trending 查询参数
  */
 export const TrendingSchema = z.object({

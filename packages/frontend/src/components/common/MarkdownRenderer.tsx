@@ -18,19 +18,50 @@ const sanitizeSchema = {
     },
 }
 
+/** 从 React children 中递归提取纯文本（用于生成锚点 ID） */
+function extractTextContent(node: React.ReactNode): string {
+    if (typeof node === 'string' || typeof node === 'number') return String(node)
+    if (Array.isArray(node)) return node.map(extractTextContent).join('')
+    if (node && typeof node === 'object' && 'props' in node) {
+        const children = (node as { props: { children?: React.ReactNode } }).props.children
+        return extractTextContent(children)
+    }
+    return ''
+}
+
+/** 从标题纯文本生成 slug：转小写 + 替换非字母数字为 - + 去重前缀 */
+function slugify(text: string): string {
+    /* eslint-disable sonarjs/super-linear-regex -- README 标题长度有限，回溯可忽略 */
+    return text
+        .toLowerCase()
+        .replace(/[^\w一-鿿]+/g, '-')
+        .replace(/(?:^-+)|(?:-+$)/g, '')
+    /* eslint-enable sonarjs/super-linear-regex */
+}
+
 /** Markdown → React 的共享渲染组件映射，确保全站 README/AI 分析等 Markdown 渲染风格一致 */
 const SHARED_MARKDOWN_COMPONENTS: Components = {
     h1: ({ children }) => (
-        <h1 style={{ fontSize: 22, borderBottom: '1px solid #eee', paddingBottom: 8, marginTop: 24, marginBottom: 12 }}>
+        <h1
+            id={slugify(extractTextContent(children))}
+            style={{ fontSize: 22, borderBottom: '1px solid #eee', paddingBottom: 8, marginTop: 24, marginBottom: 12 }}
+        >
             {children}
         </h1>
     ),
     h2: ({ children }) => (
-        <h2 style={{ fontSize: 19, borderBottom: '1px solid #eee', paddingBottom: 6, marginTop: 20, marginBottom: 10 }}>
+        <h2
+            id={slugify(extractTextContent(children))}
+            style={{ fontSize: 19, borderBottom: '1px solid #eee', paddingBottom: 6, marginTop: 20, marginBottom: 10 }}
+        >
             {children}
         </h2>
     ),
-    h3: ({ children }) => <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>{children}</h3>,
+    h3: ({ children }) => (
+        <h3 id={slugify(extractTextContent(children))} style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>
+            {children}
+        </h3>
+    ),
     h4: ({ children }) => <h4 style={{ fontSize: 14, marginTop: 12, marginBottom: 6 }}>{children}</h4>,
     p: ({ children }) => <p style={{ lineHeight: 1.8, marginBottom: 12, fontSize: 14 }}>{children}</p>,
     a: ({ href, children }) => (

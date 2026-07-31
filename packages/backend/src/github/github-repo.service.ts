@@ -183,6 +183,20 @@ export class GithubRepoService {
     }
 
     /**
+     * 根据 fullName 查询单个仓库
+     *
+     * @param fullName 仓库全名（owner/repo）
+     * @returns 仓库对象，不存在返回 null
+     *
+     * @callers
+     *   - GithubSearchService.getRepoDetail()
+     */
+    async findByFullName(fullName: string) {
+        if (!fullName) return null;
+        return this.prisma.githubRepo.findUnique({ where: { fullName } });
+    }
+
+    /**
      * 查询所有符合条件的仓库 URL 列表
      *
      * 用于导出功能，返回 htmlUrl 数组。

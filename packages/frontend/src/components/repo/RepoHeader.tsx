@@ -1,12 +1,12 @@
 import { Button, Tag, Typography, Avatar, Badge, theme } from 'antd'
 import { GithubOutlined, LinkOutlined, BugOutlined } from '@ant-design/icons'
-import type { GithubRepo } from '../../types'
+import type { RepoDetailData } from '../../types'
 
 const { Title, Text, Paragraph } = Typography
 const { useToken } = theme
 
 export interface RepoHeaderProps {
-    repo: GithubRepo
+    repo: RepoDetailData
     onOpenIssues?: () => void
 }
 

@@ -1,4 +1,5 @@
 import { Card, Tag, Avatar, Typography, Tooltip, Space, Button } from 'antd'
+import { useNavigate } from 'react-router-dom'
 import {
     StarFilled,
     ForkOutlined,
@@ -42,6 +43,7 @@ interface LearnRepoCardProps {
  * - 笔记预览（如果有）
  */
 export default function LearnRepoCard({ record, onEdit, onDelete }: LearnRepoCardProps) {
+    const navigate = useNavigate()
     const status = STATUS_META[record.status]
     const priority = PRIORITY_META[record.priority]
 
@@ -56,11 +58,9 @@ export default function LearnRepoCard({ record, onEdit, onDelete }: LearnRepoCar
                 <Space size={8} style={{ width: '100%', minWidth: 0 }}>
                     <Avatar src={record.repo.ownerAvatarUrl ?? undefined} size={20} />
                     <AntLink
-                        href={record.repo.htmlUrl ?? '#'}
-                        target='_blank'
-                        rel='noreferrer'
+                        onClick={() => navigate(`/stars/${record.repoId}`)}
                         ellipsis
-                        style={{ flex: 1, fontWeight: 600, maxWidth: '100%' }}
+                        style={{ flex: 1, fontWeight: 600, maxWidth: '100%', cursor: 'pointer' }}
                     >
                         {record.repo.repoName ?? record.repo.fullName}
                     </AntLink>
