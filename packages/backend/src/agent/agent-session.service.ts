@@ -77,9 +77,11 @@ export class AgentSessionService {
 
     /** 获取会话消息历史（取最新 N 条，按时间正序返回）；content 尝试解析为结构化 blocks，失败保持原文 */
     async getMessages(sessionId: string, limit = 50) {
+        // 按 id 降序（自增 id 越大越新，走主键索引）而非 createdAt 降序：
+        // 避免 MySQL 对含巨型 JSON content 的行做 filesort 触发 1038 Out of sort memory。
         const messages = await this.prisma.agentMessage.findMany({
             where: { sessionId },
-            orderBy: { createdAt: 'desc' },
+            orderBy: { id: 'desc' },
             take: limit,
             select: { role: true, content: true, createdAt: true },
         });
@@ -109,7 +111,7 @@ export class AgentSessionService {
             include: {
                 _count: { select: { messages: true } },
                 messages: {
-                    orderBy: { createdAt: 'asc' },
+                    orderBy: { id: 'asc' },
                     take: 1,
                     where: { role: 'user' },
                     select: { content: true },
@@ -117,22 +119,8 @@ export class AgentSessionService {
             },
         });
 
-        // 末条消息：批量查询替代逐条查询（消除 N+1）
-        const lastMessageMap = new Map<string, string>();
-        if (sessions.length > 0) {
-            const sessionIds = sessions.map((s) => s.id);
-            const allLastMessages = await this.prisma.agentMessage.findMany({
-                where: { sessionId: { in: sessionIds }, role: 'user' },
-                orderBy: { createdAt: 'desc' },
-                select: { sessionId: true, content: true },
-            });
-            // 按 sessionId 分组，取每个会话最新一条（已按 desc 排序）
-            for (const msg of allLastMessages) {
-                if (!lastMessageMap.has(msg.sessionId)) {
-                    lastMessageMap.set(msg.sessionId, this.extractText(msg.content) ?? '');
-                }
-            }
-        }
+        const sessionIds = sessions.map((s) => s.id);
+        const lastMessageMap = await this.fetchLastMessagePreviews(sessionIds);
 
         return sessions.map((s) => ({
             id: s.id,
@@ -144,6 +132,45 @@ export class AgentSessionService {
             createdAt: s.createdAt,
             updatedAt: s.updatedAt,
         }));
+    }
+
+    /**
+     * 批量取每个会话最新一条消息的预览文本（sessionId → 预览）。
+     * 取任意角色的最后一条（含 assistant），assistant 回复标注 "AI: " 前缀以便区分。
+     *
+     * 两阶段查询，避免对巨型 JSON content 做 filesort（MySQL 1038 Out of sort memory）：
+     * 阶段一只查小列按 id 降序取各会话最新消息 id（id 走主键索引，无大字段参与排序）；
+     * 阶段二按消息 id 精确查回 content（条数 = 会话数，无大排序）。
+     */
+    private async fetchLastMessagePreviews(sessionIds: string[]): Promise<Map<string, string>> {
+        const lastMessageMap = new Map<string, string>();
+        if (sessionIds.length === 0) return lastMessageMap;
+
+        const cursor = await this.prisma.agentMessage.findMany({
+            where: { sessionId: { in: sessionIds } },
+            orderBy: { id: 'desc' },
+            select: { id: true, sessionId: true },
+        });
+        const latestIdBySession = new Map<string, number>();
+        for (const row of cursor) {
+            if (!latestIdBySession.has(row.sessionId)) {
+                latestIdBySession.set(row.sessionId, row.id);
+            }
+        }
+
+        const latestIds = [...latestIdBySession.values()];
+        if (latestIds.length === 0) return lastMessageMap;
+        const lastMessages = await this.prisma.agentMessage.findMany({
+            where: { id: { in: latestIds } },
+            select: { sessionId: true, role: true, content: true },
+        });
+        for (const msg of lastMessages) {
+            const text = this.extractPreviewText(msg.content);
+            if (text) {
+                lastMessageMap.set(msg.sessionId, msg.role === 'assistant' ? `AI: ${text}` : text);
+            }
+        }
+        return lastMessageMap;
     }
 
     /** 每小时清理超过 24 小时的已关闭会话及其消息（@Interval 由 NestJS 托管生命周期） */
@@ -173,6 +200,25 @@ export class AgentSessionService {
     private extractText(raw: unknown): string | null {
         if (raw === null || raw === undefined) return null;
         return typeof raw === 'string' ? raw : JSON.stringify(raw);
+    }
+
+    /**
+     * 提取会话列表预览文本：assistant 的 content 是结构化 blocks 数组（含 thinking/tool_use），
+     * 只取其中 text 块的文本拼接；用户消息为纯文本/JSON 字符串，直接提取。
+     */
+    private extractPreviewText(raw: unknown): string | null {
+        if (raw === null || raw === undefined) return null;
+        const parsed = typeof raw === 'string' ? this.tryParseJson(raw) : raw;
+        if (typeof parsed === 'string') return parsed;
+        if (Array.isArray(parsed)) {
+            const text = parsed
+                .filter((b): b is MessageBlock => typeof b === 'object' && b !== null && (b as MessageBlock).type === 'text')
+                .map((b) => b.text ?? '')
+                .filter((t) => t !== '')
+                .join(' ');
+            return text || null;
+        }
+        return this.extractText(parsed);
     }
 
     /** 尝试将字符串解析为 JSON（结构化 blocks）；非字符串或解析失败时返回原值 */

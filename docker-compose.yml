@@ -20,7 +20,7 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DEV_MYSQL_ROOT_PASSWORD:?DEV_MYSQL_ROOT_PASSWORD is required}
       MYSQL_DATABASE: ${DEV_MYSQL_DATABASE:-githubstars}
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password --sort_buffer_size=16M
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DEV_MYSQL_ROOT_PASSWORD}"]
       interval: 5s
@@ -28,6 +28,11 @@ services:
       retries: 20
     volumes:
       - dev_mysql_data:/var/lib/mysql
+    networks:
+      - default
+      # 加入生产网络，保证 docker-compose.prod.yml 的 backend 可通过容器名直连本库。
+      # 不显式声明时，容器重建会掉回默认网络，导致 backend 无法解析 githubstars-dev-db。
+      - githubstars-network
 
   # MCP Server 独立容器 — 供外部 AI 通过 HTTP 调用
   mcp-server:
@@ -48,4 +53,11 @@ volumes:
     # 复用现有卷：之前未指定 name 时卷名为 githubstars_dev_mysql_data
     # external 告知 compose 不要试图新建，直接挂载既有卷
     name: githubstars_dev_mysql_data
+    external: true
+
+networks:
+  # 生产网络由 docker-compose.prod.yml 定义并维护，此处仅作 external 引用，
+  # 使 mysql 容器重建后仍与 backend 保持同网，避免数据库连接中断。
+  githubstars-network:
+    name: githubstars-network
     external: true
