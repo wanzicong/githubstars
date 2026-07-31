@@ -20,16 +20,19 @@ export default function LayoutSider() {
   const selectedKey = getSelectedMenuKey(location.pathname)
   const width = siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH
 
-  // 展开分组状态 -- 路由切换时自动展开包含当前页面的分组
+  // 展开分组状态 -- 路由切换时自动展开包含当前页面的分组（手风琴模式：同时只展开一个分组）
   const [openKeys, setOpenKeys] = useState<string[]>(() => getOpenGroupKeys(location.pathname))
-  // 渲染期间派生状态：路由变化时合并需要自动展开的分组（避免在 effect 中 setState）
+  // 渲染期间派生状态：路由变化时切到当前页面所在分组（避免在 effect 中 setState）
   const [prevPathname, setPrevPathname] = useState(location.pathname)
   if (prevPathname !== location.pathname) {
     setPrevPathname(location.pathname)
-    const autoOpen = getOpenGroupKeys(location.pathname)
-    if (autoOpen.some((k) => !openKeys.includes(k))) {
-      setOpenKeys(Array.from(new Set([...openKeys, ...autoOpen])))
-    }
+    setOpenKeys(getOpenGroupKeys(location.pathname))
+  }
+
+  // 手风琴展开：保留最新点击的分组 key，收起其余分组
+  const handleOpenChange = (keys: string[]) => {
+    const latest = keys.find((k) => !openKeys.includes(k))
+    setOpenKeys(latest ? [latest] : [])
   }
 
   // 构建二级菜单 items -- 分组 -> SubMenu，子项 -> MenuItem（缓存避免每次渲染重建）
@@ -88,7 +91,7 @@ export default function LayoutSider() {
             mode='inline'
             selectedKeys={[selectedKey]}
             openKeys={siderCollapsed ? undefined : openKeys}
-            onOpenChange={setOpenKeys}
+            onOpenChange={handleOpenChange}
             inlineCollapsed={siderCollapsed}
             items={items}
             onClick={({ key }) => navigate(key)}

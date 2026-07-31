@@ -21,6 +21,12 @@ export default function MobileSiderDrawer({ open, onClose }: Props) {
   // openKeys 初始化与切换路由时都不重置，仅在抽屉打开事件时同步（afterOpenChange）
   const [openKeys, setOpenKeys] = useState<string[]>(() => getOpenGroupKeys(location.pathname))
 
+  // 手风琴展开：保留最新点击的分组 key，收起其余分组
+  const handleOpenChange = (keys: string[]) => {
+    const latest = keys.find((k) => !openKeys.includes(k))
+    setOpenKeys(latest ? [latest] : [])
+  }
+
   const items: MenuItem[] = useMemo(
     () =>
       menuGroups
@@ -61,7 +67,7 @@ export default function MobileSiderDrawer({ open, onClose }: Props) {
         mode='inline'
         selectedKeys={[selectedKey]}
         openKeys={openKeys}
-        onOpenChange={(keys) => setOpenKeys(keys as string[])}
+        onOpenChange={handleOpenChange}
         items={items}
         onClick={({ key }) => {
           navigate(key)
