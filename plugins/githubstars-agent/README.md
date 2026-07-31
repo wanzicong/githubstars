@@ -1,6 +1,6 @@
 # GitHub Stars Agent Plugin
 
-面向 Claude Code 的 GitHub Stars 插件。安装后会自动启动随插件分发的 MCP Server，并提供 73 个仓库管理工具和 5 个业务 Skills，无需手工维护 `.mcp.json`。
+面向 Claude Code 的 GitHub Stars 插件。安装后会自动启动随插件分发的 MCP Server，并提供 73 个仓库管理工具和 6 个业务 Skills，无需手工维护 `.mcp.json`。
 
 ## 能力
 
@@ -35,7 +35,7 @@ claude plugin install githubstars-agent@githubstars --scope project
 
 在已经打开的 Claude Code 会话中运行 `/reload-plugins`，然后用 `/mcp` 检查 `githubstars` 服务和工具。
 
-项目内置 `/agent` 页面也通过 Agent SDK 加载同一个插件。初始化时会校验插件、MCP 连接、73 个工具和 5 个 Skills；任何一项缺失都会返回明确错误，不会静默回退成“插件看似安装但实际不可用”。
+项目内置 `/agent` 页面也通过 Agent SDK 加载同一个插件。初始化时会校验插件、MCP 连接、73 个工具和 6 个 Skills；任何一项缺失都会返回明确错误，不会静默回退成“插件看似安装但实际不可用”。
 
 插件 MCP 工具在 Agent SDK 中的完整前缀是：
 
@@ -50,6 +50,7 @@ mcp__plugin_githubstars-agent_githubstars__
 - `/githubstars-agent:localize-star-repositories`
 - `/githubstars-agent:acquire-star-source`
 - `/githubstars-agent:operate-githubstars`
+- `/githubstars-agent:analyze-project-structure`
 
 ## 开发与验证
 

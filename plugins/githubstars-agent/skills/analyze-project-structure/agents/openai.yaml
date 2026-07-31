@@ -1,0 +1,4 @@
+interface:
+  display_name: "分析项目结构"
+  short_description: "用 GitHub MCP 分析完整项目的目录结构、技术栈、技术文档与工程完整性"
+  default_prompt: "Use $analyze-project-structure to analyze the structure and engineering completeness of a GitHub project."
