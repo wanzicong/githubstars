@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Segmented, Select, Spin, Empty, Typography, Tag, Space, Button, App, Modal, Input, theme } from 'antd'
-import { StarFilled, ForkOutlined, FireOutlined, DownloadOutlined, CodeOutlined, GithubOutlined } from '@ant-design/icons'
-import { fetchTrending, downloadTrending } from '../../api'
+import { StarFilled, StarOutlined, ForkOutlined, FireOutlined, DownloadOutlined, CodeOutlined, GithubOutlined } from '@ant-design/icons'
+import { fetchTrending, downloadTrending, starRepo, checkStarred } from '../../api'
 import {
     getDownloadTaskProgress,
     getRecentDownloadDirectories,
@@ -15,23 +15,49 @@ import {
 } from '../../api/download'
 import type { GithubSearchRepo } from '../../types'
 import { LANGUAGE_OPTIONS, RANK_BADGE_COLORS } from '../../constants'
-import { formatNumberShort, getRelativeTime } from '../../utils/format'
+import { formatNumberShort, getRelativeTime, parseFullName } from '../../utils/format'
 import DownloadProgressModal from '../../components/download/DownloadProgressModal'
 import CodePreviewDrawer from '../../components/repo/CodePreviewDrawer'
 
 const { Title, Text } = Typography
 
+const SINCE_VALUES = ['daily', 'weekly', 'monthly'] as const
+
 export default function Trending() {
     const { message } = App.useApp()
     const { token } = theme.useToken()
     const navigate = useNavigate()
-    const [since, setSince] = useState<string>('daily')
-    const [language, setLanguage] = useState<string>('')
+    // 筛选条件存 URL 参数 — 进入详情再返回时保持所选时间段/语言不丢失
+    const [searchParams, setSearchParams] = useSearchParams()
+    const sinceParam = searchParams.get('since') ?? ''
+    const since = (SINCE_VALUES as readonly string[]).includes(sinceParam) ? sinceParam : 'daily'
+    const language = searchParams.get('language') ?? ''
+
+    const setSince = useCallback((value: string) => {
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev)
+            if (value === 'daily') next.delete('since')
+            else next.set('since', value)
+            return next
+        })
+    }, [setSearchParams])
+
+    const setLanguage = useCallback((value: string) => {
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev)
+            if (value) next.set('language', value)
+            else next.delete('language')
+            return next
+        })
+    }, [setSearchParams])
+
     const [repos, setRepos] = useState<GithubSearchRepo[]>([])
     const [total, setTotal] = useState(0)
     const [dateRange, setDateRange] = useState('')
     const [loading, setLoading] = useState(false)
     const [previewRepo, setPreviewRepo] = useState<string | null>(null)
+    // 已 Star 的仓库 fullName 集合（悬停卡片时探测，Star 成功后写入）
+    const [starredMap, setStarredMap] = useState<Record<string, boolean>>({})
 
     // ── 下载相关状态 ──
     const [downloadConfigOpen, setDownloadConfigOpen] = useState(false)
@@ -92,6 +118,39 @@ export default function Trending() {
         }
         void doLoad()
     }, [since, language, message])
+
+    /** 悬停仓库卡片时探测是否已 Star（失败静默忽略） */
+    const handleCheckStar = useCallback(async (repo: GithubSearchRepo) => {
+        const fullName = repo.fullName
+        const [owner, repoName] = parseFullName(fullName)
+        try {
+            const data = await checkStarred(owner, repoName)
+            if (data.success && data.starred) {
+                setStarredMap((prev) => ({ ...prev, [fullName]: true }))
+            }
+        } catch {
+            // 探测失败不阻断交互
+        }
+    }, [])
+
+    /** 点击 Star 按钮 — 后端 star 接口是幂等的，成功后标记已 Star */
+    const handleStar = useCallback(async (repo: GithubSearchRepo) => {
+        const fullName = repo.fullName
+        const [owner, repoName] = parseFullName(fullName)
+        try {
+            const data = await starRepo(owner, repoName)
+            if (data.success && data.starred) {
+                setStarredMap((prev) => ({ ...prev, [fullName]: true }))
+                message.success(`已 Star ${fullName}`)
+            } else if (data.success) {
+                message.info(data.message || '操作完成')
+            } else {
+                message.error(data.message || 'Star 失败')
+            }
+        } catch {
+            message.error('Star 操作失败，请检查网络或 GitHub Token 配置')
+        }
+    }, [message])
 
     /** 打开下载配置弹窗 */
     const handleOpenDownloadConfig = useCallback(async () => {
@@ -267,9 +326,11 @@ export default function Trending() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {repos.map((repo, idx) => {
                             const barPercent = maxStars > 0 ? (repo.starsCount / maxStars) * 100 : 0
+                            const isStarred = starredMap[repo.fullName] ?? false
                             return (
                                 <div
                                     key={repo.id}
+                                    onMouseEnter={() => { if (!isStarred) void handleCheckStar(repo) }}
                                     style={{
                                         display: 'flex',
                                         alignItems: 'stretch',
@@ -320,6 +381,18 @@ export default function Trending() {
                                                 rel='noopener noreferrer'
                                                 onClick={(e) => e.stopPropagation()}
                                                 style={{ flexShrink: 0 }}
+                                            />
+                                            <Button
+                                                type='text'
+                                                size='small'
+                                                icon={isStarred ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
+                                                title={isStarred ? '已 Star' : 'Star 此仓库'}
+                                                disabled={isStarred}
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    void handleStar(repo)
+                                                }}
+                                                style={isStarred ? { flexShrink: 0, color: '#faad14' } : { flexShrink: 0 }}
                                             />
                                             {repo.language && (
                                                 <Tag color='blue' style={{ fontSize: 11, margin: 0, flexShrink: 0 }}>
