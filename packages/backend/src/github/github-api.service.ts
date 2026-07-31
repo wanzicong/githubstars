@@ -365,6 +365,73 @@ export class GithubApiService {
     }
 
     /**
+     * 按 owner/repo 获取任意 GitHub 仓库的完整元数据。
+     *
+     * 调用 GET /repos/{owner}/{repo}，响应经 mapStarredItem 映射为 DB 同构字段，
+     * 供未入库仓库的详情页展示使用（starredAt 恒为 null）。
+     *
+     * @param fullName 仓库全名，如 "owner/repo"
+     * @returns 映射后的仓库数据
+     */
+    async fetchRepoByFullName(fullName: string): Promise<MappedRepoData> {
+        const [owner, repo, ...extra] = fullName.split('/');
+        if (!owner || !repo || extra.length > 0) {
+            throw new BadRequestException('仓库名称格式无效');
+        }
+
+        const token = await this.config.getValueDefault('github.token', '');
+        const headers = {
+            ...buildGithubHeaders(token),
+            'X-GitHub-Api-Version': '2022-11-28',
+        };
+        const url = `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+        const controller = new AbortController();
+        const repoTimeout = setTimeout(() => controller.abort(), 20_000);
+
+        this.logger.log(`获取仓库元数据: ${fullName}`);
+
+        try {
+            const response = await fetch(url, { headers, signal: controller.signal });
+            const body = await response.text();
+
+            if (response.status === 404) {
+                throw new NotFoundException('仓库不存在或无访问权限');
+            }
+            if (response.status === 403 || response.status === 429) {
+                throw new HttpException('GitHub API 请求过于频繁，请稍后重试', HttpStatus.TOO_MANY_REQUESTS);
+            }
+            if (response.status !== 200) {
+                this.logger.error(`仓库元数据请求失败: ${fullName}, status=${response.status}, body=${body.substring(0, 300)}`);
+                throw new BadGatewayException(`GitHub 仓库服务异常 (HTTP ${response.status})`);
+            }
+
+            let raw: Record<string, unknown>;
+            try {
+                raw = JSON.parse(body) as Record<string, unknown>;
+            } catch {
+                throw new BadGatewayException('GitHub 仓库响应格式异常');
+            }
+
+            const mapped = mapStarredItem({ repo: raw });
+            if (!mapped) {
+                throw new BadGatewayException('GitHub 仓库响应字段不完整');
+            }
+            this.logger.log(`仓库元数据获取成功: ${fullName}, stars=${mapped.starsCount}`);
+            return mapped;
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            if (error instanceof Error && error.name === 'AbortError') {
+                throw new GatewayTimeoutException('GitHub 仓库请求超时');
+            }
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`仓库元数据获取异常: ${fullName}, ${message}`);
+            throw new BadGatewayException(`GitHub 仓库请求失败: ${message}`);
+        } finally {
+            clearTimeout(repoTimeout);
+        }
+    }
+
+    /**
      * 查询指定仓库的 Issues。
      *
      * 使用 Search Issues API，并固定追加 repo + is:issue 限定词，

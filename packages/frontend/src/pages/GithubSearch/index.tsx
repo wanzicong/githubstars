@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Input, Select, Card, Pagination, Spin, Empty, Typography, Tag, Button, Space, Row, Col, App } from 'antd'
 import { SearchOutlined, StarFilled, StarOutlined, ForkOutlined, GithubOutlined, CodeOutlined } from '@ant-design/icons'
 import { searchRepos, starRepo, checkStarred } from '../../api'
@@ -7,7 +8,7 @@ import { LANGUAGE_OPTIONS } from '../../constants'
 import { formatNumberShort, getRelativeTime, parseFullName } from '../../utils/format'
 import CodePreviewDrawer from '../../components/repo/CodePreviewDrawer'
 
-const { Title, Text, Paragraph } = Typography
+const { Title, Text, Paragraph, Link } = Typography
 
 const SORT_OPTIONS = [
     { value: '', label: '最佳匹配' },
@@ -24,6 +25,7 @@ const PER_PAGE_OPTIONS = [
 
 export default function GithubSearch() {
     const { message } = App.useApp()
+    const navigate = useNavigate()
     const [keyword, setKeyword] = useState('')
     const [language, setLanguage] = useState('')
     const [sort, setSort] = useState('')
@@ -199,16 +201,23 @@ export default function GithubSearch() {
                                                     alt={repo.ownerName || ''}
                                                     style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0 }}
                                                 />
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <a
+                                                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    <Link
+                                                        onClick={() => navigate(`/repos/${fullName}`)}
+                                                        style={{ fontWeight: 600, fontSize: 14, wordBreak: 'break-all', cursor: 'pointer' }}
+                                                        ellipsis
+                                                    >
+                                                        {fullName}
+                                                    </Link>
+                                                    <Button
+                                                        type='text'
+                                                        size='small'
+                                                        icon={<GithubOutlined />}
                                                         href={repo.htmlUrl}
                                                         target='_blank'
                                                         rel='noopener noreferrer'
-                                                        style={{ fontWeight: 600, fontSize: 14, wordBreak: 'break-all' }}
-                                                    >
-                                                        <GithubOutlined style={{ marginRight: 4 }} />
-                                                        {fullName}
-                                                    </a>
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    />
                                                 </div>
                                             </div>
 

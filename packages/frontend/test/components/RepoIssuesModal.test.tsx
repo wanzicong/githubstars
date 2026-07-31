@@ -86,7 +86,6 @@ const issueDetail: GithubIssueDetail = {
 }
 
 const defaultProps = {
-    repoId: 332,
     fullName: 'openai/codex',
     htmlUrl: 'https://github.com/openai/codex',
     open: true,
@@ -111,7 +110,8 @@ describe('RepoIssuesModal', () => {
         expect(screen.getByLabelText('3 条评论')).toBeInTheDocument()
         expect(screen.getByText(/#42/)).toBeInTheDocument()
         expect(fetchRepoIssues).toHaveBeenCalledWith({
-            repoId: 332,
+            owner: 'openai',
+            repo: 'codex',
             state: 'open',
             query: '',
             sort: 'updated',
@@ -131,7 +131,7 @@ describe('RepoIssuesModal', () => {
         expect(await screen.findByText('important details')).toBeInTheDocument()
         expect(screen.getByText('Thanks for the detailed report.')).toBeInTheDocument()
         expect(screen.getByText('站内展示前 1 条评论')).toBeInTheDocument()
-        expect(fetchRepoIssueDetail).toHaveBeenCalledWith({ repoId: 332, issueNumber: 42 })
+        expect(fetchRepoIssueDetail).toHaveBeenCalledWith({ owner: 'openai', repo: 'codex', issueNumber: 42 })
 
         fireEvent.click(screen.getByRole('button', { name: /返回列表/ }))
         expect(screen.getByRole('button', { name: '查看 Issue #42 详情' })).toBeInTheDocument()

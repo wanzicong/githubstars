@@ -9,6 +9,7 @@ import type { RouteObject } from 'react-router-dom'
 // ── 懒加载页面 ──
 const StarList = lazy(() => import('@/pages/StarList'))
 const StarDetail = lazy(() => import('@/pages/StarDetail'))
+const RepoDetail = lazy(() => import('@/pages/RepoDetail'))
 const Sync = lazy(() => import('@/pages/Sync'))
 const Stats = lazy(() => import('@/pages/Stats'))
 const AuthorList = lazy(() => import('@/pages/AuthorList'))
@@ -29,6 +30,8 @@ export const appRoutes: RouteObject[] = [
     { index: true, element: <StarList />, handle: { title: 'Star列表' } },
     // ── Star ──
     { path: 'stars/:id', element: <StarDetail />, handle: { title: 'Star详情' } },
+    // ── 任意仓库详情（owner/repo 入口，实时 GitHub API + 本地库回退） ──
+    { path: 'repos/:owner/:repo', element: <RepoDetail />, handle: { title: '仓库详情' } },
     // ── 代码浏览 ──
     { path: 'code-browser', element: <CodeBrowser />, handle: { title: '代码浏览' } },
     // ── 搜索 / 趋势 ──

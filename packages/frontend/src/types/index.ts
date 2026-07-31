@@ -34,6 +34,18 @@ export interface GithubRepo {
     }
 }
 
+/**
+ * 统一仓库详情页数据模型
+ *
+ * 与 GithubRepo 字段完全一致，但 id 可为 null（未入库仓库）且追加 inLibrary 标记。
+ * GithubRepo 可直接赋值给此类型（id: number 满足 number | null）。
+ */
+export type RepoDetailData = Omit<GithubRepo, 'id'> & {
+    id: number | null
+    /** 是否已收录到本地 Star 库 */
+    inLibrary?: boolean
+}
+
 export interface SyncLog {
     id: number
     syncType: string
@@ -179,6 +191,8 @@ export interface GithubSearchRepo {
     ownerAvatarUrl: string
     topics: string[]
     pushedAt: string
+    /** 若已收录到本地库，返回对应的仓库 ID（Trending 接口提供） */
+    localRepoId?: number | null
 }
 
 export interface SearchReposParams {

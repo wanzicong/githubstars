@@ -36,7 +36,6 @@ const EMPTY_RESULT: GithubIssueListResult = {
 }
 
 interface RepoIssuesModalProps {
-    repoId: number
     fullName: string
     htmlUrl: string
     open: boolean
@@ -48,8 +47,9 @@ interface RepoIssuesModalProps {
  *
  * 支持状态筛选、关键词搜索、排序、分页、刷新，以及跳转 GitHub 查看原 Issue。
  */
-export default function RepoIssuesModal({ repoId, fullName, htmlUrl, open, onClose }: RepoIssuesModalProps) {
+export default function RepoIssuesModal({ fullName, htmlUrl, open, onClose }: RepoIssuesModalProps) {
     const { token } = theme.useToken()
+    const [owner, repoName] = fullName.split('/')
     const requestSequence = useRef(0)
     const [issueState, setIssueState] = useState<GithubIssueState>('open')
     const [searchInput, setSearchInput] = useState('')
@@ -71,7 +71,8 @@ export default function RepoIssuesModal({ repoId, fullName, htmlUrl, open, onClo
             setError(null)
 
             fetchRepoIssues({
-                repoId,
+                owner,
+                repo: repoName,
                 state: issueState,
                 query,
                 sort,
@@ -102,7 +103,7 @@ export default function RepoIssuesModal({ repoId, fullName, htmlUrl, open, onClo
                 requestSequence.current += 1
             }
         }
-    }, [issueState, open, page, query, reloadKey, repoId, sort])
+    }, [issueState, open, page, query, reloadKey, sort, owner, repoName])
 
     const handleStateChange = (value: string | number) => {
         setIssueState(value as GithubIssueState)
@@ -210,7 +211,6 @@ export default function RepoIssuesModal({ repoId, fullName, htmlUrl, open, onClo
         >
             {selectedIssueNumber ? (
                 <RepoIssueDetail
-                    repoId={repoId}
                     issueNumber={selectedIssueNumber}
                     fullName={fullName}
                     onBack={() => setSelectedIssueNumber(null)}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, Row, Col, Statistic, Table, Tag, Typography, Spin } from 'antd'
 import { StarFilled, ForkOutlined, GithubOutlined } from '@ant-design/icons'
 import { Doughnut, Bar, Line } from 'react-chartjs-2'
@@ -21,13 +22,14 @@ import { CHART_COLORS } from '../../constants'
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Filler)
 
-const { Title } = Typography
+const { Title, Link: AntLink } = Typography
 
 const TOP_N_OWNERS = 15
 const TOP_N_REPOS = 10
 const TOP_N_LANGUAGES = 15
 
 export default function Stats() {
+    const navigate = useNavigate()
     const [overview, setOverview] = useState<OverviewStatsDTO | null>(null)
     const [languages, setLanguages] = useState<LanguageStatsDTO[]>([])
     const [owners, setOwners] = useState<OwnerStatsDTO[]>([])
@@ -111,10 +113,10 @@ export default function Stats() {
             dataIndex: 'fullName',
             key: 'fullName',
             render: (_: string, record: GithubRepo) => (
-                <a href={record.htmlUrl} target='_blank' rel='noopener noreferrer'>
+                <AntLink onClick={() => navigate(`/stars/${record.id}`)} style={{ cursor: 'pointer' }}>
                     <GithubOutlined style={{ marginRight: 4 }} />
                     {record.fullName}
-                </a>
+                </AntLink>
             ),
         },
         {
@@ -150,10 +152,10 @@ export default function Stats() {
             dataIndex: 'fullName',
             key: 'fullName',
             render: (_: string, record: GithubRepo) => (
-                <a href={record.htmlUrl} target='_blank' rel='noopener noreferrer'>
+                <AntLink onClick={() => navigate(`/stars/${record.id}`)} style={{ cursor: 'pointer' }}>
                     <GithubOutlined style={{ marginRight: 4 }} />
                     {record.fullName}
-                </a>
+                </AntLink>
             ),
         },
         {

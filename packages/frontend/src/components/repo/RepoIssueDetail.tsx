@@ -19,14 +19,14 @@ import MarkdownRenderer from '../common/MarkdownRenderer'
 const { Text, Title } = Typography
 
 interface RepoIssueDetailProps {
-    repoId: number
     issueNumber: number
     fullName: string
     onBack: () => void
 }
 
-export default function RepoIssueDetail({ repoId, issueNumber, fullName, onBack }: RepoIssueDetailProps) {
+export default function RepoIssueDetail({ issueNumber, fullName, onBack }: RepoIssueDetailProps) {
     const { token } = theme.useToken()
+    const [owner, repoName] = fullName.split('/')
     const requestSequence = useRef(0)
     const [detail, setDetail] = useState<GithubIssueDetail | null>(null)
     const [loading, setLoading] = useState(true)
@@ -39,7 +39,7 @@ export default function RepoIssueDetail({ repoId, issueNumber, fullName, onBack 
             if (requestSequence.current !== sequence) return
             setLoading(true)
             setError(null)
-            fetchRepoIssueDetail({ repoId, issueNumber })
+            fetchRepoIssueDetail({ owner, repo: repoName, issueNumber })
                 .then((data) => {
                     if (requestSequence.current === sequence) setDetail(data)
                 })
@@ -56,7 +56,7 @@ export default function RepoIssueDetail({ repoId, issueNumber, fullName, onBack 
         return () => {
             if (requestSequence.current === sequence) requestSequence.current += 1
         }
-    }, [issueNumber, reloadKey, repoId])
+    }, [issueNumber, reloadKey, owner, repoName])
 
     return (
         <div className='repo-issue-detail-layout'>

@@ -122,6 +122,7 @@ export const menuItems: (MenuItem & { icon: React.ReactNode; orderNo: number })[
  */
 const DETAIL_PARENT_MAP: Record<string, string> = {
   '/stars': '/',
+  '/repos': '/',
 }
 
 /**
@@ -172,6 +173,7 @@ export function getOpenGroupKeys(pathname: string): string[] {
 export function getMenuTitle(pathname: string): string {
   // 详情页特殊路径（必须在前缀匹配之前检查，否则 /authors/xxx 会被 /authors 前缀拦截返回作者中心）
   if (pathname.startsWith('/stars/')) return 'Star详情'
+  if (pathname.startsWith('/repos/')) return '仓库详情'
   if (pathname.startsWith('/authors/')) return '作者详情'
 
   // 精确匹配

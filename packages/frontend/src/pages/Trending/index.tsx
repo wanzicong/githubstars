@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Segmented, Select, Spin, Empty, Typography, Tag, Space, Button, App, Modal, Input, theme } from 'antd'
-import { StarFilled, ForkOutlined, FireOutlined, DownloadOutlined, CodeOutlined } from '@ant-design/icons'
+import { StarFilled, ForkOutlined, FireOutlined, DownloadOutlined, CodeOutlined, GithubOutlined } from '@ant-design/icons'
 import { fetchTrending, downloadTrending } from '../../api'
 import {
     getDownloadTaskProgress,
@@ -23,6 +24,7 @@ const { Title, Text } = Typography
 export default function Trending() {
     const { message } = App.useApp()
     const { token } = theme.useToken()
+    const navigate = useNavigate()
     const [since, setSince] = useState<string>('daily')
     const [language, setLanguage] = useState<string>('')
     const [repos, setRepos] = useState<GithubSearchRepo[]>([])
@@ -303,14 +305,22 @@ export default function Trending() {
                                                 alt=''
                                                 style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0 }}
                                             />
-                                            <a
+                                            <Typography.Link
+                                                onClick={() => navigate(`/repos/${repo.fullName}`)}
+                                                style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '100%' }}
+                                            >
+                                                {repo.fullName}
+                                            </Typography.Link>
+                                            <Button
+                                                type='text'
+                                                size='small'
+                                                icon={<GithubOutlined />}
                                                 href={repo.htmlUrl}
                                                 target='_blank'
                                                 rel='noopener noreferrer'
-                                                style={{ fontWeight: 600, fontSize: 14, color: token.colorPrimary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                            >
-                                                {repo.fullName}
-                                            </a>
+                                                onClick={(e) => e.stopPropagation()}
+                                                style={{ flexShrink: 0 }}
+                                            />
                                             {repo.language && (
                                                 <Tag color='blue' style={{ fontSize: 11, margin: 0, flexShrink: 0 }}>
                                                     {repo.language}

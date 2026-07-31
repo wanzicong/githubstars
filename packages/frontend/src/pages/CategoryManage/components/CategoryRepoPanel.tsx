@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, Table, Input, Select, Button, Space, Tag, Avatar, Typography, Tooltip, Empty, App, Dropdown } from 'antd'
 import {
     SearchOutlined,
@@ -12,6 +13,7 @@ import {
     FolderOutlined,
     FolderOpenOutlined,
     LinkOutlined,
+    InfoCircleOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { MenuProps } from 'antd'
@@ -35,6 +37,7 @@ interface CategoryRepoPanelProps {
 
 export default function CategoryRepoPanel({ selectedNode, repoState, onCategoryRefresh }: CategoryRepoPanelProps) {
     const { message } = App.useApp()
+    const navigate = useNavigate()
     const [addModalOpen, setAddModalOpen] = useState(false)
     const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([])
     const [cloneWizardOpen, setCloneWizardOpen] = useState(false)
@@ -83,7 +86,9 @@ export default function CategoryRepoPanel({ selectedNode, repoState, onCategoryR
 
     const handleRowMenuClick = useCallback((record: CategoryRepo) => (info: { key: string; domEvent: React.SyntheticEvent }) => {
         info.domEvent.stopPropagation()
-        if (info.key === 'open') {
+        if (info.key === 'detail') {
+            navigate(`/stars/${record.id}`)
+        } else if (info.key === 'open') {
             window.open(record.htmlUrl, '_blank', 'noopener,noreferrer')
         } else if (info.key === 'move') {
             setMovingRepo(record)
@@ -92,9 +97,10 @@ export default function CategoryRepoPanel({ selectedNode, repoState, onCategoryR
         } else if (info.key === 'remove') {
             handleUnbind([record.id])
         }
-    }, [handleUnbind])
+    }, [handleUnbind, navigate])
 
     const buildRowMenu = useCallback((): MenuProps['items'] => [
+        { key: 'detail', label: '查看详情', icon: <InfoCircleOutlined /> },
         { key: 'open', label: '在 GitHub 打开', icon: <LinkOutlined /> },
         { type: 'divider' },
         { key: 'move', label: '移动到其它分类', icon: <FolderOpenOutlined /> },
@@ -119,7 +125,13 @@ export default function CategoryRepoPanel({ selectedNode, repoState, onCategoryR
                 <Space>
                     <Avatar src={record.ownerAvatarUrl} size="small" />
                     <div style={{ minWidth: 0 }}>
-                        <Link href={record.htmlUrl} target="_blank" strong style={{ fontSize: 14 }}>{record.fullName}</Link>
+                        <Link
+                            onClick={() => navigate(`/stars/${record.id}`)}
+                            style={{ fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+                            ellipsis
+                        >
+                            {record.fullName}
+                        </Link>
                         {record.description && (
                             <div><Text type="secondary" ellipsis style={{ maxWidth: 400, fontSize: 12 }}>{record.description}</Text></div>
                         )}

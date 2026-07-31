@@ -1,13 +1,88 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
+import { GithubApiService } from './github-api.service';
+import { GithubRepoService } from './github-repo.service';
 
 const GITHUB_API = 'https://api.github.com';
+
+/** 未入库仓库详情的内存缓存有效期（10 分钟），降低 GitHub API 限流压力 */
+const REPO_DETAIL_CACHE_TTL = 10 * 60 * 1000;
+/** 缓存条目上限，超出后整体清空重建 */
+const REPO_DETAIL_CACHE_MAX = 200;
 
 @Injectable()
 export class GithubSearchService {
     private readonly logger = new Logger(GithubSearchService.name);
 
-    constructor(private readonly config: ConfigService) {}
+    /** 未入库仓库详情缓存：fullName → { data, expiresAt } */
+    private readonly repoDetailCache = new Map<string, { data: Record<string, unknown>; expiresAt: number }>();
+    constructor(
+        private readonly config: ConfigService,
+        private readonly githubApi: GithubApiService,
+        private readonly repoService: GithubRepoService,
+    ) {}
+
+    /**
+     * 获取任意 GitHub 仓库详情（统一仓库详情页数据源）
+     *
+     * 数据策略：
+     * 1. 本地库已收录 → 返回 DB 完整数据（含翻译），并按需拉取 README，inLibrary=true
+     * 2. 未收录 → 实时调用 GitHub API 获取元数据 + README，组装为与 DB 模型同构的
+     *    对象（id=null、无翻译字段），inLibrary=false，结果缓存 10 分钟
+     *
+     * 未入库的仓库只读展示，不写入数据库，避免污染 Star 列表。
+     *
+     * @param owner 仓库所有者
+     * @param repo 仓库名
+     * @returns 仓库详情对象（GithubRepo 同构 + inLibrary 标记）
+     */
+    async getRepoDetail(owner: string, repo: string): Promise<Record<string, unknown>> {
+        const fullName = `${owner}/${repo}`;
+        this.logger.log(`获取仓库详情: ${fullName}`);
+
+        // 1. 本地库命中 → DB 数据（含翻译），按需拉取 README
+        const local = await this.repoService.findByFullName(fullName);
+        if (local) {
+            if (!local.readmeFetched) {
+                this.logger.log(`详情页触发 README 按需拉取: ${fullName}`);
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- ensureReadmeFetched 预存 Promise<any> 返回值
+                const updated = await this.repoService.ensureReadmeFetched(Number(local.id));
+                return { ...((updated ?? local) as Record<string, unknown>), inLibrary: true };
+            }
+            return { ...local, inLibrary: true };
+        }
+
+        // 2. 内存缓存命中
+        const cached = this.repoDetailCache.get(fullName);
+        if (cached && cached.expiresAt > Date.now()) {
+            this.logger.log(`仓库详情命中缓存: ${fullName}`);
+            return cached.data;
+        }
+
+        // 3. GitHub API 实时获取；README 失败不阻塞详情返回
+        const mapped = await this.githubApi.fetchRepoByFullName(fullName);
+        const readmeResult = await this.githubApi.fetchReadmeFromGitHub(fullName).catch((e: unknown) => {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.error(`仓库详情 README 拉取失败: ${fullName}, ${msg}`);
+            return null;
+        });
+
+        const detail: Record<string, unknown> = {
+            id: null,
+            ...mapped,
+            descriptionCn: null,
+            readmeCn: null,
+            readmeOriginal: readmeResult?.content ?? null,
+            readmeFetched: true,
+            inLibrary: false,
+        };
+
+        if (this.repoDetailCache.size >= REPO_DETAIL_CACHE_MAX) {
+            this.repoDetailCache.clear();
+        }
+        this.repoDetailCache.set(fullName, { data: detail, expiresAt: Date.now() + REPO_DETAIL_CACHE_TTL });
+        return detail;
+    }
 
     /**
      * 构建 GitHub API 请求头
