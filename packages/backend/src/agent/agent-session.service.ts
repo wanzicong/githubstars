@@ -62,14 +62,17 @@ export class AgentSessionService {
     }
 
     /**
-     * 保存一条消息。
-     * content 为字符串时原样存储（向后兼容）；为 MessageBlock[] 时 JSON 序列化后存储。
-     * MySQL Json 列与 SQLite String 列均可直接写入字符串，
-     * 无需 isSqlite() 分支（Prisma.InputJsonValue 接受 string）。
+     * 保存一条消息，同时 touch 会话 updatedAt 保证列表排序正确。
+     *
+     * 使用事务保证消息写入和会话更新原子性，避免并发下
+     * "消息已写入但 updatedAt 未更新"或反过来的不一致状态。
      */
     async saveMessage(sessionId: string, role: string, content: string | MessageBlock[]): Promise<void> {
         const data = typeof content === 'string' ? content : JSON.stringify(content);
-        await this.prisma.agentMessage.create({ data: { sessionId, role, content: data } });
+        await this.prisma.$transaction([
+            this.prisma.agentMessage.create({ data: { sessionId, role, content: data } }),
+            this.prisma.agentSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } }),
+        ]);
     }
 
     /** 获取会话消息历史（取最新 N 条，按时间正序返回）；content 尝试解析为结构化 blocks，失败保持原文 */
@@ -81,15 +84,22 @@ export class AgentSessionService {
             select: { role: true, content: true, createdAt: true },
         });
         // desc 取最新 N 条后反转为正序，保证长会话展示最新消息而非最旧消息
-        return messages.reverse().map((m) => ({ ...m, content: this.tryParseJson(m.content) }));
+        const reversed = [...messages].reverse();
+        return reversed.map((m) => ({ ...m, content: this.tryParseJson(m.content) }));
     }
 
-    /** 关闭会话 */
+    /** 关闭会话；不存在时静默返回（幂等删除语义） */
     async closeSession(sessionId: string): Promise<void> {
-        await this.prisma.agentSession.update({ where: { id: sessionId }, data: { status: 'closed' } });
+        await this.prisma.agentSession.updateMany({ where: { id: sessionId }, data: { status: 'closed' } });
     }
 
-    /** 活跃会话列表（按更新时间倒序，含首条/末条用户消息预览） */
+    /** 判断会话是否存在（含已关闭） */
+    async sessionExists(sessionId: string): Promise<boolean> {
+        const count = await this.prisma.agentSession.count({ where: { id: sessionId } });
+        return count > 0;
+    }
+
+    /** 活跃会话列表（按更新时间倒序，含首条/末条用户消息预览，一次查询解决 N+1） */
     async listSessions(limit = 50, offset = 0): Promise<AgentSessionSummary[]> {
         const sessions = await this.prisma.agentSession.findMany({
             where: { status: 'active' },
@@ -98,25 +108,39 @@ export class AgentSessionService {
             skip: offset,
             include: {
                 _count: { select: { messages: true } },
-                messages: { orderBy: { createdAt: 'asc' }, take: 1, where: { role: 'user' }, select: { content: true } },
+                messages: {
+                    orderBy: { createdAt: 'asc' },
+                    take: 1,
+                    where: { role: 'user' },
+                    select: { content: true },
+                },
             },
         });
-        const lastMessages = await Promise.all(
-            sessions.map((s) =>
-                this.prisma.agentMessage.findFirst({
-                    where: { sessionId: s.id, role: 'user' },
-                    orderBy: { createdAt: 'desc' },
-                    select: { content: true },
-                }),
-            ),
-        );
-        return sessions.map((s, index) => ({
+
+        // 末条消息：批量查询替代逐条查询（消除 N+1）
+        const lastMessageMap = new Map<string, string>();
+        if (sessions.length > 0) {
+            const sessionIds = sessions.map((s) => s.id);
+            const allLastMessages = await this.prisma.agentMessage.findMany({
+                where: { sessionId: { in: sessionIds }, role: 'user' },
+                orderBy: { createdAt: 'desc' },
+                select: { sessionId: true, content: true },
+            });
+            // 按 sessionId 分组，取每个会话最新一条（已按 desc 排序）
+            for (const msg of allLastMessages) {
+                if (!lastMessageMap.has(msg.sessionId)) {
+                    lastMessageMap.set(msg.sessionId, this.extractText(msg.content) ?? '');
+                }
+            }
+        }
+
+        return sessions.map((s) => ({
             id: s.id,
             type: s.type,
             status: s.status,
             messageCount: s._count.messages,
             firstMessage: this.extractText(s.messages[0]?.content),
-            lastMessage: this.extractText(lastMessages[index]?.content),
+            lastMessage: lastMessageMap.get(s.id) ?? null,
             createdAt: s.createdAt,
             updatedAt: s.updatedAt,
         }));
@@ -131,11 +155,14 @@ export class AgentSessionService {
                 where: { status: 'closed', updatedAt: { lt: expiryDate } },
                 select: { id: true },
             });
-            for (const session of expired) {
-                await this.prisma.agentMessage.deleteMany({ where: { sessionId: session.id } });
-                await this.prisma.agentSession.delete({ where: { id: session.id } });
+            if (expired.length > 0) {
+                this.logger.log(`开始清理 ${expired.length} 个过期会话: ids=${expired.map((s) => s.id).join(',')}`);
+                for (const session of expired) {
+                    await this.prisma.agentMessage.deleteMany({ where: { sessionId: session.id } });
+                    await this.prisma.agentSession.delete({ where: { id: session.id } });
+                }
+                this.logger.log(`已清理 ${expired.length} 个过期会话`);
             }
-            if (expired.length > 0) this.logger.log(`已清理 ${expired.length} 个过期会话`);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.error(`清理过期会话失败: ${msg}`);

@@ -45,9 +45,9 @@ export async function listAgentSessions(limit?: number, offset?: number) {
   return res.data
 }
 
-/** 获取会话历史 */
-export async function getAgentSession(sessionId: string) {
-  const res = await agentApi.get(`/api/agent/sessions/${sessionId}`)
+/** 获取会话历史（signal 用于取消过期请求，避免快速切换会话时的竞态） */
+export async function getAgentSession(sessionId: string, signal?: AbortSignal) {
+  const res = await agentApi.get(`/api/agent/sessions/${sessionId}`, { signal })
   return res.data
 }
 

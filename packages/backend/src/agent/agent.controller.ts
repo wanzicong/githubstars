@@ -27,6 +27,8 @@ interface BlockDraft {
 @Controller('api/agent')
 export class AgentController {
     private readonly logger = new Logger(AgentController.name);
+    /** H3: 会话级并发锁——正在处理流式请求的会话 ID 集合 */
+    private readonly activeSessions = new Set<string>();
 
     constructor(
         private readonly agentClient: AgentClientService,
@@ -53,6 +55,14 @@ export class AgentController {
         const ctx = await this.resolveSessionContext(body.session, res);
         if (!ctx) return; // resolveSessionContext 已写 error 事件并 end
 
+        // H3: 会话并发锁——同一会话同时只允许一个流
+        if (ctx.ourSessionId && this.activeSessions.has(ctx.ourSessionId)) {
+            this.writeSse(res, 'error', '该会话正在处理另一个请求，请稍候');
+            res.end();
+            return;
+        }
+        if (ctx.ourSessionId) this.activeSessions.add(ctx.ourSessionId);
+
         let closed = false;
         res.on('close', () => {
             closed = true;
@@ -62,20 +72,34 @@ export class AgentController {
             closed = true;
         });
 
+        // F3: SSE 心跳——每 30s 发送注释帧，防止网关/代理空闲断开
+        const heartbeat = setInterval(() => {
+            if (!closed && !res.destroyed) res.write(': heartbeat\n\n');
+        }, 30_000);
+
         try {
             const assistantBlocks = await this.streamAgentToClient(body, ctx, res, () => closed);
             if (!closed && !res.destroyed) {
                 this.writeSse(res, 'result', { sessionId: ctx.ourSessionId }, ctx.ourSessionId);
                 res.end();
             }
+            // H2: 无论流是否被客户端中断（closed=true），已收集的内容都要持久化
             await this.persistMessages(ctx.ourSessionId, body.message, assistantBlocks);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.error(`Agent chat 失败: ${msg}`);
+            // H2: 异常时也尝试持久化已收集的内容
+            if (ctx.ourSessionId) {
+                this.logger.log(`异常路径仍持久化消息: sessionId=${ctx.ourSessionId}`);
+                await this.persistMessages(ctx.ourSessionId, body.message, []);
+            }
             if (!closed && !res.destroyed) {
                 this.writeSse(res, 'error', msg);
                 res.end();
             }
+        } finally {
+            clearInterval(heartbeat);
+            if (ctx.ourSessionId) this.activeSessions.delete(ctx.ourSessionId);
         }
     }
 
@@ -133,6 +157,10 @@ export class AgentController {
     @Delete('sessions/:id')
     @ApiOperation({ summary: '关闭（删除）会话' })
     async deleteSession(@Param('id') id: string) {
+        // H5: 检查是否有进行中的流，避免关闭后流仍写消息
+        if (this.activeSessions.has(id)) {
+            return { success: false, error: '该会话正在处理请求，请等待完成后再关闭' };
+        }
         await this.sessionService.closeSession(id);
         return { success: true };
     }

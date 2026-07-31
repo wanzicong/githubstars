@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, memo } from 'react'
-import { Input, Button, Typography, Tag, theme, App, Segmented, Badge, Tooltip, Spin, Avatar, Flex, Card, Empty, Skeleton } from 'antd'
+import axios from 'axios'
+import { Input, Button, Typography, Tag, theme, App, Segmented, Badge, Tooltip, Spin, Avatar, Flex, Card, Empty, Skeleton, Grid, Drawer } from 'antd'
 import {
   SendOutlined,
   RobotOutlined,
@@ -21,11 +22,13 @@ import {
   RightOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer'
 import ThinkingBlock from './ThinkingBlock'
 import { listAgentSessions, getAgentSession, deleteAgentSession, getAgentBaseURL } from '@/api/agent'
 import { getAgentFriendlyErrorMessage } from '@/utils/agent-error'
+import { useAgentChatStore } from '@/stores'
 
 const { Text, Paragraph } = Typography
 
@@ -442,6 +445,14 @@ function withToolCalls(messages: ChatMessage[], messageId: string, list: ToolCal
   return messages.map((m) => (m.id === messageId ? { ...m, toolCalls: list } : m))
 }
 
+/** 中止生成后的最终内容：保留已累积内容，仅在末尾追加停止标记；完全没收到内容时显示占位符 */
+function buildAbortedContent(fullText: string, fullThinking: string, toolBlocks: MessageBlock[]): string {
+  const stopMarker = '> ⏹ *已停止生成*'
+  if (fullText) return `${fullText}\n\n${stopMarker}`
+  if (fullThinking || toolBlocks.length > 0) return stopMarker
+  return '*已停止生成（未收到任何内容）*'
+}
+
 // ── Hooks ──
 
 /**
@@ -476,8 +487,7 @@ function useThrottledStreamState(): [string, (val: string) => void, () => string
 
 // ── Sub-components ──
 
-function AIAvatar({ size = 36 }: { size?: number }) {
-  return <Avatar size={size} icon={<RobotOutlined />} style={AI_AVATAR_STYLE} />
+function AIAvatar({ size = 36 }: { size?: number }) {  return <Avatar size={size} icon={<RobotOutlined />} style={AI_AVATAR_STYLE} />
 }
 
 function UserAvatar({ size = 36 }: { size?: number }) {
@@ -751,7 +761,169 @@ const MessageBubble = memo(function MessageBubble({ msg, copiedId, onCopy }: {
   )
 })
 
-/** 左侧会话边栏 —— 嵌入式（替代原 Drawer），可折叠为 48px 窄条 */
+/** 会话列表主体内容（新对话按钮 + 列表 + 状态），供嵌入式边栏与移动端 Drawer 复用 */
+function SessionListContent({
+  sessions,
+  sessionsLoading,
+  sessionsError,
+  currentSessionId,
+  loadingSessionId,
+  onNewConversation,
+  onLoadSession,
+  onDeleteSession,
+  onRetry,
+}: {
+  sessions: SessionSummary[]
+  sessionsLoading: boolean
+  sessionsError: string | null
+  currentSessionId: string | null
+  loadingSessionId: string | null
+  onNewConversation: () => void
+  onLoadSession: (sessionId: string) => void
+  onDeleteSession: (sessionId: string, e: React.MouseEvent) => void
+  onRetry: () => void
+}) {
+  const { token } = theme.useToken()
+
+  return (
+    <>
+      {/* 顶部：新对话 */}
+      <div style={{ padding: 12, flexShrink: 0 }}>
+        <Button type="primary" icon={<PlusOutlined />} block onClick={onNewConversation}>
+          新对话
+        </Button>
+      </div>
+
+      {/* 中部：会话列表（可滚动） */}
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        {/* 加载态 */}
+        {sessionsLoading && (
+          <div style={{ padding: 16 }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} style={{ marginBottom: 12 }}>
+                <Skeleton active title={{ width: '80%' }} paragraph={{ rows: 1, width: '40%' }} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 错误态 */}
+        {!sessionsLoading && sessionsError && (
+          <Flex vertical align="center" justify="center" style={{ padding: 40, textAlign: 'center' }} gap={12}>
+            <Text type="danger" style={{ fontSize: 13 }}>❌ {sessionsError}</Text>
+            <Button size="small" onClick={onRetry}>重试</Button>
+          </Flex>
+        )}
+
+        {/* 空态 */}
+        {!sessionsLoading && !sessionsError && sessions.length === 0 && (
+          <Flex vertical align="center" justify="center" style={{ padding: 60, textAlign: 'center' }}>
+            <Empty description="暂无对话历史" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <Text type="secondary" style={{ fontSize: 12, marginTop: 8 }}>
+              选择"持久会话"模式开始对话
+            </Text>
+          </Flex>
+        )}
+
+        {/* 会话列表 */}
+        {!sessionsLoading && !sessionsError && sessions.length > 0 && (
+          groupSessionsByDate(sessions).map((group) => (
+            <div key={group.label}>
+              <div style={{
+                padding: '8px 16px 4px',
+                fontSize: 11,
+                color: token.colorTextTertiary,
+                fontWeight: 500,
+              }}>
+                {group.label}
+              </div>
+              {group.items.map((session) => (
+                <div
+                  key={session.id}
+                  className="session-item"
+                  onClick={() => onLoadSession(session.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    padding: '10px 16px',
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                    background: session.id === currentSessionId
+                      ? token.colorPrimaryBg
+                      : 'transparent',
+                    borderLeft: session.id === currentSessionId
+                      ? `3px solid ${token.colorPrimary}`
+                      : '3px solid transparent',
+                    position: 'relative',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (session.id !== currentSessionId) {
+                      e.currentTarget.style.background = token.colorBgTextHover
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (session.id !== currentSessionId) {
+                      e.currentTarget.style.background = 'transparent'
+                    }
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13,
+                      color: token.colorText,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      lineHeight: '20px',
+                    }}>
+                      {session.firstMessage || '新对话'}
+                    </div>
+                    <Flex gap={8} align="center" style={{ marginTop: 4 }}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        {formatRelativeTime(session.updatedAt)}
+                      </Text>
+                      {session.messageCount > 0 && (
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          {session.messageCount} 条消息
+                        </Text>
+                      )}
+                      {loadingSessionId === session.id && (
+                        <Spin size="small" />
+                      )}
+                    </Flex>
+                  </div>
+
+                  {/* 删除按钮（hover 显示） */}
+                  <Tooltip title="删除会话">
+                    <Button
+                      type="text"
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDeleteSession(session.id, e)
+                      }}
+                      style={{
+                        flexShrink: 0,
+                        opacity: 0,
+                        transition: 'opacity 0.15s',
+                        marginLeft: 4,
+                      }}
+                      className="session-delete-btn"
+                    />
+                  </Tooltip>
+                </div>
+              ))}
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  )
+}
+
+/** 左侧会话边栏（桌面端嵌入式，可折叠为 48px 窄条） */
 const SessionSidebar = memo(function SessionSidebar({
   collapsed,
   onToggleCollapsed,
@@ -800,138 +972,17 @@ const SessionSidebar = memo(function SessionSidebar({
         </Flex>
       ) : (
         <>
-          {/* 顶部：新对话 */}
-          <div style={{ padding: 12, flexShrink: 0 }}>
-            <Button type="primary" icon={<PlusOutlined />} block onClick={onNewConversation}>
-              新对话
-            </Button>
-          </div>
-
-          {/* 中部：会话列表（可滚动） */}
-          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-            {/* 加载态 */}
-            {sessionsLoading && (
-              <div style={{ padding: 16 }}>
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} style={{ marginBottom: 12 }}>
-                    <Skeleton active title={{ width: '80%' }} paragraph={{ rows: 1, width: '40%' }} />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* 错误态 */}
-            {!sessionsLoading && sessionsError && (
-              <Flex vertical align="center" justify="center" style={{ padding: 40, textAlign: 'center' }} gap={12}>
-                <Text type="danger" style={{ fontSize: 13 }}>❌ {sessionsError}</Text>
-                <Button size="small" onClick={onRetry}>重试</Button>
-              </Flex>
-            )}
-
-            {/* 空态 */}
-            {!sessionsLoading && !sessionsError && sessions.length === 0 && (
-              <Flex vertical align="center" justify="center" style={{ padding: 60, textAlign: 'center' }}>
-                <Empty description="暂无对话历史" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                <Text type="secondary" style={{ fontSize: 12, marginTop: 8 }}>
-                  选择"持久会话"模式开始对话
-                </Text>
-              </Flex>
-            )}
-
-            {/* 会话列表 */}
-            {!sessionsLoading && !sessionsError && sessions.length > 0 && (
-              groupSessionsByDate(sessions).map((group) => (
-                <div key={group.label}>
-                  <div style={{
-                    padding: '8px 16px 4px',
-                    fontSize: 11,
-                    color: token.colorTextTertiary,
-                    fontWeight: 500,
-                  }}>
-                    {group.label}
-                  </div>
-                  {group.items.map((session) => (
-                    <div
-                      key={session.id}
-                      className="session-item"
-                      onClick={() => onLoadSession(session.id)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        padding: '10px 16px',
-                        cursor: 'pointer',
-                        transition: 'background 0.15s',
-                        background: session.id === currentSessionId
-                          ? token.colorPrimaryBg
-                          : 'transparent',
-                        borderLeft: session.id === currentSessionId
-                          ? `3px solid ${token.colorPrimary}`
-                          : '3px solid transparent',
-                        position: 'relative',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (session.id !== currentSessionId) {
-                          e.currentTarget.style.background = token.colorBgTextHover
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (session.id !== currentSessionId) {
-                          e.currentTarget.style.background = 'transparent'
-                        }
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontSize: 13,
-                          color: token.colorText,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          lineHeight: '20px',
-                        }}>
-                          {session.firstMessage || '新对话'}
-                        </div>
-                        <Flex gap={8} align="center" style={{ marginTop: 4 }}>
-                          <Text type="secondary" style={{ fontSize: 11 }}>
-                            {formatRelativeTime(session.updatedAt)}
-                          </Text>
-                          {session.messageCount > 0 && (
-                            <Text type="secondary" style={{ fontSize: 11 }}>
-                              {session.messageCount} 条消息
-                            </Text>
-                          )}
-                          {loadingSessionId === session.id && (
-                            <Spin size="small" />
-                          )}
-                        </Flex>
-                      </div>
-
-                      {/* 删除按钮（hover 显示） */}
-                      <Tooltip title="删除会话">
-                        <Button
-                          type="text"
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onDeleteSession(session.id, e)
-                          }}
-                          style={{
-                            flexShrink: 0,
-                            opacity: 0,
-                            transition: 'opacity 0.15s',
-                            marginLeft: 4,
-                          }}
-                          className="session-delete-btn"
-                        />
-                      </Tooltip>
-                    </div>
-                  ))}
-                </div>
-              ))
-            )}
-          </div>
+          <SessionListContent
+            sessions={sessions}
+            sessionsLoading={sessionsLoading}
+            sessionsError={sessionsError}
+            currentSessionId={currentSessionId}
+            loadingSessionId={loadingSessionId}
+            onNewConversation={onNewConversation}
+            onLoadSession={onLoadSession}
+            onDeleteSession={onDeleteSession}
+            onRetry={onRetry}
+          />
 
           {/* 底部：折叠按钮 */}
           <div
@@ -953,18 +1004,84 @@ const SessionSidebar = memo(function SessionSidebar({
   )
 })
 
+/** 移动端会话列表抽屉 —— 从左侧滑出覆盖，选中会话后自动关闭 */
+function MobileSessionDrawer({
+  open,
+  onClose,
+  sessions,
+  sessionsLoading,
+  sessionsError,
+  currentSessionId,
+  loadingSessionId,
+  onNewConversation,
+  onLoadSession,
+  onDeleteSession,
+  onRetry,
+}: {
+  open: boolean
+  onClose: () => void
+  sessions: SessionSummary[]
+  sessionsLoading: boolean
+  sessionsError: string | null
+  currentSessionId: string | null
+  loadingSessionId: string | null
+  onNewConversation: () => void
+  onLoadSession: (sessionId: string) => void
+  onDeleteSession: (sessionId: string, e: React.MouseEvent) => void
+  onRetry: () => void
+}) {
+  const { token } = theme.useToken()
+
+  return (
+    <Drawer
+      placement="left"
+      open={open}
+      onClose={onClose}
+      size={280}
+      closable={false}
+      styles={{
+        body: { padding: 0, display: 'flex', flexDirection: 'column' },
+        header: { padding: '0 16px', height: 56, borderBottom: `1px solid ${token.colorBorderSecondary}` },
+      }}
+      title={
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 600, color: token.colorPrimary }}>
+          <HistoryOutlined /> 会话历史
+        </span>
+      }
+    >
+      <SessionListContent
+        sessions={sessions}
+        sessionsLoading={sessionsLoading}
+        sessionsError={sessionsError}
+        currentSessionId={currentSessionId}
+        loadingSessionId={loadingSessionId}
+        onNewConversation={onNewConversation}
+        onLoadSession={onLoadSession}
+        onDeleteSession={onDeleteSession}
+        onRetry={onRetry}
+      />
+    </Drawer>
+  )
+}
+
 // ── Main Component ──
 
 export default function AgentChat() {
   const { token } = theme.useToken()
   const { message: antMsg } = App.useApp()
 
+  // 持久化状态（zustand persist，刷新后恢复会话与草稿）
+  const currentSessionId = useAgentChatStore((s) => s.currentSessionId)
+  const sessionMode = useAgentChatStore((s) => s.sessionMode)
+  const draftInput = useAgentChatStore((s) => s.draftInput)
+  const setCurrentSessionId = useAgentChatStore((s) => s.setCurrentSessionId)
+  const setSessionMode = useAgentChatStore((s) => s.setSessionMode)
+  const setDraftInput = useAgentChatStore((s) => s.setDraftInput)
+  const clearAgentChat = useAgentChatStore((s) => s.clear)
+
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sessionMode, setSessionMode] = useState<SessionMode>('auto')
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   // 流式文本使用 RAF 节流 state（每帧最多一次 setState），避免高频重渲染
   const [streamingText, setStreamingText, getLatestText] = useThrottledStreamState()
   const [streamingThinking, setStreamingThinking] = useThrottledStreamState()
@@ -978,11 +1095,22 @@ export default function AgentChat() {
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const [sessionsError, setSessionsError] = useState<string | null>(null)
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
+  // 移动端会话抽屉开关
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+
+  // Ant Design 断点：md = ≥768px。screens.md 为 false 即手机端
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
 
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<React.ComponentRef<typeof Input.TextArea>>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // 会话加载竞态控制：每次加载递增序号 + 独立 AbortController，仅最新请求允许落地
+  const loadSeqRef = useRef(0)
+  const loadAbortRef = useRef<AbortController | null>(null)
+  // 流式过程累积（供中止时保留已收内容；与 SSE 回调共用同一引用，不经过 React state）
+  const streamAccumRef = useRef<StreamAccum | null>(null)
 
   // Auto scroll
   const scrollToBottom = useCallback(() => {
@@ -997,10 +1125,11 @@ export default function AgentChat() {
     scrollToBottom()
   }, [messages, streamingText, streamingThinking, streamingToolBlocks, scrollToBottom])
 
-  // 组件卸载时取消进行中的 SSE 流
+  // 组件卸载时取消进行中的 SSE 流与会话加载请求
   useEffect(() => {
     return () => {
       abortRef.current?.abort()
+      loadAbortRef.current?.abort()
     }
   }, [])
 
@@ -1026,7 +1155,7 @@ export default function AgentChat() {
     setStreamingToolBlocks([])
     setStreamingToolResults(new Map())
     setLoading(false)
-  }, [setStreamingText, setStreamingThinking])
+  }, [setCurrentSessionId, setStreamingText, setStreamingThinking])
 
   /** 停止生成（中止当前 SSE 流） */
   const handleStop = useCallback(() => {
@@ -1057,19 +1186,29 @@ export default function AgentChat() {
     }
   }, [])
 
-  /** 加载指定会话的消息（切换前中止进行中的流并清理流式状态，避免旧流污染新会话） */
+  /**
+   * 加载指定会话的消息（切换前中止进行中的流并清理流式状态，避免旧流污染新会话）。
+   * 竞态控制（最新请求胜出）：每次加载递增序号并取消上一次请求，响应落地前比对序号，过期响应/取消静默丢弃。
+   */
   const loadSession = useCallback(async (sessionId: string) => {
-    if (loadingSessionId) return
     abortRef.current?.abort()
     abortRef.current = null
+    streamAccumRef.current = null
     setStreamingText('')
     setStreamingThinking('')
     setStreamingToolBlocks([])
     setStreamingToolResults(new Map())
     setLoading(false)
+
+    const seq = ++loadSeqRef.current
+    loadAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadAbortRef.current = controller
     setLoadingSessionId(sessionId)
+
     try {
-      const data = await getAgentSession(sessionId)
+      const data = await getAgentSession(sessionId, controller.signal)
+      if (seq !== loadSeqRef.current) return // 已有更新的请求，丢弃过期响应
       if (data.success) {
         const rawMessages = (data.messages ?? []) as Array<{ role: string; content: unknown; createdAt: string }>
         const chatMessages = rawMessages
@@ -1081,26 +1220,47 @@ export default function AgentChat() {
         antMsg.error(data.error ?? '加载会话失败')
       }
     } catch (error: unknown) {
+      const isCanceled = axios.isCancel(error) || (error instanceof Error && error.name === 'AbortError')
+      if (isCanceled || seq !== loadSeqRef.current) return // 主动取消或已过期，静默处理
       antMsg.error(error instanceof Error ? error.message : '加载会话失败')
     } finally {
-      setLoadingSessionId(null)
+      if (seq === loadSeqRef.current) setLoadingSessionId(null)
     }
-  }, [loadingSessionId, antMsg, setStreamingText, setStreamingThinking])
+  }, [antMsg, setCurrentSessionId, setStreamingText, setStreamingThinking])
 
-  /** 新建对话 */
+  /** 新建对话（保留会话模式偏好与草稿，仅清空当前会话） */
   const handleNewConversation = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
+    streamAccumRef.current = null
+    loadAbortRef.current?.abort()
+    loadSeqRef.current += 1
     setMessages([])
-    setCurrentSessionId(null)
+    clearAgentChat()
     setStreamingText('')
     setStreamingThinking('')
     setStreamingToolBlocks([])
     setStreamingToolResults(new Map())
     setLoading(false)
-    setSessionMode('auto')
     inputRef.current?.focus()
-  }, [setStreamingText, setStreamingThinking])
+  }, [clearAgentChat, setStreamingText, setStreamingThinking])
+
+  /** 移动端：加载会话后自动关闭抽屉 */
+  const handleLoadSessionMobile = useCallback((sessionId: string) => {
+    loadSession(sessionId)
+    setMobileDrawerOpen(false)
+  }, [loadSession])
+
+  /** 移动端：新建对话后自动关闭抽屉 */
+  const handleNewConversationMobile = useCallback(() => {
+    handleNewConversation()
+    setMobileDrawerOpen(false)
+  }, [handleNewConversation])
+
+  /** 移动端：打开会话抽屉 */
+  const handleOpenMobileDrawer = useCallback(() => {
+    setMobileDrawerOpen(true)
+  }, [])
 
   /** 删除会话 */
   const handleDeleteSession = useCallback(async (sessionId: string, e: React.MouseEvent) => {
@@ -1110,6 +1270,7 @@ export default function AgentChat() {
       if (data.success) {
         setSessions((prev) => prev.filter((s) => s.id !== sessionId))
         if (currentSessionId === sessionId) {
+          loadSeqRef.current += 1
           setMessages([])
           setCurrentSessionId(null)
         }
@@ -1120,7 +1281,7 @@ export default function AgentChat() {
     } catch (error: unknown) {
       antMsg.error(error instanceof Error ? error.message : '删除会话失败')
     }
-  }, [currentSessionId, antMsg])
+  }, [currentSessionId, antMsg, setCurrentSessionId])
 
   // 首次加载获取会话列表（延迟到宏任务，避免 effect 体内同步 setState 触发级联渲染）
   useEffect(() => {
@@ -1131,6 +1292,17 @@ export default function AgentChat() {
       clearTimeout(timer)
     }
   }, [fetchSessions])
+
+  // 刷新/重进页面时恢复上次的会话（延迟到宏任务，避免 effect 体内同步 setState 触发级联渲染）
+  useEffect(() => {
+    if (!currentSessionId || messages.length > 0 || loadingSessionId) return
+    const timer = setTimeout(() => {
+      void loadSession(currentSessionId)
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [currentSessionId, messages.length, loadingSessionId, loadSession])
 
   // 当 currentSessionId 变化时（新建/切换会话），刷新会话列表
   const prevSessionIdRef = useRef<string | null>(null)
@@ -1157,15 +1329,7 @@ export default function AgentChat() {
     onStreamThinking: (thinking: string) => void,
     onToolCall: (block: MessageBlock) => void,
     onToolResult: (toolUseId: string, content: string, isError?: boolean) => void,
-  ): Promise<{
-    fullText: string
-    fullThinking: string
-    toolCalls: ToolCallInfo[]
-    toolBlocks: MessageBlock[]
-    toolResults: ToolResultMap
-    capturedSessionId: string | null
-    aborted: boolean
-  }> => {
+  ): Promise<StreamAccum & { aborted: boolean }> => {
     const response = await fetch(`${getAgentBaseURL()}/api/agent/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1186,6 +1350,7 @@ export default function AgentChat() {
       toolResults: new Map(),
       capturedSessionId: null,
     }
+    streamAccumRef.current = accum
     let aborted = false
 
     try {
@@ -1211,22 +1376,14 @@ export default function AgentChat() {
       }
     }
 
-    return {
-      fullText: accum.fullText,
-      fullThinking: accum.fullThinking,
-      toolCalls: accum.toolCallsList,
-      toolBlocks: accum.toolBlocks,
-      toolResults: accum.toolResults,
-      capturedSessionId: accum.capturedSessionId,
-      aborted,
-    }
+    return { ...accum, aborted }
   }, [])
 
   const handleSend = useCallback(async () => {
-    const text = input.trim()
+    const text = draftInput.trim()
     if (!text || loading) return
 
-    setInput('')
+    setDraftInput('')
     setLoading(true)
 
     const userMsg: ChatMessage = {
@@ -1261,7 +1418,7 @@ export default function AgentChat() {
       const {
         fullText,
         fullThinking,
-        toolCalls: tCalls,
+        toolCallsList: tCalls,
         toolBlocks: tBlocks,
         toolResults: tResults,
         capturedSessionId,
@@ -1281,7 +1438,8 @@ export default function AgentChat() {
       )
 
       const finalToolCalls = tCalls.length > 0 ? tCalls : undefined
-      const finalContent = aborted && !fullText ? '> ⏹ *已停止生成*' : fullText
+      // 中止时保留已累积内容，仅在末尾追加停止标记；完全没收到内容时显示占位符
+      const finalContent = aborted ? buildAbortedContent(fullText, fullThinking, tBlocks) : fullText
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
@@ -1324,15 +1482,16 @@ export default function AgentChat() {
       setStreamingThinking('')
       setStreamingToolBlocks([])
       setStreamingToolResults(new Map())
+      streamAccumRef.current = null
       abortRef.current = null
       inputRef.current?.focus()
     }
-  }, [input, loading, sessionMode, currentSessionId, fetchAndProcessStream, setStreamingText, setStreamingThinking, getLatestText])
+  }, [draftInput, loading, sessionMode, currentSessionId, fetchAndProcessStream, setDraftInput, setCurrentSessionId, setStreamingText, setStreamingThinking, getLatestText])
 
   const handleModeChange = useCallback((value: SessionMode) => {
     setSessionMode(value)
     if (value === 'none') setCurrentSessionId(null)
-  }, [])
+  }, [setSessionMode, setCurrentSessionId])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // 中文输入法选词期间的 Enter 不触发发送
@@ -1344,41 +1503,65 @@ export default function AgentChat() {
   }, [handleSend])
 
   const handleSuggestion = useCallback((text: string) => {
-    setInput(text)
+    setDraftInput(text)
     inputRef.current?.focus()
-  }, [])
+  }, [setDraftInput])
 
   // ── Render ──
 
   const isStreaming = loading && (streamingText.length > 0 || streamingThinking.length > 0 || streamingToolBlocks.length > 0)
   const hasMessages = messages.length > 0
 
+  // 响应式容器尺寸：与 Layout Content padding 对齐（移动端 12px，桌面端 16px/24px）
+  const containerMargin = isMobile ? '-12px -12px' : '-16px -24px'
+  const contentPaddingY = isMobile ? 24 : 32
+  const containerHeight = `calc(100vh - 56px - 40px - 40px - ${contentPaddingY}px)` // header(56) + tabs(40) + footer(40) + content padding
+
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'row',
-        height: 'calc(100vh - 56px - 40px - 40px - 32px)', // header(56) + tabs(40) + footer(40) + content padding(16*2)
-        margin: '-16px -24px', // 抵消父 Content 的 padding
+        height: containerHeight,
+        margin: containerMargin, // 抵消父 Content 的 padding
         overflow: 'hidden',
         position: 'relative',
         background: token.colorBgContainer,
       }}
     >
-      {/* ── 左侧会话边栏（嵌入式，可折叠） ── */}
-      <SessionSidebar
-        collapsed={sidebarCollapsed}
-        onToggleCollapsed={handleToggleSidebar}
-        sessions={sessions}
-        sessionsLoading={sessionsLoading}
-        sessionsError={sessionsError}
-        currentSessionId={currentSessionId}
-        loadingSessionId={loadingSessionId}
-        onNewConversation={handleNewConversation}
-        onLoadSession={loadSession}
-        onDeleteSession={handleDeleteSession}
-        onRetry={fetchSessions}
-      />
+      {/* ── 左侧会话边栏（桌面端嵌入式，移动端隐藏改用抽屉） ── */}
+      {!isMobile && (
+        <SessionSidebar
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={handleToggleSidebar}
+          sessions={sessions}
+          sessionsLoading={sessionsLoading}
+          sessionsError={sessionsError}
+          currentSessionId={currentSessionId}
+          loadingSessionId={loadingSessionId}
+          onNewConversation={handleNewConversation}
+          onLoadSession={loadSession}
+          onDeleteSession={handleDeleteSession}
+          onRetry={fetchSessions}
+        />
+      )}
+
+      {/* ── 移动端会话抽屉 ── */}
+      {isMobile && (
+        <MobileSessionDrawer
+          open={mobileDrawerOpen}
+          onClose={() => setMobileDrawerOpen(false)}
+          sessions={sessions}
+          sessionsLoading={sessionsLoading}
+          sessionsError={sessionsError}
+          currentSessionId={currentSessionId}
+          loadingSessionId={loadingSessionId}
+          onNewConversation={handleNewConversationMobile}
+          onLoadSession={handleLoadSessionMobile}
+          onDeleteSession={handleDeleteSession}
+          onRetry={fetchSessions}
+        />
+      )}
 
       {/* ── 右侧聊天区 ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -1395,6 +1578,11 @@ export default function AgentChat() {
           }}
         >
           <Flex align="center" gap={10}>
+            {isMobile && (
+              <Tooltip title="会话历史">
+                <Button type="text" icon={<HistoryOutlined />} onClick={handleOpenMobileDrawer} />
+              </Tooltip>
+            )}
             <div
               style={{
                 width: 32, height: 32, borderRadius: 8,
@@ -1463,14 +1651,14 @@ export default function AgentChat() {
                 搜索 GitHub 仓库、查看项目信息、分析技术趋势
               </Text>
 
-              <Flex wrap="wrap" justify="center" gap={8} style={{ marginTop: 24 }}>
+              <Flex wrap="wrap" justify="center" gap={8} style={{ marginTop: 24, width: '100%', maxWidth: 560 }}>
                 {SUGGESTIONS.map((s, i) => (
                   <Card
                     key={i}
                     hoverable
                     size="small"
                     onClick={() => handleSuggestion(s.text)}
-                    style={{ width: 260, borderRadius: 10, cursor: 'pointer' }}
+                    style={{ width: isMobile ? '100%' : 260, borderRadius: 10, cursor: 'pointer' }}
                     styles={{ body: { padding: '8px 12px' } }}
                   >
                     <Flex gap={8} align="center">
@@ -1485,7 +1673,7 @@ export default function AgentChat() {
 
           {/* Messages（过滤掉流式期间的空占位气泡，流式气泡单独渲染） */}
           {hasMessages && (
-            <div style={{ maxWidth: '80%', margin: '0 auto', width: '100%', padding: '20px 24px 0' }}>
+            <div style={{ maxWidth: isMobile ? '100%' : '80%', margin: '0 auto', width: '100%', padding: isMobile ? '16px 12px 0' : '20px 24px 0' }}>
               {messages
                 .filter((m) => !(m.role === 'assistant' && m.content === '' && !m.blocks))
                 .map((msg) => (
@@ -1524,16 +1712,16 @@ export default function AgentChat() {
             flexShrink: 0,
             background: token.colorBgContainer,
             borderTop: `1px solid ${token.colorBorderSecondary}`,
-            padding: '12px 16px 16px',
+            padding: isMobile ? '10px 12px 12px' : '12px 16px 16px',
             boxShadow: '0 -2px 8px rgba(0,0,0,0.06)',
           }}
         >
-          <Flex vertical gap={6} style={{ maxWidth: '80%', margin: '0 auto', width: '100%' }}>
+          <Flex vertical gap={6} style={{ maxWidth: isMobile ? '100%' : '80%', margin: '0 auto', width: '100%' }}>
             <Flex gap={8}>
               <Input.TextArea
                 ref={inputRef as React.Ref<React.ComponentRef<typeof Input.TextArea>>}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
+                value={draftInput}
+                onChange={(e) => setDraftInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="输入你想查询的 GitHub 仓库或问题…"
                 autoSize={{ minRows: 1, maxRows: 4 }}
@@ -1554,7 +1742,7 @@ export default function AgentChat() {
                   type="primary"
                   icon={<SendOutlined />}
                   onClick={handleSend}
-                  disabled={!input.trim()}
+                  disabled={!draftInput.trim()}
                   style={{ height: 'auto', borderRadius: 10, paddingInline: 20, minWidth: 76 }}
                 >
                   发送
