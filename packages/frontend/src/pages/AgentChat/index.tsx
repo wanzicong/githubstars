@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo, useSyncExternalStore } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { Input, Button, Typography, Tag, theme, App, Segmented, Badge, Tooltip, Spin, Avatar, Flex, Card, Empty, Skeleton, Grid, Drawer } from 'antd'
 import {
@@ -7,6 +8,7 @@ import {
   UserOutlined,
   ClearOutlined,
   CopyOutlined,
+  LinkOutlined,
   CheckOutlined,
   GithubOutlined,
   ThunderboltOutlined,
@@ -1020,6 +1022,10 @@ export default function AgentChat() {
   const setDraftInput = useAgentChatStore((s) => s.setDraftInput)
   const clearAgentChat = useAgentChatStore((s) => s.clear)
 
+  // 会话 ID 与 URL ?session= 双向同步：选中对话写 URL，打开带 session 的链接直达该对话
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlSessionId = searchParams.get('session')
+
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
@@ -1090,6 +1096,18 @@ export default function AgentChat() {
       antMsg.error('复制失败')
     }
   }, [antMsg])
+
+  /** 复制当前对话的分享链接（带 ?session= 的完整 URL） */
+  const handleCopySessionLink = useCallback(async () => {
+    if (!currentSessionId) return
+    const url = `${window.location.origin}/agent?session=${currentSessionId}`
+    try {
+      await navigator.clipboard.writeText(url)
+      antMsg.success('对话链接已复制')
+    } catch {
+      antMsg.error('复制失败')
+    }
+  }, [currentSessionId, antMsg])
 
   const handleClear = useCallback(() => {
     // 清除当前会话：中止其流（若在生成）并清空视图
@@ -1227,12 +1245,14 @@ export default function AgentChat() {
   }, [fetchSessions])
 
   // 刷新/重进页面时恢复上次的会话（延迟到宏任务，避免 effect 体内同步 setState 触发级联渲染）
+  // URL ?session= 优先：打开带 session 的分享链接时，直接以 URL 中的会话为准
   // restoredSessionIdRef 记录已恢复的会话 ID，防止 setCurrentSessionId 触发 effect 导致重复 loadSession
   const restoredSessionIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!currentSessionId || messages.length > 0 || loadingSessionId) return
-    if (restoredSessionIdRef.current === currentSessionId) return // 已恢复过，不再重复
-    const capturedId = currentSessionId
+    const targetId = urlSessionId ?? currentSessionId
+    if (!targetId || messages.length > 0 || loadingSessionId) return
+    if (restoredSessionIdRef.current === targetId) return // 已恢复过，不再重复
+    const capturedId = targetId
     const timer = setTimeout(() => {
       restoredSessionIdRef.current = capturedId
       void loadSession(capturedId)
@@ -1240,7 +1260,25 @@ export default function AgentChat() {
     return () => {
       clearTimeout(timer)
     }
-  }, [currentSessionId, messages.length, loadingSessionId, loadSession])
+  }, [urlSessionId, currentSessionId, messages.length, loadingSessionId, loadSession])
+
+  // 选中会话 → 写入 URL ?session=（清空会话时移除该参数），保证链接可分享/刷新直达
+  useEffect(() => {
+    const current = searchParams.get('session')
+    if (currentSessionId && current !== currentSessionId) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('session', currentSessionId)
+        return next
+      }, { replace: true })
+    } else if (!currentSessionId && current) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('session')
+        return next
+      }, { replace: true })
+    }
+  }, [currentSessionId, searchParams, setSearchParams])
 
   // 当 currentSessionId 变化时（新建/切换会话），刷新会话列表
   const prevSessionIdRef = useRef<string | null>(null)
@@ -1542,6 +1580,11 @@ export default function AgentChat() {
               <Tag color="blue" style={{ fontSize: 11, margin: 0 }}>
                 <ThunderboltOutlined /> #{currentSessionId.slice(0, 8)}
               </Tag>
+            )}
+            {currentSessionId && (
+              <Tooltip title="复制对话链接">
+                <Button icon={<LinkOutlined />} size="small" onClick={handleCopySessionLink} />
+              </Tooltip>
             )}
             {hasMessages && (
               <Tooltip title="清除对话">
