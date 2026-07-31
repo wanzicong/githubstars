@@ -16,6 +16,7 @@ import { ExportService } from '../export/export.service';
 import { LoggingService } from '../logging/logging.service';
 import { GithubSearchService } from '../github/github-search.service';
 import { RepositoryLocalizationService } from '../localization/repository-localization.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { isMissingConversationError, isTransientPipeError } from './agent-error.utils';
 import { AGENT_PLUGIN_REQUIRED_PATHS, resolveAgentPluginPath } from './agent-plugin.utils';
 import {
@@ -42,6 +43,8 @@ export interface AgentQueryOptions {
     sessionId?: string;
     maxTurns?: number;
     model?: string;
+    /** 对话上下文：选中的仓库/分类 ID，解析为元信息注入 system prompt */
+    context?: { repoIds?: number[]; categoryIds?: number[] };
 }
 
 export interface AgentQueryResult {
@@ -81,6 +84,7 @@ export class AgentClientService implements OnModuleInit {
         private readonly logging: LoggingService,
         private readonly githubSearch: GithubSearchService,
         private readonly localization: RepositoryLocalizationService,
+        private readonly prisma: PrismaService,
     ) {}
 
     onModuleInit(): void {
@@ -100,7 +104,7 @@ export class AgentClientService implements OnModuleInit {
         await this.credentials.refreshCredentials();
 
         const { query } = await this.loadSdk();
-        const mergedOptions = this.buildQueryOptions(options);
+        const mergedOptions = await this.buildQueryOptions(options);
 
         try {
             yield* this.iterateQuery(query, options.prompt, mergedOptions);
@@ -169,15 +173,16 @@ export class AgentClientService implements OnModuleInit {
         }
     }
 
-    /** 构建 SDK query 的完整选项（含凭据、插件、MCP 服务器、stderr 采集） */
-    private buildQueryOptions(options: AgentQueryOptions): Record<string, unknown> {
+    /** 构建 SDK query 的完整选项（含凭据、插件、MCP 服务器、stderr 采集、上下文注入） */
+    private async buildQueryOptions(options: AgentQueryOptions): Promise<Record<string, unknown>> {
         const pluginPath = this.pluginPath ?? this.requireAgentPluginPath();
         this.stderrTail = '';
+        const systemPrompt = await this.buildSystemPrompt(options.context);
         const mergedOptions: Record<string, unknown> = {
             maxTurns: options.maxTurns ?? AGENT_DEFAULT_MAX_TURNS,
             model: options.model ?? AGENT_DEFAULT_MODEL,
             allowedTools: AGENT_ALLOWED_TOOLS,
-            systemPrompt: SYSTEM_PROMPT,
+            systemPrompt,
             includePartialMessages: true,
             maxThinkingTokens: AGENT_MAX_THINKING_TOKENS,
             stderr: (data: string) => {
@@ -214,6 +219,63 @@ export class AgentClientService implements OnModuleInit {
         mergedOptions.plugins = [{ type: 'local', path: pluginPath }];
         if (options.sessionId) mergedOptions.resume = options.sessionId;
         return mergedOptions;
+    }
+
+    /** 构建 system prompt：基础提示词 + 选中的仓库/分类上下文段（无上下文时原样返回） */
+    private async buildSystemPrompt(context?: AgentQueryOptions['context']): Promise<string> {
+        const section = await this.buildContextSection(context);
+        return section ? `${SYSTEM_PROMPT}\n\n${section}` : SYSTEM_PROMPT;
+    }
+
+    /**
+     * 把选中的仓库/分类解析为元信息上下文段，注入 system prompt 帮助 Agent 聚焦回答。
+     * 仅注入元信息（名称/描述/语言/star/分类），不拉 README，控制 token 消耗。
+     */
+    private async buildContextSection(context?: AgentQueryOptions['context']): Promise<string> {
+        if (!context) return '';
+        const lines: string[] = [];
+        if (context.repoIds && context.repoIds.length > 0) {
+            const repos = await this.githubRepo.findByIds(context.repoIds);
+            if (repos.length > 0) {
+                lines.push('## 用户选中的仓库上下文', '以下仓库是用户当前关注的对象，回答时请优先结合它们：');
+                for (const repo of repos) {
+                    lines.push(this.formatRepoLine(repo));
+                }
+            }
+        }
+        if (context.categoryIds && context.categoryIds.length > 0) {
+            const names = await this.fetchCategoryNames(context.categoryIds);
+            if (names.length > 0) {
+                lines.push(
+                    '',
+                    '## 用户选中的分类上下文',
+                    `用户当前关注以下分类下的仓库：${names.join('、')}。回答涉及分类时可优先参考这些分类。`,
+                );
+            }
+        }
+        return lines.join('\n');
+    }
+
+    /** 格式化单个仓库为一行元信息 */
+    private formatRepoLine(repo: {
+        fullName: string | null;
+        description: string | null;
+        descriptionCn: string | null;
+        language: string | null;
+        starsCount: number;
+    }): string {
+        const desc = repo.descriptionCn ?? repo.description ?? '无描述';
+        const lang = repo.language ?? '未知语言';
+        return `- ${repo.fullName ?? '未知仓库'}（${lang}，★${repo.starsCount}）：${desc}`;
+    }
+
+    /** 批量取分类名称（仅元信息，不展开分类下仓库，控制 token） */
+    private async fetchCategoryNames(categoryIds: number[]): Promise<string[]> {
+        const categories = await this.prisma.category.findMany({
+            where: { id: { in: categoryIds } },
+            select: { name: true },
+        });
+        return categories.map((c) => c.name);
     }
 
     /** 在保留原始异常 cause 的同时，将已脱敏的 CLI stderr 附加到可观测错误。 */

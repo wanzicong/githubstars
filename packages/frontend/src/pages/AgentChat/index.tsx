@@ -26,6 +26,7 @@ import {
 } from '@ant-design/icons'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer'
 import ThinkingBlock from './ThinkingBlock'
+import ContextPicker, { type ChatContextItem } from './ContextPicker'
 import { listAgentSessions, getAgentSession, deleteAgentSession, getAgentBaseURL } from '@/api/agent'
 import { getAgentFriendlyErrorMessage } from '@/utils/agent-error'
 import { useAgentChatStore } from '@/stores'
@@ -1023,6 +1024,8 @@ export default function AgentChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  // 对话上下文：选中的仓库/分类（作为元信息随消息发给后端，注入 Agent prompt）
+  const [contextItems, setContextItems] = useState<ChatContextItem[]>([])
 
   // 多会话并行流：订阅全部会话的流式快照，取「当前会话」那一路驱动渲染。
   // 其它会话的流在后台静默累积，切换回来即可看到实时流式输出。
@@ -1364,11 +1367,16 @@ export default function AgentChat() {
     ])
 
     try {
+      // 把选中的仓库/分类上下文拆成 repoIds/categoryIds 随消息发给后端（仅元信息注入 prompt）
+      const repoIds = contextItems.filter((c) => c.type === 'repo').map((c) => c.id)
+      const categoryIds = contextItems.filter((c) => c.type === 'category').map((c) => c.id)
+      const context = repoIds.length > 0 || categoryIds.length > 0 ? { repoIds, categoryIds } : undefined
       const body = JSON.stringify({
         message: text,
         session: currentSessionId
           ? { type: 'resume' as const, id: currentSessionId }
           : { type: sessionMode },
+        context,
       })
 
       const result = await fetchAndProcessStream(body, streamKey, abortController)
@@ -1404,7 +1412,7 @@ export default function AgentChat() {
       setLoading(false)
       inputRef.current?.focus()
     }
-  }, [draftInput, loading, sessionMode, currentSessionId, fetchAndProcessStream, finalizeAssistantMessage, setDraftInput, setCurrentSessionId])
+  }, [draftInput, loading, sessionMode, currentSessionId, contextItems, fetchAndProcessStream, finalizeAssistantMessage, setDraftInput, setCurrentSessionId])
 
   const handleModeChange = useCallback((value: SessionMode) => {
     setSessionMode(value)
@@ -1639,6 +1647,8 @@ export default function AgentChat() {
           }}
         >
           <Flex vertical gap={6} style={{ maxWidth: isMobile ? '100%' : '80%', margin: '0 auto', width: '100%' }}>
+            {/* 上下文选择器：选中仓库/分类作为对话上下文 */}
+            <ContextPicker value={contextItems} onChange={setContextItems} />
             <Flex gap={8}>
               <Input.TextArea
                 ref={inputRef as React.Ref<React.ComponentRef<typeof Input.TextArea>>}

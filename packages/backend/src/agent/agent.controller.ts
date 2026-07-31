@@ -115,6 +115,7 @@ export class AgentController {
             sessionId: ctx.sdkSessionId,
             maxTurns: body.maxTurns,
             model: body.model,
+            context: body.context,
         });
         const resultText = this.extractResultText(result.messages);
 
@@ -239,6 +240,7 @@ export class AgentController {
                 sessionId: ctx.sdkSessionId,
                 maxTurns: body.maxTurns,
                 model: body.model,
+                context: body.context,
             })) {
                 if (isClosed()) break; // 客户端断开：for-await break 会逐层调用 async generator 的 return()，确定性取消 SDK 子进程
                 await this.captureSdkSessionId(raw, ctx);
