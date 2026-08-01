@@ -17,7 +17,7 @@ import { LoggingService } from '../logging/logging.service';
 import { GithubSearchService } from '../github/github-search.service';
 import { RepositoryLocalizationService } from '../localization/repository-localization.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { isMissingConversationError, isTransientPipeError } from './agent-error.utils';
+import { isMissingConversationError, isTokenOverflowError, isTransientPipeError } from './agent-error.utils';
 import { AGENT_PLUGIN_REQUIRED_PATHS, resolveAgentPluginPath } from './agent-plugin.utils';
 import {
     AGENT_ALLOWED_TOOLS,
@@ -46,6 +46,15 @@ export interface AgentQueryOptions {
     model?: string;
     /** 对话上下文：选中的仓库/分类 ID，解析为元信息注入 system prompt */
     context?: { repoIds?: number[]; categoryIds?: number[] };
+    /**
+     * 会话历史摘要（token 超限重开新会话时由内部生成注入）。
+     * 作为新会话的开场背景，让 Agent 在不 resume 旧会话的情况下延续对话。
+     */
+    historyDigest?: string;
+    /** 内部：为 true 时本次为 token 超限后的重开重试，禁止再次递归重开 */
+    isCompactionRetry?: boolean;
+    /** 内部：用于生成历史摘要的历史文本来源（由 session 层提供/测试注入） */
+    historySource?: string;
 }
 
 export interface AgentQueryResult {
@@ -111,6 +120,11 @@ export class AgentClientService implements OnModuleInit {
             yield* this.iterateQuery(query, options.prompt, mergedOptions);
         } catch (error) {
             const stderr = this.sanitizeStderr(this.stderrTail);
+            // token 超限：重开新会话 + 摘要续聊（首包超长时 CLI 的 auto-compact 来不及触发，只能宿主兜底）
+            if (options.sessionId && !options.isCompactionRetry && isTokenOverflowError(error)) {
+                yield* this.recoverFromTokenOverflow(query, options, mergedOptions);
+                return;
+            }
             // 会话文件丢失：去掉 resume 用新会话重试
             if (options.sessionId && isMissingConversationError(stderr)) {
                 this.logger.warn(`Claude SDK 会话 ${options.sessionId} 已丢失，自动创建新会话继续处理`);
@@ -126,6 +140,75 @@ export class AgentClientService implements OnModuleInit {
             }
             throw this.createExecutionError(error, stderr);
         }
+    }
+
+    /**
+     * token 超限恢复：生成历史摘要后重开新会话（不带 resume）。
+     * 摘要生成失败时降级为纯重开，保证对话不中断。
+     */
+    private async *recoverFromTokenOverflow(
+        query: AgentSdk['query'],
+        options: AgentQueryOptions,
+        mergedOptions: Record<string, unknown>,
+    ): AsyncGenerator<SDKMessage> {
+        this.logger.warn(`检测到 token 超限，会话 ${options.sessionId} 将重开新会话并注入历史摘要继续`);
+        const digest = options.historyDigest ?? (await this.buildHistoryDigest(options));
+        const retryOptions = { ...mergedOptions };
+        delete retryOptions.resume;
+        const prompt = this.buildCompactionPrompt(options.prompt, digest);
+        yield* this.iterateQuery(query, prompt, retryOptions);
+    }
+
+    /** 拼接重开会话的开场 prompt：历史摘要 + 用户当前消息 */
+    private buildCompactionPrompt(userPrompt: string, digest: string | undefined): string {
+        if (!digest) return userPrompt;
+        return [
+            '【会话历史摘要】由于对话上下文超出模型窗口，已自动开启新会话。以下是之前对话的摘要，请基于此继续回答：',
+            digest,
+            '',
+            '【用户当前消息】',
+            userPrompt,
+        ].join('\n');
+    }
+
+    /**
+     * 生成历史摘要：取选中仓库关联的最近会话消息，用同一 SDK/渠道压缩成简短摘要。
+     * 任何步骤失败都返回 undefined（降级为纯重开），绝不阻断主流程。
+     */
+    private async buildHistoryDigest(options: AgentQueryOptions): Promise<string | undefined> {
+        try {
+            const source = await this.loadHistorySource(options);
+            if (!source) return undefined;
+            const result = await this.queryOnce({
+                prompt: `请将以下对话历史压缩成一段简洁的中文摘要（200字以内），保留用户的需求、关键结论和未完成的任务：\n\n${source}`,
+                context: options.context,
+                maxTurns: 1,
+                isCompactionRetry: true,
+            });
+            const text = this.extractTextFromMessages(result.messages);
+            return text || undefined;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.warn(`生成历史摘要失败，降级为新会话重开: ${msg}`);
+            return undefined;
+        }
+    }
+
+    /** 读取用于生成摘要的历史文本（子类/测试可覆盖）。默认取上下文仓库的最近消息。 */
+    // eslint-disable-next-line @typescript-eslint/require-await -- 同步返回，但签名需与子类（查 DB）保持一致
+    protected async loadHistorySource(options: AgentQueryOptions): Promise<string | undefined> {
+        return options.historySource;
+    }
+
+    /** 从 SDK 消息数组中提取最后一条文本内容 */
+    private extractTextFromMessages(messages: SDKMessage[]): string {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const m = messages[i];
+            if (m.type === 'result' && m.subtype === 'success' && typeof m.result === 'string') {
+                return m.result.trim();
+            }
+        }
+        return '';
     }
 
     /** 瞬态管道错误的按次重试（同会话/同 prompt）；全部失败抛带诊断信息的错误 */
@@ -170,8 +253,19 @@ export class AgentClientService implements OnModuleInit {
     ): AsyncGenerator<SDKMessage> {
         for await (const message of query({ prompt, options: mergedOptions })) {
             this.assertAgentPluginInitialized(message);
+            this.logCompactionBoundary(message);
             yield message;
         }
+    }
+
+    /**
+     * 观测 CLI 内置 auto-compact：当上下文接近满时 CLI 会自动压缩并发出
+     * compact_boundary 系统消息。记录 trigger/pre_tokens 用于验证压缩是否生效。
+     */
+    private logCompactionBoundary(message: SDKMessage): void {
+        if (message.type !== 'system' || message.subtype !== 'compact_boundary') return;
+        const meta = (message as { compact_metadata?: { trigger?: string; pre_tokens?: number } }).compact_metadata;
+        this.logger.log(`CLI 触发上下文压缩: trigger=${meta?.trigger ?? 'unknown'}, pre_tokens=${meta?.pre_tokens ?? 'unknown'}`);
     }
 
     /** 构建 SDK query 的完整选项（含凭据、插件、MCP 服务器、stderr 采集、上下文注入） */

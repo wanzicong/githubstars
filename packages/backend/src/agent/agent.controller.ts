@@ -236,6 +236,8 @@ export class AgentController {
     ): Promise<void> {
         // 已推送的 tool_use toolId：SDK 对同一 tool_use 会发「流式 start + 完整块」两次，按 toolId 去重只推一次
         const pushedToolIds = new Set<string>();
+        // token 超限兜底：预载会话历史文本，供 service 在超限时生成摘要续聊（仅 resume 会话有历史）
+        const historySource = ctx.ourSessionId ? await this.sessionService.loadHistorySource(ctx.ourSessionId) : undefined;
         try {
             for await (const { block, raw } of this.agentClient.streamBlocks({
                 prompt: body.message,
@@ -243,6 +245,7 @@ export class AgentController {
                 maxTurns: body.maxTurns,
                 model: body.model,
                 context: body.context,
+                historySource,
             })) {
                 if (isClosed()) break; // 客户端断开：for-await break 会逐层调用 async generator 的 return()，确定性取消 SDK 子进程
                 await this.captureSdkSessionId(raw, ctx);

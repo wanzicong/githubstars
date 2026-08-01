@@ -51,6 +51,33 @@ function err(message: string) {
     return { content: [{ type: 'text' as const, text: JSON.stringify({ success: false, message }) }] };
 }
 
+/** README 字段截断长度（防止完整 README 灌进 Agent 上下文导致 token 爆炸） */
+export const README_TRUNCATE_LENGTH = 8000;
+
+/** 截断单个 README 文本，超长时截断并标注 */
+function truncateReadmeText(text: string): string {
+    if (text.length <= README_TRUNCATE_LENGTH) return text;
+    return `${text.slice(0, README_TRUNCATE_LENGTH)}\n\n…（README 过长已截断，仅展示前 ${README_TRUNCATE_LENGTH} 字符）`;
+}
+
+/**
+ * 截断仓库对象（或对象数组）的 readme / readmeCn 字段，防止单点灌爆上下文。
+ * 其他字段原样保留；非对象/缺失字段安全跳过。
+ */
+export function truncateRepoReadme<T>(input: T): T {
+    if (Array.isArray(input)) {
+        return input.map((item: unknown) => truncateRepoReadme(item)) as T;
+    }
+    if (input === null || typeof input !== 'object') return input;
+    const record = input as Record<string, unknown>;
+    const out: Record<string, unknown> = { ...record };
+    for (const key of ['readme', 'readmeCn'] as const) {
+        const value = record[key];
+        if (typeof value === 'string') out[key] = truncateReadmeText(value);
+    }
+    return out as T;
+}
+
 /** 将 since 字符串映射为天数（与 trending.controller.ts 保持一致） */
 function sinceToDays(since: string): number {
     if (since === 'weekly') return 7;
@@ -147,7 +174,7 @@ export function createSystemMcpServer(deps: SystemMcpDeps) {
                     try {
                         const repo = await githubRepo.findById(args.id);
                         if (!repo) return err('仓库不存在');
-                        return ok(repo);
+                        return ok(truncateRepoReadme(repo));
                     } catch (e) {
                         return err(e instanceof Error ? e.message : String(e));
                     }
@@ -228,7 +255,7 @@ export function createSystemMcpServer(deps: SystemMcpDeps) {
                 async (args) => {
                     try {
                         const repos = await githubRepo.findByIds(args.ids);
-                        return ok({ success: true, data: repos, total: repos.length });
+                        return ok({ success: true, data: truncateRepoReadme(repos), total: repos.length });
                     } catch (e) {
                         return err(e instanceof Error ? e.message : String(e));
                     }
@@ -246,9 +273,12 @@ export function createSystemMcpServer(deps: SystemMcpDeps) {
                 },
                 async (args) => {
                     try {
-                        return ok(
-                            await localization.findPending(args.limit ?? 50, args.includeDescription ?? true, args.includeReadme ?? true),
+                        const pending = await localization.findPending(
+                            args.limit ?? 50,
+                            args.includeDescription ?? true,
+                            args.includeReadme ?? true,
                         );
+                        return ok(truncateRepoReadme(pending));
                     } catch (e) {
                         return err(e instanceof Error ? e.message : String(e));
                     }

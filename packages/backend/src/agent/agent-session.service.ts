@@ -90,6 +90,36 @@ export class AgentSessionService {
         return reversed.map((m) => ({ ...m, content: this.tryParseJson(m.content) }));
     }
 
+    /** 历史摘要源最大字符数（防止超长历史本身又把摘要模型喂爆） */
+    private static readonly HISTORY_SOURCE_MAX = 8000;
+
+    /**
+     * 加载会话历史为「生成摘要用」的纯文本：只保留 user/assistant 的文本，
+     * 忽略 thinking/tool 块，整体截断到安全上限。供 token 超限重开会话时生成摘要。
+     */
+    async loadHistorySource(sessionId: string, limit = 40): Promise<string | undefined> {
+        const messages = await this.prisma.agentMessage.findMany({
+            where: { sessionId },
+            orderBy: { id: 'desc' },
+            take: limit,
+            select: { role: true, content: true },
+        });
+        if (messages.length === 0) return undefined;
+
+        const lines: string[] = [];
+        for (const m of [...messages].reverse()) {
+            const text = this.extractPreviewText(m.content);
+            if (!text) continue;
+            const roleLabel = m.role === 'user' ? '用户' : '助手';
+            lines.push(`${roleLabel}: ${text}`);
+        }
+        if (lines.length === 0) return undefined;
+
+        const joined = lines.join('\n');
+        if (joined.length <= AgentSessionService.HISTORY_SOURCE_MAX) return joined;
+        return `${joined.slice(0, AgentSessionService.HISTORY_SOURCE_MAX)}…`;
+    }
+
     /** 关闭会话；不存在时静默返回（幂等删除语义） */
     async closeSession(sessionId: string): Promise<void> {
         await this.prisma.agentSession.updateMany({ where: { id: sessionId }, data: { status: 'closed' } });

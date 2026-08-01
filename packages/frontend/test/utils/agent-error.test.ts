@@ -43,4 +43,15 @@ describe('getAgentFriendlyErrorMessage', () => {
         expect(message).toContain('运行环境配置异常')
         expect(message).not.toContain('额度')
     })
+
+    it('token 超限错误应提示已自动开启新会话，而非裸 400 或额度问题', () => {
+        const message = getAgentFriendlyErrorMessage(
+            new Error('API Error: 400 {"error":{"type":"invalid_request_error","message":"Invalid request: Your request exceeded model token limit: 262144 (requested: 279306)"}}'),
+        )
+
+        expect(message).toContain('上下文过长')
+        expect(message).toContain('新会话')
+        expect(message).not.toContain('exceeded model token limit')
+        expect(message).not.toContain('额度')
+    })
 })

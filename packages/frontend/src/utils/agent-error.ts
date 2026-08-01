@@ -1,5 +1,7 @@
 const QUOTA_ERROR_PATTERN =
     /usage limit|billing cycle|quota.{0,20}(?:exceeded|reached|exhausted)|insufficient.{0,20}(?:credit|balance)|额度.{0,10}(?:不足|用完|耗尽)|余额不足/iu
+const TOKEN_OVERFLOW_PATTERN =
+    /exceeded model token limit|prompt is too long|context length exceeded|maximum context length|requested: \d+/iu
 const AUTH_ERROR_PATTERN = /(?:status code |http )?401|unauthorized|authentication|invalid api key|认证失败|密钥无效/iu
 const PERMISSION_ERROR_PATTERN = /(?:status code |http )?403|permission_error|forbidden|无权访问|权限不足/iu
 const CONNECTION_ERROR_PATTERN = /econnrefused|connection refused|fetch failed|network error|socket hang up|代理连接/iu
@@ -21,6 +23,9 @@ export function getAgentFriendlyErrorMessage(error: unknown): string {
         raw = error
     }
 
+    if (TOKEN_OVERFLOW_PATTERN.test(raw)) {
+        return '对话上下文过长，已超出模型窗口。系统已自动开启新会话并携带历史摘要继续；若仍频繁出现，建议手动开启新对话。'
+    }
     if (QUOTA_ERROR_PATTERN.test(raw)) {
         return '模型服务额度已用完，请在 CC Switch 中更换可用渠道或补充当前渠道额度后重试。'
     }
