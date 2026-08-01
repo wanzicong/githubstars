@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Popover, Input, Tabs, Tag, List, Tree, Spin, Empty, Button, theme } from 'antd'
+import { Popover, Input, Tabs, Tag, Tree, Spin, Empty, Button, Checkbox, Tooltip, theme } from 'antd'
 import { PlusOutlined, StarOutlined, BranchesOutlined, CloseOutlined } from '@ant-design/icons'
 import { fetchStarList, fetchCategoryTree } from '@/api'
+import { formatNumberShort } from '@/utils/format'
 import type { GithubRepo, CategoryNode } from '@/types'
 
 /** 选中的上下文项（仓库或分类） */
@@ -18,6 +19,9 @@ interface Props {
     onChange: (items: ChatContextItem[]) => void
 }
 
+/** chip 区最多完整展示的个数，超出折叠为 +N */
+const MAX_VISIBLE_CHIPS = 3
+
 /** 把分类树拍平为一二级选项（含每级名称） */
 function flattenCategories(nodes: CategoryNode[]): CategoryNode[] {
     const result: CategoryNode[] = []
@@ -32,9 +36,9 @@ function flattenCategories(nodes: CategoryNode[]): CategoryNode[] {
 }
 
 /**
- * 对话上下文选择器 —— 「+ 上下文」按钮 + 搜索选择弹层。
- * 支持搜索添加多个仓库 / 从分类树勾选多个分类，已选项以 Tag 展示可单独删除。
- * 选中项仅作为元信息注入 Agent 上下文，帮助 Agent 聚焦回答。
+ * 对话上下文选择器 —— 「＋」按钮 + 弹层 + 已选 chip 收纳区。
+ * chip 区仅在有选中项时渲染，最多展示 MAX_VISIBLE_CHIPS 个，超出折叠为 +N；
+ * 弹层内仓库列表为紧凑单行四列网格（复选框/星标/名称/star数），保证名称列左边缘严格对齐。
  */
 export default function ContextPicker({ value, onChange }: Props) {
     const { token } = theme.useToken()
@@ -62,7 +66,7 @@ export default function ContextPicker({ value, onChange }: Props) {
         void load()
     }, [open, categories.length])
 
-    // 仓库搜索（防抖）
+    // 仓库搜索（防抖 300ms）
     useEffect(() => {
         const keyword = repoKeyword.trim()
         const timer = setTimeout(async () => {
@@ -120,83 +124,116 @@ export default function ContextPicker({ value, onChange }: Props) {
             const node = flat.find((n) => n.id === Number(key))
             if (node) selectedCats.push({ type: 'category', id: node.id, label: node.name })
         }
-        // 保留仓库项，替换分类项
         onChange([...value.filter((v) => v.type === 'repo'), ...selectedCats])
     }
 
+    // ── 仓库紧凑单行列表：复选框列(16px) + 星标列(16px) + 名称列(flex:1) + star数列(48px) ──
+    const renderRepoRow = (repo: GithubRepo) => {
+        const selected = isSelected('repo', repo.id)
+        return (
+            <div
+                key={repo.id}
+                onClick={() => toggleItem({ type: 'repo', id: repo.id, label: repo.fullName })}
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    height: 32,
+                    padding: '0 10px',
+                    cursor: 'pointer',
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                    background: selected ? token.colorPrimaryBg : 'transparent',
+                }}
+            >
+                <span style={{ width: 16, flexShrink: 0, display: 'inline-flex', justifyContent: 'center' }}>
+                    <Checkbox checked={selected} style={{ pointerEvents: 'none' }} />
+                </span>
+                <span style={{ width: 16, flexShrink: 0, display: 'inline-flex', justifyContent: 'center' }}>
+                    <StarOutlined style={{ color: '#faad14', fontSize: 12 }} />
+                </span>
+                <Tooltip title={repo.fullName} placement='topLeft'>
+                    <span
+                        style={{
+                            flex: 1,
+                            minWidth: 0,
+                            fontSize: 13,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                        }}
+                    >
+                        {repo.fullName}
+                    </span>
+                </Tooltip>
+                <span style={{ width: 48, flexShrink: 0, textAlign: 'right', fontSize: 11, color: token.colorTextTertiary }}>
+                    {formatNumberShort(repo.starsCount)}
+                </span>
+            </div>
+        )
+    }
+
+    const repoTab = (
+        <div>
+            <Input.Search
+                size='small'
+                placeholder='搜索仓库名/描述…'
+                value={repoKeyword}
+                onChange={(e) => setRepoKeyword(e.target.value)}
+                style={{ marginBottom: 8 }}
+                allowClear
+            />
+            <Spin spinning={repoLoading}>
+                {repoOptions.length === 0 ? (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='无匹配仓库' style={{ margin: '16px 0' }} />
+                ) : (
+                    <div style={{ maxHeight: 320, overflowY: 'auto' }}>{repoOptions.map(renderRepoRow)}</div>
+                )}
+            </Spin>
+        </div>
+    )
+
+    const categoryTab = (
+        <Spin spinning={catLoading}>
+            {treeData.length === 0 ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='暂无分类' style={{ margin: '16px 0' }} />
+            ) : (
+                <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                    <Tree
+                        checkable
+                        selectable={false}
+                        defaultExpandAll
+                        treeData={treeData}
+                        checkedKeys={checkedCatKeys}
+                        onCheck={(keys) => handleCheckCategory(keys as React.Key[])}
+                    />
+                </div>
+            )}
+        </Spin>
+    )
+
     const popoverContent = (
-        <div style={{ width: 360, maxHeight: 420, overflowY: 'auto' }}>
+        <div style={{ width: 360 }}>
+            {value.length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: token.colorTextSecondary }}>已选 {value.length} 项</span>
+                    <Button type='link' size='small' style={{ padding: 0, fontSize: 12 }} onClick={() => onChange([])}>
+                        清空
+                    </Button>
+                </div>
+            )}
             <Tabs
                 size='small'
                 items={[
-                    {
-                        key: 'repo',
-                        label: '仓库',
-                        children: (
-                            <div>
-                                <Input.Search
-                                    size='small'
-                                    placeholder='搜索仓库名/描述…'
-                                    value={repoKeyword}
-                                    onChange={(e) => setRepoKeyword(e.target.value)}
-                                    style={{ marginBottom: 8 }}
-                                    allowClear
-                                />
-                                <Spin spinning={repoLoading}>
-                                    {repoOptions.length === 0 ? (
-                                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='无匹配仓库' style={{ margin: '16px 0' }} />
-                                    ) : (
-                                        <List
-                                            size='small'
-                                            dataSource={repoOptions}
-                                            renderItem={(repo) => {
-                                                const selected = isSelected('repo', repo.id)
-                                                return (
-                                                    <List.Item
-                                                        onClick={() => toggleItem({ type: 'repo', id: repo.id, label: repo.fullName })}
-                                                        style={{
-                                                            cursor: 'pointer',
-                                                            padding: '6px 8px',
-                                                            background: selected ? token.colorPrimaryBg : 'transparent',
-                                                            borderRadius: 4,
-                                                        }}
-                                                    >
-                                                        <StarOutlined style={{ color: selected ? token.colorPrimary : token.colorTextTertiary, marginRight: 6 }} />
-                                                        <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                            {repo.fullName}
-                                                        </span>
-                                                    </List.Item>
-                                                )
-                                            }}
-                                        />
-                                    )}
-                                </Spin>
-                            </div>
-                        ),
-                    },
-                    {
-                        key: 'category',
-                        label: '分类',
-                        children: (
-                            <Spin spinning={catLoading}>
-                                {treeData.length === 0 ? (
-                                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='暂无分类' style={{ margin: '16px 0' }} />
-                                ) : (
-                                    <Tree
-                                        checkable
-                                        defaultExpandAll
-                                        treeData={treeData}
-                                        checkedKeys={checkedCatKeys}
-                                        onCheck={(keys) => handleCheckCategory(keys as React.Key[])}
-                                    />
-                                )}
-                            </Spin>
-                        ),
-                    },
+                    { key: 'repo', label: '仓库', children: repoTab },
+                    { key: 'category', label: '分类', children: categoryTab },
                 ]}
             />
         </div>
     )
+
+    // ── chip 收纳区：仅选中时渲染，最多 MAX_VISIBLE_CHIPS 个，超出折叠 +N ──
+    const visibleChips = value.slice(0, MAX_VISIBLE_CHIPS)
+    const hiddenCount = value.length - visibleChips.length
 
     return (
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
@@ -205,24 +242,35 @@ export default function ContextPicker({ value, onChange }: Props) {
                 trigger='click'
                 open={open}
                 onOpenChange={setOpen}
-                placement='topLeft'
+                placement='topRight'
+                arrow={false}
             >
-                <Button size='small' type='text' icon={<PlusOutlined />} style={{ color: token.colorTextSecondary }}>
-                    上下文
-                </Button>
+                <Tooltip title='添加上下文'>
+                    <Button size='small' type='text' icon={<PlusOutlined />} style={{ color: token.colorTextSecondary }} />
+                </Tooltip>
             </Popover>
-            {value.map((item) => (
+            {visibleChips.map((item) => (
                 <Tag
                     key={`${item.type}-${item.id}`}
                     icon={item.type === 'repo' ? <StarOutlined /> : <BranchesOutlined />}
                     closeIcon={<CloseOutlined />}
                     onClose={() => removeItem(item)}
                     color={item.type === 'repo' ? 'gold' : 'blue'}
-                    style={{ margin: 0, fontSize: 12 }}
+                    style={{ margin: 0, fontSize: 12, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}
                 >
                     {item.label}
                 </Tag>
             ))}
+            {hiddenCount > 0 && (
+                <Button
+                    type='text'
+                    size='small'
+                    style={{ fontSize: 12, color: token.colorTextSecondary, padding: '0 4px' }}
+                    onClick={() => setOpen(true)}
+                >
+                    +{hiddenCount}
+                </Button>
+            )}
         </div>
     )
 }
