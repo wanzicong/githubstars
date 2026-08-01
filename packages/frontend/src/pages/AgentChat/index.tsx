@@ -1112,10 +1112,16 @@ export default function AgentChat() {
   const handleClear = useCallback(() => {
     // 清除当前会话：中止其流（若在生成）并清空视图
     if (currentSessionId) agentStreamManager.end(currentSessionId)
+    // 同步清掉 URL 的 session 参数，避免恢复 effect 读到旧 session 拉回旧会话
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('session')
+      return next
+    }, { replace: true })
     setMessages([])
     setCurrentSessionId(null)
     setLoading(false)
-  }, [currentSessionId, setCurrentSessionId])
+  }, [currentSessionId, setCurrentSessionId, setSearchParams])
 
   /** 停止生成（仅中止当前会话的流，其它会话流不受影响） */
   const handleStop = useCallback(() => {
@@ -1190,11 +1196,17 @@ export default function AgentChat() {
     loadAbortRef.current?.abort()
     loadSeqRef.current += 1
     restoredSessionIdRef.current = null // 主动切换会话时重置恢复标记，允许重新恢复
+    // 同步清掉 URL 的 session 参数：避免恢复 effect 在 URL 更新前读到旧 session 又把旧会话拉回来
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('session')
+      return next
+    }, { replace: true })
     setMessages([])
     clearAgentChat()
     setLoading(false)
     inputRef.current?.focus()
-  }, [clearAgentChat])
+  }, [clearAgentChat, setSearchParams])
 
   /** 移动端：加载会话后自动关闭抽屉 */
   const handleLoadSessionMobile = useCallback((sessionId: string) => {
@@ -1222,6 +1234,12 @@ export default function AgentChat() {
         setSessions((prev) => prev.filter((s) => s.id !== sessionId))
         if (currentSessionId === sessionId) {
           loadSeqRef.current += 1
+          // 删除的是当前会话：同步清掉 URL 的 session 参数，避免恢复 effect 拉回
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev)
+            next.delete('session')
+            return next
+          }, { replace: true })
           setMessages([])
           setCurrentSessionId(null)
         }
@@ -1232,7 +1250,7 @@ export default function AgentChat() {
     } catch (error: unknown) {
       antMsg.error(error instanceof Error ? error.message : '删除会话失败')
     }
-  }, [currentSessionId, antMsg, setCurrentSessionId])
+  }, [currentSessionId, antMsg, setCurrentSessionId, setSearchParams])
 
   // 首次加载获取会话列表（延迟到宏任务，避免 effect 体内同步 setState 触发级联渲染）
   useEffect(() => {
@@ -1454,8 +1472,16 @@ export default function AgentChat() {
 
   const handleModeChange = useCallback((value: SessionMode) => {
     setSessionMode(value)
-    if (value === 'none') setCurrentSessionId(null)
-  }, [setSessionMode, setCurrentSessionId])
+    if (value === 'none') {
+      // 切到临时会话：同步清掉 URL 的 session 参数，避免恢复 effect 拉回旧会话
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('session')
+        return next
+      }, { replace: true })
+      setCurrentSessionId(null)
+    }
+  }, [setSessionMode, setCurrentSessionId, setSearchParams])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // 中文输入法选词期间的 Enter 不触发发送
