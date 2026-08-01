@@ -152,9 +152,9 @@ export class AgentClientService implements OnModuleInit {
         throw this.createExecutionError(originalError, stderr);
     }
 
-    /** 读取 EPIPE 瞬态错误的重试次数（system_config 的 agent.pipe_retry_count，默认 1，0 表示禁用重试） */
+    /** 读取 EPIPE 瞬态错误的重试次数（system_config 的 agent.pipe_retry_count，默认 3，0 表示禁用重试） */
     private async getPipeRetryCount(): Promise<number> {
-        const raw = await this.config.getValueDefault('agent.pipe_retry_count', '1');
+        const raw = await this.config.getValueDefault('agent.pipe_retry_count', '3');
         const parsed = Number.parseInt(raw, 10);
         return Number.isNaN(parsed) || parsed < 0 ? 1 : parsed;
     }
