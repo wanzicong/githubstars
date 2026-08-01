@@ -119,9 +119,7 @@ describe('TrendingService', () => {
         it('个别仓库创建失败时跳过该项，其余项不错位', async () => {
             prisma.githubRepo.findMany.mockResolvedValue([]);
             prisma.githubRepo.findFirst.mockResolvedValue(null);
-            prisma.githubRepo.create
-                .mockRejectedValueOnce(new Error('unique constraint'))
-                .mockResolvedValueOnce({ id: 44n });
+            prisma.githubRepo.create.mockRejectedValueOnce(new Error('unique constraint')).mockResolvedValueOnce({ id: 44n });
 
             const result = await service.ensureReposAndGetIdMapping(sampleRepos);
             // repo1 创建失败被跳过，repo2 的 id 仍是 44 而非错位到 repo1
