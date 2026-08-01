@@ -74,7 +74,10 @@ RUN sed -i 's|https://dl-cdn.alpinelinux.org|http://mirrors.aliyun.com|g' /etc/a
 
 # tini — 轻量级 init，正确处理 PID 1 和信号转发
 # git — Claude Code Agent 需要 git 命令（Bash 工具白名单）
-RUN apk add --no-cache tini git
+RUN apk add --no-cache tini git bash
+
+# Claude CLI 需要 POSIX shell 环境（无 bash 时启动即失败，报 "No suitable shell found"）
+ENV SHELL=/bin/bash
 
 # 配置 npm 使用国内镜像源（使用 HTTP 避免 SSL 问题）
 ENV NPM_CONFIG_REGISTRY=http://registry.npmmirror.com

@@ -36,11 +36,11 @@ export function getAgentFriendlyErrorMessage(error: unknown): string {
     if (SHELL_ERROR_PATTERN.test(raw)) {
         return '智能体运行环境配置异常（未找到可用 Shell），请联系管理员检查容器配置。'
     }
-    if (PROCESS_EXIT_PATTERN.test(raw)) {
-        return '模型服务暂时不可用。常见原因是当前渠道额度不足、认证失效或代理连接异常；请在 CC Switch 中检查当前渠道和剩余额度后重试。'
-    }
     if (PIPE_ERROR_PATTERN.test(raw)) {
         return '长任务在流式传输中被中断。系统已自动重试；若反复出现，建议把大任务拆小，或分批分步提问以获得更稳定的响应。'
+    }
+    if (PROCESS_EXIT_PATTERN.test(raw)) {
+        return '模型服务暂时不可用。常见原因是当前渠道额度不足、认证失效或代理连接异常；请在 CC Switch 中检查当前渠道和剩余额度后重试。'
     }
 
     return raw || '智能体处理失败，请稍后重试。'

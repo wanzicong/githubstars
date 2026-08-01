@@ -29,4 +29,18 @@ describe('getAgentFriendlyErrorMessage', () => {
         expect(getAgentFriendlyErrorMessage(new Error('请求超时'))).toBe('请求超时')
         expect(getAgentFriendlyErrorMessage(null)).toBe('智能体处理失败，请稍后重试。')
     })
+    it('EPIPE 管道错误应优先于通用退出码，不再误报为额度问题（回归：容器内 Shell 缺失导致 EPIPE 时文案误导）', () => {
+        const message = getAgentFriendlyErrorMessage(new Error('Claude Code process exited with code 1：Error: write EPIPE'))
+
+        expect(message).toContain('长任务在流式传输中被中断')
+        expect(message).not.toContain('额度')
+        expect(message).not.toContain('CC Switch')
+    })
+
+    it('包含 Shell 缺失信息的错误应提示运行环境配置异常', () => {
+        const message = getAgentFriendlyErrorMessage(new Error('Claude Code process exited with code 1：No suitable shell found. Claude CLI requires a Posix shell environment.'))
+
+        expect(message).toContain('运行环境配置异常')
+        expect(message).not.toContain('额度')
+    })
 })

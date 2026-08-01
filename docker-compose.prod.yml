@@ -71,6 +71,8 @@ services:
       # 注意：必须写死，不能用 ${VAR:-default} 形式，否则宿主机 shell 的 127.0.0.1 会覆盖
       ANTHROPIC_BASE_URL: http://host.docker.internal:15721
       ANTHROPIC_AUTH_TOKEN: PROXY_MANAGED
+      # Claude CLI 依赖 POSIX shell：容器内无 bash 会导致 Agent 对话启动即失败（EPIPE/exit 1）
+      SHELL: /bin/bash
 
     # 数据卷挂载 — 将宿主机目录映射到容器内
     # 用户可直接在宿主机访问克隆/下载的文件
