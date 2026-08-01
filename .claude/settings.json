@@ -45,7 +45,7 @@
   },
   "enabledPlugins": {
     "githubstars-project-plugin@local-projects-marketplace": true,
-    "githubstars-agent@githubstars": true
+    "githubstars-agent@githubstars": false
   },
   "extraKnownMarketplaces": {
     "githubstars": {

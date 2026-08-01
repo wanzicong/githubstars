@@ -8,7 +8,6 @@
 | --- | --- | --- |
 | `@githubstars/shared` | 前后端共享 TypeScript 类型与工具 | 库（编译为 dist） |
 | `@githubstars/cli` | 一键启动管理命令行工具 | 可执行 CLI |
-| `@githubstars/github-agent` | 基于 Claude Agent SDK 的智能代理服务 | 库（编译为 dist） |
 
 > `@githubstars/backend`、`@githubstars/frontend`、`@githubstars/desktop` 属于应用（非库），保留 `private: true`，不发布。
 
@@ -56,7 +55,6 @@ curl -XPUT -H "Content-type: application/json" \
 # 分别进入各包目录发布
 cd packages/shared && npm publish
 cd packages/cli && npm publish
-cd packages/github-agent && npm publish
 ```
 
 > 每次发布前需**递增版本号**（`npm version patch` 等），否则 registry 会拒绝同版本覆盖。
