@@ -38,21 +38,31 @@ export default function MultipleTabs() {
   const setActiveKey = useMultipleTabStore((s) => s.setActiveKey)
   const refreshTab = useMultipleTabStore((s) => s.refreshTab)
 
-  // 路由变化时自动添加标签（仅基于 pathname，避免筛选参数变化产生重复标签）
+  // 路由变化时自动添加标签（仅基于 pathname，避免筛选参数变化产生重复标签）；
+  // search 变化但 pathname 不变时，更新当前激活标签记录的 search（用户在同一页面调整筛选条件）
+  const updateTabSearch = useMultipleTabStore((s) => s.updateTabSearch)
   useEffect(() => {
     const title = getMenuTitle(location.pathname)
     addTab({
       key: location.pathname,
       title,
       closable: location.pathname !== '/',
-    })
+    }, location.search)
+    // 仅 pathname 变化时触发；search 变化由下方 updateTabSearch 处理
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, addTab])
 
-  // 标签切换 → 路由跳转
+  // 同一页面筛选条件变化时，同步更新该标签的 search 记录
+  useEffect(() => {
+    updateTabSearch(location.pathname, location.search)
+  }, [location.pathname, location.search, updateTabSearch])
+
+  // 标签切换 → 带该标签记录的 search 参数导航（避免丢失搜索/筛选条件）
   const handleTabChange = useCallback(
     (key: string) => {
+      const target = useMultipleTabStore.getState().tabs.find((t) => t.key === key)
       setActiveKey(key)
-      navigate(key)
+      navigate({ pathname: key, search: target?.search ?? '' })
     },
     [navigate, setActiveKey],
   )
@@ -61,10 +71,11 @@ export default function MultipleTabs() {
   const handleTabRemove = useCallback(
     (key: string) => {
       removeTab(key)
-      // 如果关闭的是当前激活标签，跳转到新的 activeKey
+      // 如果关闭的是当前激活标签，跳转到新的 activeKey（带其记录的 search）
       if (key === activeKey) {
         const store = useMultipleTabStore.getState()
-        navigate(store.activeKey)
+        const target = store.tabs.find((t) => t.key === store.activeKey)
+        navigate({ pathname: store.activeKey, search: target?.search ?? '' })
       }
     },
     [activeKey, navigate, removeTab],
@@ -72,67 +83,74 @@ export default function MultipleTabs() {
 
   // 右键菜单
   const contextMenu = useCallback(
-    (key: string): MenuProps => ({
-      items: [
-        {
-          key: 'refresh',
-          icon: <ReloadOutlined />,
-          label: '刷新页面',
-          onClick: () => {
-            // 先导航到右键的标签页，再递增 refreshKey 强制内容重新挂载
-            if (key !== activeKey) navigate(key)
-            refreshTab()
+    (key: string): MenuProps => {
+      /** 取标签记录的 search 参数，导航时一并恢复 */
+      const navTo = (targetKey: string) => {
+        const target = useMultipleTabStore.getState().tabs.find((t) => t.key === targetKey)
+        navigate({ pathname: targetKey, search: target?.search ?? '' })
+      }
+      return {
+        items: [
+          {
+            key: 'refresh',
+            icon: <ReloadOutlined />,
+            label: '刷新页面',
+            onClick: () => {
+              // 先导航到右键的标签页，再递增 refreshKey 强制内容重新挂载
+              if (key !== activeKey) navTo(key)
+              refreshTab()
+            },
           },
-        },
-        { type: 'divider' },
-        {
-          key: 'close',
-          icon: <CloseOutlined />,
-          label: '关闭当前',
-          disabled: key === '/',
-          onClick: () => handleTabRemove(key),
-        },
-        {
-          key: 'close-others',
-          label: '关闭其他',
-          onClick: () => {
-            removeOtherTabs(key)
-            if (activeKey !== key) navigate(key)
+          { type: 'divider' },
+          {
+            key: 'close',
+            icon: <CloseOutlined />,
+            label: '关闭当前',
+            disabled: key === '/',
+            onClick: () => handleTabRemove(key),
           },
-        },
-        {
-          key: 'close-left',
-          label: '关闭左侧',
-          onClick: () => {
-            removeLeftTabs(key)
-            // 如果当前激活标签被移除了，导航到 store 中的新 activeKey
-            const state = useMultipleTabStore.getState()
-            if (!state.tabs.find((t) => t.key === activeKey)) {
-              navigate(state.activeKey)
-            }
+          {
+            key: 'close-others',
+            label: '关闭其他',
+            onClick: () => {
+              removeOtherTabs(key)
+              if (activeKey !== key) navTo(key)
+            },
           },
-        },
-        {
-          key: 'close-right',
-          label: '关闭右侧',
-          onClick: () => {
-            removeRightTabs(key)
-            const state = useMultipleTabStore.getState()
-            if (!state.tabs.find((t) => t.key === activeKey)) {
-              navigate(state.activeKey)
-            }
+          {
+            key: 'close-left',
+            label: '关闭左侧',
+            onClick: () => {
+              removeLeftTabs(key)
+              // 如果当前激活标签被移除了，导航到 store 中的新 activeKey
+              const state = useMultipleTabStore.getState()
+              if (!state.tabs.find((t) => t.key === activeKey)) {
+                navTo(state.activeKey)
+              }
+            },
           },
-        },
-        {
-          key: 'close-all',
-          label: '关闭全部',
-          onClick: () => {
-            removeAllTabs()
-            navigate('/')
+          {
+            key: 'close-right',
+            label: '关闭右侧',
+            onClick: () => {
+              removeRightTabs(key)
+              const state = useMultipleTabStore.getState()
+              if (!state.tabs.find((t) => t.key === activeKey)) {
+                navTo(state.activeKey)
+              }
+            },
           },
-        },
-      ],
-    }),
+          {
+            key: 'close-all',
+            label: '关闭全部',
+            onClick: () => {
+              removeAllTabs()
+              navigate({ pathname: '/', search: '' })
+            },
+          },
+        ],
+      }
+    },
     [activeKey, navigate, handleTabRemove, removeOtherTabs, removeLeftTabs, removeRightTabs, removeAllTabs, refreshTab],
   )
 

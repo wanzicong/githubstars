@@ -22,6 +22,8 @@ export interface TabItem {
   title: string
   /** 是否可关闭（首页不可关闭，其余可关闭） */
   closable: boolean
+  /** 标签最近一次激活时的 URL search 参数（如 ?keyword=xxx），切回该标签时恢复 */
+  search: string
 }
 
 export interface MultipleTabState {
@@ -33,8 +35,8 @@ export interface MultipleTabState {
   refreshKey: number
 
   // ── Actions ──
-  /** 添加或激活标签页（已存在则激活，不存在则追加） */
-  addTab: (tab: TabItem) => void
+  /** 添加或激活标签页（已存在则激活，不存在则追加）；search 为标签对应的 URL 查询参数 */
+  addTab: (tab: Omit<TabItem, 'search'>, search: string) => void
   /** 关闭指定标签页 */
   removeTab: (key: string) => void
   /** 关闭其他标签页（保留当前 key） */
@@ -49,6 +51,8 @@ export interface MultipleTabState {
   setActiveKey: (key: string) => void
   /** 更新标签标题 */
   updateTabTitle: (key: string, title: string) => void
+  /** 更新标签的 search 记录（用户在同一页面调整筛选条件时同步） */
+  updateTabSearch: (key: string, search: string) => void
   /** 递增 refreshKey 以触发内容重新挂载（标签页刷新） */
   refreshTab: () => void
 }
@@ -57,6 +61,7 @@ const HOME_TAB: TabItem = {
   key: '/',
   title: 'Star列表',
   closable: false,
+  search: '',
 }
 
 export const useMultipleTabStore = create<MultipleTabState>()((set, get) => ({
@@ -64,23 +69,23 @@ export const useMultipleTabStore = create<MultipleTabState>()((set, get) => ({
   activeKey: '/',
   refreshKey: 0,
 
-  addTab: (tab) => {
+  addTab: (tab, search) => {
     const { tabs } = get()
     const exists = tabs.find((t) => t.key === tab.key)
     if (exists) {
-      // 已存在：仅激活，标题以新传入的为准（可能已更新）
+      // 已存在：仅激活并更新标题；search 保留标签原有记录（用户在该页面调整后由后续导航覆盖）
       set({
         activeKey: tab.key,
         tabs: tabs.map((t) => (t.key === tab.key ? { ...t, title: tab.title } : t)),
       })
     } else {
-      // 新增标签，放在当前激活标签右侧
+      // 新增标签，放在当前激活标签右侧，并记录当前 search
       const { activeKey } = get()
       const idx = tabs.findIndex((t) => t.key === activeKey)
       const before = tabs.slice(0, idx + 1)
       const after = tabs.slice(idx + 1)
       set({
-        tabs: [...before, tab, ...after],
+        tabs: [...before, { ...tab, search }, ...after],
         activeKey: tab.key,
       })
     }
@@ -145,6 +150,12 @@ export const useMultipleTabStore = create<MultipleTabState>()((set, get) => ({
   updateTabTitle: (key, title) => {
     set((state) => ({
       tabs: state.tabs.map((t) => (t.key === key ? { ...t, title } : t)),
+    }))
+  },
+
+  updateTabSearch: (key, search) => {
+    set((state) => ({
+      tabs: state.tabs.map((t) => (t.key === key ? { ...t, search } : t)),
     }))
   },
 
