@@ -20,11 +20,15 @@ export interface AgentChatState {
   sessionMode: AgentSessionMode
   /** 输入草稿 */
   draftInput: string
+  /** 主动清空标记：新建/清除/删除会话后置 true，恢复 effect 跳过直到用户重新选中会话（不持久化） */
+  manualCleared: boolean
 
   // ── Actions ──
   setCurrentSessionId: (id: string | null) => void
   setSessionMode: (mode: AgentSessionMode) => void
   setDraftInput: (text: string) => void
+  /** 设置主动清空标记 */
+  setManualCleared: (cleared: boolean) => void
   /** 清空当前会话与草稿（保留会话模式偏好） */
   clear: () => void
 }
@@ -35,11 +39,13 @@ export const useAgentChatStore = create<AgentChatState>()(
       currentSessionId: null,
       sessionMode: 'auto',
       draftInput: '',
+      manualCleared: false,
 
       setCurrentSessionId: (currentSessionId) => set({ currentSessionId }),
       setSessionMode: (sessionMode) => set({ sessionMode }),
       setDraftInput: (draftInput) => set({ draftInput }),
-      clear: () => set({ currentSessionId: null, draftInput: '' }),
+      setManualCleared: (manualCleared) => set({ manualCleared }),
+      clear: () => set({ currentSessionId: null, draftInput: '', manualCleared: true }),
     }),
     {
       name: 'agent-chat-storage',
@@ -47,6 +53,7 @@ export const useAgentChatStore = create<AgentChatState>()(
         currentSessionId: state.currentSessionId,
         sessionMode: state.sessionMode,
         draftInput: state.draftInput,
+        // manualCleared 不持久化：刷新后默认 false，不影响「刷新恢复上次会话」
       }),
     },
   ),

@@ -1021,6 +1021,8 @@ export default function AgentChat() {
   const setSessionMode = useAgentChatStore((s) => s.setSessionMode)
   const setDraftInput = useAgentChatStore((s) => s.setDraftInput)
   const clearAgentChat = useAgentChatStore((s) => s.clear)
+  const manualCleared = useAgentChatStore((s) => s.manualCleared)
+  const setManualCleared = useAgentChatStore((s) => s.setManualCleared)
 
   // 会话 ID 与 URL ?session= 双向同步：选中对话写 URL，打开带 session 的链接直达该对话
   const [searchParams, setSearchParams] = useSearchParams()
@@ -1112,16 +1114,11 @@ export default function AgentChat() {
   const handleClear = useCallback(() => {
     // 清除当前会话：中止其流（若在生成）并清空视图
     if (currentSessionId) agentStreamManager.end(currentSessionId)
-    // 同步清掉 URL 的 session 参数，避免恢复 effect 读到旧 session 拉回旧会话
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.delete('session')
-      return next
-    }, { replace: true })
+    setManualCleared(true) // 标记主动清空，恢复 effect 跳过
     setMessages([])
     setCurrentSessionId(null)
     setLoading(false)
-  }, [currentSessionId, setCurrentSessionId, setSearchParams])
+  }, [currentSessionId, setCurrentSessionId, setManualCleared])
 
   /** 停止生成（仅中止当前会话的流，其它会话流不受影响） */
   const handleStop = useCallback(() => {
@@ -1160,6 +1157,7 @@ export default function AgentChat() {
    * 竞态控制（最新请求胜出）：每次加载递增序号并取消上一次请求，过期响应/取消静默丢弃。
    */
   const loadSession = useCallback(async (sessionId: string) => {
+    setManualCleared(false) // 用户主动选中会话，解除「主动清空」标记，允许后续自动恢复
     // 仅停止「当前视图」的发送中状态；目标会话的流由 streamManager 按 sessionId 独立维护
     setLoading(false)
 
@@ -1189,24 +1187,19 @@ export default function AgentChat() {
     } finally {
       if (seq === loadSeqRef.current) setLoadingSessionId(null)
     }
-  }, [antMsg, setCurrentSessionId])
+  }, [antMsg, setCurrentSessionId, setManualCleared])
 
   /** 新建对话（保留会话模式偏好与草稿，仅清空当前会话视图；不中断其它会话的后台流） */
   const handleNewConversation = useCallback(() => {
     loadAbortRef.current?.abort()
     loadSeqRef.current += 1
     restoredSessionIdRef.current = null // 主动切换会话时重置恢复标记，允许重新恢复
-    // 同步清掉 URL 的 session 参数：避免恢复 effect 在 URL 更新前读到旧 session 又把旧会话拉回来
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.delete('session')
-      return next
-    }, { replace: true })
+    // clearAgentChat() 内部会同时把 currentSessionId 置 null 且 manualCleared 置 true（同一 set，同批渲染）
     setMessages([])
     clearAgentChat()
     setLoading(false)
     inputRef.current?.focus()
-  }, [clearAgentChat, setSearchParams])
+  }, [clearAgentChat])
 
   /** 移动端：加载会话后自动关闭抽屉 */
   const handleLoadSessionMobile = useCallback((sessionId: string) => {
@@ -1234,12 +1227,7 @@ export default function AgentChat() {
         setSessions((prev) => prev.filter((s) => s.id !== sessionId))
         if (currentSessionId === sessionId) {
           loadSeqRef.current += 1
-          // 删除的是当前会话：同步清掉 URL 的 session 参数，避免恢复 effect 拉回
-          setSearchParams((prev) => {
-            const next = new URLSearchParams(prev)
-            next.delete('session')
-            return next
-          }, { replace: true })
+          setManualCleared(true) // 删除的是当前会话：标记主动清空，恢复 effect 跳过
           setMessages([])
           setCurrentSessionId(null)
         }
@@ -1250,7 +1238,7 @@ export default function AgentChat() {
     } catch (error: unknown) {
       antMsg.error(error instanceof Error ? error.message : '删除会话失败')
     }
-  }, [currentSessionId, antMsg, setCurrentSessionId, setSearchParams])
+  }, [currentSessionId, antMsg, setCurrentSessionId, setManualCleared])
 
   // 首次加载获取会话列表（延迟到宏任务，避免 effect 体内同步 setState 触发级联渲染）
   useEffect(() => {
@@ -1267,6 +1255,9 @@ export default function AgentChat() {
   // restoredSessionIdRef 记录已恢复的会话 ID，防止 setCurrentSessionId 触发 effect 导致重复 loadSession
   const restoredSessionIdRef = useRef<string | null>(null)
   useEffect(() => {
+    // 主动清空（新建/清除/删除会话）后，除非 URL 明确带了 session（外部打开分享链接），否则不自动恢复。
+    // manualCleared 与 currentSessionId 同属 zustand 同一状态通道，同步生效，避免恢复 effect 读到旧 session 又拉回旧会话。
+    if (manualCleared && !urlSessionId) return
     const targetId = urlSessionId ?? currentSessionId
     if (!targetId || messages.length > 0 || loadingSessionId) return
     if (restoredSessionIdRef.current === targetId) return // 已恢复过，不再重复
@@ -1278,7 +1269,7 @@ export default function AgentChat() {
     return () => {
       clearTimeout(timer)
     }
-  }, [urlSessionId, currentSessionId, messages.length, loadingSessionId, loadSession])
+  }, [manualCleared, urlSessionId, currentSessionId, messages.length, loadingSessionId, loadSession])
 
   // 选中会话 → 写入 URL ?session=（清空会话时移除该参数），保证链接可分享/刷新直达
   useEffect(() => {
@@ -1473,15 +1464,10 @@ export default function AgentChat() {
   const handleModeChange = useCallback((value: SessionMode) => {
     setSessionMode(value)
     if (value === 'none') {
-      // 切到临时会话：同步清掉 URL 的 session 参数，避免恢复 effect 拉回旧会话
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev)
-        next.delete('session')
-        return next
-      }, { replace: true })
+      setManualCleared(true) // 切到临时会话：标记主动清空，恢复 effect 跳过
       setCurrentSessionId(null)
     }
-  }, [setSessionMode, setCurrentSessionId, setSearchParams])
+  }, [setSessionMode, setCurrentSessionId, setManualCleared])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // 中文输入法选词期间的 Enter 不触发发送
