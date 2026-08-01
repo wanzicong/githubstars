@@ -1727,9 +1727,16 @@ export default function AgentChat() {
           }}
         >
           <Flex vertical gap={6} style={{ maxWidth: isMobile ? '100%' : '80%', margin: '0 auto', width: '100%' }}>
-            {/* 上下文选择器：选中仓库/分类作为对话上下文 */}
-            <ContextPicker value={contextItems} onChange={setContextItems} />
-            <Flex gap={8}>
+            {/* 一体化输入容器：已选上下文 chip + TextArea + 右下「＋」/圆形发送钮 */}
+            <div
+              style={{
+                border: `1px solid ${token.colorBorderSecondary}`,
+                borderRadius: 12,
+                background: token.colorFillAlter,
+                padding: '8px 12px 6px',
+              }}
+            >
+              <ContextPicker value={contextItems} onChange={setContextItems} />
               <Input.TextArea
                 ref={inputRef as React.Ref<React.ComponentRef<typeof Input.TextArea>>}
                 value={draftInput}
@@ -1737,30 +1744,33 @@ export default function AgentChat() {
                 onKeyDown={handleKeyDown}
                 placeholder="输入你想查询的 GitHub 仓库或问题…"
                 autoSize={{ minRows: 1, maxRows: 4 }}
-                variant="filled"
-                style={{ borderRadius: 10, fontSize: 14 }}
+                variant="borderless"
+                style={{ padding: 0, fontSize: 14, background: 'transparent', boxShadow: 'none' }}
               />
-              {loading ? (
-                <Button
-                  danger
-                  icon={<StopOutlined />}
-                  onClick={handleStop}
-                  style={{ height: 'auto', borderRadius: 10, paddingInline: 20, minWidth: 76 }}
-                >
-                  停止
-                </Button>
-              ) : (
-                <Button
-                  type="primary"
-                  icon={<SendOutlined />}
-                  onClick={handleSend}
-                  disabled={!draftInput.trim()}
-                  style={{ height: 'auto', borderRadius: 10, paddingInline: 20, minWidth: 76 }}
-                >
-                  发送
-                </Button>
-              )}
-            </Flex>
+              <Flex justify="flex-end" align="center" gap={8} style={{ marginTop: 2 }}>
+                {loading ? (
+                  <Button
+                    danger
+                    type="primary"
+                    shape="circle"
+                    size="small"
+                    icon={<StopOutlined />}
+                    onClick={handleStop}
+                    aria-label="停止"
+                  />
+                ) : (
+                  <Button
+                    type="primary"
+                    shape="circle"
+                    size="small"
+                    icon={<SendOutlined />}
+                    onClick={handleSend}
+                    disabled={!draftInput.trim()}
+                    aria-label="发送"
+                  />
+                )}
+              </Flex>
+            </div>
             <Text type="secondary" style={{ fontSize: 11, textAlign: 'center' }}>
               Enter 发送 · Shift+Enter 换行 · 基于 Claude Agent SDK + GitHub MCP
             </Text>
