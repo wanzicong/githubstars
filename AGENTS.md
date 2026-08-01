@@ -9,7 +9,6 @@ packages/
   backend/       @githubstars/backend       - NestJS 11 + Prisma + MySQL API (sync, category, translate, ai, clone, stats modules)
   frontend/      @githubstars/frontend      - React 19 + Vite 8 + Ant Design 6 + Tailwind CSS 4
   desktop/       @githubstars/desktop       - Electron shell
-  github-agent/  @githubstars/github-agent  - AI agent service
   cli/           @githubstars/cli           - command-line tool
   shared/        @githubstars/shared        - shared TypeScript types
 ```
