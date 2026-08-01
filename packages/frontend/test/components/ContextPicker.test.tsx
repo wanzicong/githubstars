@@ -67,7 +67,7 @@ describe('ContextPicker', () => {
 
     it('未选上下文时只渲染「＋」按钮，无 chip 区', () => {
         renderPicker([])
-        expect(screen.getByRole('button', { name: /plus/i })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: '添加上下文' })).toBeInTheDocument()
         expect(screen.queryByText('＋')).toBeNull()
     })
 
@@ -108,7 +108,7 @@ describe('ContextPicker', () => {
 
     it('打开弹层展示仓库列表并可选中', async () => {
         const onChange = renderPicker([])
-        await userEvent.click(screen.getByRole('button', { name: /plus/i }))
+        await userEvent.click(screen.getByRole('button', { name: '添加上下文' }))
         const row = await screen.findByText('facebook/react')
         await userEvent.click(row)
         expect(onChange).toHaveBeenCalledWith([{ type: 'repo', id: 1, label: 'facebook/react' }])
@@ -116,7 +116,7 @@ describe('ContextPicker', () => {
 
     it('弹层显示 star 数（formatNumberShort 格式）', async () => {
         renderPicker([])
-        await userEvent.click(screen.getByRole('button', { name: /plus/i }))
+        await userEvent.click(screen.getByRole('button', { name: '添加上下文' }))
         await screen.findByText('facebook/react')
         expect(screen.getByText('234.0K')).toBeInTheDocument()
     })
@@ -124,7 +124,7 @@ describe('ContextPicker', () => {
     it('已有选中项时弹层显示「已选 n 项」，清空按钮移除全部', async () => {
         const items: ChatContextItem[] = [{ type: 'repo', id: 1, label: 'facebook/react' }]
         const onChange = renderPicker(items)
-        await userEvent.click(screen.getByRole('button', { name: /plus/i }))
+        await userEvent.click(screen.getByRole('button', { name: '添加上下文' }))
         expect(await screen.findByText('已选 1 项')).toBeInTheDocument()
         await userEvent.click(screen.getByText('清空'))
         expect(onChange).toHaveBeenCalledWith([])
@@ -132,7 +132,7 @@ describe('ContextPicker', () => {
 
     it('分类 Tab 勾选分类', async () => {
         const onChange = renderPicker([])
-        await userEvent.click(screen.getByRole('button', { name: /plus/i }))
+        await userEvent.click(screen.getByRole('button', { name: '添加上下文' }))
         await userEvent.click(await screen.findByRole('tab', { name: '分类' }))
         const tree = await screen.findByRole('tree')
         await userEvent.click(within(tree).getByText(/前端框架/))

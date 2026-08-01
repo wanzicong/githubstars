@@ -22,6 +22,23 @@ interface Props {
 /** chip 区最多完整展示的个数，超出折叠为 +N */
 const MAX_VISIBLE_CHIPS = 3
 
+/** 仓库行 CSS 类名：未选中时依赖 :hover 背景（颜色经 CSS 变量注入 token.colorFillTertiary） */
+const REPO_ROW_CLASS = 'ctx-picker-repo-row'
+
+/** 仓库行 hover 样式（注入组件根 div 的 <style> 中，颜色用根 div 上的 CSS 变量） */
+const REPO_ROW_HOVER_CSS = `.${REPO_ROW_CLASS}:hover { background: var(--ctx-picker-hover-bg); }`
+
+/**
+ * 分类树节点标题：名称 + 弱化计数（计数用三级文本色）
+ * antd v6 Tree 无 titleRender API，须在 treeData.title 直接传 ReactNode
+ */
+const renderCatTitle = (name: string, count: number, tertiaryColor: string) => (
+    <span style={{ fontSize: 13 }}>
+        {name}
+        <span style={{ color: tertiaryColor, marginLeft: 4, fontSize: 12 }}>（{count}）</span>
+    </span>
+)
+
 /** 把分类树拍平为一二级选项（含每级名称） */
 function flattenCategories(nodes: CategoryNode[]): CategoryNode[] {
     const result: CategoryNode[] = []
@@ -106,12 +123,12 @@ export default function ContextPicker({ value, onChange }: Props) {
         [value, onChange],
     )
 
-    // 分类树数据（勾选联动选中）
+    // 分类树数据（勾选联动选中）；标题计数用三级文本色弱化
     const treeData = categories.map((node) => ({
-        title: `${node.name}（${node.repoCount}）`,
+        title: renderCatTitle(node.name, node.repoCount, token.colorTextTertiary),
         key: node.id,
         children: node.children?.map((child) => ({
-            title: `${child.name}（${child.repoCount}）`,
+            title: renderCatTitle(child.name, child.repoCount, token.colorTextTertiary),
             key: child.id,
         })),
     }))
@@ -133,6 +150,7 @@ export default function ContextPicker({ value, onChange }: Props) {
         return (
             <div
                 key={repo.id}
+                className={REPO_ROW_CLASS}
                 onClick={() => toggleItem({ type: 'repo', id: repo.id, label: repo.fullName })}
                 style={{
                     display: 'flex',
@@ -142,7 +160,8 @@ export default function ContextPicker({ value, onChange }: Props) {
                     padding: '0 10px',
                     cursor: 'pointer',
                     borderBottom: `1px solid ${token.colorBorderSecondary}`,
-                    background: selected ? token.colorPrimaryBg : 'transparent',
+                    // 选中行固定选中底色（inline style 优先级高于 :hover 类样式）；未选中行由 CSS 类提供 hover 背景
+                    ...(selected ? { background: token.colorPrimaryBg } : {}),
                 }}
             >
                 <span style={{ width: 16, flexShrink: 0, display: 'inline-flex', justifyContent: 'center' }}>
@@ -236,7 +255,11 @@ export default function ContextPicker({ value, onChange }: Props) {
     const hiddenCount = value.length - visibleChips.length
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+        <div
+            // 注入 hover 背景色 CSS 变量，供 <style> 中的 :hover 规则引用
+            style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, ['--ctx-picker-hover-bg' as string]: token.colorFillTertiary }}
+        >
+            <style>{REPO_ROW_HOVER_CSS}</style>
             <Popover
                 content={popoverContent}
                 trigger='click'
@@ -246,7 +269,7 @@ export default function ContextPicker({ value, onChange }: Props) {
                 arrow={false}
             >
                 <Tooltip title='添加上下文'>
-                    <Button size='small' type='text' icon={<PlusOutlined />} style={{ color: token.colorTextSecondary }} />
+                    <Button size='small' type='text' aria-label='添加上下文' icon={<PlusOutlined />} style={{ color: token.colorTextSecondary }} />
                 </Tooltip>
             </Popover>
             {visibleChips.map((item) => (
