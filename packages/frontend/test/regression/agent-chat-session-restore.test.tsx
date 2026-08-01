@@ -73,7 +73,7 @@ function sessionDetail(id: string) {
 beforeEach(() => {
     vi.clearAllMocks()
     // zustand store 是模块级单例：清空跨测试残留的会话/清空标记，保证每个用例从空白状态开始
-    useAgentChatStore.setState({ currentSessionId: null, sessionMode: 'auto', draftInput: '', manualCleared: false })
+    useAgentChatStore.setState({ currentSessionId: null, sessionMode: 'auto', draftInput: '', manualCleared: false, sidebarCollapsed: false })
     localStorage.clear()
     listAgentSessions.mockResolvedValue(SESSION_LIST)
     getAgentSession.mockImplementation(async (id: string) => sessionDetail(id))
@@ -158,5 +158,41 @@ describe('AgentChat 新建/清除会话回归', () => {
 
         expect(getAgentSession.mock.calls.map((c) => c[0])).toEqual(['s1', 's2'])
         expect(screen.queryByText('回答-s1')).not.toBeInTheDocument()
+    })
+
+    it('会话列表可折叠/展开，折叠状态持久化且重挂载后保持', async () => {
+        const { unmount } = renderAgentChat()
+        await waitFor(() => expect(getAgentSession.mock.calls[0]?.[0]).toBe('s1'))
+        await screen.findByText('会话一标题')
+
+        const sidebar = document.querySelector('.agent-session-sidebar') as HTMLElement
+        expect(sidebar).not.toBeNull()
+        expect(sidebar.style.width).toBe('280px')
+
+        // 折叠（顶部按钮 + 底部按钮两个入口，任一点击均可）
+        await userEvent.click(screen.getAllByRole('button', { name: '折叠会话列表' })[0])
+        await waitFor(() => expect(useAgentChatStore.getState().sidebarCollapsed).toBe(true))
+        expect(sidebar.style.width).toBe('48px')
+        // 会话列表内容隐藏
+        expect(screen.queryByText('会话一标题')).not.toBeInTheDocument()
+        // 已持久化到 localStorage
+        const persisted = JSON.parse(localStorage.getItem('agent-chat-storage') as string)
+        expect(persisted.state.sidebarCollapsed).toBe(true)
+
+        // 展开
+        await userEvent.click(screen.getByRole('button', { name: '展开会话列表' }))
+        await waitFor(() => expect(useAgentChatStore.getState().sidebarCollapsed).toBe(false))
+        expect(sidebar.style.width).toBe('280px')
+        expect(screen.getByText('会话一标题')).toBeInTheDocument()
+
+        // 再次折叠后卸载重挂载（模拟刷新/重进页面）：状态保持折叠
+        await userEvent.click(screen.getAllByRole('button', { name: '折叠会话列表' })[0])
+        await waitFor(() => expect(useAgentChatStore.getState().sidebarCollapsed).toBe(true))
+        unmount()
+        renderAgentChat()
+        await waitFor(() => expect(getAgentSession.mock.calls[0]?.[0]).toBe('s1'))
+        const sidebar2 = document.querySelector('.agent-session-sidebar') as HTMLElement
+        expect(sidebar2.style.width).toBe('48px')
+        expect(screen.queryByText('会话一标题')).not.toBeInTheDocument()
     })
 })

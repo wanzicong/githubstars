@@ -712,6 +712,7 @@ function SessionListContent({
   currentSessionId,
   loadingSessionId,
   onNewConversation,
+  onToggleCollapsed,
   onLoadSession,
   onDeleteSession,
   onRetry,
@@ -724,17 +725,23 @@ function SessionListContent({
   onNewConversation: () => void
   onLoadSession: (sessionId: string) => void
   onDeleteSession: (sessionId: string, e: React.MouseEvent) => void
+  onToggleCollapsed?: () => void
   onRetry: () => void
 }) {
   const { token } = theme.useToken()
 
   return (
     <>
-      {/* 顶部：新对话 */}
-      <div style={{ padding: 12, flexShrink: 0 }}>
+      {/* 顶部：新对话 + 折叠开关 */}
+      <div style={{ padding: 12, flexShrink: 0, display: 'flex', gap: 8 }}>
         <Button type="primary" icon={<PlusOutlined />} block onClick={onNewConversation}>
           新对话
         </Button>
+        {onToggleCollapsed && (
+          <Tooltip title="折叠会话列表">
+            <Button type="text" icon={<MenuFoldOutlined />} onClick={onToggleCollapsed} aria-label="折叠会话列表" />
+          </Tooltip>
+        )}
       </div>
 
       {/* 中部：会话列表（可滚动） */}
@@ -895,7 +902,7 @@ const SessionSidebar = memo(function SessionSidebar({
   const { token } = theme.useToken()
 
   return (
-    <div
+    <div className="agent-session-sidebar"
       style={{
         width: collapsed ? 48 : 280,
         flexShrink: 0,
@@ -910,7 +917,7 @@ const SessionSidebar = memo(function SessionSidebar({
       {collapsed ? (
         <Flex vertical align="center" justify="center" style={{ flex: 1 }}>
           <Tooltip title="展开会话列表" placement="right">
-            <Button type="text" icon={<MenuUnfoldOutlined />} onClick={onToggleCollapsed} />
+            <Button type="text" icon={<MenuUnfoldOutlined />} onClick={onToggleCollapsed} aria-label="展开会话列表" />
           </Tooltip>
         </Flex>
       ) : (
@@ -925,6 +932,7 @@ const SessionSidebar = memo(function SessionSidebar({
             onLoadSession={onLoadSession}
             onDeleteSession={onDeleteSession}
             onRetry={onRetry}
+            onToggleCollapsed={onToggleCollapsed}
           />
 
           {/* 底部：折叠按钮 */}
@@ -938,7 +946,7 @@ const SessionSidebar = memo(function SessionSidebar({
             }}
           >
             <Tooltip title="折叠会话列表" placement="right">
-              <Button type="text" size="small" icon={<MenuFoldOutlined />} onClick={onToggleCollapsed} />
+              <Button type="text" size="small" icon={<MenuFoldOutlined />} onClick={onToggleCollapsed} aria-label="折叠会话列表" />
             </Tooltip>
           </div>
         </>
@@ -1023,6 +1031,8 @@ export default function AgentChat() {
   const clearAgentChat = useAgentChatStore((s) => s.clear)
   const manualCleared = useAgentChatStore((s) => s.manualCleared)
   const setManualCleared = useAgentChatStore((s) => s.setManualCleared)
+  const sidebarCollapsed = useAgentChatStore((s) => s.sidebarCollapsed)
+  const setSidebarCollapsed = useAgentChatStore((s) => s.setSidebarCollapsed)
 
   // 会话 ID 与 URL ?session= 双向同步：选中对话写 URL，打开带 session 的链接直达该对话
   const [searchParams, setSearchParams] = useSearchParams()
@@ -1048,7 +1058,6 @@ export default function AgentChat() {
   const isCurrentSessionStreaming = currentStream?.status === 'streaming'
 
   // 会话边栏状态
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const [sessionsError, setSessionsError] = useState<string | null>(null)
@@ -1127,9 +1136,9 @@ export default function AgentChat() {
   }, [currentSessionId])
 
   const handleToggleSidebar = useCallback(() => {
+    // 函数式更新：基于最新状态取反，避免闭包捕获过期值
     setSidebarCollapsed((v) => !v)
-  }, [])
-
+  }, [setSidebarCollapsed])
   // ── 会话列表管理 ──
 
   /** 获取会话列表 */
