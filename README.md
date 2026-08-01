@@ -181,7 +181,6 @@ npm run dev
 | `sync_log` | 同步操作日志 |
 | `system_config` | KV 配置表 |
 | `clone_task` / `clone_task_item` | 克隆任务及子项 |
-| `translation_task` / `translation_task_item` | 历史翻译任务数据（不再提供业务接口） |
 | `ai_analyze_task` | AI 分析任务结果 |
 
 ## 架构说明

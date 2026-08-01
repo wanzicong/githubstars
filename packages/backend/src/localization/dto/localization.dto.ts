@@ -1,27 +1,23 @@
 import { z } from 'zod';
 
-export const LocalizationFieldsSchema = z.enum(['description', 'readme', 'both']);
+/** 待翻译内容查询：返回尚未中文化的原文（描述 / README）供智能体翻译 */
+export const LocalizationPendingQuerySchema = z.object({
+    limit: z.number().int().min(1).max(200).default(50),
+    includeDescription: z.boolean().default(true),
+    includeReadme: z.boolean().default(true),
+});
 
-export const LocalizeRepositorySchema = z.object({
+export type LocalizationPendingQueryDto = z.infer<typeof LocalizationPendingQuerySchema>;
+
+/** 单条译文更新项：repoId + 至少一个中文字段 */
+export const LocalizationUpdateItemSchema = z.object({
     repoId: z.number().int().positive(),
-    fields: LocalizationFieldsSchema.default('both'),
-    force: z.boolean().default(false),
+    descriptionCn: z.string().max(20000).optional(),
+    readmeCn: z.string().max(2_000_000).optional(),
 });
 
-export type LocalizeRepositoryDto = z.infer<typeof LocalizeRepositorySchema>;
-
-export const LocalizeBatchSchema = z.object({
-    repoIds: z.array(z.number().int().positive()).min(1).max(2000),
-    fields: LocalizationFieldsSchema.default('both'),
-    force: z.boolean().default(false),
-    concurrency: z.number().int().min(1).max(5).default(2),
+export const LocalizationUpdateSchema = z.object({
+    items: z.array(LocalizationUpdateItemSchema).min(1).max(500),
 });
 
-export type LocalizeBatchDto = z.infer<typeof LocalizeBatchSchema>;
-
-export const LocalizationTaskSchema = z.object({
-    taskId: z.number().int().positive(),
-    itemLimit: z.number().int().min(0).max(100).default(20),
-});
-
-export type LocalizationTaskDto = z.infer<typeof LocalizationTaskSchema>;
+export type LocalizationUpdateDto = z.infer<typeof LocalizationUpdateSchema>;

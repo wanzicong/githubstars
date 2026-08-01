@@ -40,7 +40,6 @@ model GithubRepo {
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.DateTime
 
   // 关联
-  translationItems TranslationTaskItem[]
   cloneItems       CloneTaskItem[]
   downloadItems    DownloadTaskItem[]
   categories       CategoryRepoLink[]
@@ -126,47 +125,6 @@ model SystemConfig {
   updatedAt   DateTime? @map("updated_at") @db.DateTime
 
   @@map("system_config")
-}
-
-model TranslationTask {
-  id              BigInt    @id @default(autoincrement())
-  status          String?   @default("PENDING") @map("status") @db.VarChar(50)
-  totalItems      Int       @default(0) @map("total_items")
-  completedItems  Int       @default(0) @map("completed_items")
-  failedItems     Int       @default(0) @map("failed_items")
-  descTotal       Int       @default(0) @map("desc_total")
-  descCompleted   Int       @default(0) @map("desc_completed")
-  descFailed      Int       @default(0) @map("desc_failed")
-  readmeTotal     Int       @default(0) @map("readme_total")
-  readmeCompleted Int       @default(0) @map("readme_completed")
-  readmeFailed    Int       @default(0) @map("readme_failed")
-  createdAt       DateTime? @map("created_at") @db.DateTime
-  finishedAt      DateTime? @map("finished_at") @db.DateTime
-
-  items TranslationTaskItem[]
-
-  @@map("translation_task")
-}
-
-model TranslationTaskItem {
-  id            BigInt    @id @default(autoincrement())
-  taskId        BigInt    @map("task_id")
-  repoId        BigInt    @map("repo_id")
-  fullName      String?   @map("full_name") @db.VarChar(500)
-  translateType String    @map("translate_type") @db.VarChar(20)
-  status        String?   @default("PENDING") @map("status") @db.VarChar(50)
-  retryCount    Int       @default(0) @map("retry_count")
-  errorMessage  String?   @map("error_message") @db.Text
-  createdAt     DateTime? @map("created_at") @db.DateTime
-  updatedAt     DateTime? @map("updated_at") @db.DateTime
-
-  task TranslationTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  repo GithubRepo      @relation(fields: [repoId], references: [id], onDelete: Cascade)
-
-  @@index([taskId])
-  @@index([repoId])
-  @@index([status])
-  @@map("translation_task_item")
 }
 
 model CloneTask {

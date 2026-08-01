@@ -1,175 +1,123 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment -- Jest asymmetric matchers are intentionally untyped in mock assertions. */
-import { splitMarkdownIntoChunks } from '../../src/localization/agent-translation-client.service';
+import type { PrismaService } from '../../src/prisma/prisma.service';
 import { RepositoryLocalizationService } from '../../src/localization/repository-localization.service';
 
-describe('RepositoryLocalizationService', () => {
-    const baseRepo = {
-        id: 1n,
-        fullName: 'owner/project',
-        description: 'A useful project',
-        descriptionCn: null,
-        readmeOriginal: '# Project\n\nUseful documentation.',
-        readmeCn: null,
-        readmeFetched: true,
-    };
+/** 取 jest mock 的第 N 次调用入参（带类型断言，避免 unsafe member access） */
+function callArg(mock: jest.Mock, key: string): Record<string, unknown> {
+    const firstCall = mock.mock.calls[0] as Array<Record<string, unknown>>;
+    return firstCall[0][key] as Record<string, unknown>;
+}
 
+describe('RepositoryLocalizationService（纯数据接口：取原文 / 写译文）', () => {
     const prisma = {
-        githubRepo: { update: jest.fn() },
-        translationTask: {
-            create: jest.fn(),
-            findMany: jest.fn(),
-            findUnique: jest.fn(),
-            update: jest.fn(),
-        },
-        translationTaskItem: {
-            createMany: jest.fn(),
-            updateMany: jest.fn(),
-            count: jest.fn(),
+        githubRepo: {
             findMany: jest.fn(),
             update: jest.fn(),
         },
-    };
-    const githubRepo = {
-        findById: jest.fn(),
-        findByIds: jest.fn(),
-        ensureReadmeFetched: jest.fn(),
-    };
-    const translator = {
-        translateDescription: jest.fn(),
-        translateReadme: jest.fn(),
     };
 
     let service: RepositoryLocalizationService;
 
     beforeEach(() => {
         jest.clearAllMocks();
-        service = new RepositoryLocalizationService(prisma as never, githubRepo as never, translator as never);
+        service = new RepositoryLocalizationService(prisma as unknown as PrismaService);
     });
 
-    it('应翻译描述和 README 并写入中文字段', async () => {
-        githubRepo.findById.mockResolvedValue(baseRepo);
-        translator.translateDescription.mockResolvedValue('一个实用的项目');
-        translator.translateReadme.mockResolvedValue('# 项目\n\n实用文档。');
-        prisma.githubRepo.update.mockResolvedValue({});
-
-        const result = await service.localizeRepository(1, 'both');
-
-        expect(result.description).toEqual({ status: 'translated', characters: 7 });
-        expect(result.readme).toEqual({ status: 'translated', characters: 11 });
-        expect(translator.translateDescription).toHaveBeenCalledWith(baseRepo.description);
-        expect(translator.translateReadme).toHaveBeenCalledWith(baseRepo.readmeOriginal);
-        expect(prisma.githubRepo.update).toHaveBeenNthCalledWith(
-            1,
-            expect.objectContaining({ where: { id: 1 }, data: expect.objectContaining({ descriptionCn: '一个实用的项目' }) }),
-        );
-        expect(prisma.githubRepo.update).toHaveBeenNthCalledWith(
-            2,
-            expect.objectContaining({ where: { id: 1 }, data: expect.objectContaining({ readmeCn: '# 项目\n\n实用文档。' }) }),
-        );
-    });
-
-    it('默认不覆盖已有中文内容', async () => {
-        githubRepo.findById.mockResolvedValue({
-            ...baseRepo,
-            descriptionCn: '已有描述',
-            readmeCn: '# 已有文档',
+    describe('findPending', () => {
+        it('默认同时查询描述与 README 均未翻译的仓库', async () => {
+            prisma.githubRepo.findMany.mockResolvedValue([]);
+            const result = await service.findPending(50, true, true);
+            expect(result.success).toBe(true);
+            expect(prisma.githubRepo.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: {
+                        OR: [
+                            { description: { not: null, notIn: [''] }, descriptionCn: null },
+                            { readmeCn: null, readmeOriginal: { not: null, notIn: [''] } },
+                        ],
+                    },
+                    take: 50,
+                }),
+            );
         });
 
-        const result = await service.localizeRepository(1, 'both');
+        it('仅查描述时 WHERE 只含 description 条件', async () => {
+            prisma.githubRepo.findMany.mockResolvedValue([]);
+            await service.findPending(10, true, false);
+            const where = callArg(prisma.githubRepo.findMany, 'where');
+            expect(where).toEqual({ description: { not: null, notIn: [''] }, descriptionCn: null });
+        });
 
-        expect(result.description?.status).toBe('skipped');
-        expect(result.readme?.status).toBe('skipped');
-        expect(translator.translateDescription).not.toHaveBeenCalled();
-        expect(translator.translateReadme).not.toHaveBeenCalled();
-        expect(prisma.githubRepo.update).not.toHaveBeenCalled();
-    });
+        it('仅查 README 时 WHERE 只含 readme 条件', async () => {
+            prisma.githubRepo.findMany.mockResolvedValue([]);
+            await service.findPending(10, false, true);
+            const where = callArg(prisma.githubRepo.findMany, 'where');
+            expect(where).toEqual({ readmeCn: null, readmeOriginal: { not: null, notIn: [''] } });
+        });
 
-    it('README 原文缺失时应先从 GitHub 拉取再翻译', async () => {
-        const unfetchedRepo = { ...baseRepo, readmeOriginal: null, readmeFetched: false };
-        const fetchedRepo = { ...baseRepo, readmeOriginal: '# Fresh README', readmeFetched: true };
-        githubRepo.findById.mockResolvedValueOnce(unfetchedRepo).mockResolvedValueOnce(fetchedRepo);
-        githubRepo.ensureReadmeFetched.mockResolvedValue(fetchedRepo);
-        translator.translateReadme.mockResolvedValue('# 最新说明');
-        prisma.githubRepo.update.mockResolvedValue({});
+        it('WHERE 排除空串原文，避免产生全 null 的无效记录', async () => {
+            prisma.githubRepo.findMany.mockResolvedValue([]);
+            await service.findPending(10, true, true);
+            const where = callArg(prisma.githubRepo.findMany, 'where');
+            const branches = (where as unknown as { OR: Array<Record<string, unknown>> }).OR;
+            for (const branch of branches) {
+                const fieldFilter = (branch.description ?? branch.readmeOriginal) as { notIn: string[] };
+                expect(fieldFilter.notIn).toEqual(['']);
+            }
+        });
+        it('两个字段都不查时直接返回空，不访问数据库', async () => {
+            const result = await service.findPending(10, false, false);
+            expect(result).toEqual({ success: true, total: 0, records: [] });
+            expect(prisma.githubRepo.findMany).not.toHaveBeenCalled();
+        });
 
-        const result = await service.localizeRepository(1, 'readme');
-
-        expect(githubRepo.ensureReadmeFetched).toHaveBeenCalledWith(1);
-        expect(translator.translateReadme).toHaveBeenCalledWith('# Fresh README');
-        expect(result.readme?.status).toBe('translated');
-    });
-
-    it('批量任务只创建需要处理的字段并返回缺失仓库 ID', async () => {
-        githubRepo.findByIds.mockResolvedValue([
-            baseRepo,
-            { ...baseRepo, id: 2n, fullName: 'owner/done', descriptionCn: '已有描述', readmeCn: '# 已有 README' },
-        ]);
-        prisma.translationTask.create.mockResolvedValue({ id: 9n });
-        prisma.translationTaskItem.createMany.mockResolvedValue({ count: 2 });
-        const serviceWithTaskLauncher = service as unknown as {
-            startTaskAsync(taskId: bigint, concurrency: number, force: boolean): void;
-        };
-        jest.spyOn(serviceWithTaskLauncher, 'startTaskAsync').mockImplementation(() => undefined);
-
-        const result = await service.createBatch([1, 2, 404], 'both', false, 2);
-
-        expect(result).toEqual(
-            expect.objectContaining({
-                taskId: 9,
-                totalItems: 2,
-                repositoryCount: 2,
-                missingRepoIds: [404],
-            }),
-        );
-        expect(prisma.translationTaskItem.createMany).toHaveBeenCalledWith({
-            data: expect.arrayContaining([
-                expect.objectContaining({ repoId: 1, translateType: 'description' }),
-                expect.objectContaining({ repoId: 1, translateType: 'readme' }),
-            ]),
+        it('已翻译字段返回 null，仅保留待翻译原文', async () => {
+            prisma.githubRepo.findMany.mockResolvedValue([
+                {
+                    id: 1n,
+                    fullName: 'owner/a',
+                    description: 'English desc',
+                    descriptionCn: null,
+                    readmeOriginal: '# readme',
+                    readmeCn: '已有中文',
+                },
+            ]);
+            const result = await service.findPending(50, true, true);
+            expect(result.records).toHaveLength(1);
+            expect(result.records[0].repoId).toBe(1);
+            expect(result.records[0].description).toBe('English desc');
+            // readmeCn 已有中文 → readme 返回 null
+            expect(result.records[0].readme).toBeNull();
         });
     });
 
-    it('任务详情只返回有限的失败或处理中明细，避免大任务结果撑爆 Agent 上下文', async () => {
-        prisma.translationTask.findUnique.mockResolvedValue({
-            id: 2n,
-            status: 'PROCESSING',
-            totalItems: 1581,
-            completedItems: 10,
-            failedItems: 30,
+    describe('updateTranslations', () => {
+        it('写入描述与 README 译文，传 readmeCn 时置 readmeFetched=true', async () => {
+            prisma.githubRepo.update.mockResolvedValue({});
+            const result = await service.updateTranslations([{ repoId: 1, descriptionCn: '中文描述', readmeCn: '中文 README' }]);
+            expect(result.updated).toBe(1);
+            expect(result.updatedRepoIds).toEqual([1]);
+            const data = callArg(prisma.githubRepo.update, 'data');
+            expect(data.descriptionCn).toBe('中文描述');
+            expect(data.readmeCn).toBe('中文 README');
+            expect(data.readmeFetched).toBe(true);
         });
-        prisma.translationTaskItem.findMany.mockResolvedValue(
-            Array.from({ length: 20 }, (_, index) => ({ id: BigInt(index + 1), status: 'FAILED' })),
-        );
-        prisma.translationTaskItem.count.mockResolvedValue(2);
 
-        const result = await service.getTask(2);
+        it('无有效中文字段的项计入 skipped，不更新数据库', async () => {
+            const result = await service.updateTranslations([{ repoId: 5 }]);
+            expect(result.updated).toBe(0);
+            expect(result.skippedRepoIds).toEqual([5]);
+            expect(prisma.githubRepo.update).not.toHaveBeenCalled();
+        });
 
-        expect(prisma.translationTask.findUnique).toHaveBeenCalledWith({ where: { id: 2 } });
-        expect(prisma.translationTaskItem.findMany).toHaveBeenCalledWith(
-            expect.objectContaining({
-                where: { taskId: 2, status: { in: ['FAILED', 'PROCESSING'] } },
-                take: 20,
-            }),
-        );
-        expect(result).toEqual(
-            expect.objectContaining({
-                progress: 3,
-                pendingItems: 1539,
-                processingItems: 2,
-                returnedItems: 20,
-                attentionItemCount: 32,
-                hasMoreItems: true,
-            }),
-        );
-    });
-});
-
-describe('splitMarkdownIntoChunks', () => {
-    it('切分长 README 时不应在代码围栏内断开', () => {
-        const markdown = ['开头说明\n', '```ts\n', 'const value = 1;\n', 'const other = 2;\n', '```\n', '结尾说明\n'].join('');
-        const chunks = splitMarkdownIntoChunks(markdown, 20);
-
-        expect(chunks.join('')).toBe(markdown);
-        expect(chunks.some((chunk) => chunk.includes('```ts\nconst value = 1;\nconst other = 2;\n```\n'))).toBe(true);
+        it('单条更新失败不阻塞整批，计入 skipped', async () => {
+            prisma.githubRepo.update.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('记录不存在'));
+            const result = await service.updateTranslations([
+                { repoId: 1, descriptionCn: 'a' },
+                { repoId: 2, descriptionCn: 'b' },
+            ]);
+            expect(result.updated).toBe(1);
+            expect(result.updatedRepoIds).toEqual([1]);
+            expect(result.skippedRepoIds).toEqual([2]);
+        });
     });
 });

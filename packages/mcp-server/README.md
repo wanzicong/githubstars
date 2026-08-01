@@ -102,13 +102,13 @@ npm run build -w @githubstars/mcp-server
 | `stats-top-starred` | Star 排行榜 |
 | `stats-recent-active` | 最近活跃仓库 |
 
-### Localization 仓库中文化（4 个）
+### Localization 仓库中文化（2 个，纯数据接口）
 | 工具名 | 说明 |
 |--------|------|
-| `localization-run` | 中文化单个仓库的描述和/或 README |
-| `localization-batch` | 创建批量中文化任务 |
-| `localization-task-detail` | 查询任务进度与明细 |
-| `localization-task-retry` | 重试任务失败项 |
+| `localization-pending` | 查询未中文化的仓库原文（描述/README），供智能体翻译 |
+| `localization-update` | 批量写入智能体产出的译文（只更新，不做翻译） |
+
+> 翻译由智能体完成：取原文 → 智能体产出译文 → 写回。不再创建后端翻译任务。
 
 ### Categories 分类管理（10 个）
 | 工具名 | 说明 |

@@ -235,36 +235,19 @@ export function createSystemMcpServer(deps: SystemMcpDeps) {
                 },
             ),
 
-            // ==================== Localization 仓库中文化 ====================
+            // ==================== Localization 仓库中文化（纯数据接口：取原文 / 写译文） ====================
             tool(
-                'localization_run',
-                '中文化单个 Star 仓库的项目描述和/或 README，并写入数据库中文字段',
+                'localization_pending',
+                '查询未中文化的仓库原文（描述/README），供智能体翻译。返回的字段为 null 表示该字段无需翻译',
                 {
-                    repoId: z.number().int().positive().describe('仓库 ID'),
-                    fields: z.enum(['description', 'readme', 'both']).optional().describe('处理字段，默认 both'),
-                    force: z.boolean().optional().describe('是否覆盖已有中文内容，默认 false'),
-                },
-                async (args) => {
-                    try {
-                        return ok(await localization.localizeRepository(args.repoId, args.fields ?? 'both', args.force ?? false));
-                    } catch (e) {
-                        return err(e instanceof Error ? e.message : String(e));
-                    }
-                },
-            ),
-            tool(
-                'localization_batch',
-                '创建批量仓库中文化任务，异步翻译描述和 README 并写入数据库',
-                {
-                    repoIds: z.array(z.number().int().positive()).min(1).max(2000).describe('仓库 ID 列表'),
-                    fields: z.enum(['description', 'readme', 'both']).optional().describe('处理字段，默认 both'),
-                    force: z.boolean().optional().describe('是否覆盖已有中文内容，默认 false'),
-                    concurrency: z.number().int().min(1).max(5).optional().describe('并发数，默认 2'),
+                    limit: z.number().int().min(1).max(200).optional().describe('返回数量上限，默认 50，最大 200'),
+                    includeDescription: z.boolean().optional().describe('是否包含描述，默认 true'),
+                    includeReadme: z.boolean().optional().describe('是否包含 README，默认 true'),
                 },
                 async (args) => {
                     try {
                         return ok(
-                            await localization.createBatch(args.repoIds, args.fields ?? 'both', args.force ?? false, args.concurrency ?? 2),
+                            await localization.findPending(args.limit ?? 50, args.includeDescription ?? true, args.includeReadme ?? true),
                         );
                     } catch (e) {
                         return err(e instanceof Error ? e.message : String(e));
@@ -272,27 +255,24 @@ export function createSystemMcpServer(deps: SystemMcpDeps) {
                 },
             ),
             tool(
-                'localization_task_detail',
-                '查询仓库中文化批量任务的进度和有限异常明细；返回紧凑结果，适合轮询',
+                'localization_update',
+                '批量写入智能体产出的译文（只更新，不做翻译）。每项需 repoId 及 descriptionCn/readmeCn 至少其一',
                 {
-                    taskId: z.number().int().positive().describe('中文化任务 ID'),
-                    itemLimit: z.number().int().min(0).max(100).optional().describe('最多返回的失败/处理中明细数，默认 20'),
+                    items: z
+                        .array(
+                            z.object({
+                                repoId: z.number().int().positive().describe('仓库 ID'),
+                                descriptionCn: z.string().max(20000).optional().describe('中文描述'),
+                                readmeCn: z.string().max(2000000).optional().describe('中文 README'),
+                            }),
+                        )
+                        .min(1)
+                        .max(500)
+                        .describe('译文列表，单次最多 500 条'),
                 },
                 async (args) => {
                     try {
-                        return ok(await localization.getTask(args.taskId, args.itemLimit ?? 20));
-                    } catch (e) {
-                        return err(e instanceof Error ? e.message : String(e));
-                    }
-                },
-            ),
-            tool(
-                'localization_task_retry',
-                '重试仓库中文化批量任务中的失败项',
-                { taskId: z.number().int().positive().describe('中文化任务 ID') },
-                async (args) => {
-                    try {
-                        return ok(await localization.retryTask(args.taskId));
+                        return ok(await localization.updateTranslations(args.items));
                     } catch (e) {
                         return err(e instanceof Error ? e.message : String(e));
                     }

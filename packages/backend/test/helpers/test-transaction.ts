@@ -34,8 +34,6 @@ export class TestTransaction {
         await this.prisma.syncLog.deleteMany();
         await this.prisma.cloneTask.deleteMany();
         await this.prisma.cloneTaskItem.deleteMany();
-        await this.prisma.translationTask.deleteMany();
-        await this.prisma.translationTaskItem.deleteMany();
     }
 
     async commit(): Promise<void> {

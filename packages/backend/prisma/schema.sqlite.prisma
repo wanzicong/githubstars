@@ -41,7 +41,6 @@ model GithubRepo {
   updatedAt       DateTime  @updatedAt @map("updated_at") 
 
   // 关联
-  translationItems TranslationTaskItem[]
   cloneItems       CloneTaskItem[]
   downloadItems    DownloadTaskItem[]
   categories       CategoryRepoLink[]
@@ -127,47 +126,6 @@ model SystemConfig {
   updatedAt   DateTime? @map("updated_at") 
 
   @@map("system_config")
-}
-
-model TranslationTask {
-  id              Int    @id @default(autoincrement())
-  status          String?   @default("PENDING") @map("status") 
-  totalItems      Int       @default(0) @map("total_items")
-  completedItems  Int       @default(0) @map("completed_items")
-  failedItems     Int       @default(0) @map("failed_items")
-  descTotal       Int       @default(0) @map("desc_total")
-  descCompleted   Int       @default(0) @map("desc_completed")
-  descFailed      Int       @default(0) @map("desc_failed")
-  readmeTotal     Int       @default(0) @map("readme_total")
-  readmeCompleted Int       @default(0) @map("readme_completed")
-  readmeFailed    Int       @default(0) @map("readme_failed")
-  createdAt       DateTime? @map("created_at") 
-  finishedAt      DateTime? @map("finished_at") 
-
-  items TranslationTaskItem[]
-
-  @@map("translation_task")
-}
-
-model TranslationTaskItem {
-  id            Int    @id @default(autoincrement())
-  taskId        Int    @map("task_id")
-  repoId        Int    @map("repo_id")
-  fullName      String?   @map("full_name") 
-  translateType String    @map("translate_type") 
-  status        String?   @default("PENDING") @map("status") 
-  retryCount    Int       @default(0) @map("retry_count")
-  errorMessage  String?   @map("error_message") 
-  createdAt     DateTime? @map("created_at") 
-  updatedAt     DateTime? @map("updated_at") 
-
-  task TranslationTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  repo GithubRepo      @relation(fields: [repoId], references: [id], onDelete: Cascade)
-
-  @@index([taskId])
-  @@index([repoId])
-  @@index([status])
-  @@map("translation_task_item")
 }
 
 model CloneTask {

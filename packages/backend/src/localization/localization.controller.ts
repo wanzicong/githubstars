@@ -2,12 +2,10 @@ import { Body, Controller, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import {
-    LocalizeBatchSchema,
-    type LocalizeBatchDto,
-    LocalizeRepositorySchema,
-    type LocalizeRepositoryDto,
-    LocalizationTaskSchema,
-    type LocalizationTaskDto,
+    LocalizationPendingQuerySchema,
+    type LocalizationPendingQueryDto,
+    LocalizationUpdateSchema,
+    type LocalizationUpdateDto,
 } from './dto/localization.dto';
 import { RepositoryLocalizationService } from './repository-localization.service';
 
@@ -16,27 +14,15 @@ import { RepositoryLocalizationService } from './repository-localization.service
 export class LocalizationController {
     constructor(private readonly localization: RepositoryLocalizationService) {}
 
-    @Post('repository')
-    @ApiOperation({ summary: '中文化单个 Star 仓库的描述和/或 README' })
-    localizeRepository(@Body(new ZodValidationPipe(LocalizeRepositorySchema)) body: LocalizeRepositoryDto) {
-        return this.localization.localizeRepository(body.repoId, body.fields, body.force);
+    @Post('pending')
+    @ApiOperation({ summary: '查询未中文化的仓库原文（描述/README），供智能体翻译' })
+    findPending(@Body(new ZodValidationPipe(LocalizationPendingQuerySchema)) body: LocalizationPendingQueryDto) {
+        return this.localization.findPending(body.limit, body.includeDescription, body.includeReadme);
     }
 
-    @Post('batch')
-    @ApiOperation({ summary: '创建批量仓库中文化任务' })
-    createBatch(@Body(new ZodValidationPipe(LocalizeBatchSchema)) body: LocalizeBatchDto) {
-        return this.localization.createBatch(body.repoIds, body.fields, body.force, body.concurrency);
-    }
-
-    @Post('task')
-    @ApiOperation({ summary: '查询仓库中文化任务进度和有限异常明细' })
-    getTask(@Body(new ZodValidationPipe(LocalizationTaskSchema)) body: LocalizationTaskDto) {
-        return this.localization.getTask(body.taskId, body.itemLimit);
-    }
-
-    @Post('retry')
-    @ApiOperation({ summary: '重试仓库中文化任务中的失败项' })
-    retryTask(@Body(new ZodValidationPipe(LocalizationTaskSchema)) body: LocalizationTaskDto) {
-        return this.localization.retryTask(body.taskId);
+    @Post('update')
+    @ApiOperation({ summary: '批量写入译文（只更新，不做翻译）' })
+    updateTranslations(@Body(new ZodValidationPipe(LocalizationUpdateSchema)) body: LocalizationUpdateDto) {
+        return this.localization.updateTranslations(body.items);
     }
 }
