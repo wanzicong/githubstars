@@ -1252,12 +1252,19 @@ export default function AgentChat() {
 
   // 刷新/重进页面时恢复上次的会话（延迟到宏任务，避免 effect 体内同步 setState 触发级联渲染）
   // URL ?session= 优先：打开带 session 的分享链接时，直接以 URL 中的会话为准
-  // restoredSessionIdRef 记录已恢复的会话 ID，防止 setCurrentSessionId 触发 effect 导致重复 loadSession
+  // restoredSessionIdRef 记录已恢复的会话 ID，防止重复 loadSession（挂载/URL 变化/StrictMode 双调用）。
+  //
+  // 本 effect 只监听 urlSessionId（挂载 + 外部 URL 变化：前进/后退/外部链接直达）。
+  // 页面内操作（新建/清除/删除/切临时会话/点选会话）都有自己的显式处理器（clear/loadSession/handleSend），
+  // 恢复 effect 若随 currentSessionId/messages 等页面内状态变化重新执行，会在 React Router 7
+  // startTransition 延迟 URL 更新的窗口内读到过期的 urlSessionId（旧会话），把旧会话又拉回来——
+  // 这正是「新建对话后 1 秒内跳回旧会话」的根因。
   const restoredSessionIdRef = useRef<string | null>(null)
   useEffect(() => {
-    // 主动清空（新建/清除/删除会话）后，除非 URL 明确带了 session（外部打开分享链接），否则不自动恢复。
-    // manualCleared 与 currentSessionId 同属 zustand 同一状态通道，同步生效，避免恢复 effect 读到旧 session 又拉回旧会话。
-    if (manualCleared && !urlSessionId) return
+    // 用户主动清空过（新建/清除/删除/切临时会话）→ 一律不自动恢复，直到用户重新选中会话。
+    // manualCleared 与 currentSessionId 同属 zustand 同一状态通道且不持久化：
+    // 清空瞬间即同步可见（不依赖延迟的 URL 更新），刷新后为 false，不影响「刷新恢复上次会话」。
+    if (manualCleared) return
     const targetId = urlSessionId ?? currentSessionId
     if (!targetId || messages.length > 0 || loadingSessionId) return
     if (restoredSessionIdRef.current === targetId) return // 已恢复过，不再重复
@@ -1269,9 +1276,13 @@ export default function AgentChat() {
     return () => {
       clearTimeout(timer)
     }
-  }, [manualCleared, urlSessionId, currentSessionId, messages.length, loadingSessionId, loadSession])
-
-  // 选中会话 → 写入 URL ?session=（清空会话时移除该参数），保证链接可分享/刷新直达
+    // 有意仅依赖 urlSessionId：页面内状态变化由各自的显式处理器负责，本 effect 重跑只会引入过期闭包竞态。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlSessionId])
+  // 选中会话 → 写入 URL ?session=（仅用户主动清空时移除该参数），保证链接可分享/刷新直达。
+  // 删除动作以 manualCleared 为条件：挂载瞬间 currentSessionId 也是 null（尚未恢复），
+  // 若此时删除 URL 的 session，会与恢复 effect 竞争（RR7 把 URL 更新放进 startTransition 延迟渲染），
+  // 可能把分享链接/刷新恢复的会话误删。
   useEffect(() => {
     const current = searchParams.get('session')
     if (currentSessionId && current !== currentSessionId) {
@@ -1280,15 +1291,14 @@ export default function AgentChat() {
         next.set('session', currentSessionId)
         return next
       }, { replace: true })
-    } else if (!currentSessionId && current) {
+    } else if (!currentSessionId && current && manualCleared) {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
         next.delete('session')
         return next
       }, { replace: true })
     }
-  }, [currentSessionId, searchParams, setSearchParams])
-
+  }, [currentSessionId, searchParams, setSearchParams, manualCleared])
   // 当 currentSessionId 变化时（新建/切换会话），刷新会话列表
   const prevSessionIdRef = useRef<string | null>(null)
   useEffect(() => {
