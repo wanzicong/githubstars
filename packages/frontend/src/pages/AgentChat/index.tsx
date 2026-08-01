@@ -31,7 +31,7 @@ import ThinkingBlock from './ThinkingBlock'
 import ContextPicker, { type ChatContextItem } from './ContextPicker'
 import { listAgentSessions, getAgentSession, deleteAgentSession, getAgentBaseURL } from '@/api/agent'
 import { getAgentFriendlyErrorMessage } from '@/utils/agent-error'
-import { useAgentChatStore } from '@/stores'
+import { useAgentChatStore, useAppStore, useMultipleTabStore } from '@/stores'
 import { agentStreamManager, type MessageBlock, type SessionStreamState, type ToolResultMap } from '@/stores/modules/agentStreamManager'
 
 const { Text, Paragraph } = Typography
@@ -77,6 +77,9 @@ const SUGGESTIONS = [
   { icon: <BugOutlined />, text: '查看 TypeScript 项目更新动态' },
   { icon: <CodeOutlined />, text: '搜索类似 axios 的 HTTP 库' },
 ]
+
+// MultipleTabs（antd Tabs）实际渲染高度：约 33px（含底部 border），用于精确计算 AgentChat 容器高度，避免底部空白
+const TAB_BAR_HEIGHT = 33
 
 const SESSION_OPTIONS: { value: SessionMode; label: string }[] = [
   { value: 'none', label: '临时会话' },
@@ -1033,6 +1036,9 @@ export default function AgentChat() {
   const setManualCleared = useAgentChatStore((s) => s.setManualCleared)
   const sidebarCollapsed = useAgentChatStore((s) => s.sidebarCollapsed)
   const setSidebarCollapsed = useAgentChatStore((s) => s.setSidebarCollapsed)
+  const showTabsPref = useAppStore((s) => s.showTabs)
+  const tabs = useMultipleTabStore((s) => s.tabs)
+  const tabsVisible = showTabsPref && tabs.length > 1
 
   // 会话 ID 与 URL ?session= 双向同步：选中对话写 URL，打开带 session 的链接直达该对话
   const [searchParams, setSearchParams] = useSearchParams()
@@ -1510,9 +1516,9 @@ export default function AgentChat() {
   const hasMessages = messages.length > 0
 
   // 响应式容器尺寸：与 Layout Content padding 对齐（移动端 12px，桌面端 16px/24px）
+  // 容器高度 = 视口 - header(56) - tabs(实际高度)；margin 负值已抵消 Content padding，不再重复扣减
   const containerMargin = isMobile ? '-12px -12px' : '-16px -24px'
-  const contentPaddingY = isMobile ? 24 : 32
-  const containerHeight = `calc(100vh - 56px - 40px - ${contentPaddingY}px)` // header(56) + tabs(40) + content padding（footer 已移除）
+  const containerHeight = `calc(100vh - 56px - ${tabsVisible ? TAB_BAR_HEIGHT : 0}px)`
 
   return (
     <div
@@ -1636,7 +1642,7 @@ export default function AgentChat() {
         >
           {/* Empty state */}
           {!hasMessages && !isStreaming && !loading && (
-            <Flex vertical align="center" justify="center" style={{ minHeight: 'calc(100vh - 56px - 40px - 56px - 80px)', textAlign: 'center', padding: '0 20px' }}>
+            <Flex vertical align="center" justify="center" style={{ minHeight: `calc(100vh - 56px - ${tabsVisible ? TAB_BAR_HEIGHT : 0}px - 56px - 80px)`, textAlign: 'center', padding: '0 20px' }}>
               <div
                 style={{
                   width: 64, height: 64, borderRadius: 16,

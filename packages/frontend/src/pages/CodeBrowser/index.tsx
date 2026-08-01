@@ -2,10 +2,14 @@ import { useEffect, useState } from 'react'
 import { App, Button, Card, Empty, Select, Space, Spin, Tooltip, Typography, theme } from 'antd'
 import { CodeOutlined, GithubOutlined, LinkOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useSearchParams } from 'react-router-dom'
+import { useAppStore, useMultipleTabStore } from '@/stores'
 import { fetchStarList } from '../../api'
 import type { GithubRepo } from '../../types'
 
 const { Title, Text } = Typography
+
+// MultipleTabs（antd Tabs）实际渲染高度，用于精确计算页面高度，避免底部空白
+const TAB_BAR_HEIGHT = 33
 
 /** github1s 嵌入地址 —— VS Code 风格在线浏览仓库（已验证无 X-Frame-Options 限制） */
 const buildGithub1sUrl = (fullName: string): string => `https://github1s.com/${fullName}`
@@ -29,6 +33,9 @@ const toRepoOption = (r: GithubRepo): RepoOption => ({
  * 选择状态同步到 ?repo= 查询参数，刷新页面后保持。
  */
 export default function CodeBrowser() {
+  const showTabsPref = useAppStore((s) => s.showTabs)
+  const tabs = useMultipleTabStore((s) => s.tabs)
+  const tabsVisible = showTabsPref && tabs.length > 1
   const { message } = App.useApp()
   const { token } = theme.useToken()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -98,8 +105,8 @@ export default function CodeBrowser() {
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
-        // header(56) + tabs(40) + content padding(16*2)，与 AgentChat 页保持一致（footer 已移除）
-        height: 'calc(100vh - 56px - 40px - 32px)',
+        // header(56) + tabs(实际高度) + content padding(16*2)，与 AgentChat 页保持一致
+        height: `calc(100vh - 56px - ${tabsVisible ? TAB_BAR_HEIGHT : 0}px - 32px)`,
       }}
     >
       {/* ── 工具栏 ── */}
