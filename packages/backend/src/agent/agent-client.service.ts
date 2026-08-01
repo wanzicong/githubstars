@@ -223,7 +223,7 @@ export class AgentClientService implements OnModuleInit {
     ): AsyncGenerator<SDKMessage> {
         const maxRetry = await this.getPipeRetryCount();
         for (let attempt = 1; attempt <= maxRetry; attempt++) {
-            this.logger.warn(`Claude SDK 子进程管道瞬态错误，第 ${attempt}/${maxRetry} 次重试: ${stderr.slice(-150)}`);
+            this.logger.warn(`Claude SDK 子进程管道瞬态错误，第 ${attempt}/${maxRetry} 次重试: ${stderr.slice(-600)}`);
             this.stderrTail = '';
             try {
                 yield* this.iterateQuery(query, prompt, { ...mergedOptions });
@@ -386,13 +386,16 @@ export class AgentClientService implements OnModuleInit {
 
     /** 清理 CLI stderr 中的 ANSI 控制符和可能出现的凭据，仅保留末尾诊断信息。 */
     private sanitizeStderr(stderr: string): string {
-        const ansiEscapePattern = new RegExp(String.raw`\u001b\[[0-?]*[ -/]*[@-~]`, 'g');
-        return stderr
+        const ansiEscapePattern = new RegExp(String.raw`\[[0-?]*[ -/]*[@-~]`, 'g');
+        const cleaned = stderr
             .replace(ansiEscapePattern, '')
             .replace(/(ANTHROPIC_(?:API_KEY|AUTH_TOKEN)\s*[=:]\s*)\S+/gi, '$1[已隐藏]')
             .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[已隐藏]')
-            .trim()
-            .slice(-2_000);
+            .trim();
+        // EPIPE/子进程退出时，真正的失败原因（如 API 报错、网关错误）通常在 stderr 前部，
+        // 尾部只是 WriteWrap 等栈帧噪音；保留头+尾才能看到根因
+        if (cleaned.length <= 2_000) return cleaned;
+        return `${cleaned.slice(0, 1_000)}\n…[中间省略 ${cleaned.length - 2_000} 字符]…\n${cleaned.slice(-1_000)}`;
     }
 
     /** 插件是内置 Agent 的必需运行依赖，缺失时明确失败，禁止静默降级。 */

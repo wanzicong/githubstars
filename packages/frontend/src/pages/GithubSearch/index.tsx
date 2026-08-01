@@ -49,6 +49,8 @@ export default function GithubSearch() {
     const [searched, setSearched] = useState(false)
     const [starredMap, setStarredMap] = useState<Record<string, boolean>>({})
     const [previewRepo, setPreviewRepo] = useState<string | null>(null)
+    // 已触发过 Star 检查的仓库缓存（悬停即检查，避免同一仓库重复请求）
+    const checkedRef = useRef<Set<string>>(new Set())
 
     const doSearch = useCallback(async (searchPage: number, overridePerPage?: number) => {
         setLoading(true)
@@ -124,6 +126,9 @@ export default function GithubSearch() {
 
     const handleCheckStar = useCallback(async (repo: GithubSearchRepo) => {
         const fullName = repo.fullName
+        // 已确认 Star 或已检查过（无论结果）的仓库不再重复请求，避免悬停抖动放大瞬时外网故障
+        if (checkedRef.current.has(fullName)) return
+        checkedRef.current.add(fullName)
         const [owner, repoName] = parseFullName(fullName)
         try {
             const data = await checkStarred(owner, repoName)
@@ -131,7 +136,8 @@ export default function GithubSearch() {
                 setStarredMap((prev) => ({ ...prev, [fullName]: true }))
             }
         } catch {
-            // silently ignore check failures
+            // 检查失败时移出缓存，允许下次悬停重试
+            checkedRef.current.delete(fullName)
         }
     }, [])
 
