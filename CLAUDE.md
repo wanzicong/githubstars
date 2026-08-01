@@ -1163,6 +1163,7 @@ useEffect(() => {
 |------|------|---------|
 | Docker Compose 环境变量加载失败 | [docs/踩坑记录-DockerCompose环境变量加载失败.md](docs/踩坑记录-DockerCompose环境变量加载失败.md) | 执行 `docker compose up -d` / 重启生产容器 / 部署后端镜像前 |
 | Agent 对话 EPIPE 管道崩溃 | [docs/踩坑记录-Agent对话EPIPE管道崩溃.md](docs/踩坑记录-Agent对话EPIPE管道崩溃.md) | Agent 长任务流式中断、出现 `write EPIPE` / `exited with code 1`、assistant 回复丢失时 |
+| 前后端容器运行旧代码 | [docs/踩坑记录-前后端容器运行旧代码.md](docs/踩坑记录-前后端容器运行旧代码.md) | 改了代码但功能/修复不生效、出现 `React error #185`、新端点 404、「改了没用」类问题时 |
 
 **新增踩坑记录规范**：
 1. 文档放在 `docs/` 目录，文件名格式 `踩坑记录-<主题>.md`
