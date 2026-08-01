@@ -22,11 +22,15 @@ interface Props {
 /** chip 区最多完整展示的个数，超出折叠为 +N */
 const MAX_VISIBLE_CHIPS = 3
 
-/** 仓库行 CSS 类名：未选中时依赖 :hover 背景（颜色经 CSS 变量注入 token.colorFillTertiary） */
+/** 仓库行 CSS 类名：未选中时依赖 :hover 背景 */
 const REPO_ROW_CLASS = 'ctx-picker-repo-row'
 
-/** 仓库行 hover 样式（注入组件根 div 的 <style> 中，颜色用根 div 上的 CSS 变量） */
-const REPO_ROW_HOVER_CSS = `.${REPO_ROW_CLASS}:hover { background: var(--ctx-picker-hover-bg); }`
+/**
+ * 生成仓库行 hover CSS 文本。
+ * 注意：仓库行渲染在 Popover portal（挂在 body 下），与组件根 div 不同子树，
+ * CSS 变量沿 DOM 继承解析不到，必须把颜色值直接内联进 CSS 文本。
+ */
+const repoRowHoverCss = (color: string) => `.${REPO_ROW_CLASS}:hover { background: ${color}; }`
 
 /**
  * 分类树节点标题：名称 + 弱化计数（计数用三级文本色）
@@ -171,16 +175,7 @@ export default function ContextPicker({ value, onChange }: Props) {
                     <StarOutlined style={{ color: '#faad14', fontSize: 12 }} />
                 </span>
                 <Tooltip title={repo.fullName} placement='topLeft'>
-                    <span
-                        style={{
-                            flex: 1,
-                            minWidth: 0,
-                            fontSize: 13,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                        }}
-                    >
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {repo.fullName}
                     </span>
                 </Tooltip>
@@ -256,10 +251,15 @@ export default function ContextPicker({ value, onChange }: Props) {
 
     return (
         <div
-            // 注入 hover 背景色 CSS 变量，供 <style> 中的 :hover 规则引用
-            style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, ['--ctx-picker-hover-bg' as string]: token.colorFillTertiary }}
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 6,
+            }}
         >
-            <style>{REPO_ROW_HOVER_CSS}</style>
+            {/* 仓库行渲染在 Popover portal（body 子树），CSS 变量无法继承，颜色必须内联进 CSS 文本 */}
+            <style>{repoRowHoverCss(token.colorFillTertiary)}</style>
             <Popover
                 content={popoverContent}
                 trigger='click'
