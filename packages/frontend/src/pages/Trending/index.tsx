@@ -67,6 +67,8 @@ export default function Trending() {
     const [previewRepo, setPreviewRepo] = useState<string | null>(null)
     // 已 Star 的仓库 fullName 集合（悬停卡片时探测，Star 成功后写入）
     const [starredMap, setStarredMap] = useState<Record<string, boolean>>({})
+    // 已触发过 Star 检查的仓库缓存（悬停即检查，避免同一仓库重复请求）
+    const checkedRef = useRef<Set<string>>(new Set())
 
     // ── 加入 Agent 对话上下文（多选） ──
     const { addToContext } = useAddRepoContext()
@@ -182,6 +184,9 @@ export default function Trending() {
     /** 悬停仓库卡片时探测是否已 Star（失败静默忽略） */
     const handleCheckStar = useCallback(async (repo: GithubSearchRepo) => {
         const fullName = repo.fullName
+        // 已确认 Star 或已检查过（无论结果）的仓库不再重复请求，避免悬停抖动放大瞬时外网故障
+        if (checkedRef.current.has(fullName)) return
+        checkedRef.current.add(fullName)
         const [owner, repoName] = parseFullName(fullName)
         try {
             const data = await checkStarred(owner, repoName)
@@ -189,7 +194,8 @@ export default function Trending() {
                 setStarredMap((prev) => ({ ...prev, [fullName]: true }))
             }
         } catch {
-            // 探测失败不阻断交互
+            // 检查失败时移出缓存，允许下次悬停重试
+            checkedRef.current.delete(fullName)
         }
     }, [])
 
