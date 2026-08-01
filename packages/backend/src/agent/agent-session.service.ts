@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** 会话列表项（content 兼容 MySQL Json / SQLite String 两种列类型） */
@@ -12,6 +13,12 @@ export interface AgentSessionSummary {
     lastMessage: string | null;
     createdAt: Date;
     updatedAt: Date;
+}
+
+/** 会话级对话上下文（选中的仓库/分类 ID），随会话持久化，resume 时自动回填 */
+export interface SessionContext {
+    repoIds?: number[];
+    categoryIds?: number[];
 }
 
 /** 结构化消息块 —— assistant 回复持久化为 blocks 数组，完整保留 thinking/tool_use/tool_result */
@@ -123,6 +130,25 @@ export class AgentSessionService {
     /** 关闭会话；不存在时静默返回（幂等删除语义） */
     async closeSession(sessionId: string): Promise<void> {
         await this.prisma.agentSession.updateMany({ where: { id: sessionId }, data: { status: 'closed' } });
+    }
+
+    /** 把对话上下文写入会话 metadata（空上下文跳过）；失败仅告警不阻断对话 */
+    async saveSessionContext(sessionId: string, context: SessionContext): Promise<void> {
+        if (!context.repoIds?.length && !context.categoryIds?.length) return;
+        try {
+            // SessionContext 是纯 number[] 结构，与 InputJsonValue 兼容；断言仅为通过 Prisma 严格 Json 类型检查
+            await this.prisma.agentSession.update({ where: { id: sessionId }, data: { metadata: context as Prisma.InputJsonValue } });
+        } catch (e: unknown) {
+            this.logger.warn(`保存会话上下文失败: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+
+    /** 读取会话 metadata 中持久化的对话上下文；无则返回 undefined */
+    async getSessionContext(sessionId: string): Promise<SessionContext | undefined> {
+        const session = await this.prisma.agentSession.findUnique({ where: { id: sessionId }, select: { metadata: true } });
+        const meta = session?.metadata as SessionContext | null | undefined;
+        if (!meta || (!meta.repoIds?.length && !meta.categoryIds?.length)) return undefined;
+        return meta;
     }
 
     /** 判断会话是否存在（含已关闭） */

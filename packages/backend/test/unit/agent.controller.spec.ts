@@ -24,6 +24,8 @@ interface MockSessionService {
     updateSdkSessionId: jest.Mock<Promise<void>, []>;
     saveMessage: jest.Mock<Promise<void>, SaveCall>;
     loadHistorySource: jest.Mock<Promise<string | undefined>, [string]>;
+    saveSessionContext: jest.Mock<Promise<void>, []>;
+    getSessionContext: jest.Mock<Promise<undefined>, []>;
 }
 
 interface BlockChunk {
@@ -55,6 +57,8 @@ describe('AgentController — 中断时持久化 assistant 部分回复', () => 
             updateSdkSessionId: jest.fn<Promise<void>, []>().mockResolvedValue(undefined),
             saveMessage: jest.fn<Promise<void>, SaveCall>().mockResolvedValue(undefined),
             loadHistorySource: jest.fn<Promise<string | undefined>, [string]>().mockResolvedValue(undefined),
+            saveSessionContext: jest.fn<Promise<void>, []>().mockResolvedValue(undefined),
+            getSessionContext: jest.fn<Promise<undefined>, []>().mockResolvedValue(undefined),
         };
     }
 

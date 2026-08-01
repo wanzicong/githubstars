@@ -6,8 +6,8 @@ import { DownloadService } from '../download/download.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { TrendingSchema } from '../common/dto/filter.dto';
 import type { TrendingDto } from '../common/dto/filter.dto';
-import { DownloadTrendingSchema } from './trending.dto';
-import type { DownloadTrendingDto } from './trending.dto';
+import { DownloadTrendingSchema, EnsureTrendingReposSchema } from './trending.dto';
+import type { DownloadTrendingDto, EnsureTrendingReposDto } from './trending.dto';
 
 /** 将 since 字符串映射为天数 */
 function sinceToDays(since: string): number {
@@ -127,5 +127,22 @@ export class TrendingController {
         });
 
         return downloadResult;
+    }
+
+    /**
+     * POST /api/trending/ensure — 确保趋势仓库入库并返回 id 映射
+     *
+     * 供「加入 Agent 对话上下文」使用：趋势列表中只有已 star 仓库才有本地 id，
+     * 未入库仓库需先轻量 upsert 拿到 id 才能作为上下文（后端按本地 id 查库注入 prompt）。
+     *
+     * @param body { repos } 趋势仓库数组（基础元信息）
+     * @returns { success, repos } 成功入库的 { fullName, id } 数组
+     */
+    @Post('ensure')
+    @ApiOperation({ summary: '确保趋势仓库入库', description: '轻量 upsert 趋势仓库并返回本地 id，供加入 Agent 对话上下文' })
+    async ensureTrendingRepos(@Body(new ZodValidationPipe(EnsureTrendingReposSchema)) body: EnsureTrendingReposDto) {
+        const repos = await this.trendingService.ensureReposAndGetIdMapping(body.repos);
+        this.logger.log('趋势仓库 ensure 入库: 请求 ' + body.repos.length + ' 个，成功 ' + repos.length + ' 个');
+        return { success: true, repos };
     }
 }

@@ -1,5 +1,5 @@
 import api from './request'
-import type { TrendingResult } from '../types'
+import type { TrendingResult, GithubSearchRepo } from '../types'
 
 export async function fetchTrending(since: string, language?: string, perPage?: number): Promise<TrendingResult> {
     const body: Record<string, unknown> = { since }
@@ -7,6 +7,38 @@ export async function fetchTrending(since: string, language?: string, perPage?: 
     if (perPage) body.perPage = perPage
     const { data } = await api.post<TrendingResult>('/api/trending', body)
     return data
+}
+
+/** ensure 接口返回的单个映射项 */
+export interface EnsureRepoMapping {
+    fullName: string
+    id: number
+}
+
+/**
+ * 确保趋势仓库入库并返回 fullName → 本地仓库 id 映射
+ *
+ * 供「加入 Agent 对话上下文」使用：趋势列表中只有已 star 仓库才带 localRepoId，
+ * 未入库仓库需先轻量 upsert 拿到 id 才能作为对话上下文（后端按本地 id 查库注入 prompt）。
+ */
+export async function ensureTrendingRepos(repos: GithubSearchRepo[]): Promise<EnsureRepoMapping[]> {
+    const body = {
+        repos: repos.map((r) => ({
+            fullName: r.fullName,
+            description: r.description ?? null,
+            descriptionCn: r.descriptionCn ?? null,
+            language: r.language ?? null,
+            ownerName: r.ownerName ?? null,
+            ownerAvatarUrl: r.ownerAvatarUrl ?? null,
+            htmlUrl: r.htmlUrl ?? null,
+            starsCount: r.starsCount ?? 0,
+            forksCount: r.forksCount ?? 0,
+            topics: r.topics ?? [],
+            pushedAt: r.pushedAt ?? null,
+        })),
+    }
+    const { data } = await api.post<{ success: boolean; repos: EnsureRepoMapping[] }>('/api/trending/ensure', body, { timeout: 60000 })
+    return data.repos ?? []
 }
 
 /**

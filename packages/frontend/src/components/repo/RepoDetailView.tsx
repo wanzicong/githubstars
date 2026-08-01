@@ -19,12 +19,14 @@ import {
     GithubOutlined,
     InfoCircleOutlined,
     IssuesCloseOutlined,
+    RobotOutlined,
     VerticalAlignTopOutlined,
     VerticalAlignBottomOutlined,
 } from '@ant-design/icons'
 import { formatDate } from '../../utils/format'
 import { DaysSinceText } from '../../pages/StarDetail/hooks/DaysSinceText'
 import { parseTopics } from '../../pages/StarDetail/hooks/helpers'
+import { useAddRepoContext } from '../../pages/AgentChat/hooks/useAddRepoContext'
 import { RepoHeader } from '.'
 import { RepoStatsGrid } from '.'
 import { RepoReadmeCard } from '.'
@@ -60,6 +62,7 @@ export default function RepoDetailView({ repo }: RepoDetailViewProps) {
     const [issuesOpen, setIssuesOpen] = useState(false)
     const [inLearn, setInLearn] = useState<boolean | null>(null)
     const [addingLearn, setAddingLearn] = useState(false)
+    const { addRepoToContext } = useAddRepoContext()
 
     // 检查仓库是否已加入学习清单
     useEffect(() => {
@@ -119,6 +122,11 @@ export default function RepoDetailView({ repo }: RepoDetailViewProps) {
                     <Button icon={<CodeOutlined />} onClick={() => setCodePreviewOpen(true)}>
                         代码预览
                     </Button>
+                    {repo.id != null && (
+                        <Button icon={<RobotOutlined />} onClick={() => addRepoToContext({ id: repo.id!, fullName: repo.fullName })}>
+                            问 AI
+                        </Button>
+                    )}
                     {repo.id != null && (
                         <Button
                             icon={<BookOutlined />}

@@ -1,5 +1,48 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
+
+/** GitHub Search API 返回的单条仓库原始结构（仅取用到字段） */
+interface GithubSearchItem {
+    id: number;
+    full_name?: string;
+    description?: string;
+    language?: string;
+    stargazers_count?: number;
+    forks_count?: number;
+    html_url?: string;
+    pushed_at?: string;
+    created_at?: string;
+    owner?: { login?: string; avatar_url?: string };
+    topics?: unknown;
+}
+
+/** searchRepos 返回的仓库结构 */
+export interface SearchRepoItem {
+    /** 协变索引签名：允许赋值给带 [key: string]: unknown 的结构（如 TrendingRepoItem） */
+    [key: string]: unknown;
+    id: number;
+    fullName: string;
+    description: string;
+    language: string;
+    starsCount: number;
+    forksCount: number;
+    htmlUrl: string;
+    pushedAt: string;
+    createdAt: string;
+    ownerName: string;
+    ownerAvatarUrl: string;
+    topics: unknown[];
+}
+
+/** searchRepos 统一返回结构 */
+export interface SearchReposResult {
+    success: boolean;
+    total: number;
+    repos: SearchRepoItem[];
+    page: number;
+    perPage: number;
+    message?: string;
+}
 import { GithubApiService } from './github-api.service';
 import { GithubRepoService } from './github-repo.service';
 
@@ -111,7 +154,7 @@ export class GithubSearchService {
      * @param perPage 每页数量，默认 20
      * @returns 搜索结果对象，包含 success、total、repos、page、perPage
      */
-    async searchRepos(keyword: string, language: string, sort = 'stars', page = 1, perPage = 20) {
+    async searchRepos(keyword: string, language: string, sort = 'stars', page = 1, perPage = 20): Promise<SearchReposResult> {
         this.logger.log('搜索仓库: keyword=' + keyword + ', language=' + language + ', page=' + page);
         try {
             let q = keyword || '';
@@ -120,19 +163,19 @@ export class GithubSearchService {
             const params = new URLSearchParams({ q, sort: sort || 'stars', page: String(page), per_page: String(perPage) });
             const res = await fetch(`${GITHUB_API}/search/repositories?${params}`, { headers: await this.buildHeaders() });
             if (res.status === 200) {
-                const data = await res.json();
-                const repos = (data.items || []).map((item: any) => ({
+                const data = (await res.json()) as { items?: GithubSearchItem[]; total_count?: number };
+                const repos = (data.items ?? []).map((item) => ({
                     id: item.id,
-                    fullName: item.full_name || '',
-                    description: item.description || '',
-                    language: item.language || '',
-                    starsCount: item.stargazers_count || 0,
-                    forksCount: item.forks_count || 0,
-                    htmlUrl: item.html_url || '',
-                    pushedAt: item.pushed_at || '',
-                    createdAt: item.created_at || '',
-                    ownerName: item.owner?.login || '',
-                    ownerAvatarUrl: item.owner?.avatar_url || '',
+                    fullName: item.full_name ?? '',
+                    description: item.description ?? '',
+                    language: item.language ?? '',
+                    starsCount: item.stargazers_count ?? 0,
+                    forksCount: item.forks_count ?? 0,
+                    htmlUrl: item.html_url ?? '',
+                    pushedAt: item.pushed_at ?? '',
+                    createdAt: item.created_at ?? '',
+                    ownerName: item.owner?.login ?? '',
+                    ownerAvatarUrl: item.owner?.avatar_url ?? '',
                     topics: Array.isArray(item.topics) ? item.topics : [],
                 }));
                 return { success: true, total: data.total_count || 0, repos, page, perPage };

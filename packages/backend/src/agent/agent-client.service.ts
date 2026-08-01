@@ -55,6 +55,8 @@ export interface AgentQueryOptions {
     isCompactionRetry?: boolean;
     /** 内部：用于生成历史摘要的历史文本来源（由 session 层提供/测试注入） */
     historySource?: string;
+    /** 内部：应用侧会话 ID（AgentSession.id），用于 token 超限摘要等场景定位会话历史 */
+    appSessionId?: string;
 }
 
 export interface AgentQueryResult {

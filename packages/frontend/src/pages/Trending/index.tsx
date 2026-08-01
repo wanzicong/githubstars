@@ -1,8 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Segmented, Select, Spin, Empty, Typography, Tag, Space, Button, App, Modal, Input, theme } from 'antd'
-import { StarFilled, StarOutlined, ForkOutlined, FireOutlined, DownloadOutlined, CodeOutlined, GithubOutlined } from '@ant-design/icons'
+import { Segmented, Select, Spin, Empty, Typography, Tag, Space, Button, App, Modal, Input, Checkbox, theme } from 'antd'
+import { StarFilled, StarOutlined, ForkOutlined, FireOutlined, DownloadOutlined, CodeOutlined, GithubOutlined, RobotOutlined } from '@ant-design/icons'
 import { fetchTrending, downloadTrending, starRepo, checkStarred } from '../../api'
+import { ensureTrendingRepos } from '../../api/trending'
+import { useAddRepoContext } from '../AgentChat/hooks/useAddRepoContext'
+import type { GithubSearchRepo } from '../../types'
+
+/** 列表刷新后，清掉已不在新列表中的勾选项（如筛选变化导致仓库消失） */
+function pruneSelection(selected: Set<string>, loaded: GithubSearchRepo[]): Set<string> {
+    const alive = new Set(loaded.map((r) => r.fullName))
+    const next = new Set([...selected].filter((k) => alive.has(k)))
+    return next.size === selected.size ? selected : next
+}
 import {
     getDownloadTaskProgress,
     getRecentDownloadDirectories,
@@ -13,7 +23,6 @@ import {
     deleteDownloadItemFile,
     type DownloadTaskProgress,
 } from '../../api/download'
-import type { GithubSearchRepo } from '../../types'
 import { LANGUAGE_OPTIONS, RANK_BADGE_COLORS } from '../../constants'
 import { formatNumberShort, getRelativeTime, parseFullName } from '../../utils/format'
 import DownloadProgressModal from '../../components/download/DownloadProgressModal'
@@ -58,6 +67,54 @@ export default function Trending() {
     const [previewRepo, setPreviewRepo] = useState<string | null>(null)
     // 已 Star 的仓库 fullName 集合（悬停卡片时探测，Star 成功后写入）
     const [starredMap, setStarredMap] = useState<Record<string, boolean>>({})
+
+    // ── 加入 Agent 对话上下文（多选） ──
+    const { addToContext } = useAddRepoContext()
+    // 已勾选的仓库 fullName 集合；筛选变化（repos 重载）时在 doLoad 中修剪掉已不在列表中的项
+    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+    const [addingToContext, setAddingToContext] = useState(false)
+
+    const allSelected = repos.length > 0 && selectedKeys.size === repos.length
+    const partiallySelected = selectedKeys.size > 0 && !allSelected
+
+    const toggleSelect = useCallback((fullName: string) => {
+        setSelectedKeys((prev) => {
+            const next = new Set(prev)
+            if (next.has(fullName)) next.delete(fullName)
+            else next.add(fullName)
+            return next
+        })
+    }, [])
+
+    const toggleSelectAll = useCallback(() => {
+        setSelectedKeys((prev) => (prev.size === repos.length ? new Set() : new Set(repos.map((r) => r.fullName))))
+    }, [repos])
+
+    /**
+     * 把勾选的仓库加入 Agent 对话上下文并跳转对话页。
+     * 已有 localRepoId（已收录本地）直接用；未收录的先调 ensure 轻量入库拿 id。
+     */
+    const handleAddSelectedToContext = useCallback(async () => {
+        const selected = repos.filter((r) => selectedKeys.has(r.fullName))
+        if (selected.length === 0) return
+        setAddingToContext(true)
+        try {
+            const withoutId = selected.filter((r) => !r.localRepoId)
+            const ensured = withoutId.length > 0 ? await ensureTrendingRepos(withoutId) : []
+            const ensuredMap = new Map(ensured.map((m) => [m.fullName, m.id]))
+            const items = selected
+                .map((r) => ({ id: r.localRepoId ?? ensuredMap.get(r.fullName) ?? 0, fullName: r.fullName }))
+                .filter((r) => r.id > 0)
+            const failedCount = selected.length - items.length
+            if (failedCount > 0) message.warning(`${failedCount} 个仓库入库失败，已跳过`)
+            if (items.length === 0) return
+            addToContext(items.map((r) => ({ type: 'repo' as const, id: r.id, label: r.fullName })))
+        } catch {
+            message.error('加入对话上下文失败，请稍后重试')
+        } finally {
+            setAddingToContext(false)
+        }
+    }, [repos, selectedKeys, addToContext, message])
 
     // ── 下载相关状态 ──
     const [downloadConfigOpen, setDownloadConfigOpen] = useState(false)
@@ -107,9 +164,12 @@ export default function Trending() {
             setLoading(true)
             try {
                 const data = await fetchTrending(since, language || undefined, 20)
-                setRepos(data.repos || [])
+                const loaded = data.repos || []
+                setRepos(loaded)
                 setTotal(data.total || 0)
                 setDateRange(data.dateRange || '')
+                // 列表刷新后，清掉已不在新列表中的勾选项（如筛选变化导致仓库消失）
+                setSelectedKeys((prev) => pruneSelection(prev, loaded))
             } catch {
                 message.error('加载趋势数据失败')
             } finally {
@@ -294,6 +354,17 @@ export default function Trending() {
                             下载趋势
                         </Button>
                     )}
+                    {selectedKeys.size > 0 && (
+                        <Button
+                            type='primary'
+                            icon={<RobotOutlined />}
+                            onClick={() => void handleAddSelectedToContext()}
+                            loading={addingToContext}
+                            size='small'
+                        >
+                            加入对话上下文 ({selectedKeys.size})
+                        </Button>
+                    )}
                     <Select
                         value={language || ''}
                         onChange={(v) => setLanguage(v)}
@@ -323,6 +394,17 @@ export default function Trending() {
                 {repos.length === 0 && !loading ? (
                     <Empty description='暂无趋势数据' style={{ marginTop: 60 }} />
                 ) : (
+                    <>
+                        {/* 全选条：勾选多个趋势仓库后可批量加入 Agent 对话上下文 */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                            <Checkbox
+                                checked={allSelected}
+                                indeterminate={partiallySelected}
+                                onChange={toggleSelectAll}
+                            >
+                                全选（已选 {selectedKeys.size}/{repos.length}）
+                            </Checkbox>
+                        </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {repos.map((repo, idx) => {
                             const barPercent = maxStars > 0 ? (repo.starsCount / maxStars) * 100 : 0
@@ -356,6 +438,17 @@ export default function Trending() {
                                         }}
                                     >
                                         {idx + 1}
+                                    </div>
+
+                                    {/* 加入对话上下文勾选框 */}
+                                    <div
+                                        style={{ flexShrink: 0, display: 'flex', alignItems: 'center', paddingLeft: 8 }}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <Checkbox
+                                            checked={selectedKeys.has(repo.fullName)}
+                                            onChange={() => toggleSelect(repo.fullName)}
+                                        />
                                     </div>
 
                                     {/* 仓库信息 */}
@@ -465,6 +558,7 @@ export default function Trending() {
                             )
                         })}
                     </div>
+                    </>
                 )}
             </Spin>
 

@@ -20,3 +20,39 @@ export const DownloadTrendingSchema = TrendingSchema.extend({
 });
 
 export type DownloadTrendingDto = z.infer<typeof DownloadTrendingSchema>;
+
+/**
+ * 确保趋势仓库入库请求验证（加入 Agent 对话上下文前补齐本地 id）
+ *
+ * 只接受「基础元信息」字段，做轻量 upsert；上限 50 防止批量过大。
+ */
+export const EnsureTrendingReposSchema = z.object({
+    repos: z
+        .array(
+            z.object({
+                fullName: z.string().min(1, '仓库全名不能为空'),
+                description: z.string().nullish(),
+                descriptionCn: z.string().nullish(),
+                language: z.string().nullish(),
+                ownerName: z.string().nullish(),
+                ownerAvatarUrl: z.string().nullish(),
+                htmlUrl: z.string().nullish(),
+                homepage: z.string().nullish(),
+                starsCount: z.number().int().nonnegative().optional(),
+                forksCount: z.number().int().nonnegative().optional(),
+                watchersCount: z.number().int().nonnegative().optional(),
+                openIssuesCount: z.number().int().nonnegative().optional(),
+                topics: z.union([z.array(z.string()), z.string()]).optional(),
+                licenseName: z.string().nullish(),
+                isFork: z.boolean().optional(),
+                isArchived: z.boolean().optional(),
+                repoCreatedAt: z.string().nullish(),
+                repoUpdatedAt: z.string().nullish(),
+                pushedAt: z.string().nullish(),
+            }),
+        )
+        .min(1, '仓库列表不能为空')
+        .max(50, '一次最多确保 50 个仓库'),
+});
+
+export type EnsureTrendingReposDto = z.infer<typeof EnsureTrendingReposSchema>;

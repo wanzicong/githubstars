@@ -1,5 +1,5 @@
 import { Button, Tag, Typography } from 'antd'
-import { ClearOutlined, DownloadOutlined, CopyOutlined } from '@ant-design/icons'
+import { ClearOutlined, DownloadOutlined, CopyOutlined, RobotOutlined } from '@ant-design/icons'
 
 const { Text } = Typography
 
@@ -19,6 +19,8 @@ export interface StarActionBarProps {
     onOpenDownloadWizard: () => void
     onExportMd: () => void
     onExportUrls: () => void
+    /** 把选中仓库加入 Agent 对话上下文 */
+    onAddToContext: () => void
 }
 
 /** 筛选摘要行（有筛选时出现）+ 批量操作工具行（有选中时出现） */
@@ -38,6 +40,7 @@ export default function StarActionBar({
     onOpenDownloadWizard,
     onExportMd,
     onExportUrls,
+    onAddToContext,
 }: StarActionBarProps) {
     return (
         <>
@@ -82,6 +85,9 @@ export default function StarActionBar({
                     </Button>
                     <Button icon={<DownloadOutlined />} onClick={onOpenDownloadWizard} loading={loadingRepos}>
                         批量下载 ({selectedCount})
+                    </Button>
+                    <Button icon={<RobotOutlined />} onClick={onAddToContext} loading={loadingRepos}>
+                        加入对话上下文 ({selectedCount})
                     </Button>
                     <div style={{ flex: 1 }} />
                     <Button icon={<DownloadOutlined />} onClick={onExportMd} loading={exportingMd}>

@@ -8,6 +8,8 @@ export interface AgentRequest {
     | { type: 'resume'; id: string }
   maxTurns?: number
   model?: string
+  /** 对话上下文：选中的仓库/分类 ID（后端解析为元信息注入 system prompt） */
+  context?: { repoIds?: number[]; categoryIds?: number[] }
 }
 
 export interface AgentQueryResponse {

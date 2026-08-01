@@ -214,6 +214,24 @@ export class AgentController {
     }
 
     /**
+     * 解析本次生效的对话上下文：
+     * - 本次请求显式带了上下文 → 使用并持久化到会话 metadata（供后续 resume 沿用）；
+     * - 没带（如 resume 会话）→ 尝试从会话 metadata 回填，保证上下文不丢。
+     */
+    private async resolveEffectiveContext(
+        ourSessionId: string | undefined,
+        requestContext: AgentRequestDto['context'],
+    ): Promise<AgentRequestDto['context']> {
+        if (!ourSessionId) return requestContext;
+        const hasRequestContext = Boolean(requestContext && (requestContext.repoIds?.length || requestContext.categoryIds?.length));
+        if (hasRequestContext && requestContext) {
+            await this.sessionService.saveSessionContext(ourSessionId, requestContext);
+            return requestContext;
+        }
+        return (await this.sessionService.getSessionContext(ourSessionId)) ?? requestContext;
+    }
+
+    /**
      * 流式转发 Agent 消息到 SSE 客户端，把结构化 blocks 收集进传入的 blocks 数组（供持久化）。
      *
      * blocks/draft 由调用方持有：客户端中断或 SDK 流中途抛错时，本方法可能不完整返回，
@@ -238,14 +256,17 @@ export class AgentController {
         const pushedToolIds = new Set<string>();
         // token 超限兜底：预载会话历史文本，供 service 在超限时生成摘要续聊（仅 resume 会话有历史）
         const historySource = ctx.ourSessionId ? await this.sessionService.loadHistorySource(ctx.ourSessionId) : undefined;
+        // 上下文随会话持久化：本次显式带了就用并保存；没带（如 resume）则从会话 metadata 回填
+        const context = await this.resolveEffectiveContext(ctx.ourSessionId, body.context);
         try {
             for await (const { block, raw } of this.agentClient.streamBlocks({
                 prompt: body.message,
                 sessionId: ctx.sdkSessionId,
                 maxTurns: body.maxTurns,
                 model: body.model,
-                context: body.context,
+                context,
                 historySource,
+                appSessionId: ctx.ourSessionId,
             })) {
                 if (isClosed()) break; // 客户端断开：for-await break 会逐层调用 async generator 的 return()，确定性取消 SDK 子进程
                 await this.captureSdkSessionId(raw, ctx);

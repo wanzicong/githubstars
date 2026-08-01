@@ -24,12 +24,14 @@ import StarFilterBar from './components/StarFilterBar'
 import StarAdvancedFilter, { type StarAdvancedFilterHandle } from './components/StarAdvancedFilter'
 import { findCategoryLabel } from './components/categoryTreeUtils'
 import StarActionBar from './components/StarActionBar'
+import { useAddRepoContext } from '../AgentChat/hooks/useAddRepoContext'
 
 const { Title } = Typography
 
 export default function StarList() {
     const { message } = App.useApp()
     const location = useLocation()
+    const { addToContext } = useAddRepoContext()
 
     const params = useStarListParams()
     const { keyword, languageStr, selectedLanguages, sortBy, sortOrder,
@@ -366,6 +368,13 @@ export default function StarList() {
         setDownloadWizardOpen(true)
     }, [resolveSelectedRepos])
 
+    /** 把选中仓库批量加入 Agent 对话上下文（复用跨页选中补拉逻辑） */
+    const handleAddSelectedToContext = useCallback(async () => {
+        const resolved = await resolveSelectedRepos()
+        if (!resolved || resolved.length === 0) return
+        addToContext(resolved.map((r) => ({ type: 'repo' as const, id: r.id, label: r.fullName })))
+    }, [resolveSelectedRepos, addToContext])
+
     const handleExport = useCallback(async () => {
         setExportingUrls(true)
         try {
@@ -520,6 +529,7 @@ export default function StarList() {
                         onOpenDownloadWizard={handleOpenDownloadWizard}
                         onExportMd={handleExportMd}
                         onExportUrls={handleExport}
+                        onAddToContext={handleAddSelectedToContext}
                     />
                 </Space>
             </Card>

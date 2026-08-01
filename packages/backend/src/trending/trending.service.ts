@@ -1,25 +1,31 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import type { SearchRepoItem } from '../github/github-search.service';
 
 /** 可为空的日期类型，用于仓库日期字段 */
 type NullableDateField = string | Date | null;
 
-/** GitHub Search API 返回的仓库数据结构 */
+/**
+ * 趋势仓库数据结构
+ *
+ * 必填字段与 github-search.service 的 SearchRepoItem 保持一致（fetch 层已做 ?? 兜底，永不为 null），
+ * 因此 searchRepos 的返回值无需收窄即可直接传入 enrichWithCachedTranslations / ensureReposAndGetIdMapping。
+ */
 export interface TrendingRepoItem {
     fullName: string;
     description?: string | null;
     descriptionCn?: string | null;
     localRepoId?: number | null;
     language?: string | null;
-    ownerName?: string;
-    ownerAvatarUrl?: string;
-    htmlUrl?: string;
+    ownerName?: string | null;
+    ownerAvatarUrl?: string | null;
+    htmlUrl?: string | null;
     homepage?: string | null;
     starsCount?: number;
     forksCount?: number;
     watchersCount?: number;
     openIssuesCount?: number;
-    topics?: string[] | string;
+    topics?: string[] | string | unknown[];
     licenseName?: string | null;
     isFork?: boolean;
     isArchived?: boolean;
@@ -28,6 +34,9 @@ export interface TrendingRepoItem {
     pushedAt?: NullableDateField;
     [key: string]: unknown;
 }
+
+/** enrichWithCachedTranslations / ensure 系列方法的入参：SearchRepoItem 或任何符合 TrendingRepoItem 结构的对象 */
+export type TrendingRepoInput = SearchRepoItem | TrendingRepoItem;
 
 /**
  * 趋势服务 — 管理 Trending 仓库的翻译缓存
@@ -45,15 +54,25 @@ export class TrendingService {
     /**
      * 批量确保趋势仓库在本地 DB 中存在并返回 ID
      *
-     * 先批量查询已存在的仓库，再逐个创建缺失的仓库。
-     * 比逐个调用 ensureRepoExists 更高效。
+     * @param repos 趋势仓库列表
+     * @returns 本地数据库中的仓库 ID 数组（失败项会被跳过）
+     */
+    async batchEnsureReposExist(repos: TrendingRepoInput[]): Promise<number[]> {
+        const mapping = await this.ensureReposAndGetIdMapping(repos);
+        return mapping.map((m) => m.id);
+    }
+
+    /**
+     * 批量确保趋势仓库存在并返回 fullName → id 映射
+     *
+     * 与 batchEnsureReposExist 的区别：返回明确的 { fullName, id } 对而非位置对齐数组，
+     * 即使个别仓库创建失败也不会导致其余项错位。
+     * 供「加入 Agent 对话上下文」等需要按仓库名取本地 id 的场景使用。
      *
      * @param repos 趋势仓库列表
-     * @returns 本地数据库中的仓库 ID 数组
+     * @returns 成功入库的 { fullName, id } 数组
      */
-    async batchEnsureReposExist(repos: TrendingRepoItem[]): Promise<number[]> {
-        if (!repos.length) return [];
-
+    async ensureReposAndGetIdMapping(repos: TrendingRepoInput[]): Promise<{ fullName: string; id: number }[]> {
         const fullNames = repos.map((r) => r.fullName).filter(Boolean);
         if (!fullNames.length) return [];
 
@@ -64,20 +83,20 @@ export class TrendingService {
         });
         const existingMap = new Map(existing.map((r) => [r.fullName, Number(r.id)]));
 
-        const repoIds: number[] = [];
-
+        const mapping: { fullName: string; id: number }[] = [];
         for (const repo of repos) {
-            const id = existingMap.get(repo.fullName);
-            if (id) {
-                repoIds.push(id);
-            } else {
-                // 缺失的仓库逐个创建
-                const newId = await this.ensureRepoExists(repo);
-                if (newId) repoIds.push(newId);
+            if (!repo.fullName) continue;
+            const existingId = existingMap.get(repo.fullName);
+            if (existingId) {
+                mapping.push({ fullName: repo.fullName, id: existingId });
+                continue;
             }
+            // 缺失的仓库逐个创建
+            const newId = await this.ensureRepoExists(repo);
+            if (newId) mapping.push({ fullName: repo.fullName, id: newId });
         }
 
-        return repoIds;
+        return mapping;
     }
 
     /**
@@ -88,7 +107,7 @@ export class TrendingService {
      * @param repos GitHub Search API 返回的仓库列表
      * @returns 补充了 descriptionCn 字段的仓库列表
      */
-    async enrichWithCachedTranslations(repos: TrendingRepoItem[]): Promise<TrendingRepoItem[]> {
+    async enrichWithCachedTranslations(repos: TrendingRepoInput[]): Promise<TrendingRepoItem[]> {
         if (!repos.length) return repos;
 
         const fullNames = repos.map((r) => r.fullName).filter(Boolean);

@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { Card, Tag, Typography, Avatar, Tooltip, theme, App } from 'antd'
 import {
     StarFilled, ForkOutlined, ReadOutlined,
-    ClockCircleOutlined, CodeOutlined, BookOutlined,
+    ClockCircleOutlined, CodeOutlined, BookOutlined, RobotOutlined,
 } from '@ant-design/icons'
 import { formatNumberCn, formatDate, formatSize, daysSince, getStalenessColor } from '@/utils/format'
+import { useAddRepoContext } from '@/pages/AgentChat/hooks/useAddRepoContext'
 import type { GithubRepo } from '@/types'
 
 const { Text, Paragraph } = Typography
@@ -53,6 +54,7 @@ const RepoCard = memo(function RepoCard({ repo, inLearn, onAddLearn }: RepoCardP
     const navigate = useNavigate()
     const { token } = useToken()
     const { message } = App.useApp()
+    const { addRepoToContext } = useAddRepoContext()
 
     const descriptionText = repo.descriptionCn ?? repo.description
     const hasTranslation = Boolean(repo.descriptionCn)
@@ -178,6 +180,17 @@ const RepoCard = memo(function RepoCard({ repo, inLearn, onAddLearn }: RepoCardP
                         onClick={(e) => {
                             e.stopPropagation()
                             navigate(`/code-browser?repo=${encodeURIComponent(repo.fullName)}`)
+                        }}
+                        style={{ fontSize: 13, color: token.colorPrimary, cursor: 'pointer' }}
+                    />
+                </Tooltip>
+
+                {/* 加入 Agent 对话上下文 — 阻止冒泡避免触发卡片跳转详情 */}
+                <Tooltip title='加入对话上下文'>
+                    <RobotOutlined
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            addRepoToContext(repo)
                         }}
                         style={{ fontSize: 13, color: token.colorPrimary, cursor: 'pointer' }}
                     />

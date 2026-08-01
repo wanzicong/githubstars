@@ -46,4 +46,17 @@ describe('truncateRepoReadme — README 字段截断防 token 爆炸', () => {
         expect(out[0].readme).toContain('已截断');
         expect(out[1].readme).toBe('short');
     });
+
+    it('DB 实际的 readmeOriginal 字段也应被截断（此前漏截会灌爆上下文）', () => {
+        const repo = {
+            id: 4,
+            fullName: 'c/d',
+            readmeOriginal: '原'.repeat(README_TRUNCATE_LENGTH + 3000),
+            readmeCn: '译'.repeat(README_TRUNCATE_LENGTH + 3000),
+        };
+        const out = truncateRepoReadme(repo);
+        expect(out.readmeOriginal.length).toBeLessThan(README_TRUNCATE_LENGTH + 200);
+        expect(out.readmeOriginal).toContain('已截断');
+        expect(out.readmeCn.length).toBeLessThan(README_TRUNCATE_LENGTH + 200);
+    });
 });

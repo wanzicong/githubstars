@@ -6,7 +6,7 @@ import { StatsService } from '../../stats/stats.service';
 import { CloneService } from '../../clone/clone.service';
 import { DownloadService } from '../../download/download.service';
 import { SyncService } from '../../sync/sync.service';
-import { TrendingService, type TrendingRepoItem } from '../../trending/trending.service';
+import { TrendingService } from '../../trending/trending.service';
 import { AuthorService } from '../../author/author.service';
 import { ConfigService } from '../../config/config.service';
 import { ExportService } from '../../export/export.service';
@@ -61,8 +61,8 @@ function truncateReadmeText(text: string): string {
 }
 
 /**
- * 截断仓库对象（或对象数组）的 readme / readmeCn 字段，防止单点灌爆上下文。
- * 其他字段原样保留；非对象/缺失字段安全跳过。
+ * 截断仓库对象（或对象数组）的 README 字段，防止单点灌爆上下文。
+ * 覆盖 DB 实际的 readmeOriginal / readmeCn，以及兼容别名 readme；其他字段原样保留。
  */
 export function truncateRepoReadme<T>(input: T): T {
     if (Array.isArray(input)) {
@@ -71,7 +71,7 @@ export function truncateRepoReadme<T>(input: T): T {
     if (input === null || typeof input !== 'object') return input;
     const record = input as Record<string, unknown>;
     const out: Record<string, unknown> = { ...record };
-    for (const key of ['readme', 'readmeCn'] as const) {
+    for (const key of ['readme', 'readmeOriginal', 'readmeCn'] as const) {
         const value = record[key];
         if (typeof value === 'string') out[key] = truncateReadmeText(value);
     }
@@ -842,11 +842,11 @@ export function createSystemMcpServer(deps: SystemMcpDeps) {
                     try {
                         const { query, dateStr } = buildTrendingQuery(args.since ?? 'daily', args.language ?? '');
                         const result = await githubSearch.searchRepos(query, '', 'stars', 1, args.perPage ?? 20);
-                        const enrichedRepos = await trending.enrichWithCachedTranslations(result.repos as TrendingRepoItem[]);
+                        const enrichedRepos = await trending.enrichWithCachedTranslations(result.repos);
                         return ok({
                             success: true,
                             since: args.since ?? 'daily',
-                            total: result.total as number,
+                            total: result.total,
                             repos: enrichedRepos,
                             dateRange: `${dateStr} ~ ${new Date().toISOString().split('T')[0]}`,
                         });

@@ -4,14 +4,10 @@ import { PlusOutlined, StarOutlined, BranchesOutlined, CloseOutlined } from '@an
 import { fetchStarList, fetchCategoryTree } from '@/api'
 import { formatNumberShort } from '@/utils/format'
 import type { GithubRepo, CategoryNode } from '@/types'
+import type { ChatContextItem } from '@/stores/modules/agentChat'
 
-/** 选中的上下文项（仓库或分类） */
-export interface ChatContextItem {
-    type: 'repo' | 'category'
-    id: number
-    /** 展示名（仓库 fullName / 分类 name） */
-    label: string
-}
+/** 选中的上下文项（仓库或分类）。定义已上移到 agentChat store，此处 re-export 兼容既有引用。 */
+export type { ChatContextItem }
 
 interface Props {
     /** 当前已选中的上下文项 */

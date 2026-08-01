@@ -28,13 +28,28 @@ import {
 } from '@ant-design/icons'
 import MarkdownRenderer from '@/components/common/MarkdownRenderer'
 import ThinkingBlock from './ThinkingBlock'
-import ContextPicker, { type ChatContextItem } from './ContextPicker'
+import ContextPicker from './ContextPicker'
 import { listAgentSessions, getAgentSession, deleteAgentSession, getAgentBaseURL } from '@/api/agent'
 import { getAgentFriendlyErrorMessage } from '@/utils/agent-error'
 import { useAgentChatStore, useAppStore, useMultipleTabStore } from '@/stores'
+import type { ChatContextItem } from '@/stores/modules/agentChat'
 import { agentStreamManager, type MessageBlock, type SessionStreamState, type ToolResultMap } from '@/stores/modules/agentStreamManager'
 
 const { Text, Paragraph } = Typography
+
+/** 合并上下文项（按 type+id 去重），用于把 pendingContexts 并入已选 contextItems */
+function mergeContextItems(existing: ChatContextItem[], incoming: ChatContextItem[]): ChatContextItem[] {
+  const merged = [...existing]
+  const seen = new Set(existing.map((c) => `${c.type}:${c.id}`))
+  for (const item of incoming) {
+    const key = `${item.type}:${item.id}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      merged.push(item)
+    }
+  }
+  return merged
+}
 
 // ── Types ──
 
@@ -1048,8 +1063,19 @@ export default function AgentChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  // 对话上下文：选中的仓库/分类（作为元信息随消息发给后端，注入 Agent prompt）
-  const [contextItems, setContextItems] = useState<ChatContextItem[]>([])
+  // 对话上下文：选中的仓库/分类（持久化于 store，作为元信息随消息发给后端，注入 Agent prompt）
+  const contextItems = useAgentChatStore((s) => s.contextItems)
+  const setContextItems = useAgentChatStore((s) => s.setContextItems)
+  const pendingContexts = useAgentChatStore((s) => s.pendingContexts)
+  const consumePendingContexts = useAgentChatStore((s) => s.consumePendingContexts)
+
+  // 消费各列表页「加入对话上下文」写入的 pending：合并进 contextItems（去重）后清空。
+  // AgentChat 为常驻组件（切路由不卸载），必须用 store 订阅而非 mount effect 接收跨页注入。
+  useEffect(() => {
+    if (pendingContexts.length === 0) return
+    const pending = consumePendingContexts()
+    if (pending.length > 0) setContextItems(mergeContextItems(contextItems, pending))
+  }, [pendingContexts, consumePendingContexts, contextItems, setContextItems])
 
   // 多会话并行流：订阅全部会话的流式快照，取「当前会话」那一路驱动渲染。
   // 其它会话的流在后台静默累积，切换回来即可看到实时流式输出。
