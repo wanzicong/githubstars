@@ -16,13 +16,13 @@ export interface RepoReadmeTocProps {
     items: TocHeading[]
     /** 是否展开列表 */
     expanded: boolean
-    /** 点击跳转回调（slug 定位由父组件决定：卡片滚 body，弹窗滚容器） */
+    /** 点击跳转回调（slug 定位由父组件决定：卡片滚 window，弹窗滚容器） */
     onNavigate: (slug: string) => void
     /** 折叠/展开切换；inline 布局下不展示折叠按钮 */
     onToggle?: () => void
     /** 当前阅读到的章节（scroll-spy），不传则无高亮 */
     activeSlug?: string | null
-    /** 阅读进度 0~1，不传则不显示进度条 */
+    /** 阅读进度 0~1；undefined 表示内容不足一屏，不显示进度条 */
     progress?: number
     /** fixed 布局下面板是否可见（README 区域外淡出） */
     inView?: boolean
@@ -37,7 +37,8 @@ export interface RepoReadmeTocProps {
 /**
  * README 结构导航（TOC）面板
  *
- * - fixed 布局：悬浮于视口右侧，支持折叠、区域外淡出、scroll-spy 高亮、阅读进度条
+ * - fixed 布局：悬浮于视口右侧，支持折叠（带宽度+透明度过渡）、区域外淡出、
+ *   scroll-spy 高亮、阅读进度条
  * - inline 布局：嵌入文档流（全屏弹窗左栏），始终展开
  */
 export default function RepoReadmeToc({
@@ -50,7 +51,7 @@ export default function RepoReadmeToc({
     inView = true,
     layout = 'fixed',
     top = 156,
-    bottom = 72,
+    bottom = 132,
     right = 16,
 }: RepoReadmeTocProps) {
     const { token } = theme.useToken()
@@ -91,23 +92,40 @@ export default function RepoReadmeToc({
                   display: 'flex',
                   flexDirection: 'column',
                   minHeight: 0,
+                  height: '100%',
               }
 
     return (
-        <div style={panelStyle}>
-            {/* 阅读进度条 */}
-            {progress !== undefined && expanded && (
-                <div style={{ height: 3, flexShrink: 0, background: token.colorFillTertiary }}>
-                    <div
-                        style={{
-                            width: `${Math.round(progress * 100)}%`,
-                            height: '100%',
-                            background: token.colorPrimary,
-                            transition: 'width 0.15s',
-                        }}
-                    />
-                </div>
-            )}
+        <nav
+            style={{
+                ...panelStyle,
+                // hover/active 背景经 CSS 变量注入，配合 index.css 中的 .toc-nav-item 规则，
+                // 避免用 JS mouseenter/leave 操作 DOM（主题切换时不会自动更新）
+                ['--toc-hover-bg' as string]: token.colorFillSecondary,
+                ['--toc-active-bg' as string]: token.colorFillTertiary,
+            }}
+            role='navigation'
+            aria-label='README 结构导航'
+        >
+            {/* 阅读进度条：有进度时填充，无进度/折叠时保持占位避免布局跳动 */}
+            <div
+                style={{
+                    height: 3,
+                    flexShrink: 0,
+                    background: token.colorFillTertiary,
+                    opacity: expanded ? 1 : 0,
+                    transition: 'opacity 0.2s',
+                }}
+            >
+                <div
+                    style={{
+                        width: progress === undefined ? '0%' : `${Math.round(progress * 100)}%`,
+                        height: '100%',
+                        background: token.colorPrimary,
+                        transition: 'width 0.15s',
+                    }}
+                />
+            </div>
 
             {/* 折叠工具行（仅 fixed 布局） */}
             {layout === 'fixed' && (
@@ -121,58 +139,64 @@ export default function RepoReadmeToc({
                         borderBottom: `1px solid ${token.colorBorderSecondary}`,
                     }}
                 >
-                    <Button type='text' size='small' icon={<OrderedListOutlined />} onClick={onToggle} title='结构导航' />
-                    {expanded && <Text type='secondary' style={{ fontSize: 12 }}>导航</Text>}
+                    <Button
+                        type='text'
+                        size='small'
+                        icon={<OrderedListOutlined />}
+                        onClick={onToggle}
+                        title='结构导航'
+                        aria-label={expanded ? '收起结构导航' : '展开结构导航'}
+                        aria-expanded={expanded}
+                    />
+                    {expanded && (
+                        <Text type='secondary' style={{ fontSize: 12 }}>
+                            导航
+                        </Text>
+                    )}
                 </div>
             )}
 
-            {/* 章节列表 */}
-            {expanded && (
-                <div ref={listRef} style={{ flex: 1, padding: 8, overflow: 'auto', minHeight: 0 }}>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                        {items.map((item) => {
-                            const active = item.slug === activeSlug
-                            return (
-                                <li key={item.slug}>
-                                    <button
-                                        type='button'
-                                        data-slug={item.slug}
-                                        title={item.text}
-                                        onClick={() => onNavigate(item.slug)}
-                                        style={{
-                                            display: 'block',
-                                            width: '100%',
-                                            textAlign: 'left',
-                                            border: 'none',
-                                            background: active ? token.colorFillTertiary : 'none',
-                                            cursor: 'pointer',
-                                            fontSize: 12,
-                                            lineHeight: '22px',
-                                            padding: '1px 4px',
-                                            paddingLeft: tocItemIndent(item.level) + 4,
-                                            color: active ? token.colorPrimary : token.colorTextSecondary,
-                                            fontWeight: active ? 600 : 400,
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            whiteSpace: 'nowrap',
-                                            borderRadius: 4,
-                                            transition: 'background 0.15s, color 0.15s',
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            e.currentTarget.style.background = token.colorFillSecondary
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.currentTarget.style.background = active ? token.colorFillTertiary : 'none'
-                                        }}
-                                    >
-                                        {item.text}
-                                    </button>
-                                </li>
-                            )
-                        })}
-                    </ul>
-                </div>
-            )}
-        </div>
+            {/* 章节列表：始终挂载，折叠时用透明度+事件屏蔽过渡，避免突兀的内容闪现 */}
+            <div
+                ref={listRef}
+                aria-hidden={!expanded}
+                style={{
+                    flex: 1,
+                    padding: 8,
+                    overflow: 'auto',
+                    minHeight: 0,
+                    opacity: expanded ? 1 : 0,
+                    visibility: expanded ? 'visible' : 'hidden',
+                    pointerEvents: expanded ? 'auto' : 'none',
+                    transition: 'opacity 0.15s, visibility 0.15s',
+                }}
+            >
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {items.map((item) => {
+                        const active = item.slug === activeSlug
+                        return (
+                            <li key={item.slug}>
+                                <button
+                                    type='button'
+                                    data-slug={item.slug}
+                                    title={item.text}
+                                    aria-current={active ? 'location' : undefined}
+                                    tabIndex={expanded ? 0 : -1}
+                                    className={active ? 'toc-nav-item toc-nav-item-active' : 'toc-nav-item'}
+                                    onClick={() => onNavigate(item.slug)}
+                                    style={{
+                                        paddingLeft: tocItemIndent(item.level) + 4,
+                                        color: active ? token.colorPrimary : token.colorTextSecondary,
+                                        fontWeight: active ? 600 : 400,
+                                    }}
+                                >
+                                    {item.text}
+                                </button>
+                            </li>
+                        )
+                    })}
+                </ul>
+            </div>
+        </nav>
     )
 }

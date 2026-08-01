@@ -720,3 +720,33 @@ body {
     width: 100%;
     display: block;
 }
+
+/* ── README 结构导航（TOC）条目 ─────────────────────────────────
+ * hover/active 背景色由组件通过 --toc-hover-bg / --toc-active-bg
+ * CSS 变量按主题注入，此处只描述交互行为，不硬编码颜色。
+ */
+.toc-nav-item {
+    display: block;
+    width: 100%;
+    padding: 1px 4px;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 22px;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition:
+        background 0.15s,
+        color 0.15s;
+}
+.toc-nav-item:hover {
+    background: var(--toc-hover-bg, rgba(0, 0, 0, 0.06));
+}
+.toc-nav-item-active,
+.toc-nav-item-active:hover {
+    background: var(--toc-active-bg, rgba(0, 0, 0, 0.1));
+}

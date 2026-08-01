@@ -1,9 +1,10 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import type { Components } from 'react-markdown'
+import { buildHeadingIdMap, slugify } from '../../utils/toc'
 
 /** 自定义 sanitize schema：保留 README 中常见的安全 HTML 元素，阻止脚本注入 */
 const sanitizeSchema = {
@@ -18,7 +19,7 @@ const sanitizeSchema = {
     },
 }
 
-/** 从 React children 中递归提取纯文本（用于生成锚点 ID） */
+/** 从 React children 中递归提取纯文本（用于生成锚点 ID 的兜底） */
 function extractTextContent(node: React.ReactNode): string {
     if (typeof node === 'string' || typeof node === 'number') return String(node)
     if (Array.isArray(node)) return node.map(extractTextContent).join('')
@@ -29,39 +30,8 @@ function extractTextContent(node: React.ReactNode): string {
     return ''
 }
 
-/** 从标题纯文本生成 slug：转小写 + 替换非字母数字为 - + 去重前缀 */
-function slugify(text: string): string {
-    /* eslint-disable sonarjs/super-linear-regex -- README 标题长度有限，回溯可忽略 */
-    return text
-        .toLowerCase()
-        .replace(/[^\w一-鿿]+/g, '-')
-        .replace(/(?:^-+)|(?:-+$)/g, '')
-    /* eslint-enable sonarjs/super-linear-regex */
-}
-
 /** Markdown → React 的共享渲染组件映射，确保全站 README/AI 分析等 Markdown 渲染风格一致 */
 const SHARED_MARKDOWN_COMPONENTS: Components = {
-    h1: ({ children }) => (
-        <h1
-            id={slugify(extractTextContent(children))}
-            style={{ fontSize: 22, borderBottom: '1px solid #eee', paddingBottom: 8, marginTop: 24, marginBottom: 12 }}
-        >
-            {children}
-        </h1>
-    ),
-    h2: ({ children }) => (
-        <h2
-            id={slugify(extractTextContent(children))}
-            style={{ fontSize: 19, borderBottom: '1px solid #eee', paddingBottom: 6, marginTop: 20, marginBottom: 10 }}
-        >
-            {children}
-        </h2>
-    ),
-    h3: ({ children }) => (
-        <h3 id={slugify(extractTextContent(children))} style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>
-            {children}
-        </h3>
-    ),
     h4: ({ children }) => <h4 style={{ fontSize: 14, marginTop: 12, marginBottom: 6 }}>{children}</h4>,
     p: ({ children }) => <p style={{ lineHeight: 1.8, marginBottom: 12, fontSize: 14 }}>{children}</p>,
     a: ({ href, children }) => (
@@ -144,12 +114,52 @@ interface MarkdownRendererProps {
     style?: React.CSSProperties
 }
 
+type HeadingProps = React.ComponentProps<'h1'> & { node?: { position?: { start?: { line?: number } } } }
+
+/** h1~h3 标题样式（id 由调用方注入） */
+const HEADING_STYLES = {
+    h1: { fontSize: 22, borderBottom: '1px solid #eee', paddingBottom: 8, marginTop: 24, marginBottom: 12 },
+    h2: { fontSize: 19, borderBottom: '1px solid #eee', paddingBottom: 6, marginTop: 20, marginBottom: 10 },
+    h3: { fontSize: 16, marginTop: 16, marginBottom: 8 },
+} as const
+
 /**
  * 共享 Markdown 渲染器 — 统一全站 README/AI 分析/Trending 分析的 Markdown 样式。
  * 使用 React.memo 避免内容未变化时的重复渲染。
+ *
+ * h1~h3 的锚点 id 优先通过标题节点的源码行号查 buildHeadingIdMap，
+ * 与 extractToc 生成的 TOC slug 完全一致（含重名去重后缀）；
+ * 查不到时（如 HTML 内联标题无行号映射）回退到纯文本 slugify。
  */
 const MarkdownRenderer = memo(function MarkdownRenderer({ content, components, className, style }: MarkdownRendererProps) {
-    const mergedComponents: Components = { ...SHARED_MARKDOWN_COMPONENTS, ...components }
+    const headingIdMap = useMemo(() => buildHeadingIdMap(content), [content])
+
+    const headingComponents = useMemo<Components>(() => {
+        const resolveId = (node: HeadingProps['node'], children: React.ReactNode): string => {
+            const line = node?.position?.start?.line
+            const mapped = line === undefined ? undefined : headingIdMap.get(line)
+            return mapped ?? slugify(extractTextContent(children))
+        }
+        return {
+            h1: ({ node, children }: HeadingProps) => (
+                <h1 id={resolveId(node, children)} style={HEADING_STYLES.h1}>
+                    {children}
+                </h1>
+            ),
+            h2: ({ node, children }: HeadingProps) => (
+                <h2 id={resolveId(node, children)} style={HEADING_STYLES.h2}>
+                    {children}
+                </h2>
+            ),
+            h3: ({ node, children }: HeadingProps) => (
+                <h3 id={resolveId(node, children)} style={HEADING_STYLES.h3}>
+                    {children}
+                </h3>
+            ),
+        }
+    }, [headingIdMap])
+
+    const mergedComponents: Components = { ...SHARED_MARKDOWN_COMPONENTS, ...headingComponents, ...components }
 
     return (
         <div className={className} style={style}>
