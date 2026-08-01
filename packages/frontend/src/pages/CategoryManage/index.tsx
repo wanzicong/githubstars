@@ -21,12 +21,12 @@ export default function CategoryManage() {
         await tree.refresh()
     }, [tree])
 
-    // 左侧分类树 sticky 固定：高度 = 视口 - header(56) - tabs(40) - Content 上 padding(16) - 页面 padding(24) - footer(40) - Content 下 padding(16) - 页面 padding(24)
+    // 左侧分类树 sticky 固定：高度 = 视口 - header(56) - tabs(40) - Content 上 padding(16) - 页面 padding(24) - Content 下 padding(16) - 页面 padding(24)（footer 已移除）
     // 给一点余量防止临界抖动
     // 注意：Row 不能用 align="top"，否则 col 会被 flex 收缩到内容高度，sticky 就失去滚动空间
     // 默认 stretch 让 col 撑满 row 高度（= 最高列高度），sticky 才能在该空间内固定
     const stickyTop = 24
-    const panelMaxHeight = 'calc(100vh - 240px)'
+    const panelMaxHeight = 'calc(100vh - 200px)'
 
     return (
         <div style={{ padding: 24 }}>

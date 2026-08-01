@@ -1512,7 +1512,7 @@ export default function AgentChat() {
   // 响应式容器尺寸：与 Layout Content padding 对齐（移动端 12px，桌面端 16px/24px）
   const containerMargin = isMobile ? '-12px -12px' : '-16px -24px'
   const contentPaddingY = isMobile ? 24 : 32
-  const containerHeight = `calc(100vh - 56px - 40px - 40px - ${contentPaddingY}px)` // header(56) + tabs(40) + footer(40) + content padding
+  const containerHeight = `calc(100vh - 56px - 40px - ${contentPaddingY}px)` // header(56) + tabs(40) + content padding（footer 已移除）
 
   return (
     <div
@@ -1636,7 +1636,7 @@ export default function AgentChat() {
         >
           {/* Empty state */}
           {!hasMessages && !isStreaming && !loading && (
-            <Flex vertical align="center" justify="center" style={{ minHeight: 'calc(100vh - 56px - 40px - 40px - 56px - 80px)', textAlign: 'center', padding: '0 20px' }}>
+            <Flex vertical align="center" justify="center" style={{ minHeight: 'calc(100vh - 56px - 40px - 56px - 80px)', textAlign: 'center', padding: '0 20px' }}>
               <div
                 style={{
                   width: 64, height: 64, borderRadius: 16,

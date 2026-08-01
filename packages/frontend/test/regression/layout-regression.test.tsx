@@ -15,6 +15,7 @@
 
 import { describe, it, expect } from 'vitest'
 import indexCss from '../../src/index.css?raw'
+import layoutIndexSrc from '../../src/layouts/default/Index.tsx?raw'
 
 // ================================================================
 // 辅助工具
@@ -97,10 +98,10 @@ describe('LayoutIndex — Content & Footer CSS 类名', () => {
     expect(main.className).toBe('layout-content-side')
   })
 
-  it('侧边栏模式下 Footer 应有 layout-footer-side 类名', () => {
-    const footer = document.createElement('footer')
-    footer.className = 'layout-footer-side'
-    expect(footer.className).toBe('layout-footer-side')
+  it('布局不再渲染底部版权 Footer（GitHub Stars 管理系统 © 已移除）', () => {
+    expect(layoutIndexSrc).not.toContain('<Footer')
+    expect(layoutIndexSrc).not.toContain('GitHub Stars 管理系统')
+    expect(layoutIndexSrc).not.toContain('layout-footer-side')
   })
 })
 
@@ -303,7 +304,7 @@ describe('布局修复完整性检查', () => {
     { name: 'LayoutSider z-index 101 + layout-sider-wrapper', file: 'LayoutSider.tsx' },
     { name: 'LayoutHeader side mode layout-header-side + minWidth overflow', file: 'LayoutHeader.tsx' },
     { name: 'LayoutHeader top mode z-index 102', file: 'LayoutHeader.tsx' },
-    { name: 'Index layout-content-side + layout-footer-side', file: 'Index.tsx' },
+    { name: 'Index layout-content-side（底部 Footer 已移除）', file: 'Index.tsx' },
     { name: 'MultipleTabs multiple-tabs-container + overflow hidden', file: 'MultipleTabs.tsx' },
     { name: 'Stats 卡片 xs=24 sm=12 md 布局', file: 'Stats.tsx' },
     { name: 'Stats Chart.js chart-container', file: 'Stats.tsx' },
@@ -338,7 +339,6 @@ describe('布局修复完整性检查', () => {
       'layout-sider-wrapper',
       'layout-header-side',
       'layout-content-side',
-      'layout-footer-side',
       'multiple-tabs-container',
       'chart-container',
     ]

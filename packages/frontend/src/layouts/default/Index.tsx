@@ -1,6 +1,6 @@
 import { lazy, useState, useEffect, Suspense } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
-import { Layout, theme, Spin, Grid } from 'antd'
+import { Layout, Spin, Grid } from 'antd'
 import { useAppStore, useMultipleTabStore } from '@/stores'
 import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts'
 import ErrorBoundary from '@/components/common/ErrorBoundary'
@@ -12,7 +12,7 @@ import MultipleTabs from './tabs/MultipleTabs'
 import SettingDrawer from './setting/SettingDrawer'
 import { SIDER_WIDTH, SIDER_COLLAPSED_WIDTH } from './constants'
 
-const { Footer, Content } = Layout
+const { Content } = Layout
 const AgentChat = lazy(() => import('@/pages/AgentChat'))
 
 /** 路由切换时滚动到顶部 */
@@ -23,11 +23,10 @@ function useScrollToTop() {
     }, [pathname])
 }
 
-/** 默认布局 —— Sider + Header + Tabs + Content + Footer */
+/** 默认布局 —— Sider + Header + Tabs + Content */
 export default function DefaultLayout() {
     useScrollToTop()
     useGlobalShortcuts()
-    const { token } = theme.useToken()
     const layoutMode = useAppStore((s) => s.layoutMode)
     const showTabs = useAppStore((s) => s.showTabs)
     const darkMode = useAppStore((s) => s.darkMode)
@@ -72,7 +71,7 @@ export default function DefaultLayout() {
     const sideMargin = siderCollapsed ? SIDER_COLLAPSED_WIDTH : SIDER_WIDTH
     // MultipleTabs 在仅 1 个标签时不渲染，minHeight 需据此计算避免底部空白
     const tabsVisible = showTabs && tabs.length > 1
-    const minHeight = `calc(100vh - 56px - ${tabsVisible ? 40 : 0}px - 40px)` // header 56px + tabs(可选) + footer 40px
+    const minHeight = `calc(100vh - 56px - ${tabsVisible ? 40 : 0}px)` // header 56px + tabs(可选)
 
     const content = (
         <Content
@@ -105,19 +104,6 @@ export default function DefaultLayout() {
         </Content>
     )
 
-    const footer = (
-        <Footer
-            className={isSideMode ? 'layout-footer-side' : undefined}
-            style={{
-                textAlign: 'center',
-                color: token.colorTextTertiary,
-                fontSize: 12,
-                padding: 12,
-            }}
-        >
-            GitHub Stars 管理系统 ©{new Date().getFullYear()}
-        </Footer>
-    )
 
     const drawer = <SettingDrawer open={settingOpen} onClose={() => setSettingOpen(false)} />
 
@@ -132,7 +118,6 @@ export default function DefaultLayout() {
                 />
                 {showTabs && <MultipleTabs />}
                 {content}
-                {footer}
                 {drawer}
                 <MobileSiderDrawer open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
             </Layout>
@@ -157,7 +142,6 @@ export default function DefaultLayout() {
                 />
                 {showTabs && <MultipleTabs />}
                 {content}
-                {footer}
             </Layout>
             {drawer}
             <MobileSiderDrawer open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />

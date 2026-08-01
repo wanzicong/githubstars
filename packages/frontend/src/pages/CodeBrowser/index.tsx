@@ -98,8 +98,8 @@ export default function CodeBrowser() {
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
-        // header(56) + tabs(40) + footer(40) + content padding(16*2)，与 AgentChat 页保持一致
-        height: 'calc(100vh - 56px - 40px - 40px - 32px)',
+        // header(56) + tabs(40) + content padding(16*2)，与 AgentChat 页保持一致（footer 已移除）
+        height: 'calc(100vh - 56px - 40px - 32px)',
       }}
     >
       {/* ── 工具栏 ── */}
