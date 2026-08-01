@@ -4,10 +4,18 @@ import { AgentClientService } from '../../src/agent/agent-client.service';
 
 describe('buildContextSection 上下文注入', () => {
     function createSvc() {
-        const svc = Object.create(AgentClientService.prototype) as any;
-        svc.githubRepo = { findByIds: jest.fn().mockResolvedValue([
-            { fullName: 'public-apis/public-apis', description: 'APIs list', descriptionCn: '免费API合集', language: 'Python', starsCount: 300000 },
-        ]) };
+        const svc = Object.create(AgentClientService.prototype);
+        svc.githubRepo = {
+            findByIds: jest.fn().mockResolvedValue([
+                {
+                    fullName: 'public-apis/public-apis',
+                    description: 'APIs list',
+                    descriptionCn: '免费API合集',
+                    language: 'Python',
+                    starsCount: 300000,
+                },
+            ]),
+        };
         svc.prisma = { category: { findMany: jest.fn().mockResolvedValue([{ name: '视频相关' }]) } };
         return svc;
     }

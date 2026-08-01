@@ -6,7 +6,7 @@ import type { MessageBlock } from '../../src/agent/agent-session.service';
 /** collectBlock 去重：SDK 增量+完整块两套只保留一份 */
 describe('AgentController.collectBlock 增量与完整块去重', () => {
     function makeController() {
-        return Object.create(AgentController.prototype) as any;
+        return Object.create(AgentController.prototype);
     }
 
     it('text_delta 后到达完整 text，应只保留完整 text 一份', () => {
