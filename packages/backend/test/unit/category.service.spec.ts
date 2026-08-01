@@ -268,6 +268,8 @@ describe('CategoryService', () => {
     describe('getCategoryRepos', () => {
         it('应返回分类下的仓库列表', async () => {
             prisma.category.findUnique.mockResolvedValue({ id: 1n });
+            // 无子分类 → 递归终止（防止残留 mock 实现导致 getChildCategoryIds 无限递归 OOM）
+            prisma.category.findMany.mockResolvedValue([]);
             prisma.githubRepo.count.mockResolvedValue(2);
             prisma.githubRepo.findMany.mockResolvedValue([
                 {

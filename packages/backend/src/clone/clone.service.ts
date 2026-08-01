@@ -208,7 +208,7 @@ export class CloneService {
         return this.prisma.cloneTask.findFirst({
             where: { status: 'PENDING' },
             orderBy: { createdAt: 'asc' },
-            select: { id: true },
+            select: { id: true, concurrency: true },
         });
     }
 
@@ -411,11 +411,13 @@ export class CloneService {
             completedItems,
             failedItems,
             processingItems,
+            skippedItems: 0,
             progress,
             createdAt: task.createdAt?.toISOString(),
             startedAt: task.startedAt?.toISOString(),
             finishedAt: task.finishedAt?.toISOString(),
             failedDetails: task.items.filter((i) => i.status === 'FAILED').map((i) => ({ fullName: i.fullName, error: i.errorMessage })),
+            skippedDetails: [],
             allItems: task.items,
         };
     }
@@ -437,6 +439,7 @@ export class CloneService {
                 totalItems: true,
                 completedItems: true,
                 failedItems: true,
+                skippedItems: true,
                 createdAt: true,
                 startedAt: true,
                 finishedAt: true,
@@ -454,6 +457,7 @@ export class CloneService {
                 totalItems: t.totalItems,
                 completedItems: t.completedItems,
                 failedItems: t.failedItems,
+                skippedItems: t.skippedItems ?? 0,
                 createdAt: t.createdAt?.toISOString(),
                 startedAt: t.startedAt?.toISOString(),
                 finishedAt: t.finishedAt?.toISOString(),

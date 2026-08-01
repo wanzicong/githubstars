@@ -42,6 +42,8 @@ describe('StatsService', () => {
             aggregate: jest.fn(),
         },
         $queryRaw: jest.fn(),
+        // 生产代码 getTimelineStats 会调 isSqlite() 判断方言，mock 需补齐
+        isSqlite: jest.fn().mockReturnValue(false),
     };
 
     beforeEach(async () => {

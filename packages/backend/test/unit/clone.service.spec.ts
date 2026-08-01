@@ -2,6 +2,8 @@ import { Test } from '@nestjs/testing';
 import { CloneService } from '../../src/clone/clone.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ConfigService } from '../../src/config/config.service';
+import { CloneExecutorService } from '../../src/clone/clone-executor.service';
+import { CloneCleanupService } from '../../src/clone/clone-cleanup.service';
 
 describe('CloneService', () => {
     let service: CloneService;
@@ -36,6 +38,16 @@ describe('CloneService', () => {
         getValue: jest.fn().mockResolvedValue('fake-token'),
     };
 
+    // e322334 拆分出的子服务：克隆模块单元测试仅需占位 mock，真实执行逻辑由各自套件覆盖
+    const mockExecutor = {
+        executeClone: jest.fn().mockResolvedValue({ success: true }),
+    };
+
+    const mockCleanup = {
+        cleanFailedCloneDir: jest.fn().mockResolvedValue(undefined),
+        removeCloneDir: jest.fn().mockResolvedValue(undefined),
+    };
+
     const repoData = [
         { id: createBigIntId(1), fullName: 'owner1/repo-a', htmlUrl: 'https://github.com/owner1/repo-a' },
         { id: createBigIntId(2), fullName: 'owner2/repo-b', htmlUrl: 'https://github.com/owner2/repo-b' },
@@ -44,7 +56,13 @@ describe('CloneService', () => {
     beforeEach(async () => {
         jest.clearAllMocks();
         const module = await Test.createTestingModule({
-            providers: [CloneService, { provide: PrismaService, useValue: mockPrisma }, { provide: ConfigService, useValue: mockConfig }],
+            providers: [
+                CloneService,
+                { provide: PrismaService, useValue: mockPrisma },
+                { provide: ConfigService, useValue: mockConfig },
+                { provide: CloneExecutorService, useValue: mockExecutor },
+                { provide: CloneCleanupService, useValue: mockCleanup },
+            ],
         }).compile();
         service = module.get(CloneService);
         prisma = mockPrisma;
@@ -101,8 +119,8 @@ describe('CloneService', () => {
     });
 
     describe('getLockAge', () => {
-        it('未持锁时返回 -1', () => {
-            expect(service.getLockAge()).toBe(-1);
+        it('未持锁时返回 null', () => {
+            expect(service.getLockAge()).toBeNull();
         });
     });
 
@@ -129,6 +147,9 @@ describe('CloneService', () => {
                     concurrency: 3,
                     shallow: true,
                     totalItems: 2,
+                    completedItems: 2,
+                    failedItems: 0,
+                    skippedItems: 0,
                     createdAt: new Date(),
                     startedAt: new Date(),
                     finishedAt: new Date(),
@@ -141,6 +162,9 @@ describe('CloneService', () => {
                     concurrency: 2,
                     shallow: false,
                     totalItems: 3,
+                    completedItems: 1,
+                    failedItems: 2,
+                    skippedItems: 0,
                     createdAt: new Date(),
                     startedAt: new Date(),
                     finishedAt: new Date(),
@@ -203,6 +227,7 @@ describe('CloneService', () => {
 
     describe('retryFailed', () => {
         it('应重置失败项为 PENDING', async () => {
+            prisma.cloneTask.findUnique.mockResolvedValue({ id: createBigIntId(1), targetDir: '/tmp/clone' });
             prisma.cloneTaskItem.findMany.mockResolvedValue([{ id: createBigIntId(1), status: 'FAILED', localPath: '/tmp/c/d' }]); // eslint-disable-line sonarjs/publicly-writable-directories
             prisma.$transaction.mockResolvedValue([]);
 
@@ -212,6 +237,7 @@ describe('CloneService', () => {
         });
 
         it('无需要重试的项时应返回失败', async () => {
+            prisma.cloneTask.findUnique.mockResolvedValue({ id: createBigIntId(1), targetDir: '/tmp/clone' });
             prisma.cloneTaskItem.findMany.mockResolvedValue([]);
             const result = await service.retryFailed(1);
             expect(result.success).toBe(false);
@@ -221,6 +247,7 @@ describe('CloneService', () => {
 
     describe('retryItem', () => {
         it('应重试单个克隆项', async () => {
+            prisma.cloneTask.findUnique.mockResolvedValue({ id: createBigIntId(1), targetDir: '/tmp/clone' });
             prisma.cloneTaskItem.findFirst.mockResolvedValue({
                 id: createBigIntId(1),
                 taskId: createBigIntId(1),
@@ -241,6 +268,7 @@ describe('CloneService', () => {
         });
 
         it('正在执行的项应拒绝重试', async () => {
+            prisma.cloneTask.findUnique.mockResolvedValue({ id: createBigIntId(1), targetDir: '/tmp/clone' });
             prisma.cloneTaskItem.findFirst.mockResolvedValue({
                 id: createBigIntId(1),
                 taskId: createBigIntId(1),

@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { GithubRepoService } from '../../src/github/github-repo.service';
+import { GithubApiService } from '../../src/github/github-api.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 describe('GithubRepoService', () => {
@@ -44,9 +45,18 @@ describe('GithubRepoService', () => {
         $executeRaw: jest.fn().mockResolvedValue(undefined),
     };
 
+    const mockGithubApi = {
+        fetchReadmeFromGitHub: jest.fn().mockResolvedValue({ content: null }),
+        fetchRepoByFullName: jest.fn().mockResolvedValue(null),
+    };
+
     beforeEach(async () => {
         const module = await Test.createTestingModule({
-            providers: [GithubRepoService, { provide: PrismaService, useValue: mockPrisma }],
+            providers: [
+                GithubRepoService,
+                { provide: PrismaService, useValue: mockPrisma },
+                { provide: GithubApiService, useValue: mockGithubApi },
+            ],
         }).compile();
 
         service = module.get(GithubRepoService);

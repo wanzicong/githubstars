@@ -1,5 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { GithubSearchService } from '../../src/github/github-search.service';
+import { GithubApiService } from '../../src/github/github-api.service';
+import { GithubRepoService } from '../../src/github/github-repo.service';
 import { ConfigService } from '../../src/config/config.service';
 
 describe('GithubSearchService', () => {
@@ -10,10 +12,25 @@ describe('GithubSearchService', () => {
         getValueDefault: jest.fn().mockResolvedValue(''),
     };
 
+    const mockGithubApi = {
+        fetchReadmeFromGitHub: jest.fn().mockResolvedValue({ content: null }),
+        fetchRepoByFullName: jest.fn().mockResolvedValue(null),
+    };
+
+    const mockRepoService = {
+        findByFullName: jest.fn().mockResolvedValue(null),
+        ensureReadmeFetched: jest.fn().mockResolvedValue(undefined),
+    };
+
     beforeEach(async () => {
         jest.clearAllMocks();
         const module = await Test.createTestingModule({
-            providers: [GithubSearchService, { provide: ConfigService, useValue: mockConfig }],
+            providers: [
+                GithubSearchService,
+                { provide: ConfigService, useValue: mockConfig },
+                { provide: GithubApiService, useValue: mockGithubApi },
+                { provide: GithubRepoService, useValue: mockRepoService },
+            ],
         }).compile();
         service = module.get(GithubSearchService);
     });
