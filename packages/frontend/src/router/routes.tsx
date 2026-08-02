@@ -23,6 +23,8 @@ const Download = lazy(() => import('@/pages/Download'))
 const CategoryManage = lazy(() => import('@/pages/CategoryManage'))
 const CodeBrowser = lazy(() => import('@/pages/CodeBrowser'))
 const Learn = lazy(() => import('@/pages/Learn'))
+const MyRepos = lazy(() => import('@/pages/MyRepos'))
+const MyRepoDetail = lazy(() => import('@/pages/MyRepoDetail'))
 
 /** 所有路由（Layout 子路由） */
 export const appRoutes: RouteObject[] = [
@@ -30,6 +32,9 @@ export const appRoutes: RouteObject[] = [
     { index: true, element: <StarList />, handle: { title: 'Star列表' } },
     // ── Star ──
     { path: 'stars/:id', element: <StarDetail />, handle: { title: 'Star详情' } },
+    // ── 我的仓库 ──
+    { path: 'my-repos', element: <MyRepos />, handle: { title: '我的仓库' } },
+    { path: 'my-repos/:id', element: <MyRepoDetail />, handle: { title: '仓库详情' } },
     // ── 任意仓库详情（owner/repo 入口，实时 GitHub API + 本地库回退） ──
     { path: 'repos/:owner/:repo', element: <RepoDetail />, handle: { title: '仓库详情' } },
     // ── 代码浏览 ──

@@ -7,6 +7,7 @@ import {
   CopyOutlined,
   RobotOutlined,
   ReadOutlined,
+  CodeOutlined,
 } from '@ant-design/icons'
 /**
  * 导航菜单项定义 -- 集中管理所有菜单的 key、图标、标题、排序。
@@ -55,6 +56,12 @@ export const menuGroups: MenuGroup[] = [
       { key: '/', label: 'Star列表' },
       { key: '/code-browser', label: '代码浏览' },
       { key: '/categories', label: '分类管理' },
+    ],
+  },
+  {
+    key: 'group-my-repos', icon: <CodeOutlined />, label: '我的仓库', orderNo: 2,
+    children: [
+      { key: '/my-repos', label: '我的仓库列表' },
     ],
   },
   {
@@ -123,6 +130,7 @@ export const menuItems: (MenuItem & { icon: React.ReactNode; orderNo: number })[
 const DETAIL_PARENT_MAP: Record<string, string> = {
   '/stars': '/',
   '/repos': '/',
+  '/my-repos': '/my-repos',
 }
 
 /**
@@ -174,6 +182,7 @@ export function getMenuTitle(pathname: string): string {
   // 详情页特殊路径（必须在前缀匹配之前检查，否则 /authors/xxx 会被 /authors 前缀拦截返回作者中心）
   if (pathname.startsWith('/stars/')) return 'Star详情'
   if (pathname.startsWith('/repos/')) return '仓库详情'
+  if (pathname.startsWith('/my-repos/')) return '仓库详情'
   if (pathname.startsWith('/authors/')) return '作者详情'
 
   // 精确匹配
