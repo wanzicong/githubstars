@@ -1,6 +1,6 @@
 {
   "name": "githubstars-agent",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "通过 MCP 工具和业务 Skills 管理、分析、中文化及下载 GitHub Star 仓库",
   "author": {
     "name": "GitHub Stars Team"
