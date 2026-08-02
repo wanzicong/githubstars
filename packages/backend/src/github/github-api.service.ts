@@ -92,6 +92,76 @@ export class GithubApiService {
     }
 
     /**
+     * 获取当前 Token 用户自己创建的所有仓库（自动翻页至末尾）
+     *
+     * 使用 /user/repos?type=owner 覆盖 public + private 仓库。
+     * 与 fetchAllStarredRepos 的差异：
+     * - 数据源为 owned repos，starredAt 恒为 null
+     * - 响应体直接是 repo 数组（无 {repo, starred_at} 包装）
+     *
+     * @returns 映射为 DB 友好格式的仓库数组
+     * @throws 首屏请求失败时抛出（已有数据时容错返回部分结果）
+     *
+     * @callers MyRepoSyncService.executeSync
+     * @depends buildGithubHeaders / parseLinkHeader / mapStarredItem / sleep
+     */
+    async fetchAllOwnedRepos(): Promise<MappedRepoData[]> {
+        const token = await this.config.getValueDefault('github.token', '');
+        if (!token) {
+            throw new Error('未配置 GitHub Token，无法获取我的仓库（请到系统配置页设置 github.token）');
+        }
+
+        this.logger.log('===== 开始全量获取我的仓库 =====');
+        const all: MappedRepoData[] = [];
+        let currentPage = 1;
+        let nextUrl: string | null = `${GITHUB_API}/user/repos?type=owner&per_page=100&page=1&sort=updated`;
+        const startTime = Date.now();
+
+        while (nextUrl) {
+            const pageStart = Date.now();
+            this.logger.log(`>>>>> 正在获取我的仓库第 ${currentPage} 页...`);
+
+            const headers = buildGithubHeaders(token);
+            const response = await this.executeFetch(nextUrl, headers, currentPage, all.length);
+            if (!response) break;
+
+            const isOk = await this.handleNonOkResponse(response, currentPage, all.length);
+            if (!isOk) break;
+
+            const rawText = await response.text();
+            const pageItems = await this.parsePageItems(rawText, currentPage, all.length);
+            if (!pageItems) break;
+
+            // /user/repos 响应直接是 repo 数组，包装成 {repo} 复用 mapStarredItem（starredAt 为 null）
+            for (const item of pageItems) {
+                try {
+                    const mapped = mapStarredItem({ repo: item });
+                    if (mapped) all.push(mapped);
+                } catch (mapErr) {
+                    this.logger.error(`映射单条我的仓库失败, 第${currentPage}页: ${mapErr instanceof Error ? mapErr.message : String(mapErr)}`);
+                }
+            }
+
+            const duration = ((Date.now() - pageStart) / 1000).toFixed(1);
+            this.logger.log(`第${currentPage}页完成: 映射${pageItems.length}条, 累计${all.length}条, 耗时${duration}s`);
+
+            const links = parseLinkHeader(response.headers.get('Link') || '');
+            if (links.next && pageItems.length > 0) {
+                nextUrl = links.next;
+                currentPage++;
+                await sleep(300);
+            } else {
+                nextUrl = null;
+            }
+        }
+
+        const deduped = this.deduplicateRepos(all);
+        const totalDuration = ((Date.now() - startTime) / 1000).toFixed(1);
+        this.logger.log(`===== 我的仓库全量获取完成: 共${deduped.length}个, 共${currentPage}页, 总耗时${totalDuration}s =====`);
+        return deduped;
+    }
+
+    /**
      * 获取单页星标仓库数据
      *
      * 负责网络请求、JSON 解析和字段映射。

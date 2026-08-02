@@ -75,6 +75,7 @@ model Category {
   parent            Category?          @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
   children          Category[]         @relation("CategoryTree")
   categoryRepoLinks CategoryRepoLink[]
+  myRepoLinks       MyRepoCategoryLink[]
 
   @@index([parentId])
   @@index([sortOrder])
@@ -99,6 +100,73 @@ model CategoryRepoLink {
   @@unique([categoryId, repoId])
   @@index([repoId])
   @@map("category_repo_link")
+}
+
+// ── 我的仓库 ──
+
+/**
+ * 我的仓库表 —— 用户自己在 GitHub 上创建的仓库（含私有）。
+ * 与 github_repo（Star 收藏）独立建表，无 starredAt，多 isPrivate。
+ */
+model MyRepo {
+  id              Int    @id @default(autoincrement())
+  repoName        String?   @map("repo_name")
+  fullName        String?   @unique @map("full_name")
+  description     String?   @map("description")
+  descriptionCn   String?   @map("description_cn")
+  readmeCn        String?   @map("readme_cn")
+  readmeOriginal  String?   @map("readme_original")
+  readmeFetched   Boolean   @default(false) @map("readme_fetched")
+  language        String?   @map("language")
+  ownerName       String?   @map("owner_name")
+  ownerAvatarUrl  String?   @map("owner_avatar_url")
+  htmlUrl         String?   @map("html_url")
+  homepage        String?   @map("homepage")
+  starsCount      Int       @default(0) @map("stars_count")
+  forksCount      Int       @default(0) @map("forks_count")
+  watchersCount   Int       @default(0) @map("watchers_count")
+  openIssuesCount Int       @default(0) @map("open_issues_count")
+  topics          String?   @map("topics")
+  licenseName     String?   @map("license_name")
+  isFork          Boolean   @default(false) @map("is_fork")
+  isArchived      Boolean   @default(false) @map("is_archived")
+  isPrivate       Boolean   @default(false) @map("is_private")
+  repoSize        Int?      @map("repo_size")
+  defaultBranch   String?   @map("default_branch")
+  visibility      String?   @map("visibility")
+  repoCreatedAt   DateTime? @map("repo_created_at")
+  repoUpdatedAt   DateTime? @map("repo_updated_at")
+  repoPushedAt    DateTime? @map("repo_pushed_at")
+  createdAt       DateTime  @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // 关联
+  cloneItems    MyRepoCloneTaskItem[]
+  downloadItems MyRepoDownloadTaskItem[]
+  categories    MyRepoCategoryLink[]
+
+  @@index([language])
+  @@index([starsCount])
+  @@index([repoUpdatedAt])
+  @@index([isPrivate])
+  @@map("my_repo")
+}
+
+/**
+ * 我的仓库-分类关联表 —— 多对多关系，复用 category 分类树。
+ */
+model MyRepoCategoryLink {
+  id         Int   @id @default(autoincrement())
+  categoryId Int   @map("category_id")
+  myRepoId   Int   @map("my_repo_id")
+  createdAt  DateTime @map("created_at")
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  myRepo   MyRepo   @relation(fields: [myRepoId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, myRepoId])
+  @@index([myRepoId])
+  @@map("my_repo_category_link")
 }
 
 model SyncLog {
@@ -143,7 +211,8 @@ model CloneTask {
   startedAt      DateTime? @map("started_at") 
   finishedAt     DateTime? @map("finished_at") 
 
-  items CloneTaskItem[]
+  items       CloneTaskItem[]
+  myRepoItems MyRepoCloneTaskItem[]
 
   @@index([status])
   @@index([createdAt])
@@ -172,6 +241,31 @@ model CloneTaskItem {
   @@map("clone_task_item")
 }
 
+/**
+ * 我的仓库克隆任务子项 —— 与 clone_task_item 平行，repoId 指向 my_repo。
+ */
+model MyRepoCloneTaskItem {
+  id           Int    @id @default(autoincrement())
+  taskId       Int    @map("task_id")
+  repoId       Int    @map("repo_id")
+  fullName     String?   @map("full_name")
+  cloneUrl     String?   @map("clone_url")
+  localPath    String?   @map("local_path")
+  status       String?   @default("PENDING") @map("status")
+  retryCount   Int       @default(0) @map("retry_count")
+  errorMessage String?   @map("error_message")
+  createdAt    DateTime? @map("created_at")
+  updatedAt    DateTime? @updatedAt @map("updated_at")
+
+  task CloneTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  repo MyRepo    @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([repoId])
+  @@index([status])
+  @@map("my_repo_clone_task_item")
+}
+
 model DownloadTask {
   id                         Int    @id @default(autoincrement())
   status                     String?   @default("PENDING") @map("status") 
@@ -190,7 +284,8 @@ model DownloadTask {
   startedAt                  DateTime? @map("started_at") 
   finishedAt                 DateTime? @map("finished_at") 
 
-  items DownloadTaskItem[]
+  items       DownloadTaskItem[]
+  myRepoItems MyRepoDownloadTaskItem[]
 
   @@index([status])
   @@index([createdAt])
@@ -258,6 +353,34 @@ model DownloadTaskItem {
   @@index([repoId])
   @@index([status])
   @@map("download_task_item")
+}
+
+/**
+ * 我的仓库下载任务子项 —— 与 download_task_item 平行，repoId 指向 my_repo。
+ */
+model MyRepoDownloadTaskItem {
+  id             Int    @id @default(autoincrement())
+  taskId         Int    @map("task_id")
+  repoId         Int    @map("repo_id")
+  fullName       String?   @map("full_name")
+  archiveUrl     String?   @map("archive_url")
+  localFilePath  String?   @map("local_file_path")
+  extractDir     String?   @map("extract_dir")
+  fileSize       BigInt?      @default(0) @map("file_size")
+  defaultBranch  String?   @map("default_branch")
+  status         String?   @default("PENDING") @map("status")
+  retryCount     Int       @default(0) @map("retry_count")
+  errorMessage   String?   @map("error_message")
+  createdAt      DateTime? @map("created_at")
+  updatedAt      DateTime? @updatedAt @map("updated_at")
+
+  task DownloadTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  repo MyRepo       @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([repoId])
+  @@index([status])
+  @@map("my_repo_download_task_item")
 }
 
 // ── 学习收藏 ──
