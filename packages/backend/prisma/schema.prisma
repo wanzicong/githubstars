@@ -74,6 +74,7 @@ model Category {
   parent            Category?          @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
   children          Category[]         @relation("CategoryTree")
   categoryRepoLinks CategoryRepoLink[]
+  myRepoLinks       MyRepoCategoryLink[]
 
   @@index([parentId])
   @@index([sortOrder])
@@ -98,6 +99,78 @@ model CategoryRepoLink {
   @@unique([categoryId, repoId])
   @@index([repoId])
   @@map("category_repo_link")
+}
+
+// ── 我的仓库 ──
+
+/**
+ * 我的仓库表 —— 用户自己在 GitHub 上创建的仓库（含私有）。
+ *
+ * 与 github_repo（Star 收藏）独立建表：
+ * - 无 starredAt，多 isPrivate
+ * - fullName 唯一，同步时 UPSERT 增量更新，不做删除同步
+ */
+model MyRepo {
+  id              BigInt    @id @default(autoincrement())
+  repoName        String?   @map("repo_name") @db.VarChar(255)
+  fullName        String?   @unique @map("full_name") @db.VarChar(500)
+  description     String?   @map("description") @db.Text
+  descriptionCn   String?   @map("description_cn") @db.Text
+  readmeCn        String?   @map("readme_cn") @db.LongText
+  readmeOriginal  String?   @map("readme_original") @db.LongText
+  readmeFetched   Boolean   @default(false) @map("readme_fetched") @db.TinyInt
+  language        String?   @map("language") @db.VarChar(100)
+  ownerName       String?   @map("owner_name") @db.VarChar(255)
+  ownerAvatarUrl  String?   @map("owner_avatar_url") @db.VarChar(1000)
+  htmlUrl         String?   @map("html_url") @db.VarChar(1000)
+  homepage        String?   @map("homepage") @db.VarChar(1000)
+  starsCount      Int       @default(0) @map("stars_count")
+  forksCount      Int       @default(0) @map("forks_count")
+  watchersCount   Int       @default(0) @map("watchers_count")
+  openIssuesCount Int       @default(0) @map("open_issues_count")
+  topics          String?   @map("topics") @db.Text
+  licenseName     String?   @map("license_name") @db.VarChar(255)
+  isFork          Boolean   @default(false) @map("is_fork") @db.TinyInt
+  isArchived      Boolean   @default(false) @map("is_archived") @db.TinyInt
+  isPrivate       Boolean   @default(false) @map("is_private") @db.TinyInt
+  repoSize        Int?      @map("repo_size")
+  defaultBranch   String?   @map("default_branch") @db.VarChar(255)
+  visibility      String?   @map("visibility") @db.VarChar(50)
+  repoCreatedAt   DateTime? @map("repo_created_at") @db.DateTime
+  repoUpdatedAt   DateTime? @map("repo_updated_at") @db.DateTime
+  repoPushedAt    DateTime? @map("repo_pushed_at") @db.DateTime
+  createdAt       DateTime  @map("created_at") @db.DateTime
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.DateTime
+
+  // 关联
+  cloneItems    MyRepoCloneTaskItem[]
+  downloadItems MyRepoDownloadTaskItem[]
+  categories    MyRepoCategoryLink[]
+
+  @@index([language])
+  @@index([starsCount])
+  @@index([repoUpdatedAt])
+  @@index([isPrivate])
+  @@map("my_repo")
+}
+
+/**
+ * 我的仓库-分类关联表 —— 多对多关系。
+ *
+ * 复用 category 分类树，与 category_repo_link（Star 仓库）平行。
+ */
+model MyRepoCategoryLink {
+  id         BigInt   @id @default(autoincrement())
+  categoryId BigInt   @map("category_id")
+  myRepoId   BigInt   @map("my_repo_id")
+  createdAt  DateTime @map("created_at") @db.DateTime
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  myRepo   MyRepo   @relation(fields: [myRepoId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, myRepoId])
+  @@index([myRepoId])
+  @@map("my_repo_category_link")
 }
 
 model SyncLog {
@@ -142,7 +215,8 @@ model CloneTask {
   startedAt      DateTime? @map("started_at") @db.DateTime
   finishedAt     DateTime? @map("finished_at") @db.DateTime
 
-  items CloneTaskItem[]
+  items       CloneTaskItem[]
+  myRepoItems MyRepoCloneTaskItem[]
 
   @@index([status])
   @@index([createdAt])
@@ -171,6 +245,31 @@ model CloneTaskItem {
   @@map("clone_task_item")
 }
 
+/**
+ * 我的仓库克隆任务子项 —— 与 clone_task_item 平行，repoId 指向 my_repo。
+ */
+model MyRepoCloneTaskItem {
+  id           BigInt    @id @default(autoincrement())
+  taskId       BigInt    @map("task_id")
+  repoId       BigInt    @map("repo_id")
+  fullName     String?   @map("full_name") @db.VarChar(500)
+  cloneUrl     String?   @map("clone_url") @db.VarChar(1000)
+  localPath    String?   @map("local_path") @db.VarChar(1000)
+  status       String?   @default("PENDING") @map("status") @db.VarChar(50)
+  retryCount   Int       @default(0) @map("retry_count")
+  errorMessage String?   @map("error_message") @db.Text
+  createdAt    DateTime? @map("created_at") @db.DateTime
+  updatedAt    DateTime? @updatedAt @map("updated_at") @db.DateTime
+
+  task CloneTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  repo MyRepo    @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([repoId])
+  @@index([status])
+  @@map("my_repo_clone_task_item")
+}
+
 model DownloadTask {
   id                         BigInt    @id @default(autoincrement())
   status                     String?   @default("PENDING") @map("status") @db.VarChar(50)
@@ -189,7 +288,8 @@ model DownloadTask {
   startedAt                  DateTime? @map("started_at") @db.DateTime
   finishedAt                 DateTime? @map("finished_at") @db.DateTime
 
-  items DownloadTaskItem[]
+  items       DownloadTaskItem[]
+  myRepoItems MyRepoDownloadTaskItem[]
 
   @@index([status])
   @@index([createdAt])
@@ -260,6 +360,34 @@ model DownloadTaskItem {
   @@index([repoId])
   @@index([status])
   @@map("download_task_item")
+}
+
+/**
+ * 我的仓库下载任务子项 —— 与 download_task_item 平行，repoId 指向 my_repo。
+ */
+model MyRepoDownloadTaskItem {
+  id             BigInt    @id @default(autoincrement())
+  taskId         BigInt    @map("task_id")
+  repoId         BigInt    @map("repo_id")
+  fullName       String?   @map("full_name") @db.VarChar(500)
+  archiveUrl     String?   @map("archive_url") @db.VarChar(2000)
+  localFilePath  String?   @map("local_file_path") @db.VarChar(1000)
+  extractDir     String?   @map("extract_dir") @db.VarChar(1000)
+  fileSize       BigInt?   @default(0) @map("file_size")
+  defaultBranch  String?   @map("default_branch") @db.VarChar(100)
+  status         String?   @default("PENDING") @map("status") @db.VarChar(50)
+  retryCount     Int       @default(0) @map("retry_count")
+  errorMessage   String?   @map("error_message") @db.Text
+  createdAt      DateTime? @map("created_at") @db.DateTime
+  updatedAt      DateTime? @updatedAt @map("updated_at") @db.DateTime
+
+  task DownloadTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  repo MyRepo       @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([repoId])
+  @@index([status])
+  @@map("my_repo_download_task_item")
 }
 
 // ── 学习收藏 ──

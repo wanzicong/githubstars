@@ -16,7 +16,8 @@ import {
     Filler,
 } from 'chart.js'
 import * as statsApi from '../../api'
-import type { OverviewStatsDTO, LanguageStatsDTO, OwnerStatsDTO, TimelineStatsDTO, GithubRepo } from '../../types'
+import { fetchMyRepoStats } from '../../api/my-repos'
+import type { OverviewStatsDTO, LanguageStatsDTO, OwnerStatsDTO, TimelineStatsDTO, GithubRepo, MyRepoStats } from '../../types'
 import { formatDate, formatNumberShort } from '../../utils/format'
 import { CHART_COLORS } from '../../constants'
 
@@ -36,19 +37,21 @@ export default function Stats() {
     const [timeline, setTimeline] = useState<TimelineStatsDTO[]>([])
     const [topRepos, setTopRepos] = useState<GithubRepo[]>([])
     const [recentRepos, setRecentRepos] = useState<GithubRepo[]>([])
+    const [myRepoStats, setMyRepoStats] = useState<MyRepoStats | null>(null)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         const fetchAll = async () => {
             setLoading(true)
             try {
-                const [overviewRes, languagesRes, ownersRes, timelineRes, topReposRes, recentReposRes] = await Promise.allSettled([
+                const [overviewRes, languagesRes, ownersRes, timelineRes, topReposRes, recentReposRes, myRepoRes] = await Promise.allSettled([
                     statsApi.fetchOverviewStats(),
                     statsApi.fetchLanguageStats(),
                     statsApi.fetchOwnerStats(TOP_N_OWNERS),
                     statsApi.fetchTimelineStats(),
                     statsApi.fetchTopStarredRepos(TOP_N_REPOS),
                     statsApi.fetchRecentActiveRepos(TOP_N_REPOS),
+                    fetchMyRepoStats(),
                 ])
 
                 if (overviewRes.status === 'fulfilled') setOverview(overviewRes.value)
@@ -57,6 +60,7 @@ export default function Stats() {
                 if (timelineRes.status === 'fulfilled') setTimeline(timelineRes.value || [])
                 if (topReposRes.status === 'fulfilled') setTopRepos(topReposRes.value || [])
                 if (recentReposRes.status === 'fulfilled') setRecentRepos(recentReposRes.value || [])
+                if (myRepoRes.status === 'fulfilled') setMyRepoStats(myRepoRes.value)
             } finally {
                 setLoading(false)
             }
@@ -252,6 +256,51 @@ export default function Stats() {
                         </Card>
                     </Col>
                 </Row>
+
+                {/* 我的仓库概览（用户自建仓库，仅在有数据时展示） */}
+                {myRepoStats && myRepoStats.total > 0 && (
+                    <Card
+                        title='我的仓库'
+                        style={{ marginBottom: 24 }}
+                        extra={
+                            <AntLink onClick={() => navigate('/my-repos')}>查看全部</AntLink>
+                        }
+                    >
+                        <Row gutter={[16, 16]}>
+                            <Col xs={12} sm={6}>
+                                <Statistic title='仓库总数' value={myRepoStats.total} prefix={<GithubOutlined style={{ color: '#1677ff' }} />} />
+                            </Col>
+                            <Col xs={12} sm={6}>
+                                <Statistic title='私有仓库' value={myRepoStats.privateCount} />
+                            </Col>
+                            <Col xs={12} sm={6}>
+                                <Statistic
+                                    title='总 Star 数'
+                                    value={myRepoStats.totalStars}
+                                    formatter={(value) => formatNumberShort(value as number)}
+                                    prefix={<StarFilled style={{ color: '#faad14' }} />}
+                                />
+                            </Col>
+                            <Col xs={12} sm={6}>
+                                <Statistic
+                                    title='总 Fork 数'
+                                    value={myRepoStats.totalForks}
+                                    formatter={(value) => formatNumberShort(value as number)}
+                                    prefix={<ForkOutlined style={{ color: '#52c41a' }} />}
+                                />
+                            </Col>
+                        </Row>
+                        {myRepoStats.languages.length > 0 && (
+                            <div style={{ marginTop: 16 }}>
+                                {(myRepoStats.languages || []).slice(0, 8).map((l) => (
+                                    <Tag key={l.language} style={{ marginBottom: 4 }}>
+                                        {l.language} ({l.count})
+                                    </Tag>
+                                ))}
+                            </div>
+                        )}
+                    </Card>
+                )}
 
                 <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
                     <Col xs={24} lg={12}>

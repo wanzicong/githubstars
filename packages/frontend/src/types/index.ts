@@ -136,6 +136,51 @@ export interface StarListParams {
     categoryId?: number
 }
 
+// ─── 我的仓库（用户在 GitHub 上自建的仓库）───
+
+/** 我的仓库实体：在 GithubRepo 基础上扩展私有标记与所属分类（starredAt 恒为 null） */
+export interface MyRepo extends GithubRepo {
+    /** 我的仓库无收藏时间，恒为 null */
+    starredAt: null
+    isPrivate: boolean
+    /** 详情接口返回时附带的所属分类 */
+    categories?: { id: number; name: string; parentId: number | null }[]
+}
+
+export interface MyRepoListParams {
+    page?: number
+    size?: number
+    keyword?: string
+    language?: string
+    sortBy?: string
+    sortOrder?: string
+    dateField?: string
+    startDate?: string
+    endDate?: string
+    categoryId?: number
+    /** 私有/公开筛选：true=仅私有，false=仅公开，不传=全部 */
+    isPrivate?: boolean
+    untranslatedOnly?: boolean
+}
+
+export interface MyRepoStats {
+    total: number
+    privateCount: number
+    totalStars: number
+    totalForks: number
+    languages: { language: string; count: number }[]
+}
+
+export interface MyRepoSyncStatus {
+    syncing: boolean
+    status: string
+    lastSyncTime: string | null
+    lastSyncCount: number
+    totalRepos: number
+    lastSuccessTime: string | null
+    lastSuccessCount: number
+}
+
 export interface ApiResponse<T = unknown> {
     success: boolean
     message?: string
