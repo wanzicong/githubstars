@@ -161,7 +161,7 @@ const MyRepoCard = memo(function MyRepoCard({ repo, selected, onSelect, onCatego
             {topics.length > 0 && (
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', overflow: 'hidden' }}>
                     {topics.map((t) => (
-                        <Tag key={t} bordered={false} style={{ margin: 0, fontSize: 11, lineHeight: '18px', paddingInline: 6 }}>
+                        <Tag key={t} variant='filled' style={{ margin: 0, fontSize: 11, lineHeight: '18px', paddingInline: 6 }}>
                             {t}
                         </Tag>
                     ))}
@@ -237,7 +237,7 @@ const MyRepoCard = memo(function MyRepoCard({ repo, selected, onSelect, onCatego
 
                 {/* 中文翻译标签 */}
                 {repo.readmeFetched && repo.readmeCn && (
-                    <Tag bordered={false} style={{ margin: 0, fontSize: 11, lineHeight: '18px', paddingInline: 6, color: token.colorPrimary }}>
+                    <Tag variant='filled' style={{ margin: 0, fontSize: 11, lineHeight: '18px', paddingInline: 6, color: token.colorPrimary }}>
                         <ReadOutlined style={{ fontSize: 10, marginRight: 2 }} />
                         已翻译
                     </Tag>

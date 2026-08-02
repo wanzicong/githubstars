@@ -93,7 +93,7 @@ export default function MyRepoCategoryPopover({ repoId, categoryIds = [], onChan
     }, [checkedKeys, categoryIds, repoId, message, onChange])
 
     return (
-        <Popover open={open} onOpenChange={(visible) => { setOpen(visible); if (!visible) setTimeout(() => (document.activeElement as HTMLElement)?.blur(), 0) }} trigger="click" destroyTooltipOnHide
+        <Popover open={open} onOpenChange={(visible) => { setOpen(visible); if (!visible) setTimeout(() => (document.activeElement as HTMLElement)?.blur(), 0) }} trigger="click" destroyOnHidden
             title={
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>选择分类</span>
