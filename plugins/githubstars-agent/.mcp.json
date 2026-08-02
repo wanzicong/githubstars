@@ -7,7 +7,7 @@
       ],
       "cwd": "${CLAUDE_PLUGIN_ROOT}",
       "env": {
-        "GITHUBSTARS_API_URL": "${GITHUBSTARS_API_URL:-http://localhost:10002}"
+        "GITHUBSTARS_API_URL": "${GITHUBSTARS_API_URL:-http://localhost:10004}"
       }
     }
   }
